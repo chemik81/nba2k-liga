@@ -2322,7 +2322,7 @@ openTeamModal._openPlayer=function(pn,tn){
 function openComparatorModal() {
   const agg=getAggregatedStats();
   const players=[...new Set(agg.map(p=>p.name))].sort();
-  document.getElementById('comparator-content').innerHTML=
+  document.getElementById('comparator-modal-content').innerHTML=
     '<div style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:1.25rem">&#x26A1; POR\u00d3WNAJ ZAWODNIK\u00d3W</div>'
     +'<div style="display:flex;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">'
     +'<div style="flex:1;min-width:180px"><div style="font-size:.75rem;color:var(--muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:1px">Zawodnik 1</div>'
