@@ -638,6 +638,31 @@
   .tow-team{font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
   .tow-score{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem}
   .tow-stats{font-size:.72rem;color:var(--muted);margin-top:.3rem}
+
+  .streak-w{color:var(--win);font-weight:700;font-size:.78rem}
+  .streak-l{color:var(--loss);font-weight:700;font-size:.78rem}
+  body.light{--bg:#f0f2f5;--surface:#fff;--surface2:#e8eaed;--border:#d1d5db;--text:#111827;--muted:#6b7280;--accent:#c9a800;--win:#16a34a;--loss:#dc2626}
+  body.light .nav{background:#fff;border-bottom:1px solid #d1d5db}
+  body.light .card{background:#fff}
+  body.light .modal{background:#fff}
+  body.light .leader-card{background:#fff}
+  .theme-toggle{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .6rem;cursor:pointer;font-size:.9rem}
+  .theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+  .pcard-wrap{background:linear-gradient(135deg,#1a1a2e,#16213e 50%,#0f3460);border-radius:16px;padding:1.5rem;color:#fff;font-family:'Barlow Condensed',sans-serif;width:340px;position:relative;overflow:hidden}
+  .pcard-pos{font-size:.7rem;letter-spacing:3px;font-weight:700;color:rgba(245,197,24,.8);margin-bottom:.2rem}
+  .pcard-name{font-size:1.8rem;font-weight:900;letter-spacing:2px;text-transform:uppercase;line-height:1.1;margin-bottom:.15rem}
+  .pcard-team{font-size:.85rem;color:rgba(255,255,255,.6);margin-bottom:1rem}
+  .pcard-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:1rem}
+  .pcard-stat{text-align:center;background:rgba(255,255,255,.07);border-radius:8px;padding:.5rem .3rem}
+  .pcard-sv{font-size:1.3rem;font-weight:900;color:#fff}
+  .pcard-sl{font-size:.6rem;letter-spacing:1px;color:rgba(255,255,255,.5);text-transform:uppercase}
+  .pcard-gp{font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.75rem;text-align:right}
+  .rivalry-pair{display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
+  .rivalry-pair:last-child{border-bottom:none}
+  .rivalry-teams{flex:1;font-weight:600;font-size:.9rem}
+  .rivalry-bar{width:120px;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+  .rivalry-fill{height:100%;background:linear-gradient(90deg,var(--accent),#e05c2a);border-radius:4px}
+  .rivalry-count{font-size:.8rem;color:var(--muted);min-width:30px;text-align:right}
 </style>
 </head>
 <body>
@@ -700,6 +725,7 @@
     <button id="logout-btn" class="btn btn-ghost" onclick="logout()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🔓 Wyloguj</button>
     <button id="baza-btn" class="btn btn-ghost" onclick="openSetupModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" title="Zmień konfigurację bazy danych">⚙ Baza</button>
     <button id="season-btn" class="btn btn-ghost" onclick="openSeasonModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Sezony</button>
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" title="Zmien motyw">&#9728;</button>
   </div>
 </header>
 
@@ -733,10 +759,10 @@
           <thead><tr>
             <th style="text-align:left; padding-left:1.5rem">#</th>
             <th style="text-align:left">Drużyna</th>
-            <th>M</th><th>W</th><th>L</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>Ostatnie 5</th>
+            <th>M</th><th>W</th><th>L</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th>
           </tr></thead>
           <tbody id="standings-body">
-            <tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>
+            <tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>
           </tbody>
         </table>
       </div>
@@ -870,6 +896,86 @@
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">✕</button>
     <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="login-box">
+    <div class="login-logo">🔐 Logowanie</div>
+    <div class="login-sub">Ta sekcja wymaga hasła</div>
+    <label style="text-align:left">Hasło dostępu</label>
+    <input type="password" id="login-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkLogin()">
+    <button class="btn btn-primary" style="width:100%" onclick="checkLogin()">Zaloguj się</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="document.getElementById('auth-modal').classList.remove('open')">Anuluj</button>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal" style="max-width:400px;text-align:center">
+    <div style="font-size:2rem;margin-bottom:1rem">🗑️</div>
+    <div style="font-weight:700;font-size:1.1rem;margin-bottom:.5rem">Usunąć ten mecz?</div>
+    <div style="color:var(--muted);font-size:.9rem;margin-bottom:1.5rem">Tej operacji nie można cofnąć.</div>
+    <div style="display:flex;gap:.75rem;justify-content:center">
+      <button class="btn btn-danger" onclick="confirmDelete()">Tak, usuń</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('delete-modal').classList.remove('open')">Anuluj</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER MODAL -->
+<div class="modal-overlay" id="player-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:900px">
+    <button class="modal-close" onclick="document.getElementById('player-modal').classList.remove('open')">✕</button>
+    <div id="player-modal-content"></div>
+  </div>
+</div>
+
+<!-- TEAM MODAL -->
+<div class="modal-overlay" id="team-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:900px">
+    <button class="modal-close" onclick="document.getElementById('team-modal').classList.remove('open')">✕</button>
+    <div id="team-modal-content"></div>
+  </div>
+</div>
+
+<!-- COMPARATOR MODAL -->
+<div class="modal-overlay" id="comparator-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:700px">
+    <button class="modal-close" onclick="document.getElementById('comparator-modal').classList.remove('open')">✕</button>
+    <div id="comparator-modal-content"></div>
+  </div>
+</div>
+
+<!-- SEASON MODAL -->
+<div class="modal-overlay" id="season-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="document.getElementById('season-modal').classList.remove('open')">✕</button>
+    <div id="season-modal-content"></div>
+  </div>
+</div>
+
+<!-- TOP10 MODAL -->
+<div class="modal-overlay" id="top10-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:900px">
+    <button class="modal-close" onclick="document.getElementById('top10-modal').classList.remove('open')">✕</button>
+    <div id="top10-modal-content"></div>
+  </div>
+</div>
+
+<!-- RIVALRY MODAL -->
+<div class="modal-overlay" id="rivalry-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="document.getElementById('rivalry-modal').classList.remove('open')">✕</button>
+    <div id="rivalry-modal-content"></div>
+  </div>
+</div>
+
+<!-- PLAYER CARD MODAL -->
+<div class="modal-overlay" id="pcard-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:420px;background:transparent;box-shadow:none;padding:0">
+    <div id="pcard-modal-content"></div>
   </div>
 </div>
 
@@ -1372,7 +1478,7 @@ function openMatch(id) {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:0.85rem;letter-spacing:2px;color:var(--muted);text-transform:uppercase">Final</div>
         <div style="font-size:1.5rem;margin:0.5rem 0">🏀</div>
         <div style="font-size:0.8rem;color:var(--muted)">${formatDate(m.date)}</div>
-        ${_isLoggedInSync() ? `<button class="btn btn-danger" style="margin-top:1rem;font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button>` : ''}
+        ${_isLoggedInSync() ? `<div style="display:flex;gap:.5rem;margin-top:1rem"><button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="editMatch(${id})">&#x270f;&#xfe0f; Edytuj</button><button class="btn btn-danger" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button></div>` : ''}
       </div>
       <div style="text-align:right">
         <div class="modal-team">${m.team2.name}</div>
@@ -1682,7 +1788,7 @@ function openPlayerModal(playerName, teamName) {
   const _bestStl=Math.max(...games.map(g=>g.stl||0));
   const _bestBlk=Math.max(...games.map(g=>g.blk||0));
   const _hot=getHotPlayers();
-  const _hotBanner=_hot.has(playerName)?'<div style="background:linear-gradient(90deg,#ff6b35,#ff9a00);color:#fff;padding:.5rem 1rem;border-radius:6px;margin-bottom:1rem;font-weight:700;font-size:.9rem">\uD83D\uDD25 HOT STREAK \u2014 A- lub lepsza w ostatnich 3 meczach!</div>':'';
+  const _hotBanner=_hot.has(playerName)?'<div style="background:linear-gradient(90deg,#ff6b35,#ff9a00);color:#fff;padding:.5rem 1rem;border-radius:6px;margin-bottom:1rem;font-weight:700;font-size:.9rem">\uD83D\uDD25 HOT STREAK — A- lub lepsza w ostatnich 3 meczach!</div>':'';
   const _bestRow='<div class="cbrow"><div style="font-size:.75rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);width:100%">\uD83C\uDFC6 Rekordy kariery</div>'+[['PTS',_bestPts],['REB',_bestReb],['AST',_bestAst],['STL',_bestStl],['BLK',_bestBlk]].map(([k,v])=>'<div class="cbi"><div class="cbil">'+k+'</div><div class="cbiv">'+v+'</div></div>').join('')+'</div>';
   const _pmEl=document.getElementById('player-modal-content');
   _pmEl.innerHTML=_hotBanner+_pmEl.innerHTML;
@@ -1767,10 +1873,16 @@ function renderStandings() {
   });
   const sorted=Object.entries(ts).sort((a,b)=>b[1].w/(b[1].w+b[1].l||1)-a[1].w/(a[1].w+a[1].l||1));
   const tbody=document.getElementById('standings-body');
-  if(!sorted.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>';renderTeamForm([]);renderTop3();return;}
+  if(!sorted.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>';renderTeamForm([]);renderTop3();return;}
   const byD=[...matches].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const tl5={};
-  Object.keys(ts).forEach(n=>{tl5[n]=byD.filter(m=>m.team1.name===n||m.team2.name===n).slice(0,5).map(m=>(m.team1.name===n?m.team1.score:m.team2.score)>(m.team1.name===n?m.team2.score:m.team1.score)?'w':'l');});
+  const tl5={},streaks={};
+  Object.keys(ts).forEach(n=>{
+    const tm=byD.filter(m=>m.team1.name===n||m.team2.name===n);
+    tl5[n]=tm.slice(0,5).map(m=>(m.team1.name===n?m.team1.score:m.team2.score)>(m.team1.name===n?m.team2.score:m.team1.score)?'w':'l');
+    let sw=0,sl=0;
+    for(const m of tm){const my=m.team1.name===n?m.team1.score:m.team2.score,op=m.team1.name===n?m.team2.score:m.team1.score;if(my>op){if(sl>0)break;sw++;}else{if(sw>0)break;sl++;}}
+    streaks[n]=sw>0?`<span class="streak-w">W${sw}</span>`:sl>0?`<span class="streak-l">L${sl}</span>`:'<span style="color:var(--muted)">-</span>';
+  });
   const hot=getHotPlayers();
   tbody.innerHTML=sorted.map(([name,s],i)=>{
     const gp=s.w+s.l,pct=gp>0?(s.w/gp).toFixed(3):'.000';
@@ -1779,7 +1891,7 @@ function renderStandings() {
     const l5h='<div class="l5">'+Array.from({length:5},(_,j)=>j>=l5.length?'<span class="l5e"></span>':l5[j]==='w'?'<span class="l5w"></span>':'<span class="l5l"></span>').join('')+'</div>';
     const hc=[...hot].filter(p=>matches.some(m=>[...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>pl.name===p&&(m.team1.name===name||m.team2.name===name)))).length;
     const hb=hc>0?`<span class="hot" title="🔥 Hot Streak: ${hc} zawodnik${hc>1?'ów ma':'ma'} ocenę A- lub lepszą w ostatnich 3 meczach">\uD83D\uDD25${hc>1?' x'+hc:''}</span>`:'';
-    return `<tr><td style="padding-left:1.5rem"><span class="rank-num rank-${i+1}">${i+1}</span></td><td style="font-weight:700"><span class="tlink" data-t="${name.replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${name}</span>${hb}</td><td>${gp}</td><td>${s.w}</td><td>${s.l}</td><td>${pct}</td><td>${ppg}</td><td>${opp}</td><td>${l5h}</td></tr>`;
+    return `<tr><td style="padding-left:1.5rem"><span class="rank-num rank-${i+1}">${i+1}</span></td><td style="font-weight:700"><span class="tlink" data-t="${name.replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${name}</span>${hb}</td><td>${gp}</td><td>${s.w}</td><td>${s.l}</td><td>${pct}</td><td>${ppg}</td><td>${opp}</td><td>${streaks[name]||'-'}</td><td>${l5h}</td></tr>`;
   }).join('');
   renderTeamForm(sorted);
   renderTop3();
@@ -1961,77 +2073,149 @@ async function saveSetup() {
   renderDashboard();
   updateAuthUI();
 })();
-</script>
-<!-- AUTH MODAL -->
-<div class="modal-overlay" id="auth-modal">
-  <div class="login-box">
-    <div class="login-logo">🔐 Logowanie</div>
-    <div class="login-sub">Ta sekcja wymaga hasła</div>
-    <label style="text-align:left">Hasło dostępu</label>
-    <input type="password" id="login-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkLogin()">
-    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:0.25rem" onclick="checkLogin()">Zaloguj się</button>
-    <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:0.5rem" onclick="document.getElementById('auth-modal').classList.remove('open')">Anuluj</button>
-    <div class="login-error" id="login-error"></div>
-  </div>
-</div>
 
-<!-- PLAYER MODAL -->
-<div class="modal-overlay" id="player-modal" onclick="if(event.target===this)document.getElementById('player-modal').classList.remove('open')">
-  <div class="modal" style="max-width:860px">
-    <button class="modal-close" onclick="document.getElementById('player-modal').classList.remove('open')">✕</button>
-    <div id="player-modal-content"></div>
-  </div>
-</div>
+function getWeekBounds() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun,1=Mon,...
+  const diffToMon = (day === 0) ? -6 : 1 - day;
+  const mon = new Date(now); mon.setDate(now.getDate() + diffToMon); mon.setHours(0,0,0,0);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+  return { mon, sun };
+}
 
-<!-- CONFIRM MODAL -->
-<div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
-  <div class="modal" style="max-width:400px;text-align:center">
-    <div style="font-size:2rem;margin-bottom:1rem">🗑️</div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.3rem;letter-spacing:1px;margin-bottom:0.5rem">Usunąć ten mecz?</div>
-    <div style="color:var(--muted);font-size:0.9rem;margin-bottom:1.5rem">Tej operacji nie można cofnąć.</div>
-    <div style="display:flex;gap:0.75rem;justify-content:center">
-      <button class="btn btn-danger" onclick="confirmDelete()">Tak, usuń</button>
-      <button class="btn btn-ghost" onclick="closeConfirm()">Anuluj</button>
+function renderTeamOfWeek() {
+  const wrap = document.getElementById('team-of-week-wrap');
+  if(!wrap) return;
+  const { mon, sun } = getWeekBounds();
+  const weekMatches = matches.filter(m => {
+    const d = new Date(m.date);
+    return d >= mon && d <= sun;
+  });
+  if(!weekMatches.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak meczów w bieżącym tygodniu (' + mon.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ' – ' + sun.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ')</div>';
+    return;
+  }
+  const POSITIONS = ['PG','SG','SF','PF','C'];
+  // Gather all players from week matches with their position
+  const playerMap = {};
+  weekMatches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team.players||[]).forEach((p,idx) => {
+        const pos = p.pos || POSITIONS[idx] || 'PG';
+        const key = p.name + '|' + team.name + '|' + pos;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,gradeSum:0};
+        const s = playerMap[key];
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+  const players = Object.values(playerMap).map(p => ({
+    ...p,
+    avgGrade: p.gradeSum/p.gp,
+    score: (p.gradeSum/p.gp)*2 + (p.pts/p.gp)*0.5 + (p.reb/p.gp)*0.3 + (p.ast/p.gp)*0.4
+  }));
+  // Pick best player per position
+  const best = {};
+  POSITIONS.forEach(pos => {
+    const candidates = players.filter(p => p.pos === pos);
+    if(candidates.length) best[pos] = candidates.sort((a,b)=>b.score-a.score)[0];
+  });
+  if(!Object.keys(best).length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Za mało danych (zawodnicy muszą mieć przypisane pozycje)</div>';
+    return;
+  }
+  const weekLabel = mon.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ' – ' + sun.toLocaleDateString('pl-PL',{day:'numeric',month:'short'});
+  wrap.innerHTML = `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Tydzień: ${weekLabel} · ${weekMatches.length} mecz${weekMatches.length===1?'':'ów'}</div>
+  <div class="tow-grid">${POSITIONS.map(pos => {
+    const p = best[pos];
+    if(!p) return `<div class="tow-card"><div class="tow-pos">${pos}</div><div style="color:var(--muted);font-size:.8rem">Brak</div></div>`;
+    const gr = numToGrade(p.avgGrade);
+    const pts = (p.pts/p.gp).toFixed(1), reb = (p.reb/p.gp).toFixed(1), ast = (p.ast/p.gp).toFixed(1);
+    return `<div class="tow-card" onclick="openPlayerModal('${p.name.replace(/'/g,"\\'")}','${p.team.replace(/'/g,"\\'")}')">
+      <div class="tow-pos">${pos}</div>
+      <div class="tow-name">${p.name}</div>
+      <div class="tow-team">${p.team}</div>
+      <div class="tow-score"><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></div>
+      <div class="tow-stats">${pts} PTS · ${reb} REB · ${ast} AST</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+
+function calcCompositeScore(p) {
+  // Composite: ocena (waga 40%) + PTS (20%) + AST (15%) + REB (12%) + STL (8%) + BLK (5%)
+  // Normalizujemy do per-game
+  const gp = Math.max(p.gp, 1);
+  const gradeScore = (p.gradeSum / gp) / 13 * 100; // 0-100
+  const ptsScore   = Math.min((p.pts / gp) / 50 * 100, 100);
+  const astScore   = Math.min((p.ast / gp) / 15 * 100, 100);
+  const rebScore   = Math.min((p.reb / gp) / 20 * 100, 100);
+  const stlScore   = Math.min((p.stl / gp) / 5  * 100, 100);
+  const blkScore   = Math.min((p.blk / gp) / 5  * 100, 100);
+  return gradeScore*0.40 + ptsScore*0.20 + astScore*0.15 + rebScore*0.12 + stlScore*0.08 + blkScore*0.05;
+}
+
+function getSeasonMVP(seasonId) {
+  const agg = getAggregatedStats(seasonId);
+  if(!agg.length) return null;
+  const ranked = agg.filter(p=>p.gp>=2).map(p=>({...p, score: calcCompositeScore(p)})).sort((a,b)=>b.score-a.score);
+  return ranked[0] || null;
+}
+
+function renderSeasonMVPBlock(seasonId) {
+  const mvp = getSeasonMVP(seasonId);
+  if(!mvp) return '';
+  const gr = numToGrade(mvp.gradeSum/mvp.gp);
+  const avg = (v) => mvp.gp>0?(v/mvp.gp).toFixed(1):'0.0';
+  return `<div style="margin-top:.75rem;padding:.75rem;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.3);border-radius:8px">
+    <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.4rem">🏆 MVP Sezonu</div>
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <div>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="document.getElementById('season-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${mvp.name}','${mvp.team}'),200)">${mvp.name}</span>
+        <span style="color:var(--muted);font-size:.8rem;margin-left:.4rem">${mvp.team}</span>
+      </div>
+      <span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span>
+      <span style="font-size:.8rem;color:var(--muted)">${avg(mvp.pts)} PTS · ${avg(mvp.reb)} REB · ${avg(mvp.ast)} AST · ${mvp.gp} GP</span>
     </div>
-  </div>
-</div>
+  </div>`;
+}
 
-<div class="modal-overlay" id="team-modal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:860px">
-    <button class="modal-close" onclick="document.getElementById('team-modal').classList.remove('open')">&#x2715;</button>
-    <div id="team-modal-content"></div>
-  </div>
-</div>
-<div class="modal-overlay" id="player-modal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:860px">
-    <button class="modal-close" onclick="document.getElementById('player-modal').classList.remove('open')">&#x2715;</button>
-    <div id="player-modal-content"></div>
-  </div>
-</div>
-<div class="modal-overlay" id="comparator-modal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:900px">
-    <button class="modal-close" onclick="document.getElementById('comparator-modal').classList.remove('open')">&#x2715;</button>
-    <div id="comparator-content"></div>
-  </div>
-</div>
+function openTop10Modal(seasonId, seasonName) {
+  const agg = getAggregatedStats(seasonId);
+  const ranked = agg.filter(p=>p.gp>=1).map(p=>({...p, score: calcCompositeScore(p), avgGN: p.gradeSum/p.gp})).sort((a,b)=>b.score-a.score).slice(0,10);
+  const medals = ['🥇','🥈','🥉'];
+  const rows = ranked.map((p,i) => {
+    const gr = numToGrade(p.avgGN);
+    const avg = v => (v/p.gp).toFixed(1);
+    const rank = i<3 ? medals[i] : `<span style="font-weight:900;color:var(--muted)">${i+1}</span>`;
+    return `<tr style="cursor:pointer" onclick="document.getElementById('top10-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${p.name.replace(/'/g,"\\'")}','${p.team.replace(/'/g,"\\'")}'),200)">
+      <td style="text-align:center;font-size:1.1rem">${rank}</td>
+      <td style="font-weight:700">${p.name}</td>
+      <td style="color:var(--muted);font-size:.85rem">${p.pos||''}</td>
+      <td style="color:var(--muted);font-size:.85rem">${p.team}</td>
+      <td><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></td>
+      <td style="color:var(--accent);font-weight:700">${avg(p.pts)}</td>
+      <td>${avg(p.reb)}</td><td>${avg(p.ast)}</td><td>${avg(p.stl)}</td><td>${avg(p.blk)}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${p.gp}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('top10-modal-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🏆 TOP 10 — ${seasonName||'Wszystkie sezony'}</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1.25rem">Ranking wg composite score: ocena (40%) + PTS (20%) + AST (15%) + REB (12%) + STL (8%) + BLK (5%)</div>
+    <div class="stats-table-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
+          <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>GP</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  document.getElementById('top10-modal').classList.add('open');
+}
 
-<!-- TOP10 MODAL -->
-<div class="modal-overlay" id="top10-modal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:900px">
-    <button class="modal-close" onclick="document.getElementById('top10-modal').classList.remove('open')">&#x2715;</button>
-    <div id="top10-modal-content"></div>
-  </div>
-</div>
 
-<!-- SEASON MODAL -->
-<div class="modal-overlay" id="season-modal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:600px">
-    <button class="modal-close" onclick="document.getElementById('season-modal').classList.remove('open')">&#x2715;</button>
-    <div id="season-modal-content"></div>
-  </div>
-</div>
-</body>
-<script>
 document.addEventListener('click',function(e){
   var t=e.target.closest('.tlink');
   if(t){openTeamModal(t.getAttribute('data-t'));return;}
@@ -2090,7 +2274,7 @@ function openTeamModal(tn){
           +'<td style="color:var(--muted);font-size:.8rem">'+formatDate(m.date)+'</td>'
           +'<td><span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span></td>'
           +'<td style="font-size:.85rem">vs '+opp+'</td>'
-          +'<td style="font-weight:700"><span style="color:'+(win?'var(--win)':'var(--loss))'">'+(win?myScore+'-'+oppScore:myScore+'-'+oppScore)+'</span></td>'
+          +'<td style="font-weight:700"><span style="color:'+(win?'var(--win)':'var(--loss)')+'">'+myScore+'-'+oppScore+'</span></td>'
           +'<td style="font-size:.75rem;color:var(--muted)">'+(sn?sn.name:'')+'</td>'
           +'</tr>';
       }).join('');
@@ -2310,148 +2494,124 @@ function updateSeasonBadge() {
 }
 
 
-
-
-function getWeekBounds() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun,1=Mon,...
-  const diffToMon = (day === 0) ? -6 : 1 - day;
-  const mon = new Date(now); mon.setDate(now.getDate() + diffToMon); mon.setHours(0,0,0,0);
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
-  return { mon, sun };
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('nba2k_theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isLight ? '🌙' : '☀️';
 }
-
-function renderTeamOfWeek() {
-  const wrap = document.getElementById('team-of-week-wrap');
-  if(!wrap) return;
-  const { mon, sun } = getWeekBounds();
-  const weekMatches = matches.filter(m => {
-    const d = new Date(m.date);
-    return d >= mon && d <= sun;
-  });
-  if(!weekMatches.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak meczów w bieżącym tygodniu (' + mon.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ' – ' + sun.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ')</div>';
-    return;
+(function(){
+  if(localStorage.getItem('nba2k_theme')==='light'){
+    document.body.classList.add('light');
+    const btn=document.getElementById('theme-btn');
+    if(btn) btn.textContent='🌙';
   }
-  const POSITIONS = ['PG','SG','SF','PF','C'];
-  // Gather all players from week matches with their position
-  const playerMap = {};
-  weekMatches.forEach(m => {
-    [m.team1, m.team2].forEach(team => {
-      (team.players||[]).forEach((p,idx) => {
-        const pos = p.pos || POSITIONS[idx] || 'PG';
-        const key = p.name + '|' + team.name + '|' + pos;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,gradeSum:0};
-        const s = playerMap[key];
-        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
-        s.gradeSum+=gradeToNum(p.grade||'B');
-      });
-    });
-  });
-  const players = Object.values(playerMap).map(p => ({
-    ...p,
-    avgGrade: p.gradeSum/p.gp,
-    score: (p.gradeSum/p.gp)*2 + (p.pts/p.gp)*0.5 + (p.reb/p.gp)*0.3 + (p.ast/p.gp)*0.4
-  }));
-  // Pick best player per position
-  const best = {};
-  POSITIONS.forEach(pos => {
-    const candidates = players.filter(p => p.pos === pos);
-    if(candidates.length) best[pos] = candidates.sort((a,b)=>b.score-a.score)[0];
-  });
-  if(!Object.keys(best).length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Za mało danych (zawodnicy muszą mieć przypisane pozycje)</div>';
-    return;
-  }
-  const weekLabel = mon.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ' – ' + sun.toLocaleDateString('pl-PL',{day:'numeric',month:'short'});
-  wrap.innerHTML = `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Tydzień: ${weekLabel} · ${weekMatches.length} mecz${weekMatches.length===1?'':'ów'}</div>
-  <div class="tow-grid">${POSITIONS.map(pos => {
-    const p = best[pos];
-    if(!p) return `<div class="tow-card"><div class="tow-pos">${pos}</div><div style="color:var(--muted);font-size:.8rem">Brak</div></div>`;
-    const gr = numToGrade(p.avgGrade);
-    const pts = (p.pts/p.gp).toFixed(1), reb = (p.reb/p.gp).toFixed(1), ast = (p.ast/p.gp).toFixed(1);
-    return `<div class="tow-card" onclick="openPlayerModal('${p.name.replace(/'/g,"\\'")}','${p.team.replace(/'/g,"\\'")}')">
-      <div class="tow-pos">${pos}</div>
-      <div class="tow-name">${p.name}</div>
-      <div class="tow-team">${p.team}</div>
-      <div class="tow-score"><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></div>
-      <div class="tow-stats">${pts} PTS · ${reb} REB · ${ast} AST</div>
-    </div>`;
-  }).join('')}</div>`;
-}
+})();
 
-
-function calcCompositeScore(p) {
-  // Composite: ocena (waga 40%) + PTS (20%) + AST (15%) + REB (12%) + STL (8%) + BLK (5%)
-  // Normalizujemy do per-game
-  const gp = Math.max(p.gp, 1);
-  const gradeScore = (p.gradeSum / gp) / 13 * 100; // 0-100
-  const ptsScore   = Math.min((p.pts / gp) / 50 * 100, 100);
-  const astScore   = Math.min((p.ast / gp) / 15 * 100, 100);
-  const rebScore   = Math.min((p.reb / gp) / 20 * 100, 100);
-  const stlScore   = Math.min((p.stl / gp) / 5  * 100, 100);
-  const blkScore   = Math.min((p.blk / gp) / 5  * 100, 100);
-  return gradeScore*0.40 + ptsScore*0.20 + astScore*0.15 + rebScore*0.12 + stlScore*0.08 + blkScore*0.05;
-}
-
-function getSeasonMVP(seasonId) {
-  const agg = getAggregatedStats(seasonId);
-  if(!agg.length) return null;
-  const ranked = agg.filter(p=>p.gp>=2).map(p=>({...p, score: calcCompositeScore(p)})).sort((a,b)=>b.score-a.score);
-  return ranked[0] || null;
-}
-
-function renderSeasonMVPBlock(seasonId) {
-  const mvp = getSeasonMVP(seasonId);
-  if(!mvp) return '';
-  const gr = numToGrade(mvp.gradeSum/mvp.gp);
-  const avg = (v) => mvp.gp>0?(v/mvp.gp).toFixed(1):'0.0';
-  return `<div style="margin-top:.75rem;padding:.75rem;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.3);border-radius:8px">
-    <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.4rem">🏆 MVP Sezonu</div>
-    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-      <div>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="document.getElementById('season-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${mvp.name}','${mvp.team}'),200)">${mvp.name}</span>
-        <span style="color:var(--muted);font-size:.8rem;margin-left:.4rem">${mvp.team}</span>
+function openPlayerCard(playerName, teamName) {
+  const agg = getAggregatedStats();
+  const p = agg.find(x=>x.name===playerName);
+  if(!p) { showToast('Brak danych zawodnika', 'error'); return; }
+  const gr = numToGrade(p.gradeSum/p.gp);
+  const avg = v => (v/p.gp).toFixed(1);
+  const fgp = p.fga>0?Math.round(p.fgm/p.fga*100):0;
+  const tpp = p.tpa>0?Math.round(p.tpm/p.tpa*100):0;
+  const ftp = p.fta>0?Math.round(p.ftm/p.fta*100):0;
+  const sn = (seasons.find(s=>s.id===currentSeasonId)||{name:'–'}).name;
+  document.getElementById('pcard-modal-content').innerHTML = `
+    <div class="pcard-wrap">
+      <div class="pcard-pos">${p.pos||'NBA 2K26 LIGA'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="pcard-name">${playerName}</div>
+          <div class="pcard-team">${teamName}</div>
+        </div>
+        <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:2rem;padding:.4rem .7rem">${gr}</span>
       </div>
-      <span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span>
-      <span style="font-size:.8rem;color:var(--muted)">${avg(mvp.pts)} PTS · ${avg(mvp.reb)} REB · ${avg(mvp.ast)} AST · ${mvp.gp} GP</span>
+      <div class="pcard-stats">
+        ${[['PTS',avg(p.pts)],['REB',avg(p.reb)],['AST',avg(p.ast)],['STL',avg(p.stl)],['BLK',avg(p.blk)],['TO',avg(p.to)],['FG%',fgp+'%'],['3P%',tpp+'%'],['FT%',ftp+'%']].map(([l,v])=>`<div class="pcard-stat"><div class="pcard-sv">${v}</div><div class="pcard-sl">${l}</div></div>`).join('')}
+      </div>
+      <div class="pcard-gp">${p.gp} GP &middot; ${sn}</div>
     </div>
-  </div>`;
+    <div style="margin-top:.75rem;text-align:center;color:rgba(255,255,255,.5);font-size:.75rem">
+      Zrob zrzut ekranu aby udostepnic karte zawodnika
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:.5rem">
+      <button onclick="document.getElementById('pcard-modal').classList.remove('open')" class="btn btn-ghost" style="font-size:.85rem">Zamknij</button>
+    </div>`;
+  document.getElementById('pcard-modal').classList.add('open');
 }
 
-function openTop10Modal(seasonId, seasonName) {
-  const agg = getAggregatedStats(seasonId);
-  const ranked = agg.filter(p=>p.gp>=1).map(p=>({...p, score: calcCompositeScore(p), avgGN: p.gradeSum/p.gp})).sort((a,b)=>b.score-a.score).slice(0,10);
-  const medals = ['🥇','🥈','🥉'];
-  const rows = ranked.map((p,i) => {
-    const gr = numToGrade(p.avgGN);
-    const avg = v => (v/p.gp).toFixed(1);
-    const rank = i<3 ? medals[i] : `<span style="font-weight:900;color:var(--muted)">${i+1}</span>`;
-    return `<tr style="cursor:pointer" onclick="document.getElementById('top10-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${p.name.replace(/'/g,"\\'")}','${p.team.replace(/'/g,"\\'")}'),200)">
-      <td style="text-align:center;font-size:1.1rem">${rank}</td>
-      <td style="font-weight:700">${p.name}</td>
-      <td style="color:var(--muted);font-size:.85rem">${p.pos||''}</td>
-      <td style="color:var(--muted);font-size:.85rem">${p.team}</td>
-      <td><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></td>
-      <td style="color:var(--accent);font-weight:700">${avg(p.pts)}</td>
-      <td>${avg(p.reb)}</td><td>${avg(p.ast)}</td><td>${avg(p.stl)}</td><td>${avg(p.blk)}</td>
-      <td style="font-size:.8rem;color:var(--muted)">${p.gp}</td>
-    </tr>`;
-  }).join('');
-  document.getElementById('top10-modal-content').innerHTML = `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🏆 TOP 10 — ${seasonName||'Wszystkie sezony'}</div>
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1.25rem">Ranking wg composite score: ocena (40%) + PTS (20%) + AST (15%) + REB (12%) + STL (8%) + BLK (5%)</div>
-    <div class="stats-table-wrap">
-      <table>
-        <thead><tr>
-          <th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
-          <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>GP</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+function openRivalryModal() {
+  const pairs = {};
+  matches.forEach(m => {
+    const key = [m.team1.name, m.team2.name].sort().join('|||');
+    if(!pairs[key]) { const t=[m.team1.name,m.team2.name].sort(); pairs[key]={t1:t[0],t2:t[1],count:0,wins:{}}; }
+    pairs[key].count++;
+    const w=m.team1.score>m.team2.score?m.team1.name:m.team2.name;
+    pairs[key].wins[w]=(pairs[key].wins[w]||0)+1;
+  });
+  const sorted=Object.values(pairs).sort((a,b)=>b.count-a.count);
+  if(!sorted.length){
+    document.getElementById('rivalry-modal-content').innerHTML='<div style="color:var(--muted);padding:2rem;text-align:center">Brak danych</div>';
+    document.getElementById('rivalry-modal').classList.add('open');
+    return;
+  }
+  const mx=sorted[0].count;
+  const rows=sorted.map(p=>{
+    const w1=p.wins[p.t1]||0,w2=p.wins[p.t2]||0,pct=Math.round(p.count/mx*100);
+    return `<div class="rivalry-pair">
+      <div class="rivalry-teams"><span style="color:var(--accent);font-weight:700">${p.t1}</span> <span style="color:var(--muted);font-size:.85rem">${w1}–${w2}</span> <span style="color:var(--accent2);font-weight:700">${p.t2}</span></div>
+      <div class="rivalry-bar"><div class="rivalry-fill" style="width:${pct}%"></div></div>
+      <div class="rivalry-count">${p.count}x</div>
     </div>`;
-  document.getElementById('top10-modal').classList.add('open');
+  }).join('');
+  document.getElementById('rivalry-modal-content').innerHTML=`
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:1.25rem">&#x2694;&#xfe0f; GRAF RYWALIZACJI</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">Pary posortowane wg liczby meczow · wynik to bilans W–L</div>
+    <div>${rows}</div>`;
+  document.getElementById('rivalry-modal').classList.add('open');
 }
+
+let editingMatchId = null;
+
+function editMatch(id) {
+  const m=matches.find(x=>Number(x.id)===Number(id));
+  if(!m)return;
+  editingMatchId=Number(id);
+  pendingMatch=JSON.parse(JSON.stringify(m));
+  document.getElementById('match-modal').classList.remove('open');
+  setTimeout(()=>{
+    showView('add-match');
+    document.getElementById('match-date').value=m.date||'';
+    document.getElementById('match-note').value=m.note||'';
+    renderParsedPreview(pendingMatch);
+    document.getElementById('parsed-result').style.display='block';
+    setStatus('info','✏️ Tryb edycji — popraw dane i kliknij Zapisz zmiany.');
+    const btn=document.querySelector('[onclick="saveMatch()"]');
+    if(btn)btn.innerHTML='💾 Zapisz zmiany';
+  },200);
+}
+
+const _origSaveMatchEdit = saveMatch;
+saveMatch = function() {
+  if(editingMatchId!==null){
+    if(!pendingMatch)return;
+    pendingMatch.date=document.getElementById('match-date').value||pendingMatch.date;
+    pendingMatch.note=document.getElementById('match-note').value;
+    const idx=matches.findIndex(x=>Number(x.id)===editingMatchId);
+    if(idx!==-1)matches[idx]={...matches[idx],...pendingMatch,id:editingMatchId};
+    editingMatchId=null;
+    saveData().then(()=>showToast('✅ Mecz zaktualizowany!','success'));
+    clearForm();
+    document.getElementById('parsed-result').style.display='none';
+    pendingMatch=null;
+    const btn=document.querySelector('[onclick="saveMatch()"]');
+    if(btn)btn.innerHTML='✅ Zapisz Mecz';
+    setTimeout(()=>showView('matches'),1200);
+    return;
+  }
+  _origSaveMatchEdit();
+};
 
 </script>
 </html>
