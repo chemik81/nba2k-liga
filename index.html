@@ -1851,7 +1851,7 @@ function renderTop3() {
   if(!wrap) return;
   const agg = getAggregatedStats();
   if(!agg.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Brak danych</div>'; return; }
-  const ranked = agg.filter(p=>p.gp>=2).map(p=>({...p, avgGN: p.gradeSum/p.gp})).sort((a,b)=>b.avgGN-a.avgGN).slice(0,3);
+  const ranked = agg.filter(p=>p.gp>=2).map(p=>({...p, avgGN: p.gradeSum/p.gp, _score: calcCompositeScore(p)})).sort((a,b)=>b._score-a._score).slice(0,3);
   if(!ranked.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Minimum 2 mecze wymagane</div>'; return; }
   const medals=['🥇','🥈','🥉'];
   wrap.innerHTML = ranked.map((p,i)=>{
@@ -2238,32 +2238,50 @@ function renderTop10Tab(tab) {
     ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
     : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
-  const extraLabel = isComposite ? 'Score' : 'PER';
-  const extraVal = p => isComposite ? p._s.toFixed(1) : calcPER(p).toFixed(1);
-  const desc = isComposite
-    ? 'Composite: PTS (25%) + STL (20%) + BLK (18%) + REB (15%) + AST (12%) + ocena (10%)'
-    : 'PER (Hollinger): PTS + REB + AST + STL + BLK &minus; missedFG &minus; missedFT &minus; TO &divide; GP';
+  const tabBtn = (active, label, tab) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${active?'var(--accent)':'transparent'};background:none;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tab}')">${label}</button>`;
+  const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(isComposite,'Composite Score','composite')}${tabBtn(!isComposite,'PER (Hollinger)','per')}</div>`;
 
-  const tabStyle = active => active
-    ? 'padding:.5rem 1.25rem;border:none;border-bottom:2px solid var(--accent);background:none;color:var(--accent);font-weight:700;cursor:pointer;font-family:inherit;font-size:.9rem'
-    : 'padding:.5rem 1.25rem;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;font-family:inherit;font-size:.9rem';
-
-  document.getElementById('top10-modal-content').innerHTML = `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div>
-    <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">
-      <button style="${tabStyle(isComposite)}" onclick="renderTop10Tab('composite')">Composite Score</button>
-      <button style="${tabStyle(!isComposite)}" onclick="renderTop10Tab('per')">PER (Hollinger)</button>
-    </div>
-    <div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">${desc}</div>
-    <div class="stats-table-wrap">
-      <table>
-        <thead><tr>
-          <th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
-          <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>${extraLabel}</th><th>GP</th>
-        </tr></thead>
-        <tbody>${makeRows(ranked, extraLabel, extraVal)}</tbody>
-      </table>
-    </div>`;
+  if(isComposite) {
+    document.getElementById('top10-modal-content').innerHTML = header +
+      `<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Composite: PTS (25%) + STL (20%) + BLK (18%) + REB (15%) + AST (12%) + ocena (10%)</div>
+      <div class="stats-table-wrap"><table>
+        <thead><tr><th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
+        <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>Score</th><th>GP</th></tr></thead>
+        <tbody>${makeRows(ranked, 'Score', p=>p._s.toFixed(1))}</tbody>
+      </table></div>`;
+  } else {
+    const perRows = ranked.map((p,i) => {
+      const gr = numToGrade(p.gradeSum/p.gp);
+      const avg = v => (v/p.gp).toFixed(1);
+      const rank = i<3 ? ['🥇','🥈','🥉'][i] : `<span style="font-weight:900;color:var(--muted)">${i+1}</span>`;
+      const esc = s => s.replace(/'/g,"\'");
+      const mFG = (p.fga-p.fgm)/p.gp; const mFT = (p.fta-p.ftm)/p.gp;
+      const fgp = p.fga>0?Math.round(p.fgm/p.fga*100)+'%':'-';
+      const tpp = p.tpa>0?Math.round(p.tpm/p.tpa*100)+'%':'-';
+      return `<tr style="cursor:pointer" onclick="document.getElementById('top10-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${esc(p.name)}','${esc(p.team)}'),200)">
+        <td style="text-align:center;font-size:1.1rem">${rank}</td>
+        <td style="font-weight:700">${p.name}</td>
+        <td style="color:var(--muted);font-size:.85rem">${p.pos||''}</td>
+        <td style="color:var(--muted);font-size:.85rem">${p.team}</td>
+        <td><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></td>
+        <td style="color:var(--accent);font-weight:700">${avg(p.pts)}</td>
+        <td style="color:var(--loss)">${mFG.toFixed(1)}</td>
+        <td style="color:var(--loss)">${mFT.toFixed(1)}</td>
+        <td style="color:var(--loss)">${avg(p.to)}</td>
+        <td>${fgp}</td><td>${tpp}</td>
+        <td style="color:var(--accent2);font-weight:700">${p._s.toFixed(1)}</td>
+        <td style="font-size:.8rem;color:var(--muted)">${p.gp}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('top10-modal-content').innerHTML = header +
+      `<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">PER = (PTS + REB + AST + STL + BLK &minus; pud&#322;a FG &minus; pud&#322;a FT &minus; TO) &divide; GP &mdash; im wy&#380;szy tym lepiej</div>
+      <div class="stats-table-wrap"><table>
+        <thead><tr><th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
+        <th>GRD</th><th>PTS</th><th style="color:var(--loss)">-FG</th><th style="color:var(--loss)">-FT</th><th style="color:var(--loss)">TO</th>
+        <th>FG%</th><th>3P%</th><th>PER</th><th>GP</th></tr></thead>
+        <tbody>${perRows}</tbody>
+      </table></div>`;
+  }
 }
 
 
