@@ -1825,7 +1825,7 @@ function openPlayerModal(playerName, teamName) {
         </div>`).join('')}
     </div>
 
-    <div id="form-chart-${playerName.replace(/[^a-z0-9]/gi,'_')}" style="margin-bottom:1.5rem;padding:1rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px"></div>
+    <div id="player-form-chart" style="margin-bottom:1.5rem;padding:1rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px"></div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.75rem;color:var(--muted)">Historia meczów</div>
     <div class="stats-table-wrap">
       <table>
@@ -1853,7 +1853,7 @@ function openPlayerModal(playerName, teamName) {
   if(_pmGrid) _pmGrid.insertAdjacentHTML('beforebegin',_bestRow);
   document.getElementById('player-modal').classList.add('open');
   // Render form chart
-  const _chartId = 'form-chart-' + playerName.replace(/[^a-z0-9]/gi,'_');
+  const _chartId = 'player-form-chart';
   const _chartGames = [...games].sort((a,b)=>new Date(a.date)-new Date(b.date));
   // Add vs opponent info
   _chartGames.forEach(g => {
@@ -1940,7 +1940,7 @@ function renderFormChart(games, containerId) {
   const gridLines = yTicks.map(v => `<line x1="${PAD.left}" y1="${py(v).toFixed(1)}" x2="${PAD.left+chartW}" y2="${py(v).toFixed(1)}" stroke="var(--border)" stroke-width="0.5"/>`).join('');
 
   // Metric buttons
-  const btns = METRICS.map(m => `<button onclick="document.getElementById('${containerId}')._metric='${m.key}';renderFormChart(window._chartGames_${containerId},'${containerId}')" style="padding:.2rem .6rem;border:1px solid ${m.key===activeMet?m.color:'var(--border)'};background:${m.key===activeMet?m.color+'22':'transparent'};color:${m.key===activeMet?m.color:'var(--muted)'};border-radius:4px;font-size:.75rem;cursor:pointer;font-family:inherit;transition:all .2s">${m.label}</button>`).join('');
+  const btns = METRICS.map(m => `<button onclick="document.getElementById('player-form-chart')._metric='${m.key}';renderFormChart(window._chartGames_player_form_chart,'player-form-chart')" style="padding:.2rem .6rem;border:1px solid ${m.key===activeMet?m.color:'var(--border)'};background:${m.key===activeMet?m.color+'22':'transparent'};color:${m.key===activeMet?m.color:'var(--muted)'};border-radius:4px;font-size:.75rem;cursor:pointer;font-family:inherit;transition:all .2s">${m.label}</button>`).join('');
 
   el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
@@ -1963,7 +1963,7 @@ function renderFormChart(games, containerId) {
     </svg>`;
 
   // Store games reference for re-render on metric switch
-  window['_chartGames_' + containerId] = games;
+  window['_chartGames_' + containerId.replace(/-/g,'_')] = games;
 }
 
 // ═══════════════════════════════════════════════════════════════
