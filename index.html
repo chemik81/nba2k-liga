@@ -2123,11 +2123,31 @@ async function confirmImport() {
   toImport.forEach(m => { m.id = nextId++; });
 
   matches = [...matches, ...toImport];
-  await saveData();
-  document.getElementById('import-modal').classList.remove('open');
-  showToast(`✅ Zaimportowano ${toImport.length} meczów!`, 'success');
-  renderDashboard();
-  renderMatches();
+
+  if(!jbKey) {
+    showToast('❌ Brak Master Key — zaloguj się jako admin aby zapisać import!', 'error');
+    return;
+  }
+
+  showToast('⏳ Zapisuję do bazy...', 'info');
+  try {
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': jbKey },
+      body: JSON.stringify({ matches, aliases, seasons, currentSeasonId, schedule })
+    });
+    if(!res.ok) {
+      const err = await res.json();
+      showToast('❌ Błąd zapisu: ' + (err.message || res.status), 'error');
+      return;
+    }
+    document.getElementById('import-modal').classList.remove('open');
+    showToast(`✅ Zaimportowano i zapisano ${toImport.length} meczów!`, 'success');
+    renderDashboard();
+    renderMatches();
+  } catch(e) {
+    showToast('❌ Błąd połączenia: ' + e.message, 'error');
+  }
 }
 
 
