@@ -897,7 +897,7 @@
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:0.5rem">Zastosuj do zapisanych meczów</div>
         <p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">Kliknij aby poprawić nazwy we wszystkich już zapisanych meczach według powyższych korekt.</p>
         <button class="btn btn-primary" onclick="applyAliasesToAllMatches()">🔧 Popraw wszystkie mecze</button>
-        <button id="import-btn" class="btn btn-ghost" onclick="triggerImport()" style="margin-left:.75rem;display:none">📥 Importuj mecze (JSON)</button>
+
         <span id="fix-result" style="margin-left:1rem;font-size:0.85rem;color:var(--win)"></span>
       </div>
 
@@ -905,6 +905,7 @@
       <div style="border-top:1px solid var(--border);padding-top:1.5rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">🏀 Zarządzanie Drużynami</div>
         <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Dodaj drużyny i wgraj ich loga. Drużyny są dostępne w harmonogramie.</p>
+        <button onclick="triggerImport()" class="btn btn-ghost" style="margin-bottom:1rem">📥 Importuj mecze z pliku JSON</button>
         <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:end;margin-bottom:1rem">
           <div>
             <label>Nazwa drużyny</label>
@@ -1233,7 +1234,7 @@ function _doShowView(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
   if(id==='stats') { renderStats(); populateTeamFilter(); }
-  if(id==='aliases') { renderAliases(); renderTeamsSection(); const ib=document.getElementById('import-btn'); if(ib) ib.style.display=_isLoggedInSync()?'':'none'; }
+  if(id==='aliases') { renderAliases(); renderTeamsSection(); }
   updateAuthUI();
 }
 
