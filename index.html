@@ -1754,7 +1754,18 @@ function openPlayerModal(playerName, teamName) {
   document.getElementById('player-modal-content').innerHTML = `
     <div style="margin-bottom:1.5rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">${playerName}</div>
-      <div style="color:var(--muted);font-size:0.9rem">${teamName}${games[0]?.pos ? ' · <span style="color:var(--accent);font-weight:700">' + games[0].pos + '</span>' : ''} · ${gp} meczy</div>
+      <div style="color:var(--muted);font-size:0.9rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <span>${teamName}</span>
+        <span style="color:var(--muted)">·</span>
+        <span id="pos-label-${playerName}" style="color:var(--accent);font-weight:700;min-width:1.5rem">${games[0]?.pos||'—'}</span>
+        ${_isLoggedInSync() ? `<select id="pos-select-${playerName}" onchange="savePlayerPosition('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .35rem;font-size:.75rem;font-family:inherit;cursor:pointer">
+          <option value="">— brak —</option>
+          ${['PG','SG','SF','PF','C'].map(pos=>`<option value="${pos}" ${(games[0]?.pos||'')=== pos?'selected':''}>${pos}</option>`).join('')}
+        </select>` : ''}
+        <span style="color:var(--muted)">·</span>
+        <span>${gp} meczy</span>
+        <button onclick="openPlayerCard('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.2rem .6rem;font-size:.75rem;cursor:pointer;font-family:inherit">🃏 Karta</button>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:0.75rem;margin-bottom:1.75rem">
@@ -2681,6 +2692,30 @@ saveMatch = function() {
   }
   _origSaveMatchEdit();
 };
+
+
+function savePlayerPosition(playerName, teamName) {
+  const sel = document.getElementById('pos-select-' + CSS.escape(playerName));
+  if(!sel) return;
+  const newPos = sel.value;
+  // Update position in all matches
+  let changed = 0;
+  matches.forEach(m => {
+    [m.team1, m.team2].forEach(t => {
+      (t.players||[]).forEach(p => {
+        if(p.name === playerName) { p.pos = newPos; changed++; }
+      });
+    });
+  });
+  if(changed > 0) {
+    saveData().then(() => {
+      showToast('✅ Pozycja zaktualizowana: ' + (newPos||'brak'), 'success');
+      // Update display
+      const lbl = document.getElementById('pos-label-' + CSS.escape(playerName));
+      if(lbl) lbl.textContent = newPos || '—';
+    });
+  }
+}
 
 </script>
 </html>
