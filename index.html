@@ -2783,9 +2783,23 @@ async function generateRecap(id) {
   }
   const duelsText = duelLines.length ? '\nBEZPOŚREDNIE POJEDYNKI (kto atakuje vs kto broni):\n' + duelLines.join('\n') : '';
 
-  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz krótki, dynamiczny recap meczu po polsku (max 150 słów). Używaj sportowego języka. Wymień MVP meczu. Skomentuj kluczowe pojedynki 1vs1 — kto wygrał swój duel ofensywnie i defensywnie. Zwróć uwagę czy obrońcy powstrzymali swoich rywali czy pozwolili im punktować. Nie używaj nagłówków ani list — sam ciągły tekst.
+  // Flag players with 0 shot attempts
+  const zeroShotsNote = (team) => (team.players||[])
+    .filter(p => (p.fga||0) === 0 && (p.fta||0) === 0)
+    .map(p => p.name).join(', ');
+  const zs1 = zeroShotsNote(m.team1);
+  const zs2 = zeroShotsNote(m.team2);
+  const zeroShotsText = [zs1 && `${m.team1.name}: ${zs1}`, zs2 && `${m.team2.name}: ${zs2}`].filter(Boolean).join('; ');
 
-ZASADY KRYCIA: PG kryje SF rywala, SG kryje SG, SF kryje PG, PF kryje C (pick'n'roll), C kryje PF.
+  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz krótki, dynamiczny recap meczu po polsku (max 150 słów). Używaj sportowego języka. Wymień MVP meczu. Skomentuj kluczowe pojedynki defensywne — kto pozwolił rywalowi punktować, a kto skutecznie go zatrzymał. Nie używaj nagłówków ani list — sam ciągły tekst.
+
+WAŻNE ZASADY:
+- Jeśli gracz miał 0 prób rzutów z gry i 0 rzutów wolnych, nie oceniaj jego ofensywy negatywnie — napisz że praktycznie nie otrzymał piłki w ataku — koledzy kompletnie go nie widzieli w ofensywie, nie oddał ani jednej próby rzutu.
+- Oceniaj defensywę przez pryzmat punktów zdobytych przez rywala którego bronił, nie przez statystyki samego obrońcy.
+- Gracze z 0 FGA w tym meczu: ${zeroShotsText || 'brak'}.
+
+ZASADY KRYCIA W NBA 2K: PG kryje SF rywala, SG kryje SG, SF kryje PG, PF kryje C (pick'n'roll), C kryje PF.
+UWAGA: Pozycje w statystykach mogą nie odzwierciedlać faktycznej roli — gracz oznaczony jako SF może grać jako PF i odwrotnie. Patrz na kontekst.
 
 MECZ: ${m.team1.name} ${m.team1.score} - ${m.team2.score} ${m.team2.name}
 Data: ${m.date || 'brak'}
