@@ -2794,12 +2794,15 @@ async function generateRecap(id) {
   const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz krótki, dynamiczny recap meczu po polsku (max 150 słów). Używaj sportowego języka. Wymień MVP meczu. Skomentuj kluczowe pojedynki defensywne — kto pozwolił rywalowi punktować, a kto skutecznie go zatrzymał. Nie używaj nagłówków ani list — sam ciągły tekst.
 
 WAŻNE ZASADY:
-- Jeśli gracz miał 0 prób rzutów z gry i 0 rzutów wolnych, nie oceniaj jego ofensywy negatywnie — napisz że praktycznie nie otrzymał piłki w ataku — koledzy kompletnie go nie widzieli w ofensywie, nie oddał ani jednej próby rzutu.
-- Oceniaj defensywę przez pryzmat punktów zdobytych przez rywala którego bronił, nie przez statystyki samego obrońcy.
-- Gracze z 0 FGA w tym meczu: ${zeroShotsText || 'brak'}.
+- Jeśli gracz miał 0 prób rzutów (FGA=0 i FTA=0), napisz że praktycznie nie otrzymał piłki w ataku — koledzy kompletnie go nie widzieli w ofensywie.
+- Jeśli gracz miał MAŁO prób rzutów (np. 2-3 FGA) ale WYSOKĄ skuteczność (np. 2/3 = 67%), NIE pisz że ktoś go "zneutralizował" — po prostu rzadko dostawał piłkę, ale gdy dostał, był skuteczny.
+- "Zneutralizowany" stosuj tylko gdy gracz miał DUŻO prób rzutów (5+) ale NISKĄ skuteczność (poniżej 40%).
+- Oceniaj defensywę przez pryzmat punktów zdobytych przez rywala którego bronił — ile pozwolił zdobyć i przy jakiej skuteczności.
+- Dużo punktów przy złej skuteczności (poniżej 45%) i wielu stratach (3+) to NIE jest dobry mecz ofensywny — zaznacz to.
+- Gracze z 0 FGA w tym meczu: \${zeroShotsText || 'brak'}.
 
 ZASADY KRYCIA W NBA 2K: PG kryje SF rywala, SG kryje SG, SF kryje PG, PF kryje C (pick'n'roll), C kryje PF.
-UWAGA: Pozycje w statystykach mogą nie odzwierciedlać faktycznej roli — gracz oznaczony jako SF może grać jako PF i odwrotnie. Patrz na kontekst.
+UWAGA: Pozycje mogą nie odzwierciedlać faktycznej roli — np. gracz z pozycją SF może faktycznie grać jako PF. Stosuj zdrowy rozsądek patrząc na statystyki (dużo zbiórek = raczej big man, dużo asyst = raczej rozgrywający).
 
 MECZ: ${m.team1.name} ${m.team1.score} - ${m.team2.score} ${m.team2.name}
 Data: ${m.date || 'brak'}
