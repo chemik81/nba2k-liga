@@ -2181,7 +2181,7 @@ function renderSchedule() {
 
 function openScheduleAdd(editId) {
   const existing = editId ? schedule.find(s=>s.id===editId) : null;
-  const teams = [...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))].sort();
+  const teams = [...new Set([...Object.keys(window.teams||{}), ...matches.flatMap(m=>[m.team1.name,m.team2.name])])].sort();
   const teamOpts = teams.map(t=>`<option value="${t}">${t}</option>`).join('');
   const modal = document.getElementById('schedule-modal');
   document.getElementById('schedule-modal-content').innerHTML = `
