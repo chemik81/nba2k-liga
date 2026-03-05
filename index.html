@@ -3436,4 +3436,13 @@ ${formatPlayers(m.team2)}${duelsText}`;
 }
 
 </script>
+
+  <!-- IMPORT MODAL -->
+  <div id="import-modal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1100">
+    <div class="modal" style="max-width:700px;max-height:85vh;display:flex;flex-direction:column">
+      <button class="modal-close" onclick="document.getElementById('import-modal').classList.remove('open')">✕</button>
+      <div id="import-modal-content" style="overflow-y:auto;flex:1"></div>
+    </div>
+  </div>
+
 </html>
