@@ -2766,7 +2766,7 @@ async function generateRecap(id) {
 
   // Build matchup duels: attacker[pos] is guarded by opponent[guardPos]
   // PG is guarded by SF, SG by SG, SF by PG, PF by C, C by PF
-  const GUARD_MAP = { PG:'PF', SG:'SG', SF:'C', PF:'SF', C:'PG' }; // Liga: PG kryje PF, SG kryje SG, SF kryje C (pick'n'roll pomoc), PF kryje SF, C kryje PG
+  const GUARD_MAP = { PF:'PG', SG:'SG', PG:'SF', C:'PF', SF:'C' }; // PG kryje PF, SG kryje SG, SF kryje PG, PF kryje C, C kryje SF
   const getByPos = (team, pos) => (team.players||[]).find(p => p.pos === pos);
   const duelLines = [];
   for(const [atkPos, grdPos] of Object.entries(GUARD_MAP)) {
@@ -2805,7 +2805,7 @@ WAŻNE ZASADY:
 - Dużo punktów przy złej skuteczności (poniżej 45%) i wielu stratach (3+) to NIE jest dobry mecz ofensywny — zaznacz to.
 - Gracze z 0 FGA w tym meczu: \${zeroShotsText || 'brak'}.
 
-ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG, SF kryje C (pomoc przy pick'n'roll), PF kryje SF, C kryje PG. WAŻNE: SF i PF często zamieniają się przy kryciu PG i C w trakcie pick'n'roll — obaj odpowiadają za obronę tych pozycji.
+ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG, SF kryje PG rywala, PF kryje C rywala, C kryje SF rywala. KONTEKST: PG i C rywala grają razem pick'n'roll — SF i PF często zamieniają się przy ich kryciu na ułamki sekund, więc obaj SF i PF współodpowiadają za zatrzymanie PG i C.
 UWAGA: Pozycje mogą nie odzwierciedlać faktycznej roli. Stosuj zdrowy rozsądek — PG to rozgrywający (dużo asyst, mało zbiórek), C/PF to gracze podkoszowi (dużo zbiórek). NIE opisuj PG jako gracza "strefy podkoszowej" ani "podkoszowego" — to pozycja obwodowa.
 
 MECZ: ${m.team1.name} ${m.team1.score} - ${m.team2.score} ${m.team2.name}
