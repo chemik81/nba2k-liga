@@ -1555,7 +1555,7 @@ let pendingDeleteId = null;
 
 function deleteMatch(id) {
   pendingDeleteId = Number(id);
-  document.getElementById('confirm-modal').classList.add('open');
+  document.getElementById('delete-modal').classList.add('open');
 }
 
 function confirmDelete() {
@@ -1570,7 +1570,7 @@ function confirmDelete() {
 }
 
 function closeConfirm() {
-  document.getElementById('confirm-modal').classList.remove('open');
+  document.getElementById('delete-modal').classList.remove('open');
 }
 
 // ═══════════════════════════════════════════════════════════════
