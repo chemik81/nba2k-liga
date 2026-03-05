@@ -1432,7 +1432,8 @@ function renderMatches() {
   updateMatchFilters();
   const container = document.getElementById('matches-list');
   const ft=document.getElementById('mft')?.value||'',fp=document.getElementById('mfp')?.value||'',fs=document.getElementById('mfs')?.value||'';
-  const list=(ft||fp||fs)?matches.filter(m=>{if(fs&&m.seasonId!==fs)return false;if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;if(fp&&![...(m.team1.players||[]),...(m.team2.players||[])].some(p=>p.name===fp))return false;return true;}):matches;
+  const _raw=(ft||fp||fs)?matches.filter(m=>{if(fs&&m.seasonId!==fs)return false;if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;if(fp&&![...(m.team1.players||[]),...(m.team2.players||[])].some(p=>p.name===fp))return false;return true;}):matches;
+  const list=[..._raw].sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!list.length) {
     container.innerHTML = '<div class="empty"><div class="icon">📋</div><h3>Brak meczów</h3><p>'+(ft||fp?'Brak wyników dla filtra.':'Dodaj pierwszy mecz klikając "+ Dodaj Mecz"')+'</p></div>';
     return;
