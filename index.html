@@ -719,6 +719,7 @@
     <button onclick="showView('matches')">Mecze</button>
     <button onclick="showView('stats')">Statystyki</button>
     <button onclick="showView('add-match')">+ Dodaj Mecz</button>
+    <button onclick="showView('schedule')">📅 Harmonogram</button>
     <button onclick="showView('aliases')">⚙ Aliasy</button>
   </nav>
   <div style="display:flex;gap:0.5rem;align-items:center">
@@ -752,6 +753,7 @@
         <div class="card" style="padding:1rem" id="top3-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych</div></div>
       </div>
     </div>
+    <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div class="section-title">Tabela</div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="stats-table-wrap">
@@ -862,6 +864,17 @@
     </div>
   </div>
 
+
+
+  <!-- SCHEDULE -->
+  <div id="view-schedule" class="view">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem">
+      <div class="section-title" style="margin-bottom:0">📅 Harmonogram</div>
+      <div id="schedule-admin-btn"></div>
+    </div>
+    <div id="schedule-upcoming" style="margin-bottom:2rem"></div>
+    <div id="schedule-played" style="margin-bottom:2rem"></div>
+  </div>
 
   <!-- ALIASES VIEW -->
   <div id="view-aliases" class="view">
@@ -985,6 +998,7 @@
 // DATA STORE
 // ═══════════════════════════════════════════════════════════════
 let matches = [];
+let schedule = []; // planned matches
 let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}'); // { "wrong": "correct" }
 let seasons = [];
 let currentSeasonId = null;
@@ -1062,7 +1076,7 @@ async function saveData() {
     await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': jbKey },
-      body: JSON.stringify({ matches, aliases, seasons, currentSeasonId })
+      body: JSON.stringify({ matches, aliases, seasons, currentSeasonId, schedule })
     });
   } catch(e) { console.error('Save error:', e); }
 }
@@ -1081,6 +1095,7 @@ async function loadData() {
     aliases = data.record?.aliases || {};
     seasons = data.record?.seasons || [];
     currentSeasonId = data.record?.currentSeasonId || null;
+    schedule = data.record?.schedule || [];
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
     // Auto-assign matches without seasonId to currentSeason
     if(currentSeasonId) {
@@ -1167,6 +1182,7 @@ function applyAliasesToMatch(match) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
+  if(id==='schedule') { setTimeout(renderSchedule, 50); }
   if(PROTECTED_VIEWS.includes(id)) {
     isLoggedIn().then(logged => {
       if(!logged) {
@@ -1966,11 +1982,227 @@ function renderFormChart(games, containerId) {
   window['_chartGames_' + containerId.replace(/-/g,'_')] = games;
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// SCHEDULE / HARMONOGRAM
+// ═══════════════════════════════════════════════════════════════
+function renderSchedule() {
+  const isAdmin = _isLoggedInSync();
+  const now = new Date();
+
+  // Admin button
+  const adminBtn = document.getElementById('schedule-admin-btn');
+  if(adminBtn) adminBtn.innerHTML = isAdmin
+    ? `<button class="btn btn-primary" onclick="openScheduleAdd()">+ Dodaj mecz</button>`
+    : '';
+
+  const upcoming = schedule.filter(s => !s.played).sort((a,b) => new Date(a.date) - new Date(b.date));
+  const played   = schedule.filter(s =>  s.played).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+  const renderCard = (s, showPlayed) => {
+    const matchResult = s.matchId ? matches.find(m => Number(m.id) === Number(s.matchId)) : null;
+    const t1color = teamColor(s.team1); const t2color = teamColor(s.team2);
+    const dateStr = s.date ? new Date(s.date).toLocaleDateString('pl-PL',{weekday:'short',day:'numeric',month:'short'}) : '?';
+    const timeStr = s.time || '';
+    const isPast  = s.date && new Date(s.date) < now && !s.played;
+
+    let resultBadge = '';
+    if(matchResult) {
+      const w1 = matchResult.team1.score > matchResult.team2.score;
+      const winner = w1 ? matchResult.team1.name : matchResult.team2.name;
+      resultBadge = `<div style="margin-top:.75rem;padding:.5rem 1rem;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.2);border-radius:8px;text-align:center">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:var(--accent)">${matchResult.team1.score} — ${matchResult.team2.score}</span>
+        <span style="font-size:.75rem;color:var(--muted);display:block">Wygrali: ${winner}</span>
+      </div>`;
+    } else if(s.prediction) {
+      resultBadge = `<div style="margin-top:.75rem;padding:.5rem 1rem;background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.2);border-radius:8px">
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:.2rem">🤖 Predykcja AI</div>
+        <div style="font-size:.85rem;line-height:1.5;color:var(--text)">${s.prediction}</div>
+      </div>`;
+    }
+
+    const adminActions = isAdmin ? `
+      <div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+        ${!s.played ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="linkScheduleMatch(${s.id})">🔗 Połącz z meczem</button>` : ''}
+        ${!s.played && anthropicKey ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="predictScheduleMatch(${s.id})">🤖 Predykcja AI</button>` : ''}
+        <button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="openScheduleEdit(${s.id})">✏️ Edytuj</button>
+        <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .7rem" onclick="deleteScheduleMatch(${s.id})">🗑</button>
+      </div>` : '';
+
+    return `<div style="background:var(--surface);border:1px solid ${isPast?'var(--loss)':'var(--border)'};border-radius:12px;padding:1rem 1.25rem;margin-bottom:.75rem${s.played?';opacity:.7':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+        <div style="font-size:.8rem;color:${isPast?'var(--loss)':'var(--muted)'}">
+          📅 ${dateStr}${timeStr ? ' · ⏰ '+timeStr : ''}
+          ${s.seasonId ? ' · <span style="color:var(--accent);font-weight:600">'+(seasons.find(x=>x.id===s.seasonId)||{}).name+'</span>' : ''}
+          ${isPast ? ' · <span style="color:var(--loss)">Nie rozegrany</span>' : ''}
+        </div>
+        ${s.streamUrl ? `<a href="${s.streamUrl}" target="_blank" style="font-size:.8rem;color:var(--accent);text-decoration:none">▶ Stream</a>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;justify-content:center">
+        <div style="display:flex;align-items:center;gap:.5rem;flex:1;justify-content:flex-end">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.1rem;text-align:right">${s.team1}</div>
+          ${teamLogo(s.team1,40,'1rem')}
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:var(--muted);width:40px;text-align:center">VS</div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex:1">
+          ${teamLogo(s.team2,40,'1rem')}
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.1rem">${s.team2}</div>
+        </div>
+      </div>
+      ${resultBadge}
+      ${adminActions}
+    </div>`;
+  };
+
+  const upEl = document.getElementById('schedule-upcoming');
+  const plEl = document.getElementById('schedule-played');
+
+  if(upEl) upEl.innerHTML = upcoming.length
+    ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Nadchodzące mecze (${upcoming.length})</div>` + upcoming.map(s=>renderCard(s,false)).join('')
+    : `<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">Brak zaplanowanych meczów</div>`;
+
+  if(plEl) plEl.innerHTML = played.length
+    ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Rozegrane (${played.length})</div>` + played.map(s=>renderCard(s,true)).join('')
+    : '';
+}
+
+function openScheduleAdd(editId) {
+  const existing = editId ? schedule.find(s=>s.id===editId) : null;
+  const teams = [...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))].sort();
+  const teamOpts = teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+  const modal = document.getElementById('schedule-modal');
+  document.getElementById('schedule-modal-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:1.25rem">${existing?'✏️ Edytuj mecz':'➕ Dodaj planowany mecz'}</div>
+    <div style="display:flex;flex-direction:column;gap:.75rem">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.5rem;align-items:center">
+        <select id="sch-t1" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit">
+          <option value="">Drużyna 1...</option>${teamOpts}
+        </select>
+        <span style="color:var(--muted);font-weight:700">VS</span>
+        <select id="sch-t2" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit">
+          <option value="">Drużyna 2...</option>${teamOpts}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">DATA</label>
+          <input type="date" id="sch-date" value="${existing?.date||''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box"></div>
+        <div><label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">GODZINA</label>
+          <input type="time" id="sch-time" value="${existing?.time||''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box"></div>
+      </div>
+      <div><label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">LINK DO STREAMA (opcjonalnie)</label>
+        <input type="url" id="sch-stream" placeholder="https://twitch.tv/..." value="${existing?.streamUrl||''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box"></div>
+      <div><label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">SEZON</label>
+        <select id="sch-season" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit">
+          <option value="">Brak</option>
+          ${seasons.map(s=>`<option value="${s.id}" ${existing?.seasonId===s.id?'selected':''}>${s.name}</option>`).join('')}
+        </select></div>
+      <button class="btn btn-primary" onclick="saveScheduleMatch(${editId||'null'})" style="width:100%;margin-top:.5rem">✅ Zapisz</button>
+    </div>`;
+  if(existing) {
+    setTimeout(()=>{
+      const t1=document.getElementById('sch-t1'); if(t1) t1.value=existing.team1||'';
+      const t2=document.getElementById('sch-t2'); if(t2) t2.value=existing.team2||'';
+    },10);
+  }
+  modal.classList.add('open');
+}
+
+function openScheduleEdit(id) { openScheduleAdd(id); }
+
+function saveScheduleMatch(editId) {
+  const t1 = document.getElementById('sch-t1')?.value;
+  const t2 = document.getElementById('sch-t2')?.value;
+  const date = document.getElementById('sch-date')?.value;
+  const time = document.getElementById('sch-time')?.value;
+  const streamUrl = document.getElementById('sch-stream')?.value;
+  const seasonId = document.getElementById('sch-season')?.value || null;
+  if(!t1||!t2||t1===t2) { showToast('❌ Wybierz dwie różne drużyny', 'error'); return; }
+  if(!date) { showToast('❌ Podaj datę', 'error'); return; }
+  if(editId) {
+    const idx = schedule.findIndex(s=>s.id===editId);
+    if(idx!==-1) schedule[idx] = {...schedule[idx], team1:t1, team2:t2, date, time, streamUrl, seasonId};
+  } else {
+    schedule.push({ id: Date.now(), team1:t1, team2:t2, date, time, streamUrl, seasonId, played:false, prediction:null, matchId:null });
+  }
+  saveData().then(()=>{ showToast('✅ Zapisano!','success'); document.getElementById('schedule-modal').classList.remove('open'); renderSchedule(); });
+}
+
+function deleteScheduleMatch(id) {
+  schedule = schedule.filter(s=>s.id!==id);
+  saveData().then(()=>{ showToast('🗑 Usunięto','info'); renderSchedule(); });
+}
+
+function linkScheduleMatch(schedId) {
+  const unlinked = matches.filter(m => !schedule.some(s=>s.matchId===m.id));
+  const opts = unlinked.map(m=>`<option value="${m.id}">${formatDate(m.date)}: ${m.team1.name} ${m.team1.score}-${m.team2.score} ${m.team2.name}</option>`).join('');
+  if(!opts) { showToast('Brak meczów do połączenia','info'); return; }
+  const modal = document.getElementById('schedule-modal');
+  document.getElementById('schedule-modal-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:1rem">🔗 Połącz z meczem</div>
+    <select id="link-match-sel" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;margin-bottom:1rem"><option value="">Wybierz mecz...</option>${opts}</select>
+    <button class="btn btn-primary" style="width:100%" onclick="confirmLinkMatch(${schedId})">✅ Połącz</button>`;
+  modal.classList.add('open');
+}
+
+function confirmLinkMatch(schedId) {
+  const matchId = Number(document.getElementById('link-match-sel')?.value);
+  if(!matchId) return;
+  const idx = schedule.findIndex(s=>s.id===schedId);
+  if(idx!==-1) { schedule[idx].matchId = matchId; schedule[idx].played = true; }
+  saveData().then(()=>{ showToast('✅ Połączono!','success'); document.getElementById('schedule-modal').classList.remove('open'); renderSchedule(); });
+}
+
+async function predictScheduleMatch(schedId) {
+  const s = schedule.find(x=>x.id===schedId);
+  if(!s || !anthropicKey) return;
+  showToast('⏳ Generuję predykcję AI...','info');
+  const t1stats = getAggregatedStats().filter(p=>p.team===s.team1);
+  const t2stats = getAggregatedStats().filter(p=>p.team===s.team2);
+  const h2h = matches.filter(m=>(m.team1.name===s.team1&&m.team2.name===s.team2)||(m.team1.name===s.team2&&m.team2.name===s.team1));
+  const fmtTeam = (players) => players.map(p=>`${p.name}[${p.pos||'?'}]: ${(p.pts/p.gp).toFixed(1)}pkt ${(p.ast/p.gp).toFixed(1)}as ${(p.reb/p.gp).toFixed(1)}zb GRD:${numToGrade(p.gradeSum/p.gp)}`).join(', ');
+  const h2hText = h2h.length ? h2h.map(m=>`${m.team1.name} ${m.team1.score}-${m.team2.score} ${m.team2.name}`).join(', ') : 'Brak historii H2H';
+  const prompt = `Jesteś analitykiem sportowym NBA 2K. Na podstawie statystyk przewidź wynik meczu. Odpowiedz po polsku w 2-3 zdaniach. Podaj przewidywany wynik i faworyta. Bądź konkretny.
+
+${s.team1} vs ${s.team2}
+
+Statystyki ${s.team1}: ${fmtTeam(t1stats)}
+Statystyki ${s.team2}: ${fmtTeam(t2stats)}
+H2H: ${h2hText}`;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})});
+    const data = await res.json();
+    const pred = data.content?.[0]?.text||'';
+    const idx = schedule.findIndex(x=>x.id===schedId);
+    if(idx!==-1) schedule[idx].prediction = pred;
+    saveData().then(()=>{ showToast('✅ Predykcja wygenerowana!','success'); renderSchedule(); });
+  } catch(e) { showToast('❌ Błąd: '+e.message,'error'); }
+}
+
+function renderScheduleDashboard() {
+  const el = document.getElementById('schedule-dashboard');
+  if(!el) return;
+  const upcoming = schedule.filter(s=>!s.played).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,3);
+  if(!upcoming.length) { el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+    <div class="section-title" style="font-size:1.3rem;margin-bottom:0">📅 Nadchodzące mecze</div>
+    <button onclick="showView('schedule')" style="font-size:.75rem;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.3rem .7rem;border-radius:6px;cursor:pointer;font-family:inherit">Wszystkie →</button>
+  </div>` + upcoming.map(s=>{
+    const dateStr = s.date ? new Date(s.date).toLocaleDateString('pl-PL',{weekday:'short',day:'numeric',month:'short'}) : '?';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .9rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;cursor:pointer" onclick="showView('schedule')">
+      <div style="display:flex;align-items:center;gap:.4rem">${teamLogo(s.team1,24,'.65rem')}<span style="font-weight:700;font-size:.9rem">${s.team1}</span></div>
+      <div style="text-align:center"><div style="font-size:.65rem;color:var(--muted)">${dateStr}${s.time?' '+s.time:''}</div><div style="font-size:.75rem;font-weight:700;color:var(--muted)">VS</div></div>
+      <div style="display:flex;align-items:center;gap:.4rem"><span style="font-weight:700;font-size:.9rem">${s.team2}</span>${teamLogo(s.team2,24,'.65rem')}</div>
+    </div>`;
+  }).join('');
+}
+
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 function renderDashboard() {
   renderStandings();
+  setTimeout(renderScheduleDashboard, 100);
   renderLeaders();
   renderTeamOfWeek();
   updateSeasonBadge();
@@ -2228,6 +2460,7 @@ async function saveSetup() {
     aliases = data.record?.aliases || {};
     seasons = data.record?.seasons || [];
     currentSeasonId = data.record?.currentSeasonId || null;
+    schedule = data.record?.schedule || [];
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
 
     document.getElementById('setup-modal').classList.remove('open');
