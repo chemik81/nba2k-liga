@@ -899,6 +899,21 @@
         <button class="btn btn-primary" onclick="applyAliasesToAllMatches()">🔧 Popraw wszystkie mecze</button>
         <span id="fix-result" style="margin-left:1rem;font-size:0.85rem;color:var(--win)"></span>
       </div>
+
+    <div id="teams-admin-section" style="display:none;margin-top:2rem">
+      <div style="border-top:1px solid var(--border);padding-top:1.5rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">🏀 Zarządzanie Drużynami</div>
+        <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Dodaj drużyny i wgraj ich loga. Drużyny są dostępne w harmonogramie.</p>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:end;margin-bottom:1rem">
+          <div>
+            <label>Nazwa drużyny</label>
+            <input type="text" id="new-team-name" placeholder="np. Nowa Drużyna FC" style="width:100%;box-sizing:border-box">
+          </div>
+          <button class="btn btn-primary" onclick="addTeamEntry()">Dodaj</button>
+        </div>
+        <div id="teams-list"></div>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -1217,7 +1232,7 @@ function _doShowView(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
   if(id==='stats') { renderStats(); populateTeamFilter(); }
-  if(id==='aliases') renderAliases();
+  if(id==='aliases') { renderAliases(); renderTeamsSection(); }
   updateAuthUI();
 }
 
@@ -1990,6 +2005,95 @@ function renderFormChart(games, containerId) {
 }
 
 
+
+// ═══════════════════════════════════════════════════════════════
+// TEAMS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+// teams = { "Polish Boars": { logo: "data:image/..." }, ... }
+let teams = {};
+
+function loadTeams() {
+  try { teams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}'); } catch(e) { teams = {}; }
+}
+function saveTeams() {
+  localStorage.setItem('nba2k_teams', JSON.stringify(teams));
+}
+
+function renderTeamsSection() {
+  const section = document.getElementById('teams-admin-section');
+  if(!section) return;
+  section.style.display = _isLoggedInSync() ? 'block' : 'none';
+  renderTeamsList();
+}
+
+function renderTeamsList() {
+  const el = document.getElementById('teams-list');
+  if(!el) return;
+  // Merge: teams from matches + manually added
+  const matchTeams = [...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))];
+  const schedTeams = [...new Set(schedule.map(s=>[s.team1,s.team2]).flat().filter(Boolean))];
+  const allTeams = [...new Set([...Object.keys(teams), ...matchTeams, ...schedTeams])].sort();
+
+  if(!allTeams.length) { el.innerHTML='<div style="color:var(--muted);font-size:.85rem">Brak drużyn</div>'; return; }
+
+  el.innerHTML = allTeams.map(name => {
+    const t = teams[name] || {};
+    const logoHtml = t.logo
+      ? `<img src="${t.logo}" style="width:40px;height:40px;border-radius:8px;object-fit:contain;background:#fff">`
+      : teamLogo(name, 40, '1rem');
+    return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.5rem">
+      ${logoHtml}
+      <div style="font-weight:700;flex:1">${name}</div>
+      <label style="cursor:pointer;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .7rem;font-size:.75rem;font-family:inherit">
+        📁 Logo
+        <input type="file" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadTeamLogo('${name.replace(/'/g,"\'")}', this)">
+      </label>
+      ${t.logo ? `<button onclick="removeTeamLogo('${name.replace(/'/g,"\'")}'"  style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .6rem;font-size:.75rem;cursor:pointer">✕ Logo</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function addTeamEntry() {
+  const inp = document.getElementById('new-team-name');
+  const name = inp?.value.trim();
+  if(!name) { showToast('❌ Wpisz nazwę drużyny', 'error'); return; }
+  if(!teams[name]) teams[name] = {};
+  saveTeams();
+  inp.value = '';
+  renderTeamsList();
+  showToast('✅ Drużyna dodana: ' + name, 'success');
+}
+
+function uploadTeamLogo(teamName, input) {
+  const file = input.files[0];
+  if(!file) return;
+  if(file.size > 500*1024) { showToast('❌ Plik za duży — max 500KB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    if(!teams[teamName]) teams[teamName] = {};
+    teams[teamName].logo = e.target.result;
+    saveTeams();
+    renderTeamsList();
+    showToast('✅ Logo wgrane dla: ' + teamName, 'success');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeTeamLogo(teamName) {
+  if(teams[teamName]) delete teams[teamName].logo;
+  saveTeams();
+  renderTeamsList();
+  showToast('🗑 Logo usunięte', 'info');
+}
+
+// Override teamLogo to use custom logo if available
+const _origTeamLogo = teamLogo;
+function teamLogo(name, size=40, fontSize='1rem') {
+  const t = teams[name];
+  if(t?.logo) return `<img src="${t.logo}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0">`;
+  return _origTeamLogo(name, size, fontSize);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SCHEDULE / HARMONOGRAM
 // ═══════════════════════════════════════════════════════════════
@@ -2090,7 +2194,7 @@ function openScheduleAdd(editId) {
           <input id="sch-t2" type="text" list="sch-teams-list" placeholder="Drużyna 2..." style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box">
         </div>
       </div>
-      <datalist id="sch-teams-list">${teams.map(t=>`<option value="${t}">`).join('')}</datalist>
+      <datalist id="sch-teams-list">${[...new Set([...Object.keys(window.teams||{}), ...teams])].sort().map(t=>`<option value="${t}">`).join('')}</datalist>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
         <div><label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">DATA</label>
           <input type="date" id="sch-date" value="${existing?.date||''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box"></div>
@@ -2210,6 +2314,7 @@ function renderScheduleDashboard() {
 // ═══════════════════════════════════════════════════════════════
 function renderDashboard() {
   renderStandings();
+  loadTeams();
   setTimeout(renderScheduleDashboard, 100);
   renderLeaders();
   renderTeamOfWeek();
