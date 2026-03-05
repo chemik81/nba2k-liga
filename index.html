@@ -993,6 +993,13 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="schedule-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box" style="max-width:500px">
+    <button class="modal-close" onclick="document.getElementById('schedule-modal').classList.remove('open')">×</button>
+    <div id="schedule-modal-content"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 // DATA STORE
