@@ -1121,12 +1121,40 @@ async function saveData() {
   if(!jbBin) return;
   if(!jbKey) { showToast('❌ Brak Master Key — zaloguj się jako admin aby zapisywać dane', 'error'); return; }
   try {
-    await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
+    // Compact player data before saving (remove zero-value fields to save space)
+    const compactMatches = matches.map(m => ({
+      ...m,
+      team1: { ...m.team1, players: (m.team1.players||[]).map(p => {
+        const c = { name: p.name, grade: p.grade };
+        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta','pos'].forEach(k => { if(p[k]) c[k] = p[k]; });
+        return c;
+      })},
+      team2: { ...m.team2, players: (m.team2.players||[]).map(p => {
+        const c = { name: p.name, grade: p.grade };
+        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta','pos'].forEach(k => { if(p[k]) c[k] = p[k]; });
+        return c;
+      })}
+    }));
+    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule });
+    const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
+    if(parseFloat(sizeKB) > 95) {
+      showToast(`❌ Dane za duże (${sizeKB}KB) — limit JSONBin to ~100KB. Skontaktuj się z adminem.`, 'error');
+      console.warn('Payload too large:', sizeKB, 'KB');
+      return false;
+    }
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': jbKey },
-      body: JSON.stringify({ matches, aliases, seasons, currentSeasonId, schedule })
+      body: payload
     });
-  } catch(e) { console.error('Save error:', e); }
+    if(!res.ok) {
+      const err = await res.json().catch(()=>({}));
+      showToast(`❌ Błąd zapisu (${res.status}): ${err.message||'nieznany błąd'}`, 'error');
+      console.error('SaveData error:', res.status, err);
+      return false;
+    }
+    return true;
+  } catch(e) { console.error('Save error:', e); return false; }
 }
 
 async function loadData() {
