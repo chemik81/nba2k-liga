@@ -2154,16 +2154,16 @@ function renderTeamOfWeek() {
 
 
 function calcCompositeScore(p) {
-  // Composite: ocena (waga 40%) + PTS (20%) + AST (15%) + REB (12%) + STL (8%) + BLK (5%)
-  // Normalizujemy do per-game
+  // Composite: PTS(25%) + STL(20%) + BLK(18%) + REB(15%) + AST(12%) + ocena(10%)
+  // Obrona (STL+BLK) doceniona bardziej niz atak, ocena ma mniejsza wage
   const gp = Math.max(p.gp, 1);
-  const gradeScore = (p.gradeSum / gp) / 13 * 100; // 0-100
+  const gradeScore = (p.gradeSum / gp) / 13 * 100;
   const ptsScore   = Math.min((p.pts / gp) / 50 * 100, 100);
   const astScore   = Math.min((p.ast / gp) / 15 * 100, 100);
   const rebScore   = Math.min((p.reb / gp) / 20 * 100, 100);
-  const stlScore   = Math.min((p.stl / gp) / 5  * 100, 100);
-  const blkScore   = Math.min((p.blk / gp) / 5  * 100, 100);
-  return gradeScore*0.40 + ptsScore*0.20 + astScore*0.15 + rebScore*0.12 + stlScore*0.08 + blkScore*0.05;
+  const stlScore   = Math.min((p.stl / gp) / 4  * 100, 100); // prog nizszy = latw. max
+  const blkScore   = Math.min((p.blk / gp) / 3  * 100, 100); // bloki b. trudne wiec nizszy prog
+  return ptsScore*0.25 + stlScore*0.20 + blkScore*0.18 + rebScore*0.15 + astScore*0.12 + gradeScore*0.10;
 }
 
 function getSeasonMVP(seasonId) {
@@ -2212,7 +2212,7 @@ function openTop10Modal(seasonId, seasonName) {
   }).join('');
   document.getElementById('top10-modal-content').innerHTML = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🏆 TOP 10 — ${seasonName||'Wszystkie sezony'}</div>
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1.25rem">Ranking wg composite score: ocena (40%) + PTS (20%) + AST (15%) + REB (12%) + STL (8%) + BLK (5%)</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1.25rem">Ranking wg composite score: PTS (25%) + STL (20%) + BLK (18%) + REB (15%) + AST (12%) + ocena (10%)</div>
     <div class="stats-table-wrap">
       <table>
         <thead><tr>
