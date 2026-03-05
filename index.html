@@ -989,10 +989,11 @@ let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}'); // { "w
 let seasons = [];
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
-// Bin ID is public (needed for read-only access) - Master Key only from localStorage
+// Read-only key (safe to hardcode - only Read permission, no Create/Update/Delete)
+const PUBLIC_JB_READ_KEY = '$2a$10$s7x/.clV2lsU/yDDQAZ5nOVGQAAAQk3dJevLg7YYNphAObo0axoBK';
 const PUBLIC_JB_BIN = '69a6c311ae596e708f5abaf8';
 
-let jbKey = localStorage.getItem('nba2k_jb_key') || ''; // Master Key: admin only, never hardcoded
+let jbKey = localStorage.getItem('nba2k_jb_key') || ''; // Master Key: admin only
 let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let pendingMatch = null;
@@ -1072,6 +1073,7 @@ async function loadData() {
     showGlobalLoader(true);
     const headers = { 'Content-Type': 'application/json' };
     if(jbKey) headers['X-Master-Key'] = jbKey;
+    else headers['X-Access-Key'] = PUBLIC_JB_READ_KEY;
     const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}/latest`, { headers });
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
