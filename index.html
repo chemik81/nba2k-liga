@@ -988,10 +988,10 @@ let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}'); // { "w
 let seasons = [];
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
-const PUBLIC_JB_KEY = '$2a$10$4PQ8y05G/YxgLAIC2nzIluA1wSN0X9pFkyieeRJHLX3Rjsg6t4YeS';
+// Bin ID is public (needed for read-only access) - Master Key only from localStorage
 const PUBLIC_JB_BIN = '69a6c311ae596e708f5abaf8';
 
-let jbKey = localStorage.getItem('nba2k_jb_key') || PUBLIC_JB_KEY;
+let jbKey = localStorage.getItem('nba2k_jb_key') || ''; // Master Key: admin only, never hardcoded
 let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let pendingMatch = null;
@@ -1054,7 +1054,8 @@ function renderAliases() {
 }
 
 async function saveData() {
-  if(!jbKey || !jbBin) return;
+  if(!jbBin) return;
+  if(!jbKey) { showToast('❌ Brak Master Key — zaloguj się jako admin aby zapisywać dane', 'error'); return; }
   try {
     await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
       method: 'PUT',
@@ -1949,7 +1950,13 @@ async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
-const CORRECT_HASH = (async () => sha256('chemik1981_12po34@'))();
+// Password hash - admin should change this via localStorage('nba2k_pw_hash')
+const _PW_SALT = 'nba2k26liga2025';
+const CORRECT_HASH = (async () => {
+  const stored = localStorage.getItem('nba2k_pw_hash');
+  if(stored) return stored;
+  return Promise.resolve('c8b583e26e557d2231acf77e064362620471401652ec527b7be7bfdd3a4c06e8'); // pre-computed salted hash
+})();
 
 async function isLoggedIn() {
   const stored = localStorage.getItem('nba2k_auth');
@@ -1968,7 +1975,7 @@ CORRECT_HASH.then(h => { _cachedHash = h; });
 
 async function checkLogin() {
   const val = document.getElementById('login-input').value;
-  const hash = await sha256(val);
+  const hash = await sha256(_PW_SALT + val);
   const correct = await CORRECT_HASH;
   if(hash === correct) {
     localStorage.setItem('nba2k_auth', hash);
