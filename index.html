@@ -2000,7 +2000,7 @@ function renderSchedule() {
   // Admin button
   const adminBtn = document.getElementById('schedule-admin-btn');
   if(adminBtn) adminBtn.innerHTML = isAdmin
-    ? `<button class="btn btn-primary" onclick="openScheduleAdd()">+ Dodaj mecz</button>`
+    ? `<button class="btn btn-primary" onclick="openScheduleAdd()">📅 Planowany mecz</button> <button class="btn btn-ghost" onclick="showView('add-match')" style="margin-left:.5rem">🏀 Dodaj wynik meczu</button>`
     : '';
 
   const upcoming = schedule.filter(s => !s.played).sort((a,b) => new Date(a.date) - new Date(b.date));
