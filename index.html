@@ -2192,15 +2192,35 @@ function renderSeasonMVPBlock(seasonId) {
   </div>`;
 }
 
+function calcPER(p) {
+  // Uproszczone PER (bez minut) wg Hollingera
+  // PER = (PTS + REB + AST + STL + BLK - missedFG - missedFT - TO) / GP
+  const gp = Math.max(p.gp, 1);
+  const missedFG = (p.fga - p.fgm) || 0;
+  const missedFT = (p.fta - p.ftm) || 0;
+  const raw = (p.pts + p.reb + p.ast + p.stl + p.blk - missedFG - missedFT - p.to) / gp;
+  return Math.round(raw * 10) / 10;
+}
+
+let _top10SeasonId = null, _top10SeasonName = null;
+
 function openTop10Modal(seasonId, seasonName) {
-  const agg = getAggregatedStats(seasonId);
-  const ranked = agg.filter(p=>p.gp>=1).map(p=>({...p, score: calcCompositeScore(p), avgGN: p.gradeSum/p.gp})).sort((a,b)=>b.score-a.score).slice(0,10);
+  _top10SeasonId = seasonId;
+  _top10SeasonName = seasonName;
+  renderTop10Tab('composite');
+  document.getElementById('top10-modal').classList.add('open');
+}
+
+function renderTop10Tab(tab) {
+  const agg = getAggregatedStats(_top10SeasonId);
   const medals = ['🥇','🥈','🥉'];
-  const rows = ranked.map((p,i) => {
-    const gr = numToGrade(p.avgGN);
+
+  const makeRows = (ranked, extraCol, extraVal) => ranked.map((p,i) => {
+    const gr = numToGrade(p.gradeSum/p.gp);
     const avg = v => (v/p.gp).toFixed(1);
     const rank = i<3 ? medals[i] : `<span style="font-weight:900;color:var(--muted)">${i+1}</span>`;
-    return `<tr style="cursor:pointer" onclick="document.getElementById('top10-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${p.name.replace(/'/g,"\\'")}','${p.team.replace(/'/g,"\\'")}'),200)">
+    const esc = s => s.replace(/'/g,"\'");
+    return `<tr style="cursor:pointer" onclick="document.getElementById('top10-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${esc(p.name)}','${esc(p.team)}'),200)">
       <td style="text-align:center;font-size:1.1rem">${rank}</td>
       <td style="font-weight:700">${p.name}</td>
       <td style="color:var(--muted);font-size:.85rem">${p.pos||''}</td>
@@ -2208,22 +2228,42 @@ function openTop10Modal(seasonId, seasonName) {
       <td><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></td>
       <td style="color:var(--accent);font-weight:700">${avg(p.pts)}</td>
       <td>${avg(p.reb)}</td><td>${avg(p.ast)}</td><td>${avg(p.stl)}</td><td>${avg(p.blk)}</td>
+      <td style="color:var(--accent2);font-weight:700">${extraVal(p)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${p.gp}</td>
     </tr>`;
   }).join('');
+
+  const isComposite = tab === 'composite';
+  const ranked = isComposite
+    ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
+    : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
+
+  const extraLabel = isComposite ? 'Score' : 'PER';
+  const extraVal = p => isComposite ? p._s.toFixed(1) : calcPER(p).toFixed(1);
+  const desc = isComposite
+    ? 'Composite: PTS (25%) + STL (20%) + BLK (18%) + REB (15%) + AST (12%) + ocena (10%)'
+    : 'PER (Hollinger): PTS + REB + AST + STL + BLK &minus; missedFG &minus; missedFT &minus; TO &divide; GP';
+
+  const tabStyle = active => active
+    ? 'padding:.5rem 1.25rem;border:none;border-bottom:2px solid var(--accent);background:none;color:var(--accent);font-weight:700;cursor:pointer;font-family:inherit;font-size:.9rem'
+    : 'padding:.5rem 1.25rem;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;font-family:inherit;font-size:.9rem';
+
   document.getElementById('top10-modal-content').innerHTML = `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🏆 TOP 10 — ${seasonName||'Wszystkie sezony'}</div>
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1.25rem">Ranking wg composite score: PTS (25%) + STL (20%) + BLK (18%) + REB (15%) + AST (12%) + ocena (10%)</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div>
+    <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">
+      <button style="${tabStyle(isComposite)}" onclick="renderTop10Tab('composite')">Composite Score</button>
+      <button style="${tabStyle(!isComposite)}" onclick="renderTop10Tab('per')">PER (Hollinger)</button>
+    </div>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">${desc}</div>
     <div class="stats-table-wrap">
       <table>
         <thead><tr>
           <th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
-          <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>GP</th>
+          <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>${extraLabel}</th><th>GP</th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${makeRows(ranked, extraLabel, extraVal)}</tbody>
       </table>
     </div>`;
-  document.getElementById('top10-modal').classList.add('open');
 }
 
 
