@@ -897,6 +897,7 @@
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:0.5rem">Zastosuj do zapisanych meczów</div>
         <p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">Kliknij aby poprawić nazwy we wszystkich już zapisanych meczach według powyższych korekt.</p>
         <button class="btn btn-primary" onclick="applyAliasesToAllMatches()">🔧 Popraw wszystkie mecze</button>
+        <button onclick="triggerImport()" class="btn btn-ghost" style="margin-left:.75rem">📥 Importuj mecze (JSON)</button>
 
         <span id="fix-result" style="margin-left:1rem;font-size:0.85rem;color:var(--win)"></span>
       </div>
@@ -905,7 +906,6 @@
       <div style="border-top:1px solid var(--border);padding-top:1.5rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">🏀 Zarządzanie Drużynami</div>
         <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Dodaj drużyny i wgraj ich loga. Drużyny są dostępne w harmonogramie.</p>
-        <button onclick="triggerImport()" class="btn btn-ghost" style="margin-bottom:1rem">📥 Importuj mecze z pliku JSON</button>
         <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:end;margin-bottom:1rem">
           <div>
             <label>Nazwa drużyny</label>
@@ -3397,6 +3397,9 @@ WAŻNE ZASADY:
 - Jeśli gracz oddał dużo rzutów (10+) i trafił poniżej 50%, to był to kiepski wieczór ofensywny — forsował rzuty i nie był skuteczny mimo dużego zaufania zespołu. Np. 11/20 (55%) przy 20 próbach to przeciętny występ ofensywny, nie dobry.
 - Dużo punktów przy złej skuteczności (poniżej 45%) i wielu stratach (3+) to NIE jest dobry mecz ofensywny — zaznacz to.
 - Gracze z 0 FGA w tym meczu: \${zeroShotsText || 'brak'}.
+- SPECJALNE ZASADY DLA KONKRETNYCH GRACZY:
+  * chemik81pl: gdy jego ocena to B lub wyższa (B, B+, A-, A, A+), zawsze napisz o nim z lekką pochwałą i uznaniem — podkreśl jego wkład, nawet jeśli statystyki nie są spektakularne. Traktuj go jak gracza który "cicho robi robotę".
+  * SniperKPL: możesz pisać o nim naprzemiennie jako "SniperKPL" lub "Saper" — używaj przydomka "Saper" mniej więcej co drugi raz gdy go wspominasz.
 
 ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG, SF kryje PG rywala, PF kryje C rywala, C kryje SF rywala. KONTEKST: PG i C rywala grają razem pick'n'roll — SF i PF często zamieniają się przy ich kryciu na ułamki sekund, więc obaj SF i PF współodpowiadają za zatrzymanie PG i C.
 UWAGA: Pozycje mogą nie odzwierciedlać faktycznej roli. Stosuj zdrowy rozsądek — PG to rozgrywający (dużo asyst, mało zbiórek), C/PF to gracze podkoszowi (dużo zbiórek). NIE opisuj PG jako gracza "strefy podkoszowej" ani "podkoszowego" — to pozycja obwodowa.
