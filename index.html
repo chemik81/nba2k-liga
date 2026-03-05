@@ -897,6 +897,7 @@
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:0.5rem">Zastosuj do zapisanych meczów</div>
         <p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">Kliknij aby poprawić nazwy we wszystkich już zapisanych meczach według powyższych korekt.</p>
         <button class="btn btn-primary" onclick="applyAliasesToAllMatches()">🔧 Popraw wszystkie mecze</button>
+        <button id="import-btn" class="btn btn-ghost" onclick="triggerImport()" style="margin-left:.75rem;display:none">📥 Importuj mecze (JSON)</button>
         <span id="fix-result" style="margin-left:1rem;font-size:0.85rem;color:var(--win)"></span>
       </div>
 
@@ -1232,7 +1233,7 @@ function _doShowView(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
   if(id==='stats') { renderStats(); populateTeamFilter(); }
-  if(id==='aliases') { renderAliases(); renderTeamsSection(); }
+  if(id==='aliases') { renderAliases(); renderTeamsSection(); const ib=document.getElementById('import-btn'); if(ib) ib.style.display=_isLoggedInSync()?'':'none'; }
   updateAuthUI();
 }
 
@@ -2007,6 +2008,102 @@ function renderFormChart(games, containerId) {
 }
 
 
+
+
+// ═══════════════════════════════════════════════════════════════
+// IMPORT MATCHES FROM JSON
+// ═══════════════════════════════════════════════════════════════
+let _importBuffer = null;
+
+function triggerImport() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json';
+  inp.onchange = async e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    try {
+      _importBuffer = JSON.parse(text);
+      showImportPreview(_importBuffer);
+    } catch(err) {
+      showToast('❌ Błąd pliku JSON: ' + err.message, 'error');
+    }
+  };
+  inp.click();
+}
+
+function showImportPreview(data) {
+  const allMatches = data.matches || [];
+  const season = data.season;
+  const modal = document.getElementById('import-modal');
+  const content = document.getElementById('import-modal-content');
+
+  const rows = allMatches.map((m, idx) => {
+    const d = m.date ? new Date(m.date).toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) : '?';
+    const w = m.team1.score > m.team2.score ? m.team1.name : m.team2.name;
+    return `<tr>
+      <td style="padding:.4rem .6rem"><input type="checkbox" class="import-chk" data-idx="${idx}" checked style="cursor:pointer;width:16px;height:16px"></td>
+      <td style="padding:.4rem .6rem;color:var(--muted);font-size:.8rem">${d}</td>
+      <td style="padding:.4rem .6rem;font-weight:600">${m.team1.name}</td>
+      <td style="padding:.4rem .6rem;text-align:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;color:var(--accent)">${m.team1.score} — ${m.team2.score}</td>
+      <td style="padding:.4rem .6rem;font-weight:600">${m.team2.name}</td>
+      <td style="padding:.4rem .6rem;font-size:.75rem;color:var(--muted)">${m.note||''}</td>
+    </tr>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.25rem">📥 Wybierz mecze do importu</div>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Sezon: <strong style="color:var(--accent)">${season?.name||'?'}</strong> · ${allMatches.length} meczów w pliku</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button onclick="document.querySelectorAll('.import-chk').forEach(c=>c.checked=true)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.3rem .75rem;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">✅ Zaznacz wszystkie</button>
+        <button onclick="document.querySelectorAll('.import-chk').forEach(c=>c.checked=false)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.3rem .75rem;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">☐ Odznacz wszystkie</button>
+        <button onclick="confirmImport()" class="btn btn-primary" style="font-size:.85rem">📥 Importuj zaznaczone</button>
+      </div>
+    </div>
+    <div style="padding:1rem 1.5rem">
+      <div class="stats-table-wrap">
+        <table style="width:100%">
+          <thead><tr>
+            <th style="width:30px"></th>
+            <th style="text-align:left">Data</th>
+            <th style="text-align:left">Drużyna 1</th>
+            <th>Wynik</th>
+            <th style="text-align:left">Drużyna 2</th>
+            <th style="text-align:left">Notatka</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  modal.classList.add('open');
+}
+
+async function confirmImport() {
+  const checked = [...document.querySelectorAll('.import-chk:checked')].map(c => Number(c.dataset.idx));
+  if(!checked.length) { showToast('Nie zaznaczono żadnych meczów', 'info'); return; }
+
+  const data = _importBuffer;
+  const toImport = checked.map(i => data.matches[i]);
+  const season = data.season;
+
+  if(season && !seasons.find(s => s.id === season.id)) {
+    seasons.push(season);
+  }
+
+  const maxId = matches.length > 0 ? Math.max(...matches.map(m => Number(m.id))) : 0;
+  let nextId = maxId + 1;
+  toImport.forEach(m => { m.id = nextId++; });
+
+  matches = [...matches, ...toImport];
+  await saveData();
+  document.getElementById('import-modal').classList.remove('open');
+  showToast(`✅ Zaimportowano ${toImport.length} meczów!`, 'success');
+  renderDashboard();
+  renderMatches();
+}
 
 // ═══════════════════════════════════════════════════════════════
 // TEAMS MANAGEMENT
