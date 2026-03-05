@@ -2764,24 +2764,28 @@ async function generateRecap(id) {
 
   const quarters = (t) => (t.quarters||[]).map((s,i)=>`Q${i+1}:${s}`).join(' ');
 
-  // Build matchup duels based on positions
-  // Defensive assignments: PG→SF, SG→SG, SF→PG, PF→C, C→PF (pick'n'roll coverage)
-  const MATCHUPS = { PG:'SF', SG:'SG', SF:'PG', PF:'C', C:'PF' };
+  // Build matchup duels: attacker[pos] is guarded by opponent[guardPos]
+  // PG is guarded by SF, SG by SG, SF by PG, PF by C, C by PF
+  const GUARD_MAP = { PG:'PF', SG:'SG', SF:'C', PF:'SF', C:'PG' }; // Liga: PG kryje PF, SG kryje SG, SF kryje C (pick'n'roll pomoc), PF kryje SF, C kryje PG
   const getByPos = (team, pos) => (team.players||[]).find(p => p.pos === pos);
   const duelLines = [];
-  for(const [offPos, defPos] of Object.entries(MATCHUPS)) {
-    const attacker = getByPos(m.team1, offPos);
-    const defender = getByPos(m.team2, defPos);
-    if(attacker && defender) {
-      duelLines.push(`${attacker.name}[${offPos}] vs ${defender.name}[${defPos}]: ${attacker.pts}pkt/${attacker.fgm}z${attacker.fga}FG atakuje — ${defender.name} bronil (${defender.stl}prz ${defender.blk}blk ${defender.grade})`);
+  for(const [atkPos, grdPos] of Object.entries(GUARD_MAP)) {
+    // team1 attacker guarded by team2 defender
+    const atk1 = getByPos(m.team1, atkPos);
+    const def1 = getByPos(m.team2, grdPos);
+    if(atk1 && def1) {
+      const fgPct1 = atk1.fga>0 ? Math.round(atk1.fgm/atk1.fga*100)+'%' : 'brak rzutów';
+      duelLines.push(`${atk1.name}[${atkPos}] ATAKUJE, broni go ${def1.name}[${grdPos}]: ${atk1.pts}pkt FG:${atk1.fgm}/${atk1.fga}(${fgPct1}) TO:${atk1.to} | obrońca ${def1.name}: ${def1.stl}prz ${def1.blk}blk ocena:${def1.grade}`);
     }
-    const attacker2 = getByPos(m.team2, offPos);
-    const defender2 = getByPos(m.team1, defPos);
-    if(attacker2 && defender2) {
-      duelLines.push(`${attacker2.name}[${offPos}] vs ${defender2.name}[${defPos}]: ${attacker2.pts}pkt/${attacker2.fgm}z${attacker2.fga}FG atakuje — ${defender2.name} bronil (${defender2.stl}prz ${defender2.blk}blk ${defender2.grade})`);
+    // team2 attacker guarded by team1 defender
+    const atk2 = getByPos(m.team2, atkPos);
+    const def2 = getByPos(m.team1, grdPos);
+    if(atk2 && def2) {
+      const fgPct2 = atk2.fga>0 ? Math.round(atk2.fgm/atk2.fga*100)+'%' : 'brak rzutów';
+      duelLines.push(`${atk2.name}[${atkPos}] ATAKUJE, broni go ${def2.name}[${grdPos}]: ${atk2.pts}pkt FG:${atk2.fgm}/${atk2.fga}(${fgPct2}) TO:${atk2.to} | obrońca ${def2.name}: ${def2.stl}prz ${def2.blk}blk ocena:${def2.grade}`);
     }
   }
-  const duelsText = duelLines.length ? '\nBEZPOŚREDNIE POJEDYNKI (kto atakuje vs kto broni):\n' + duelLines.join('\n') : '';
+  const duelsText = duelLines.length ? '\nBEZPOŚREDNIE POJEDYNKI (kto atakuje, kto broni):\n' + duelLines.join('\n') : '';
 
   // Flag players with 0 shot attempts
   const zeroShotsNote = (team) => (team.players||[])
@@ -2801,7 +2805,7 @@ WAŻNE ZASADY:
 - Dużo punktów przy złej skuteczności (poniżej 45%) i wielu stratach (3+) to NIE jest dobry mecz ofensywny — zaznacz to.
 - Gracze z 0 FGA w tym meczu: \${zeroShotsText || 'brak'}.
 
-ZASADY KRYCIA W NBA 2K: PG kryje SF rywala, SG kryje SG, SF kryje PG, PF kryje C (pick'n'roll), C kryje PF.
+ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG, SF kryje C (pomoc przy pick'n'roll), PF kryje SF, C kryje PG. WAŻNE: SF i PF często zamieniają się przy kryciu PG i C w trakcie pick'n'roll — obaj odpowiadają za obronę tych pozycji.
 UWAGA: Pozycje mogą nie odzwierciedlać faktycznej roli — np. gracz z pozycją SF może faktycznie grać jako PF. Stosuj zdrowy rozsądek patrząc na statystyki (dużo zbiórek = raczej big man, dużo asyst = raczej rozgrywający).
 
 MECZ: ${m.team1.name} ${m.team1.score} - ${m.team2.score} ${m.team2.name}
