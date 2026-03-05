@@ -902,6 +902,29 @@
         <span id="fix-result" style="margin-left:1rem;font-size:0.85rem;color:var(--win)"></span>
       </div>
 
+    <!-- TEAM ALIASES -->
+    <div class="card" style="margin-top:1.5rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">🔀 Aliasy Drużyn</div>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Połącz różne nazwy tej samej drużyny. Np. "Aliens Katowice PL" → "Katowice PL". Kliknij Zastosuj aby zaktualizować wszystkie mecze.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;margin-bottom:1rem">
+        <div>
+          <label>Stara/błędna nazwa</label>
+          <input type="text" id="talias-wrong" list="talias-teams-list" placeholder="np. Aliens Katowice PL">
+          <datalist id="talias-teams-list"></datalist>
+        </div>
+        <div>
+          <label>Poprawna nazwa</label>
+          <input type="text" id="talias-correct" list="talias-teams-list" placeholder="np. Katowice PL">
+        </div>
+        <button class="btn btn-primary" onclick="addTeamAlias()">Dodaj</button>
+      </div>
+      <div id="team-aliases-list"></div>
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary" onclick="applyTeamAliasesToAllMatches()">🔧 Zastosuj do wszystkich meczów</button>
+        <span id="talias-result" style="margin-left:1rem;font-size:.85rem;color:var(--win)"></span>
+      </div>
+    </div>
+
     <div id="teams-admin-section" style="display:none;margin-top:2rem">
       <div style="border-top:1px solid var(--border);padding-top:1.5rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">🏀 Zarządzanie Drużynami</div>
@@ -1023,7 +1046,8 @@
 // ═══════════════════════════════════════════════════════════════
 let matches = [];
 let schedule = []; // planned matches
-let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}'); // { "wrong": "correct" }
+let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}');
+let teamAliases = JSON.parse(localStorage.getItem('nba2k_team_aliases') || '{}'); // { "wrong": "correct" }
 let seasons = [];
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
@@ -1234,7 +1258,7 @@ function _doShowView(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
   if(id==='stats') { renderStats(); populateTeamFilter(); }
-  if(id==='aliases') { renderAliases(); renderTeamsSection(); }
+  if(id==='aliases') { renderAliases(); renderTeamAliases(); renderTeamsSection(); }
   updateAuthUI();
 }
 
@@ -2104,6 +2128,62 @@ async function confirmImport() {
   showToast(`✅ Zaimportowano ${toImport.length} meczów!`, 'success');
   renderDashboard();
   renderMatches();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TEAM ALIASES
+// ═══════════════════════════════════════════════════════════════
+function saveTeamAliases() {
+  localStorage.setItem('nba2k_team_aliases', JSON.stringify(teamAliases));
+}
+function addTeamAlias() {
+  const wrong = document.getElementById('talias-wrong')?.value.trim();
+  const correct = document.getElementById('talias-correct')?.value.trim();
+  if(!wrong||!correct){showToast('❌ Wypełnij oba pola','error');return;}
+  if(wrong===correct){showToast('❌ Nazwy muszą być różne','error');return;}
+  teamAliases[wrong]=correct; saveTeamAliases();
+  document.getElementById('talias-wrong').value='';
+  document.getElementById('talias-correct').value='';
+  renderTeamAliases(); showToast('✅ Alias dodany','success');
+}
+function removeTeamAlias(wrong) {
+  delete teamAliases[wrong]; saveTeamAliases(); renderTeamAliases();
+}
+function renderTeamAliases() {
+  const container = document.getElementById('team-aliases-list');
+  if(!container) return;
+  const dl = document.getElementById('talias-teams-list');
+  if(dl) {
+    const all = [...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))].sort();
+    dl.innerHTML = all.map(t=>`<option value="${t}">`).join('');
+  }
+  const entries = Object.entries(teamAliases);
+  if(!entries.length){container.innerHTML='<p style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak aliasów drużyn.</p>';return;}
+  container.innerHTML=`<table style="width:100%;border-collapse:collapse"><thead><tr>
+    <th style="text-align:left;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border)">Stara nazwa</th>
+    <th style="text-align:left;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border)">→ Nowa nazwa</th>
+    <th style="border-bottom:1px solid var(--border)"></th>
+  </tr></thead><tbody>${entries.map(([w,c])=>`
+    <tr>
+      <td style="padding:.5rem .75rem;color:var(--loss)">${w}</td>
+      <td style="padding:.5rem .75rem;color:var(--win);font-weight:600">${c}</td>
+      <td style="padding:.5rem .75rem;text-align:right"><button onclick="removeTeamAlias('${w.replace(/'/g,"\'")}')" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">✕</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function applyTeamAliasesToAllMatches() {
+  let changed=0;
+  matches.forEach(m=>{
+    if(teamAliases[m.team1.name]){m.team1.name=teamAliases[m.team1.name];changed++;}
+    if(teamAliases[m.team2.name]){m.team2.name=teamAliases[m.team2.name];changed++;}
+  });
+  const el=document.getElementById('talias-result');
+  if(changed>0){
+    saveData();renderStats();renderMatches();renderDashboard();
+    if(el){el.textContent=`✅ Zaktualizowano ${changed} drużyn!`;setTimeout(()=>el.textContent='',3000);}
+  } else {
+    if(el){el.textContent='Brak zmian.';setTimeout(()=>el.textContent='',3000);}
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
