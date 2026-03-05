@@ -2016,9 +2016,11 @@ let teams = {};
 
 function loadTeams() {
   try { teams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}'); } catch(e) { teams = {}; }
+  window.teams = teams;
 }
 function saveTeams() {
   localStorage.setItem('nba2k_teams', JSON.stringify(teams));
+  window.teams = teams;
 }
 
 function renderTeamsSection() {
