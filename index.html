@@ -1423,6 +1423,32 @@ function clearForm() {
   setStatus('', '');
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// TEAM LOGO HELPERS
+// ═══════════════════════════════════════════════════════════════
+function teamColor(name) {
+  // Deterministic color from team name
+  const COLORS = [
+    '#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c',
+    '#3498db','#9b59b6','#e91e63','#00bcd4','#ff5722',
+    '#8bc34a','#607d8b','#ff9800','#795548','#673ab7'
+  ];
+  let hash = 0;
+  for(let i=0;i<name.length;i++) hash = name.charCodeAt(i) + ((hash<<5)-hash);
+  return COLORS[Math.abs(hash) % COLORS.length];
+}
+function teamInitials(name) {
+  const words = name.trim().split(/\s+/);
+  if(words.length >= 2) return (words[0][0] + words[words.length-1][0]).toUpperCase();
+  return name.substring(0,2).toUpperCase();
+}
+function teamLogo(name, size=40, fontSize='1rem') {
+  const color = teamColor(name);
+  const initials = teamInitials(name);
+  return `<div style="width:${size}px;height:${size}px;border-radius:8px;background:${color};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${fontSize};color:#fff;flex-shrink:0;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,.4)">${initials}</div>`;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // RENDER MATCHES
 // ═══════════════════════════════════════════════════════════════
@@ -1454,7 +1480,7 @@ function renderMatches() {
     const w1 = m.team1.score > m.team2.score;
     return `<div class="match-card" onclick="openMatch(${m.id})" style="position:relative">
       <div class="team-side">
-        <div class="team-name">${m.team1.name}</div>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem">${teamLogo(m.team1.name,36,'.85rem')}<div class="team-name">${m.team1.name}</div></div>
         <div class="team-score ${w1?'winner':''}">${m.team1.score}</div>
         <div class="quarters" style="margin-top:0.25rem">${(m.team1.quarters||[]).map((s,i)=>`<div class="q-box">Q${i+1}:${s}</div>`).join('')}</div>
       </div>
@@ -1465,7 +1491,7 @@ function renderMatches() {
         ${m.seasonId ? `<div style="font-size:0.65rem;color:var(--accent);font-weight:700;margin-top:2px">${(seasons.find(s=>s.id===m.seasonId)||{}).name||''}</div>` : ''}
       </div>
       <div class="team-side right">
-        <div class="team-name">${m.team2.name}</div>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem;justify-content:flex-end"><div class="team-name">${m.team2.name}</div>${teamLogo(m.team2.name,36,'.85rem')}</div>
         <div class="team-score ${!w1?'winner':''}">${m.team2.score}</div>
         <div class="quarters" style="margin-top:0.25rem;justify-content:flex-end">${(m.team2.quarters||[]).map((s,i)=>`<div class="q-box">Q${i+1}:${s}</div>`).join('')}</div>
       </div>
@@ -1485,7 +1511,7 @@ function openMatch(id) {
   modal.innerHTML = `
     <div class="modal-score-row">
       <div>
-        <div class="modal-team">${m.team1.name}</div>
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.25rem">${teamLogo(m.team1.name,44,'1rem')}<div class="modal-team">${m.team1.name}</div></div>
         <div class="modal-score-big" style="${!w1?'color:var(--text)':''}">${m.team1.score}</div>
         <div class="quarters">${(m.team1.quarters||[]).map((s,i)=>`<div class="q-box">Q${i+1}: ${s}</div>`).join('')}</div>
       </div>
@@ -1499,14 +1525,14 @@ function openMatch(id) {
       </div>
       </div>
       <div style="text-align:right">
-        <div class="modal-team">${m.team2.name}</div>
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.25rem;justify-content:flex-end"><div class="modal-team">${m.team2.name}</div>${teamLogo(m.team2.name,44,'1rem')}</div>
         <div class="modal-score-big" style="${w1?'color:var(--text)':''}">${m.team2.score}</div>
         <div class="quarters" style="justify-content:flex-end">${(m.team2.quarters||[]).map((s,i)=>`<div class="q-box">Q${i+1}: ${s}</div>`).join('')}</div>
       </div>
     </div>
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab(this,'tab-t1')">📊 ${m.team1.name}</button>
-      <button class="tab-btn" onclick="switchTab(this,'tab-t2')">📊 ${m.team2.name}</button>
+      <button class="tab-btn active" onclick="switchTab(this,'tab-t1')" style="display:flex;align-items:center;gap:.4rem">${teamLogo(m.team1.name,22,'.6rem')} ${m.team1.name}</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-t2')" style="display:flex;align-items:center;gap:.4rem">${teamLogo(m.team2.name,22,'.6rem')} ${m.team2.name}</button>
     </div>
     <div id="tab-t1" class="tab-content active">${buildPlayerTable(m.team1.players, m.team1.name)}</div>
     <div id="tab-t2" class="tab-content">${buildPlayerTable(m.team2.players, m.team2.name)}</div>
@@ -1771,7 +1797,7 @@ function openPlayerModal(playerName, teamName) {
     <div style="margin-bottom:1.5rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">${playerName}</div>
       <div style="color:var(--muted);font-size:0.9rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-        <span>${teamName}</span>
+        ${teamLogo(teamName,24,'.65rem')}<span>${teamName}</span>
         <span style="color:var(--muted)">·</span>
         <span id="pos-label-${playerName}" style="color:var(--accent);font-weight:700;min-width:1.5rem">${games[0]?.pos||'—'}</span>
         ${_isLoggedInSync() ? `<select id="pos-select-${playerName}" onchange="savePlayerPosition('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .35rem;font-size:.75rem;font-family:inherit;cursor:pointer">
@@ -1886,7 +1912,7 @@ function renderTop3() {
     const pts = p.gp>0?(p.pts/p.gp).toFixed(1):'0.0';
     return `<div class="top3-row">
       <div class="top3-rank top3-rank-${i+1}">${medals[i]}</div>
-      <div class="top3-info"><div class="top3-name" style="cursor:pointer" onclick="openPlayerModal('${p.name}','${p.team}')" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${p.name}</div><div class="top3-team" style="cursor:pointer" onclick="openTeamModal('${p.team}')" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${p.team} &middot; ${pts} PPG &middot; ${p.gp} GP</div></div>
+      <div class="top3-info"><div class="top3-name" style="cursor:pointer" onclick="openPlayerModal('${p.name}','${p.team}')" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${p.name}</div><div class="top3-team" style="cursor:pointer;display:flex;align-items:center;gap:.3rem" onclick="openTeamModal('${p.team}')" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${teamLogo(p.team,18,'.5rem')}<span>${p.team} &middot; ${pts} PPG &middot; ${p.gp} GP</span></div></div>
       <div class="top3-grade"><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></div>
     </div>`;
   }).join('');
@@ -2346,7 +2372,7 @@ function openTeamModal(tn){
       +'<td>'+(p.fga>0?Math.round(p.fgm/p.fga*100):0)+'%</td><td>'+(p.tpa>0?Math.round(p.tpm/p.tpa*100):0)+'%</td><td>'+(p.fta>0?Math.round(p.ftm/p.fta*100):0)+'%</td></tr>';
   }).join('');
   document.getElementById('team-modal-content').innerHTML=
-    '<div style="margin-bottom:1.5rem"><div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">'+tn+'</div>'
+    '<div style="margin-bottom:1.5rem"><div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem">'+teamLogo(tn,52,'1.2rem')+'<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">'+tn+'</div></div>'
     +'<div style="display:flex;gap:1.5rem;margin-top:0.5rem;flex-wrap:wrap">'
     +'<span style="color:var(--win);font-weight:700">'+w+'W</span><span style="color:var(--loss);font-weight:700">'+l+'L</span>'
     +'<span style="color:var(--muted)">PPG: <strong style="color:var(--text)">'+(gp>0?(pf/gp).toFixed(1):'0.0')+'</strong></span>'
@@ -2369,7 +2395,7 @@ function openTeamModal(tn){
         return '<tr style="cursor:pointer" onclick="closeTeamModal();setTimeout(function(){openMatch('+m.id+');},200)">'
           +'<td style="color:var(--muted);font-size:.8rem">'+formatDate(m.date)+'</td>'
           +'<td><span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span></td>'
-          +'<td style="font-size:.85rem">vs '+opp+'</td>'
+          +'<td style="font-size:.85rem"><div style="display:flex;align-items:center;gap:.4rem">'+teamLogo(opp,20,'.55rem')+'<span>vs '+opp+'</span></div></td>'
           +'<td style="font-weight:700"><span style="color:'+(win?'var(--win)':'var(--loss)')+'">'+myScore+'-'+oppScore+'</span></td>'
           +'<td style="font-size:.75rem;color:var(--muted)">'+(sn?sn.name:'')+'</td>'
           +'</tr>';
@@ -2726,10 +2752,12 @@ function savePlayerPosition(playerName, teamName) {
   if(changed > 0) {
     saveData().then(() => {
       showToast('✅ Pozycja zaktualizowana: ' + (newPos||'brak'), 'success');
-      // Update display
       const lbl = document.getElementById('pos-label-' + CSS.escape(playerName));
       if(lbl) lbl.textContent = newPos || '—';
     });
+  } else {
+    showToast('❌ Nie znaleziono gracza w meczach', 'error');
+    console.log('savePlayerPosition: no matches found for', playerName);
   }
 }
 
