@@ -1825,6 +1825,7 @@ function openPlayerModal(playerName, teamName) {
         </div>`).join('')}
     </div>
 
+    <div id="form-chart-${playerName.replace(/[^a-z0-9]/gi,'_')}" style="margin-bottom:1.5rem;padding:1rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px"></div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.75rem;color:var(--muted)">Historia meczów</div>
     <div class="stats-table-wrap">
       <table>
@@ -1851,6 +1852,118 @@ function openPlayerModal(playerName, teamName) {
   const _pmGrid=_pmEl.querySelector('[style*="display:grid"]');
   if(_pmGrid) _pmGrid.insertAdjacentHTML('beforebegin',_bestRow);
   document.getElementById('player-modal').classList.add('open');
+  // Render form chart
+  const _chartId = 'form-chart-' + playerName.replace(/[^a-z0-9]/gi,'_');
+  const _chartGames = [...games].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  // Add vs opponent info
+  _chartGames.forEach(g => {
+    const m = matches.find(x => x.id === g.matchId);
+    if(m) g.vs = m.team1.name === teamName ? m.team2.name : m.team1.name;
+  });
+  setTimeout(() => renderFormChart(_chartGames, _chartId), 50);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYER FORM CHART
+// ═══════════════════════════════════════════════════════════════
+function renderFormChart(games, containerId) {
+  const el = document.getElementById(containerId);
+  if(!el || games.length < 2) {
+    if(el) el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.5rem">Minimum 2 mecze do wyświetlenia wykresu</div>';
+    return;
+  }
+
+  // Sort chronologically
+  const sorted = [...games].sort((a,b) => new Date(a.date)-new Date(b.date));
+  const METRICS = [
+    { key: 'pts', label: 'PTS', color: '#f5c518' },
+    { key: 'ast', label: 'AST', color: '#3498db' },
+    { key: 'reb', label: 'REB', color: '#2ecc71' },
+    { key: 'fgPct', label: 'FG%', color: '#e74c3c', pct: true },
+  ];
+
+  // Compute values
+  const data = sorted.map(g => ({
+    label: formatDate(g.date) + (g.vs ? ' vs '+g.vs : ''),
+    pts: g.pts||0,
+    ast: g.ast||0,
+    reb: g.reb||0,
+    fgPct: g.fga>0 ? Math.round(g.fgm/g.fga*100) : 0,
+    grade: g.grade||'B',
+    gradeN: g.gradeN||0,
+  }));
+
+  const W = el.offsetWidth || 420;
+  const H = 180;
+  const PAD = { top: 16, right: 16, bottom: 48, left: 36 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+  const n = data.length;
+  const xStep = n > 1 ? chartW / (n-1) : chartW;
+
+  // Active metric state
+  const stateKey = 'chart_metric_' + containerId;
+  const activeMet = el._metric || 'pts';
+
+  const met = METRICS.find(m => m.key === activeMet);
+  const vals = data.map(d => d[met.key]);
+  const maxV = Math.max(...vals, 1);
+  const minV = Math.min(...vals, 0);
+  const range = maxV - minV || 1;
+
+  const px = i => PAD.left + i * xStep;
+  const py = v => PAD.top + chartH - ((v - minV) / range * chartH);
+
+  // Build SVG path
+  const pathD = vals.map((v,i) => (i===0?'M':'L') + px(i).toFixed(1)+','+py(v).toFixed(1)).join(' ');
+  const areaD = pathD + ' L'+px(n-1).toFixed(1)+','+(PAD.top+chartH)+' L'+PAD.left.toFixed(1)+','+(PAD.top+chartH)+' Z';
+
+  // Y axis ticks
+  const ticks = 4;
+  const yTicks = Array.from({length:ticks+1},(_,i)=>minV + (range/ticks)*i);
+
+  // Dots + tooltips
+  const dots = vals.map((v,i) => {
+    const gr = data[i].grade;
+    const grColor = gr.startsWith('A')?'#f5c518':gr.startsWith('B')?'#3498db':gr.startsWith('C')?'#95a5a6':'#e74c3c';
+    return `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="5" fill="${grColor}" stroke="${met.color}" stroke-width="2">
+      <title>${data[i].label}\n${met.label}: ${v}${met.pct?'%':''}\nOcena: ${gr}</title>
+    </circle>`;
+  }).join('');
+
+  // X labels (show max 6)
+  const step = Math.ceil(n/6);
+  const xLabels = data.map((d,i) => i%step===0||i===n-1 ? `<text x="${px(i).toFixed(1)}" y="${H-6}" text-anchor="middle" fill="var(--muted)" font-size="9">${d.label.split(' ')[0]}</text>` : '').join('');
+
+  const yLabels = yTicks.map(v => `<text x="${PAD.left-4}" y="${py(v).toFixed(1)+4}" text-anchor="end" fill="var(--muted)" font-size="9">${Math.round(v)}${met.pct?'%':''}</text>`).join('');
+  const gridLines = yTicks.map(v => `<line x1="${PAD.left}" y1="${py(v).toFixed(1)}" x2="${PAD.left+chartW}" y2="${py(v).toFixed(1)}" stroke="var(--border)" stroke-width="0.5"/>`).join('');
+
+  // Metric buttons
+  const btns = METRICS.map(m => `<button onclick="document.getElementById('${containerId}')._metric='${m.key}';renderFormChart(window._chartGames_${containerId},'${containerId}')" style="padding:.2rem .6rem;border:1px solid ${m.key===activeMet?m.color:'var(--border)'};background:${m.key===activeMet?m.color+'22':'transparent'};color:${m.key===activeMet?m.color:'var(--muted)'};border-radius:4px;font-size:.75rem;cursor:pointer;font-family:inherit;transition:all .2s">${m.label}</button>`).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">📈 Trend formy</div>
+      <div style="display:flex;gap:.35rem">${btns}</div>
+    </div>
+    <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+      <defs>
+        <linearGradient id="grad_${containerId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${met.color}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="${met.color}" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      ${gridLines}
+      ${yLabels}
+      ${xLabels}
+      <path d="${areaD}" fill="url(#grad_${containerId})"/>
+      <path d="${pathD}" fill="none" stroke="${met.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+    </svg>`;
+
+  // Store games reference for re-render on metric switch
+  window['_chartGames_' + containerId] = games;
 }
 
 // ═══════════════════════════════════════════════════════════════
