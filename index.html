@@ -1391,13 +1391,23 @@ function renderTeamTable(team, idx) {
 function saveMatch() {
   if(!pendingMatch) return;
   if(currentSeasonId) pendingMatch.seasonId = currentSeasonId;
-  matches.unshift(pendingMatch);
-  saveData().then(() => showToast('✅ Mecz zapisany!', 'success'));
+  const _savedMatch = pendingMatch;
+  matches.unshift(_savedMatch);
+  pendingMatch = null;
+  saveData().then(() => {
+    showToast('✅ Mecz zapisany!', 'success');
+    if(anthropicKey) {
+      setStatus('success', '🎉 Mecz zapisany! Generuję recap...');
+      generateRecap(_savedMatch.id).then(() => {
+        setStatus('success', '🎉 Mecz zapisany z recapem!');
+      });
+    } else {
+      setStatus('success', '🎉 Mecz zapisany! Możesz zobaczyć go w zakładce Mecze.');
+    }
+  });
   clearForm();
   document.getElementById('parsed-result').style.display = 'none';
-  setStatus('success', '🎉 Mecz zapisany! Możesz zobaczyć go w zakładce Mecze.');
-  pendingMatch = null;
-  setTimeout(() => showView('matches'), 1500);
+  setTimeout(() => showView('matches'), anthropicKey ? 3500 : 1500);
 }
 
 function clearForm() {
@@ -1481,7 +1491,10 @@ function openMatch(id) {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:0.85rem;letter-spacing:2px;color:var(--muted);text-transform:uppercase">Final</div>
         <div style="font-size:1.5rem;margin:0.5rem 0">🏀</div>
         <div style="font-size:0.8rem;color:var(--muted)">${formatDate(m.date)}</div>
-        ${_isLoggedInSync() ? `<div style="display:flex;gap:.5rem;margin-top:1rem"><button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="editMatch(${id})">&#x270f;&#xfe0f; Edytuj</button><button class="btn btn-danger" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button></div>` : ''}
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+        ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="generateRecap(${id})">📝 Recap</button>` : ''}
+        ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="editMatch(${id})">&#x270f;&#xfe0f; Edytuj</button><button class="btn btn-danger" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button>` : ''}
+      </div>
       </div>
       <div style="text-align:right">
         <div class="modal-team">${m.team2.name}</div>
@@ -1494,7 +1507,8 @@ function openMatch(id) {
       <button class="tab-btn" onclick="switchTab(this,'tab-t2')">📊 ${m.team2.name}</button>
     </div>
     <div id="tab-t1" class="tab-content active">${buildPlayerTable(m.team1.players, m.team1.name)}</div>
-    <div id="tab-t2" class="tab-content">${buildPlayerTable(m.team2.players, m.team2.name)}</div>`;
+    <div id="tab-t2" class="tab-content">${buildPlayerTable(m.team2.players, m.team2.name)}</div>
+    <div id="match-recap-${id}" style="margin-top:1.25rem">${m.recap ? renderRecapBlock(m.recap) : ''}</div>`;
   document.getElementById('match-modal').classList.add('open');
   // H2H
   setTimeout(()=>{
@@ -2714,6 +2728,70 @@ function savePlayerPosition(playerName, teamName) {
       const lbl = document.getElementById('pos-label-' + CSS.escape(playerName));
       if(lbl) lbl.textContent = newPos || '—';
     });
+  }
+}
+
+
+function renderRecapBlock(text) {
+  return `<div style="margin-top:1.25rem;padding:1rem 1.25rem;background:rgba(245,197,24,0.05);border:1px solid rgba(245,197,24,0.2);border-radius:10px">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem">📝 Recap meczu</div>
+    <div style="font-size:.9rem;line-height:1.65;color:var(--text);white-space:pre-line">${text}</div>
+  </div>`;
+}
+
+async function generateRecap(id) {
+  const m = matches.find(x => Number(x.id) === Number(id));
+  if(!m) return;
+  const recapDiv = document.getElementById('match-recap-' + id);
+
+  if(!anthropicKey) {
+    if(recapDiv) showToast('❌ Brak Anthropic API Key — skonfiguruj w ⚙ Baza', 'error');
+    return;
+  }
+
+  if(recapDiv) recapDiv.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:.9rem">⏳ Generuję recap...</div>';
+
+  const w1 = m.team1.score > m.team2.score;
+  const winner = w1 ? m.team1.name : m.team2.name;
+  const loser  = w1 ? m.team2.name : m.team1.name;
+  const diff   = Math.abs(m.team1.score - m.team2.score);
+
+  const formatPlayers = (team) => (team.players||[]).map(p =>
+    `${p.name} (${p.grade}): ${p.pts}pkt ${p.reb}zb ${p.ast}as ${p.stl}prz ${p.blk}blk ${p.to}st FG:${p.fgm}/${p.fga} 3P:${p.tpm}/${p.tpa}`
+  ).join('\n');
+
+  const quarters = (t) => (t.quarters||[]).map((s,i)=>`Q${i+1}:${s}`).join(' ');
+
+  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz krótki, dynamiczny recap meczu po polsku (max 120 słów). Używaj sportowego języka, wymień MVP meczu i kluczowe momenty. Nie używaj nagłówków ani list — sam ciągły tekst.
+
+MECZ: ${m.team1.name} ${m.team1.score} - ${m.team2.score} ${m.team2.name}
+Data: ${m.date || 'brak'}
+${m.note ? 'Notatka: ' + m.note : ''}
+Kwarty ${m.team1.name}: ${quarters(m.team1)}
+Kwarty ${m.team2.name}: ${quarters(m.team2)}
+
+STATYSTYKI ${m.team1.name}:
+${formatPlayers(m.team1)}
+
+STATYSTYKI ${m.team2.name}:
+${formatPlayers(m.team2)}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error?.message || 'API error');
+    const recap = data.content?.[0]?.text || '';
+    // Save recap to match
+    const idx = matches.findIndex(x => Number(x.id) === Number(id));
+    if(idx !== -1) { matches[idx].recap = recap; saveData(); }
+    if(recapDiv) recapDiv.innerHTML = renderRecapBlock(recap);
+  } catch(e) {
+    if(recapDiv) recapDiv.innerHTML = `<div style="color:var(--loss);font-size:.85rem;padding:.75rem">❌ Błąd generowania: ${e.message}</div>`;
+    throw e;
   }
 }
 
