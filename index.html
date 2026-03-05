@@ -906,6 +906,7 @@
     <div class="login-sub">Ta sekcja wymaga hasła</div>
     <label style="text-align:left">Hasło dostępu</label>
     <input type="password" id="login-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkLogin()">
+    <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" style="width:100%" onclick="checkLogin()">Zaloguj się</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="document.getElementById('auth-modal').classList.remove('open')">Anuluj</button>
   </div>
