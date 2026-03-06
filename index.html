@@ -2608,7 +2608,7 @@ function renderTop3() {
   if(!wrap) return;
   const agg = getAggregatedStats();
   if(!agg.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Brak danych</div>'; return; }
-  const ranked = agg.filter(p=>p.gp>=2).map(p=>({...p, avgGN: p.gradeSum/p.gp, _score: calcCompositeScore(p)})).sort((a,b)=>b._score-a._score).slice(0,3);
+  const ranked = agg.filter(p=>p.gp>=5).map(p=>({...p, avgGN: p.gradeSum/p.gp, _score: calcCompositeScore(p)})).sort((a,b)=>b._score-a._score).slice(0,3);
   if(!ranked.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Minimum 2 mecze wymagane</div>'; return; }
   const medals=['🥇','🥈','🥉'];
   wrap.innerHTML = ranked.map((p,i)=>{
@@ -2928,7 +2928,7 @@ function calcCompositeScore(p) {
 function getSeasonMVP(seasonId) {
   const agg = getAggregatedStats(seasonId);
   if(!agg.length) return null;
-  const ranked = agg.filter(p=>p.gp>=2).map(p=>({...p, score: calcCompositeScore(p)})).sort((a,b)=>b.score-a.score);
+  const ranked = agg.filter(p=>p.gp>=5).map(p=>({...p, score: calcCompositeScore(p)})).sort((a,b)=>b.score-a.score);
   return ranked[0] || null;
 }
 
