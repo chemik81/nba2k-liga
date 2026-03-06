@@ -1126,12 +1126,12 @@ async function saveData() {
       ...m,
       team1: { ...m.team1, players: (m.team1.players||[]).map(p => {
         const c = { name: p.name, grade: p.grade };
-        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta','pos'].forEach(k => { if(p[k]) c[k] = p[k]; });
+        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta'].forEach(k => { if(p[k]) c[k] = p[k]; }); if(p.pos) c.pos = p.pos;
         return c;
       })},
       team2: { ...m.team2, players: (m.team2.players||[]).map(p => {
         const c = { name: p.name, grade: p.grade };
-        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta','pos'].forEach(k => { if(p[k]) c[k] = p[k]; });
+        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta'].forEach(k => { if(p[k]) c[k] = p[k]; }); if(p.pos) c.pos = p.pos;
         return c;
       })}
     }));
@@ -1458,7 +1458,7 @@ function renderTeamTable(team, idx) {
       <td>${p.name}</td>
       <td style="color:var(--accent);font-weight:700;font-size:.8rem">${p.pos||'-'}</td>
       <td><span class="grade grade-${(p.grade||'B').replace('+','p').replace('-','m')}">${p.grade||'B'}</span></td>
-      <td>${p.pts}</td><td>${p.reb}</td><td>${p.ast}</td><td>${p.stl}</td><td>${p.blk}</td>
+      <td>${p.pts||0}</td><td>${p.reb||0}</td><td>${p.ast||0}</td><td>${p.stl||0}</td><td>${p.blk||0}</td>
       <td>${p.fgm}/${p.fga}</td><td>${p.tpm}/${p.tpa}</td><td>${p.ftm}/${p.fta}</td>
     </tr>`).join('');
   const q = team.quarters || [];
@@ -1652,19 +1652,19 @@ function openMatch(id) {
 function buildPlayerTable(players, teamName) {
   if(!players?.length) return '<p style="color:var(--muted);padding:1rem">Brak danych</p>';
   const rows = players.map(p => {
-    const fgPct = p.fga > 0 ? Math.round(p.fgm/p.fga*100) : 0;
-    const tpPct = p.tpa > 0 ? Math.round(p.tpm/p.tpa*100) : 0;
-    const ftPct = p.fta > 0 ? Math.round(p.ftm/p.fta*100) : 0;
+    const fgPct = (p.fga||0) > 0 ? Math.round((p.fgm||0)/(p.fga||0)*100) : 0;
+    const tpPct = (p.tpa||0) > 0 ? Math.round((p.tpm||0)/(p.tpa||0)*100) : 0;
+    const ftPct = (p.fta||0) > 0 ? Math.round((p.ftm||0)/(p.fta||0)*100) : 0;
     const safeName = (p.name||'').replace(/'/g,"\'");
     const safeTeam = (teamName||'').replace(/'/g,"\'");
     return `<tr>
       <td><span onclick="event.stopPropagation();openPlayerModal('${safeName}','${safeTeam}')" style="cursor:pointer;border-bottom:1px dashed var(--muted);padding-bottom:1px;transition:color 0.15s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='';this.style.borderColor='var(--muted)'">${p.name}</span></td>
       <td><span class="grade grade-${(p.grade||'B').replace('+','p').replace('-','m')}">${p.grade||'B'}</span></td>
-      <td>${p.pts}</td><td>${p.reb}</td><td>${p.ast}</td><td>${p.stl}</td><td>${p.blk}</td>
-      <td>${p.fouls||0}</td><td>${p.to||0}</td>
-      <td>${p.fgm}/${p.fga} <span style="color:var(--muted);font-size:0.75rem">${fgPct}%</span></td>
-      <td>${p.tpm}/${p.tpa} <span style="color:var(--muted);font-size:0.75rem">${tpPct}%</span></td>
-      <td>${p.ftm}/${p.fta} <span style="color:var(--muted);font-size:0.75rem">${ftPct}%</span></td>
+      <td>${p.pts||0}</td><td>${p.reb||0}</td><td>${p.ast||0}</td><td>${p.stl||0}</td><td>${p.blk||0}</td>
+      <td>${p.fol||p.fouls||0}</td><td>${p.to||0}</td>
+      <td>${p.fgm||0}/${p.fga||0} <span style="color:var(--muted);font-size:0.75rem">${fgPct}%</span></td>
+      <td>${p.tpm||0}/${p.tpa||0} <span style="color:var(--muted);font-size:0.75rem">${tpPct}%</span></td>
+      <td>${p.ftm||0}/${p.fta||0} <span style="color:var(--muted);font-size:0.75rem">${ftPct}%</span></td>
     </tr>`;
   }).join('');
   return `<div class="stats-table-wrap"><table>
@@ -1734,7 +1734,7 @@ function getAggregatedStats(seasonFilter) {
         const key = p.name + '|' + team.name;
         if(!playerMap[key]) playerMap[key] = { name: p.name, team: team.name, pos: p.pos||'', gp: 0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0 };
         const s = playerMap[key];
-        s.gp++; s.pts+=p.pts; s.reb+=p.reb; s.ast+=p.ast; s.stl+=p.stl; s.blk+=p.blk;
+        s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0); s.stl+=(p.stl||0); s.blk+=(p.blk||0);
         s.to+=(p.to||0); s.fgm+=p.fgm; s.fga+=p.fga; s.tpm+=p.tpm; s.tpa+=p.tpa; s.ftm+=p.ftm; s.fta+=p.fta;
         s.gradeSum += gradeToNum(p.grade);
       });
@@ -1820,9 +1820,9 @@ function renderStats() {
   }
   tbody.innerHTML = filtered.map((p) => {
     const avg = v => p.gp > 0 ? (v/p.gp).toFixed(1) : '0.0';
-    const fgPct = p.fga > 0 ? Math.round(p.fgm/p.fga*100) : 0;
-    const tpPct = p.tpa > 0 ? Math.round(p.tpm/p.tpa*100) : 0;
-    const ftPct = p.fta > 0 ? Math.round(p.ftm/p.fta*100) : 0;
+    const fgPct = (p.fga||0) > 0 ? Math.round((p.fgm||0)/(p.fga||0)*100) : 0;
+    const tpPct = (p.tpa||0) > 0 ? Math.round((p.tpm||0)/(p.tpa||0)*100) : 0;
+    const ftPct = (p.fta||0) > 0 ? Math.round((p.ftm||0)/(p.fta||0)*100) : 0;
     const hl = 'color:var(--accent);font-weight:700';
     const avgGrade = p.gp > 0 ? numToGrade(p.gradeSum/p.gp) : '-';
     return `<tr style="cursor:pointer" onclick="openPlayerModal('${p.name}','${p.team}')">
