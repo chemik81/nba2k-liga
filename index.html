@@ -1856,10 +1856,15 @@ function openPlayerModal(playerName, teamName) {
       const p = (team.players||[]).find(x => x.name === playerName);
       if(!p) return;
       const opp = team === m.team1 ? m.team2 : m.team1;
-      games.push({ date: m.date, opp: opp.name, ...p,
-        fgpct: p.fga>0 ? Math.round(p.fgm/p.fga*100) : 0,
-        tppct: p.tpa>0 ? Math.round(p.tpm/p.tpa*100) : 0,
-        ftpct: p.fta>0 ? Math.round(p.ftm/p.fta*100) : 0,
+      const _fgm=p.fgm||0,_fga=p.fga||0,_tpm=p.tpm||0,_tpa=p.tpa||0,_ftm=p.ftm||0,_fta=p.fta||0;
+      games.push({ matchId: m.id, date: m.date, opp: opp.name,
+        pts:p.pts||0, reb:p.reb||0, ast:p.ast||0, stl:p.stl||0, blk:p.blk||0,
+        fol:p.fol||p.fouls||0, to:p.to||0,
+        fgm:_fgm, fga:_fga, tpm:_tpm, tpa:_tpa, ftm:_ftm, fta:_fta,
+        grade:p.grade||'B', pos:p.pos||'',
+        fgpct:_fga>0?Math.round(_fgm/_fga*100):0,
+        tppct:_tpa>0?Math.round(_tpm/_tpa*100):0,
+        ftpct:_fta>0?Math.round(_ftm/_fta*100):0,
       });
     });
   });
@@ -1869,22 +1874,22 @@ function openPlayerModal(playerName, teamName) {
   const avg = key => (games.reduce((s,g) => s+(g[key]||0),0)/gp).toFixed(1);
   const avgGradeNum = games.reduce((s,g) => s+gradeToNum(g.grade),0)/gp;
   const avgGrade = numToGrade(avgGradeNum);
-  const fgpct = games.reduce((s,g)=>s+g.fgm,0);
-  const fgatt = games.reduce((s,g)=>s+g.fga,0);
-  const tpMade = games.reduce((s,g)=>s+g.tpm,0);
-  const tpAtt = games.reduce((s,g)=>s+g.tpa,0);
-  const ftMade = games.reduce((s,g)=>s+g.ftm,0);
-  const ftAtt = games.reduce((s,g)=>s+g.fta,0);
+  const fgpct = games.reduce((s,g)=>s+(g.fgm||0),0);
+  const fgatt = games.reduce((s,g)=>s+(g.fga||0),0);
+  const tpMade = games.reduce((s,g)=>s+(g.tpm||0),0);
+  const tpAtt = games.reduce((s,g)=>s+(g.tpa||0),0);
+  const ftMade = games.reduce((s,g)=>s+(g.ftm||0),0);
+  const ftAtt = games.reduce((s,g)=>s+(g.fta||0),0);
 
   const gameRows = [...games].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(g => `
     <tr>
       <td>${formatDate(g.date)}</td>
       <td style="color:var(--muted)">${g.opp}</td>
       <td><span class="grade grade-${(g.grade||'B').replace('+','p').replace('-','m')}">${g.grade||'B'}</span></td>
-      <td>${g.pts}</td><td>${g.reb}</td><td>${g.ast}</td><td>${g.stl}</td><td>${g.blk}</td><td>${g.to||0}</td>
-      <td>${g.fgm}/${g.fga}<span style="color:var(--muted);font-size:0.7rem"> ${g.fgpct}%</span></td>
-      <td>${g.tpm}/${g.tpa}<span style="color:var(--muted);font-size:0.7rem"> ${g.tppct}%</span></td>
-      <td>${g.ftm}/${g.fta}<span style="color:var(--muted);font-size:0.7rem"> ${g.ftpct}%</span></td>
+      <td>${g.pts||0}</td><td>${g.reb||0}</td><td>${g.ast||0}</td><td>${g.stl||0}</td><td>${g.blk||0}</td><td>${g.to||0}</td>
+      <td>${g.fgm||0}/${g.fga||0}<span style="color:var(--muted);font-size:0.7rem"> ${g.fgpct||0}%</span></td>
+      <td>${g.tpm||0}/${g.tpa||0}<span style="color:var(--muted);font-size:0.7rem"> ${g.tppct||0}%</span></td>
+      <td>${g.ftm||0}/${g.fta||0}<span style="color:var(--muted);font-size:0.7rem"> ${g.ftpct||0}%</span></td>
     </tr>`).join('');
 
   document.getElementById('player-modal-content').innerHTML = `
