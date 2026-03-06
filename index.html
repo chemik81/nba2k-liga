@@ -2674,7 +2674,7 @@ function renderLeaders() {
     { stat: 'blk', label: 'Bloki (śr.)', icon: '🛡️' },
   ];
   grid.innerHTML = leaders.map(l => {
-    const sorted = [...all].sort((a,b) => (b[l.stat]/b.gp) - (a[l.stat]/a.gp));
+    const sorted = [...all].filter(p=>p.gp>=5).sort((a,b) => (b[l.stat]/b.gp) - (a[l.stat]/a.gp));
     const top = sorted[0];
     const val = top ? (top[l.stat]/top.gp).toFixed(1) : '0.0';
     return `<div class="leader-card">
@@ -2993,8 +2993,8 @@ function renderTop10Tab(tab) {
 
   const isComposite = tab === 'composite';
   const ranked = isComposite
-    ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
-    : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
+    ? agg.filter(p=>p.gp>=5).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
+    : agg.filter(p=>p.gp>=5).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
   const tabBtn = (active, label, tab) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${active?'var(--accent)':'transparent'};background:none;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tab}')">${label}</button>`;
   const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(isComposite,'Composite Score','composite')}${tabBtn(!isComposite,'PER (Hollinger)','per')}</div>`;
