@@ -1135,7 +1135,7 @@ async function saveData() {
         return c;
       })}
     }));
-    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule });
+    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule, teams });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
     if(parseFloat(sizeKB) > 95) {
       showToast(`❌ Dane za duże (${sizeKB}KB) — limit JSONBin to ~100KB. Skontaktuj się z adminem.`, 'error');
@@ -1172,6 +1172,8 @@ async function loadData() {
     seasons = data.record?.seasons || [];
     currentSeasonId = data.record?.currentSeasonId || null;
     schedule = data.record?.schedule || [];
+    teams = data.record?.teams || {};
+    window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
     // Auto-assign matches without seasonId to currentSeason
     if(currentSeasonId) {
@@ -2257,12 +2259,12 @@ function applyTeamAliasesToAllMatches() {
 let teams = {};
 
 function loadTeams() {
-  try { teams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}'); } catch(e) { teams = {}; }
+  // teams are loaded from JSONBin in loadData() - just sync window.teams
   window.teams = teams;
 }
 function saveTeams() {
-  localStorage.setItem('nba2k_teams', JSON.stringify(teams));
   window.teams = teams;
+  saveData(); // persist to JSONBin so all users see logos
 }
 
 function renderTeamsSection() {
@@ -2313,7 +2315,7 @@ function addTeamEntry() {
 function uploadTeamLogo(teamName, input) {
   const file = input.files[0];
   if(!file) return;
-  if(file.size > 500*1024) { showToast('❌ Plik za duży — max 500KB', 'error'); return; }
+  if(file.size > 80*1024) { showToast('❌ Plik za duży — max 80KB (loga zapisywane w chmurze)', 'error'); return; }
   const reader = new FileReader();
   reader.onload = e => {
     if(!teams[teamName]) teams[teamName] = {};
@@ -2820,6 +2822,8 @@ async function saveSetup() {
     seasons = data.record?.seasons || [];
     currentSeasonId = data.record?.currentSeasonId || null;
     schedule = data.record?.schedule || [];
+    teams = data.record?.teams || {};
+    window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
 
     document.getElementById('setup-modal').classList.remove('open');
