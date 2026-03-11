@@ -742,6 +742,7 @@
     <div style="margin-bottom:1.5rem">
       <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem">🏅 Najlepsza Piątka Kolejki</div>
       <div class="card" style="padding:1rem" id="team-of-week-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych z bieżącego tygodnia</div></div>
+      <div style="text-align:center;margin-top:.75rem"><button onclick="openRoundsDetailModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.4rem 1.2rem;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.85rem;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Zobacz więcej →</button></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem" id="dashboard-extras">
       <div>
@@ -3879,6 +3880,193 @@ ${formatPlayers(m.team2)}${duelsText}`;
     if(recapDiv) recapDiv.innerHTML = `<div style="color:var(--loss);font-size:.85rem;padding:.75rem">❌ Błąd generowania: ${e.message}</div>`;
     throw e;
   }
+}
+
+
+function calcDefScore(p) {
+  // Defensive score: STL (high weight) + BLK + defensive grade proxy
+  // We don't have pts-allowed per matchup so we use: STL*3 + BLK*2 + low TO bonus
+  const gp = Math.max(p.gp, 1);
+  const stlPG = (p.stl||0) / gp;
+  const blkPG = (p.blk||0) / gp;
+  const toPG  = (p.to||0)  / gp;
+  const gradeFactor = (p.gradeSum / gp) / 13; // 0..1
+  // maturity factor same as composite
+  const maturity = gp / (gp + 5);
+  const base = stlPG * 40 + blkPG * 25 + gradeFactor * 20 - toPG * 5;
+  return Math.max(0, base * maturity);
+}
+
+function buildDefFive(roundMatches) {
+  const totalGames = roundMatches.length;
+  const minGP = Math.min(3, Math.max(1, Math.ceil(totalGames / 6)));
+  const POSITIONS = ['PG','SG','SF','PF','C'];
+  const playerMap = {};
+  roundMatches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team.players||[]).forEach((p,idx) => {
+        const pos = p.pos || POSITIONS[idx] || 'PG';
+        const key = p.name + '|' + pos;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        const s = playerMap[key];
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0;
+        s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+  const players = Object.values(playerMap)
+    .filter(p => p.gp >= minGP)
+    .map(p => ({...p, avgGrade: p.gradeSum/p.gp, score: calcDefScore(p)}));
+  const best = {};
+  POSITIONS.forEach(pos => {
+    const c = players.filter(p => p.pos === pos);
+    if(c.length) best[pos] = c.sort((a,b) => b.score-a.score)[0];
+  });
+  return { best, POSITIONS, minGP };
+}
+
+function renderFiveGrid(best, POSITIONS, minGP, mode) {
+  // mode: 'off' = offensive (composite), 'def' = defensive
+  return POSITIONS.map(pos => {
+    const p = best[pos];
+    if(!p) return '<div class="tow-card"><div class="tow-pos">'+pos+'</div><div style="color:var(--muted);font-size:.75rem">Brak<br>(min.'+minGP+')</div></div>';
+    const gr = numToGrade(p.avgGrade);
+    const esc = s => s.replace(/'/g,"\'");
+    const stl=(p.stl/p.gp).toFixed(1), blk=(p.blk/p.gp).toFixed(1);
+    const pts=(p.pts/p.gp).toFixed(1), reb=(p.reb/p.gp).toFixed(1), ast=(p.ast/p.gp).toFixed(1);
+    const statsLine = mode==='def'
+      ? stl+' STL · '+blk+' BLK · '+reb+' REB'
+      : pts+' PTS · '+reb+' REB · '+ast+' AST';
+    const scoreVal = mode==='def' ? calcDefScore(p).toFixed(1) : calcCompositeScore(p).toFixed(1);
+    const scoreLabel = mode==='def' ? 'DEF' : 'CS';
+    const scoreColor = mode==='def' ? '#2ecc71' : 'var(--accent)';
+    return '<div class="tow-card" onclick="openPlayerModal(\'' + esc(p.name) + '\',\'' + esc(p.team) + '\')">'
+      +'<div class="tow-pos">'+pos+'</div>'
+      +'<div class="tow-name">'+p.name+'</div>'
+      +'<div class="tow-team">'+p.team+'</div>'
+      +'<div style="display:flex;gap:.35rem;justify-content:center;align-items:center;margin:.2rem 0">'
+        +'<span class="grade grade-'+gr.replace('+','p').replace('-','m')+'">'+gr+'</span>'
+        +'<span style="font-size:.7rem;font-weight:700;color:'+scoreColor+';background:rgba(0,0,0,.2);padding:.1rem .35rem;border-radius:4px">'+scoreLabel+' '+scoreVal+'</span>'
+      +'</div>'
+      +'<div class="tow-stats">'+statsLine+'</div>'
+      +'<div style="font-size:.65rem;color:var(--muted)">'+p.gp+' mecz'+(p.gp===1?'':'e/ów')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function renderSecondFive(roundMatches, minGP) {
+  // 2nd five: same composite but exclude players already in first five
+  const POSITIONS = ['PG','SG','SF','PF','C'];
+  const playerMap = {};
+  roundMatches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team.players||[]).forEach((p,idx) => {
+        const pos = p.pos || POSITIONS[idx] || 'PG';
+        const key = p.name + '|' + pos;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        const s = playerMap[key];
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0;
+        s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+  const players = Object.values(playerMap)
+    .filter(p => p.gp >= minGP)
+    .map(p => ({...p, avgGrade: p.gradeSum/p.gp, score: calcCompositeScore(p)}));
+
+  // First pick best per position (1st five)
+  const first = {};
+  POSITIONS.forEach(pos => {
+    const c = players.filter(p => p.pos===pos).sort((a,b)=>b.score-a.score);
+    if(c.length) first[pos] = c[0];
+  });
+  // Second five: next best per position
+  const second = {};
+  POSITIONS.forEach(pos => {
+    const c = players.filter(p => p.pos===pos && p!==first[pos]).sort((a,b)=>b.score-a.score);
+    if(c.length) second[pos] = c[0];
+  });
+  return { best: second, POSITIONS, minGP };
+}
+
+let _rdActiveRound = 0;
+
+function openRoundsDetailModal() {
+  const today = new Date().toISOString().slice(0,10);
+  const activeRounds = (rounds && rounds.length
+    ? rounds
+    : [{id:'r1',label:'1. Kolejka',from:'2000-01-01',to:'2026-03-11'}]
+  ).filter(r => r.from <= today).sort((a,b)=>a.from.localeCompare(b.from));
+
+  if(!activeRounds.length) { showToast('Brak kolejek','info'); return; }
+
+  _rdActiveRound = activeRounds.length - 1; // default: latest round
+
+  // Render tabs
+  const tabs = activeRounds.map((r,i) =>
+    '<button id="rd-tab-'+i+'" onclick="rdSelectRound('+i+')" style="padding:.4rem 1rem;border:none;border-bottom:2px solid '+(i===_rdActiveRound?'var(--accent)':'transparent')+';background:none;color:'+(i===_rdActiveRound?'var(--accent)':'var(--muted)')+';font-weight:'+(i===_rdActiveRound?'700':'400')+';cursor:pointer;font-family:inherit;font-size:.85rem;transition:all .2s">'+r.label+'</button>'
+  ).join('');
+  document.getElementById('rounds-detail-tabs').innerHTML = tabs;
+  window._rdRounds = activeRounds;
+  rdRenderContent(_rdActiveRound);
+  document.getElementById('rounds-detail-modal').classList.add('open');
+}
+
+function rdSelectRound(idx) {
+  _rdActiveRound = idx;
+  const tabs = document.querySelectorAll('[id^="rd-tab-"]');
+  tabs.forEach((t,i) => {
+    t.style.borderBottomColor = i===idx ? 'var(--accent)' : 'transparent';
+    t.style.color = i===idx ? 'var(--accent)' : 'var(--muted)';
+    t.style.fontWeight = i===idx ? '700' : '400';
+  });
+  rdRenderContent(idx);
+}
+
+function rdRenderContent(idx) {
+  const round = window._rdRounds[idx];
+  const roundMatches = matches.filter(m => m.date >= round.from && m.date <= round.to);
+  const el = document.getElementById('rounds-detail-content');
+
+  if(!roundMatches.length) {
+    el.innerHTML = '<div style="color:var(--muted);padding:1rem">Brak meczów w tej kolejce</div>';
+    return;
+  }
+
+  const totalGames = roundMatches.length;
+  const minGP = Math.min(3, Math.max(1, Math.ceil(totalGames / 6)));
+
+  // 1st five (offensive)
+  const { best: best1, POSITIONS } = buildRoundFive(roundMatches);
+  const grid1 = renderFiveGrid(best1, POSITIONS, minGP, 'off');
+
+  // 2nd five
+  const { best: best2 } = renderSecondFive(roundMatches, minGP);
+  const grid2 = renderFiveGrid(best2, POSITIONS, minGP, 'off');
+
+  // Defensive five
+  const { best: bestD } = buildDefFive(roundMatches);
+  const gridD = renderFiveGrid(bestD, POSITIONS, minGP, 'def');
+
+  const section = (icon, title, subtitle, grid) =>
+    '<div style="margin-bottom:1.75rem">'
+    +'<div style="display:flex;align-items:baseline;gap:.6rem;margin-bottom:.75rem">'
+    +'<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:1.15rem;letter-spacing:1px;text-transform:uppercase">'+icon+' '+title+'</div>'
+    +'<div style="font-size:.75rem;color:var(--muted)">'+subtitle+'</div>'
+    +'</div>'
+    +'<div class="tow-grid">'+grid+'</div>'
+    +'</div>';
+
+  el.innerHTML =
+    section('🥇','1. Piątka','Composite Score — atakująca',grid1)
+    + '<hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.75rem">'
+    + section('🥈','2. Piątka','Composite Score — kolejni najlepsi',grid2)
+    + '<hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.75rem">'
+    + section('🛡️','Defensywna Piątka','STL × 40 + BLK × 25 + GRD × 20 − TO × 5',gridD);
 }
 
 </script>
