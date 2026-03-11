@@ -1435,12 +1435,8 @@ async function loadData() {
     }
     renderDashboard();
     updateAuthUI();
-    // Set default season filters to current season
-    // Fill all selects first, then render
     updateMatchFilters();
     populateTeamFilter();
-    renderMatches();
-    renderStats();
   } catch(e) {
     console.error('Load error:', e);
     showToast('❌ Błąd ładowania danych: ' + e.message, 'error');
