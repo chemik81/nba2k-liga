@@ -761,7 +761,7 @@
           <thead><tr>
             <th style="text-align:left; padding-left:1.5rem">#</th>
             <th style="text-align:left">Drużyna</th>
-            <th>M</th><th>W</th><th>L</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th>
+            <th>M</th><th>W</th><th>L</th><th>PTS</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th>
           </tr></thead>
           <tbody id="standings-body">
             <tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>
@@ -845,6 +845,24 @@
           <span id="parse-btn-text">🤖 Analizuj Screenshot</span>
         </button>
         <button class="btn btn-ghost" onclick="clearForm()">Wyczyść</button>
+      </div>
+
+      <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;margin-bottom:.75rem">🏳️ Dodaj Walkower</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+          <div><label>Drużyna wygrywająca</label>
+            <input type="text" id="wo-winner" list="wo-teams-list" placeholder="Drużyna która wygrała">
+          </div>
+          <div><label>Drużyna oddająca walkower</label>
+            <input type="text" id="wo-loser" list="wo-teams-list" placeholder="Drużyna nieobecna">
+          </div>
+        </div>
+        <datalist id="wo-teams-list"></datalist>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+          <div><label>Data</label><input type="date" id="wo-date"></div>
+          <div><label>Notatka (opcjonalnie)</label><input type="text" id="wo-note" placeholder="np. Walkower - nieobecność"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveWalkover()">🏳️ Zapisz Walkower (20:0)</button>
       </div>
 
       <div class="status-box" id="status-box"></div>
@@ -1298,6 +1316,7 @@ function applyAliasesToMatch(match) {
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
+  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); }
   if(PROTECTED_VIEWS.includes(id)) {
     isLoggedIn().then(logged => {
       if(!logged) {
@@ -2234,6 +2253,46 @@ async function confirmImport() {
 }
 
 
+
+function initWalkoverTeams() {
+  const dl = document.getElementById('wo-teams-list');
+  if(!dl) return;
+  const all = [...new Set([...Object.keys(window.teams||{}), ...matches.flatMap(m=>[m.team1.name,m.team2.name])])].sort();
+  dl.innerHTML = all.map(t=>`<option value="${t}">`).join('');
+  // Set today as default date
+  const wd = document.getElementById('wo-date');
+  if(wd && !wd.value) wd.value = new Date().toISOString().split('T')[0];
+}
+
+async function saveWalkover() {
+  const winner = document.getElementById('wo-winner')?.value.trim();
+  const loser  = document.getElementById('wo-loser')?.value.trim();
+  const date   = document.getElementById('wo-date')?.value;
+  const note   = document.getElementById('wo-note')?.value.trim() || 'Walkower';
+  if(!winner || !loser) { showToast('❌ Wpisz obie drużyny', 'error'); return; }
+  if(winner === loser)  { showToast('❌ Drużyny muszą być różne', 'error'); return; }
+  if(!date)             { showToast('❌ Wybierz datę', 'error'); return; }
+
+  const maxId = matches.length > 0 ? Math.max(...matches.map(m=>Number(m.id))) : 0;
+  const newMatch = {
+    id: maxId + 1,
+    date,
+    note: note + ' (W/O)',
+    walkover: true,
+    seasonId: currentSeasonId || null,
+    team1: { name: winner, score: 20, players: [], quarters: [] },
+    team2: { name: loser,  score: 0,  players: [], quarters: [] },
+  };
+  matches.push(newMatch);
+  await saveData();
+  showToast(`✅ Walkower zapisany: ${winner} 20:0 ${loser}`, 'success');
+  document.getElementById('wo-winner').value = '';
+  document.getElementById('wo-loser').value  = '';
+  document.getElementById('wo-note').value   = '';
+  renderDashboard();
+  renderMatches();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // TEAM ALIASES
 // ═══════════════════════════════════════════════════════════════
@@ -2676,14 +2735,27 @@ function renderTop3() {
 function renderStandings() {
   const ts={};
   matches.forEach(m=>{
-    [m.team1,m.team2].forEach(t=>{if(!ts[t.name])ts[t.name]={w:0,l:0,pf:0,pa:0};});
+    [m.team1,m.team2].forEach(t=>{if(!ts[t.name])ts[t.name]={w:0,l:0,wo:0,pf:0,pa:0};});
+    const isWalkover = m.walkover === true;
     const w1=m.team1.score>m.team2.score;
-    ts[m.team1.name].w+=w1?1:0;ts[m.team1.name].l+=w1?0:1;
-    ts[m.team1.name].pf+=m.team1.score;ts[m.team1.name].pa+=m.team2.score;
-    ts[m.team2.name].w+=w1?0:1;ts[m.team2.name].l+=w1?1:0;
-    ts[m.team2.name].pf+=m.team2.score;ts[m.team2.name].pa+=m.team1.score;
+    if(isWalkover) {
+      // walkover: winner gets 2 pkt, loser gets 0 pkt
+      ts[m.team1.name].w+=w1?1:0; ts[m.team1.name].l+=w1?0:1;
+      ts[m.team2.name].w+=w1?0:1; ts[m.team2.name].l+=w1?1:0;
+      if(!w1) ts[m.team1.name].wo+=1; else ts[m.team2.name].wo+=1;
+    } else {
+      ts[m.team1.name].w+=w1?1:0; ts[m.team1.name].l+=w1?0:1;
+      ts[m.team1.name].pf+=m.team1.score; ts[m.team1.name].pa+=m.team2.score;
+      ts[m.team2.name].w+=w1?0:1; ts[m.team2.name].l+=w1?1:0;
+      ts[m.team2.name].pf+=m.team2.score; ts[m.team2.name].pa+=m.team1.score;
+    }
   });
-  const sorted=Object.entries(ts).sort((a,b)=>b[1].w/(b[1].w+b[1].l||1)-a[1].w/(a[1].w+a[1].l||1));
+  // Liga points: win=2, loss (normal)=1, walkover loss=0
+  const ligaPts = (s) => s.w*2 + (s.l - s.wo)*1 + s.wo*0;
+  const sorted=Object.entries(ts).sort((a,b)=>{
+    const pa=ligaPts(a[1]), pb=ligaPts(b[1]);
+    return pb!==pa ? pb-pa : b[1].w/(b[1].w+b[1].l||1)-a[1].w/(a[1].w+a[1].l||1);
+  });
   const tbody=document.getElementById('standings-body');
   if(!sorted.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>';renderTeamForm([]);renderTop3();return;}
   const byD=[...matches].sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -2700,12 +2772,13 @@ function renderStandings() {
   const hot=getHotPlayers();
   tbody.innerHTML=sorted.map(([name,s],i)=>{
     const gp=s.w+s.l,pct=gp>0?(s.w/gp).toFixed(3):'.000';
+    const ligaPts=s.w*2+(s.l-s.wo)*1+s.wo*0;
     const ppg=gp>0?(s.pf/gp).toFixed(1):'0.0',opp=gp>0?(s.pa/gp).toFixed(1):'0.0';
     const l5=tl5[name]||[];
     const l5h='<div class="l5">'+Array.from({length:5},(_,j)=>j>=l5.length?'<span class="l5e"></span>':l5[j]==='w'?'<span class="l5w"></span>':'<span class="l5l"></span>').join('')+'</div>';
     const hc=[...hot].filter(p=>matches.some(m=>[...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>pl.name===p&&(m.team1.name===name||m.team2.name===name)))).length;
     const _hs=hc>1?'ów ma':'ma';const _hx=hc>1?' x'+hc:'';const hb=hc>0?'<span class="hot" title="\uD83D\uDD25 Hot Streak: '+hc+' zawodnik'+_hs+' ocenę A- lub lepszą w ostatnich 3 meczach">\uD83D\uDD25'+_hx+'</span>':'';
-    return `<tr><td style="padding-left:1.5rem"><span class="rank-num rank-${i+1}">${i+1}</span></td><td style="font-weight:700"><span class="tlink" data-t="${name.replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${name}</span>${hb}</td><td>${gp}</td><td>${s.w}</td><td>${s.l}</td><td>${pct}</td><td>${ppg}</td><td>${opp}</td><td>${streaks[name]||'-'}</td><td>${l5h}</td></tr>`;
+    return `<tr><td style="padding-left:1.5rem"><span class="rank-num rank-${i+1}">${i+1}</span></td><td style="font-weight:700"><span class="tlink" data-t="${name.replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${name}</span>${hb}</td><td>${gp}</td><td>${s.w}</td><td>${s.l}</td><td style="font-weight:900;color:var(--accent)">${ligaPts}</td><td>${pct}</td><td>${ppg}</td><td>${opp}</td><td>${streaks[name]||'-'}</td><td>${l5h}</td></tr>`;
   }).join('');
   renderTeamForm(sorted);
   renderTop3();
