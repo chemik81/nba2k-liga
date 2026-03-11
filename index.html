@@ -1177,19 +1177,38 @@ async function loadData() {
     try {
       const localTeams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}');
       let migrated = false;
-      Object.entries(localTeams).forEach(([name, data]) => {
-        if(data.logo && !teams[name]?.logo) {
+      const compressLogo = (dataUrl, cb) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 48;
+          const scale = Math.min(MAX/img.width, MAX/img.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width*scale);
+          canvas.height = Math.round(img.height*scale);
+          canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+          cb(canvas.toDataURL('image/jpeg', 0.6));
+        };
+        img.src = dataUrl;
+      };
+      const entries = Object.entries(localTeams).filter(([n,d]) => d.logo && !teams[n]?.logo);
+      let pending = entries.length;
+      if(pending === 0) { migrated = false; }
+      entries.forEach(([name, data]) => {
+        compressLogo(data.logo, compressed => {
           if(!teams[name]) teams[name] = {};
-          teams[name].logo = data.logo;
+          teams[name].logo = compressed;
           migrated = true;
-        }
+          pending--;
+          if(pending === 0) {
+            window.teams = teams;
+            setTimeout(() => saveData(), 500);
+            localStorage.removeItem('nba2k_teams');
+            renderDashboard();
+            renderMatches();
+          }
+        });
       });
-      if(migrated) {
-        window.teams = teams;
-        // Save migrated logos to JSONBin silently
-        setTimeout(() => saveData(), 1000);
-        localStorage.removeItem('nba2k_teams'); // clear after migration
-      }
+      // migration handled in compressLogo callbacks above
     } catch(e) {}
     window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
@@ -2333,14 +2352,27 @@ function addTeamEntry() {
 function uploadTeamLogo(teamName, input) {
   const file = input.files[0];
   if(!file) return;
-  if(file.size > 80*1024) { showToast('❌ Plik za duży — max 80KB (loga zapisywane w chmurze)', 'error'); return; }
   const reader = new FileReader();
   reader.onload = e => {
-    if(!teams[teamName]) teams[teamName] = {};
-    teams[teamName].logo = e.target.result;
-    saveTeams();
-    renderTeamsList();
-    showToast('✅ Logo wgrane dla: ' + teamName, 'success');
+    const img = new Image();
+    img.onload = () => {
+      // Resize to max 64x64px and compress to JPEG quality 0.7
+      const MAX = 48;
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.6);
+      const kb = (compressed.length * 0.75 / 1024).toFixed(1);
+      if(!teams[teamName]) teams[teamName] = {};
+      teams[teamName].logo = compressed;
+      saveTeams();
+      renderTeamsList();
+      showToast(`✅ Logo wgrane (${kb}KB) dla: ${teamName}`, 'success');
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
