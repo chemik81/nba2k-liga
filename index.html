@@ -3287,9 +3287,14 @@ function openTeamModal(tn){
   var rows=pl.map(function(p){
     var a=function(v){return p.gp>0?(v/p.gp).toFixed(1):'0.0';};
     var ag=numToGrade(p.gp>0?p.gs/p.gp:0);
+    var pFull={name:p.name,team:tn,pos:p.pos||'',gp:p.gp,pts:p.pts,reb:p.reb,ast:p.ast,stl:p.stl,blk:p.blk,to:p.to,fgm:p.fgm,fga:p.fga,tpm:p.tpm,tpa:p.tpa,ftm:p.ftm,fta:p.fta,gradeSum:p.gs};
+    var cs=calcCompositeScore(pFull).toFixed(1);
+    var per=calcPER(pFull).toFixed(1);
     return '<tr class="prow" data-n="'+p.name.replace(/"/g,'&quot;')+'" data-t="'+tn.replace(/"/g,'&quot;')+'" style="cursor:pointer">'
       +'<td style="font-weight:600">'+p.name+'</td><td>'+p.gp+'</td>'
       +'<td><span class="grade grade-'+ag.replace('+','p').replace('-','m')+'">'+ag+'</span></td>'
+      +'<td style="color:var(--accent);font-weight:700">'+cs+'</td>'
+      +'<td style="color:#3498db;font-weight:700">'+per+'</td>'
       +'<td style="color:var(--accent);font-weight:700">'+a(p.pts)+'</td>'
       +'<td>'+a(p.reb)+'</td><td>'+a(p.ast)+'</td><td>'+a(p.stl)+'</td><td>'+a(p.blk)+'</td><td>'+a(p.to)+'</td>'
       +'<td>'+(p.fga>0?Math.round(p.fgm/p.fga*100):0)+'%</td><td>'+(p.tpa>0?Math.round(p.tpm/p.tpa*100):0)+'%</td><td>'+(p.fta>0?Math.round(p.ftm/p.fta*100):0)+'%</td></tr>';
@@ -3301,7 +3306,7 @@ function openTeamModal(tn){
     +'<span style="color:var(--muted)">PPG: <strong style="color:var(--text)">'+(gp>0?(pf/gp).toFixed(1):'0.0')+'</strong></span>'
     +'<span style="color:var(--muted)">OPP: <strong style="color:var(--text)">'+(gp>0?(pa/gp).toFixed(1):'0.0')+'</strong></span>'
     +'</div></div>'
-    +'<div class="stats-table-wrap"><table><thead><tr><th style="text-align:left">Zawodnik</th><th>GP</th><th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>'
+    +'<div class="stats-table-wrap"><table><thead><tr><th style="text-align:left">Zawodnik</th><th>GP</th><th>GRD</th><th title="Composite Score" style="color:var(--accent)">CS</th><th title="Player Efficiency Rating" style="color:#3498db">PER</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div>'
     +'<p style="color:var(--muted);font-size:0.8rem;margin-top:1rem">Kliknij zawodnika aby zobaczyc profil</p>'
     // Historia meczów drużyny
@@ -3624,6 +3629,16 @@ function openPlayerCard(playerName, teamName) {
           <div class="pcard-team">${teamName}</div>
         </div>
         <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:2rem;padding:.4rem .7rem">${gr}</span>
+      </div>
+      <div style="display:flex;gap:.6rem;margin-bottom:.6rem;justify-content:center">
+        <div style="background:rgba(245,197,24,.15);border:1px solid rgba(245,197,24,.4);border-radius:8px;padding:.35rem .9rem;text-align:center;flex:1">
+          <div style="font-size:1.4rem;font-weight:900;color:var(--accent)">${calcCompositeScore(p).toFixed(1)}</div>
+          <div style="font-size:.6rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px">Composite</div>
+        </div>
+        <div style="background:rgba(52,152,219,.15);border:1px solid rgba(52,152,219,.4);border-radius:8px;padding:.35rem .9rem;text-align:center;flex:1">
+          <div style="font-size:1.4rem;font-weight:900;color:#3498db">${calcPER(p).toFixed(1)}</div>
+          <div style="font-size:.6rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px">PER</div>
+        </div>
       </div>
       <div class="pcard-stats">
         ${[['PTS',avg(p.pts)],['REB',avg(p.reb)],['AST',avg(p.ast)],['STL',avg(p.stl)],['BLK',avg(p.blk)],['TO',avg(p.to)],['FG%',fgp+'%'],['3P%',tpp+'%'],['FT%',ftp+'%']].map(([l,v])=>`<div class="pcard-stat"><div class="pcard-sv">${v}</div><div class="pcard-sl">${l}</div></div>`).join('')}
