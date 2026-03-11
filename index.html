@@ -775,7 +775,7 @@
 
   <!-- MATCHES -->
   <div id="view-matches" class="view">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem"><div class="section-title" style="margin-bottom:0" data-i18n="match_results">Wyniki Meczów</div><div style="display:flex;gap:.75rem;flex-wrap:wrap"><select id="mfs" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">'+t('all_seasons')+'</option></select>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem"><div class="section-title" style="margin-bottom:0" data-i18n="match_results">Wyniki Meczów</div><div style="display:flex;gap:.75rem;flex-wrap:wrap"><select id="mfs" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_seasons">Wszystkie sezony</option></select>
         <select id="mft" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_teams">Wszystkie druzyny</option></select><select id="mfp" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_players">Wszyscy zawodnicy</option></select></div></div>
     <div class="matches-grid" id="matches-list">
       <div class="empty"><div class="icon">📋</div><h3>Brak meczów</h3><p>Dodaj pierwszy mecz klikając "+ Dodaj Mecz"</p></div>
@@ -1636,7 +1636,7 @@ function updateMatchFilters() {
   const teams=[...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))].sort();
   const players=[...new Set(matches.flatMap(m=>[...(m.team1.players||[]),...(m.team2.players||[])].map(p=>p.name)))].sort();
   const ct=ts.value,cp=ps.value;
-  ts.innerHTML=('<option value="">'+t('all_teams')+'</option>')+teams.map(t=>`<option value="${t}"${t===ct?' selected':''}>${t}</option>`).join('');
+  ts.innerHTML=('<option value="">'+t('all_teams')+'</option>')+teams.map(tn=>`<option value="${tn}"${tn===ct?' selected':''}>${tn}</option>`).join('');
   ps.innerHTML=('<option value="">'+t('all_players')+'</option>')+players.map(p=>`<option value="${p}"${p===cp?' selected':''}>${p}</option>`).join('');
 }
 function renderMatches() {
@@ -1827,7 +1827,7 @@ function populateTeamFilter() {
   const sel = document.getElementById('filter-team');
   const teams = [...new Set(matches.flatMap(m => [m.team1.name, m.team2.name]))];
   const current = sel.value;
-  sel.innerHTML = ('<option value="">'+t('all_pos')+'</option>') + teams.map(t => `<option value="${t}" ${t===current?'selected':''}>${t}</option>`).join('');
+  sel.innerHTML = '<option value="">'+t('all_pos')+'</option>' + teams.map(tn => `<option value="${tn}" ${tn===current?'selected':''}>${tn}</option>`).join('');
   // Also populate season filter in stats
   const ss = document.getElementById('filter-season-stats');
   if(ss) {
@@ -2301,7 +2301,7 @@ function initWalkoverTeams() {
   const dl = document.getElementById('wo-teams-list');
   if(!dl) return;
   const all = [...new Set([...Object.keys(window.teams||{}), ...matches.flatMap(m=>[m.team1.name,m.team2.name])])].sort();
-  dl.innerHTML = all.map(t=>`<option value="${t}">`).join('');
+  dl.innerHTML = all.map(tn=>`<option value="${tn}">`).join('');
   // Set today as default date
   const wd = document.getElementById('wo-date');
   if(wd && !wd.value) wd.value = new Date().toISOString().split('T')[0];
@@ -2402,7 +2402,7 @@ function renderTeamAliases() {
   const dl = document.getElementById('talias-teams-list');
   if(dl) {
     const all = [...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))].sort();
-    dl.innerHTML = all.map(t=>`<option value="${t}">`).join('');
+    dl.innerHTML = all.map(tn=>`<option value="${tn}">`).join('');
   }
   const entries = Object.entries(teamAliases);
   if(!entries.length){container.innerHTML='<p style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak aliasów drużyn.</p>';return;}
@@ -2621,7 +2621,7 @@ function renderSchedule() {
 function openScheduleAdd(editId) {
   const existing = editId ? schedule.find(s=>s.id===editId) : null;
   const teams = [...new Set([...Object.keys(window.teams||{}), ...matches.flatMap(m=>[m.team1.name,m.team2.name])])].sort();
-  const teamOpts = teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+  const teamOpts = teams.map(tn=>`<option value="${tn}">${tn}</option>`).join('');
   const modal = document.getElementById('schedule-modal');
   document.getElementById('schedule-modal-content').innerHTML = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:1.25rem">${existing?'✏️ Edytuj mecz':'➕ Dodaj planowany mecz'}</div>
@@ -2635,7 +2635,7 @@ function openScheduleAdd(editId) {
           <input id="sch-t2" type="text" list="sch-teams-list" placeholder="Drużyna 2..." style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box">
         </div>
       </div>
-      <datalist id="sch-teams-list">${[...new Set([...Object.keys(window.teams||{}), ...teams])].sort().map(t=>`<option value="${t}">`).join('')}</datalist>
+      <datalist id="sch-teams-list">${[...new Set([...Object.keys(window.teams||{}), ...teams])].sort().map(tn=>`<option value="${tn}">`).join('')}</datalist>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
         <div><label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">DATA</label>
           <input type="date" id="sch-date" value="${existing?.date||''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;border-radius:6px;font-family:inherit;box-sizing:border-box"></div>
