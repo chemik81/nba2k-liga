@@ -4085,4 +4085,14 @@ function rdRenderContent(idx) {
     </div>
   </div>
 
+<!-- ROUNDS DETAIL MODAL -->
+<div class="modal-overlay" id="rounds-detail-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1100">
+  <div class="modal-box" style="max-width:700px;width:95vw;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('rounds-detail-modal').classList.remove('open')">✕</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:2px;margin-bottom:1.25rem">📊 STATYSTYKI KOLEJEK</div>
+    <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap" id="rounds-detail-tabs"></div>
+    <div id="rounds-detail-content"></div>
+  </div>
+</div>
+
 </html>
