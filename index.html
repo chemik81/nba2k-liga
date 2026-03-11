@@ -3693,14 +3693,14 @@ async function generateRecap(id) {
     const def1 = getByPos(m.team2, grdPos);
     if(atk1 && def1) {
       const fgPct1 = atk1.fga>0 ? Math.round(atk1.fgm/atk1.fga*100)+'%' : 'brak rzutów';
-      duelLines.push(`${atk1.name}[${atkPos}] ATAKUJE, broni go ${def1.name}[${grdPos}]: ${atk1.pts}pkt FG:${atk1.fgm}/${atk1.fga}(${fgPct1}) TO:${atk1.to} | obrońca ${def1.name}: ${def1.stl}prz ${def1.blk}blk ocena:${def1.grade}`);
+      duelLines.push(`POJEDYNEK: ${def1.name}[${grdPos}] KRYJE ${atk1.name}[${atkPos}] — atakujący: ${atk1.pts}pkt FG:${atk1.fgm||0}/${atk1.fga||0}(${fgPct1}) TO:${atk1.to||0} ocena:${atk1.grade} | obrońca: ${def1.stl||0}prz ${def1.blk||0}blk ocena:${def1.grade}`);
     }
     // team2 attacker guarded by team1 defender
     const atk2 = getByPos(m.team2, atkPos);
     const def2 = getByPos(m.team1, grdPos);
     if(atk2 && def2) {
       const fgPct2 = atk2.fga>0 ? Math.round(atk2.fgm/atk2.fga*100)+'%' : 'brak rzutów';
-      duelLines.push(`${atk2.name}[${atkPos}] ATAKUJE, broni go ${def2.name}[${grdPos}]: ${atk2.pts}pkt FG:${atk2.fgm}/${atk2.fga}(${fgPct2}) TO:${atk2.to} | obrońca ${def2.name}: ${def2.stl}prz ${def2.blk}blk ocena:${def2.grade}`);
+      duelLines.push(`POJEDYNEK: ${def2.name}[${grdPos}] KRYJE ${atk2.name}[${atkPos}] — atakujący: ${atk2.pts}pkt FG:${atk2.fgm||0}/${atk2.fga||0}(${fgPct2}) TO:${atk2.to||0} ocena:${atk2.grade} | obrońca: ${def2.stl||0}prz ${def2.blk||0}blk ocena:${def2.grade}`);
     }
   }
   const duelsText = duelLines.length ? '\nBEZPOŚREDNIE POJEDYNKI (kto atakuje, kto broni):\n' + duelLines.join('\n') : '';
@@ -3730,7 +3730,9 @@ WAŻNE ZASADY:
   * chemik81pl: gdy jego ocena to B lub wyższa (B, B+, A-, A, A+), zawsze napisz o nim z lekką pochwałą i uznaniem — podkreśl jego wkład, nawet jeśli statystyki nie są spektakularne. Traktuj go jak gracza który "cicho robi robotę".
   * SniperKPL: możesz pisać o nim naprzemiennie jako "SniperKPL" lub "Saper" — używaj przydomka "Saper" mniej więcej co drugi raz gdy go wspominasz.
 
-ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG, SF kryje PG rywala, PF kryje C rywala, C kryje SF rywala. KONTEKST: PG i C rywala grają razem pick'n'roll — SF i PF często zamieniają się przy ich kryciu na ułamki sekund, więc obaj SF i PF współodpowiadają za zatrzymanie PG i C.
+ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG rywala, SF kryje PG rywala, PF kryje C rywala, C kryje SF rywala.
+W DANYCH PONIŻEJ: format "X KRYJE Y" oznacza że X jest obrońcą a Y atakującym. Np. "LeTbartko[SF] KRYJE RudiGay[PG]" = LeTbartko broni przed RudiGay'em. NIE odwracaj tej relacji.
+KONTEKST: PG i C rywala grają razem pick'n'roll — SF i PF często zamieniają się przy ich kryciu na ułamki sekund, więc obaj SF i PF współodpowiadają za zatrzymanie PG i C.
 UWAGA: Pozycje mogą nie odzwierciedlać faktycznej roli. Stosuj zdrowy rozsądek — PG to rozgrywający (dużo asyst, mało zbiórek), C/PF to gracze podkoszowi (dużo zbiórek). NIE opisuj PG jako gracza "strefy podkoszowej" ani "podkoszowego" — to pozycja obwodowa.
 
 MECZ: ${m.team1.name} ${m.team1.score} - ${m.team2.score} ${m.team2.name}
