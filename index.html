@@ -2610,7 +2610,7 @@ function renderTop3() {
   if(!wrap) return;
   const agg = getAggregatedStats();
   if(!agg.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Brak danych</div>'; return; }
-  const ranked = agg.filter(p=>p.gp>=5).map(p=>({...p, avgGN: p.gradeSum/p.gp, _score: calcCompositeScore(p)})).sort((a,b)=>b._score-a._score).slice(0,3);
+  const ranked = agg.filter(p=>p.gp>=1).map(p=>({...p, avgGN: p.gradeSum/p.gp, _score: calcCompositeScore(p)})).sort((a,b)=>b._score-a._score).slice(0,3);
   if(!ranked.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Minimum 2 mecze wymagane</div>'; return; }
   const medals=['🥇','🥈','🥉'];
   wrap.innerHTML = ranked.map((p,i)=>{
@@ -2676,7 +2676,7 @@ function renderLeaders() {
     { stat: 'blk', label: 'Bloki (śr.)', icon: '🛡️' },
   ];
   grid.innerHTML = leaders.map(l => {
-    const sorted = [...all].filter(p=>p.gp>=5).sort((a,b) => (b[l.stat]/b.gp) - (a[l.stat]/a.gp));
+    const sorted = [...all].filter(p=>p.gp>=1).sort((a,b) => (b[l.stat]/b.gp) - (a[l.stat]/a.gp));
     const top = sorted[0];
     const val = top ? (top[l.stat]/top.gp).toFixed(1) : '0.0';
     return `<div class="leader-card">
@@ -2918,21 +2918,26 @@ function renderTeamOfWeek() {
 
 function calcCompositeScore(p) {
   // Composite: PTS(25%) + STL(20%) + BLK(18%) + REB(15%) + AST(12%) + ocena(10%)
-  // Obrona (STL+BLK) doceniona bardziej niz atak, ocena ma mniejsza wage
+  // Współczynnik GP (maturity) — mocna kara za mało meczów:
+  //   1 mecz  = 0.20,  3 mecze = 0.43,  5 = 0.58,  8 = 0.73
+  //  10 mecze = 0.80, 15 = 0.89, 20+ → ~1.0
+  // Wzór: gp / (gp + 5) — przy 5 meczach gracz ma 50% siły, przy 15 meczach 75%
   const gp = Math.max(p.gp, 1);
+  const maturity = gp / (gp + 5);  // 0..1, asymptotycznie → 1.0
   const gradeScore = (p.gradeSum / gp) / 13 * 100;
   const ptsScore   = Math.min((p.pts / gp) / 50 * 100, 100);
   const astScore   = Math.min((p.ast / gp) / 15 * 100, 100);
   const rebScore   = Math.min((p.reb / gp) / 20 * 100, 100);
-  const stlScore   = Math.min((p.stl / gp) / 4  * 100, 100); // prog nizszy = latw. max
-  const blkScore   = Math.min((p.blk / gp) / 3  * 100, 100); // bloki b. trudne wiec nizszy prog
-  return ptsScore*0.25 + stlScore*0.20 + blkScore*0.18 + rebScore*0.15 + astScore*0.12 + gradeScore*0.10;
+  const stlScore   = Math.min((p.stl / gp) / 4  * 100, 100);
+  const blkScore   = Math.min((p.blk / gp) / 3  * 100, 100);
+  const baseScore  = ptsScore*0.25 + stlScore*0.20 + blkScore*0.18 + rebScore*0.15 + astScore*0.12 + gradeScore*0.10;
+  return baseScore * maturity;
 }
 
 function getSeasonMVP(seasonId) {
   const agg = getAggregatedStats(seasonId);
   if(!agg.length) return null;
-  const ranked = agg.filter(p=>p.gp>=5).map(p=>({...p, score: calcCompositeScore(p)})).sort((a,b)=>b.score-a.score);
+  const ranked = agg.filter(p=>p.gp>=1).map(p=>({...p, score: calcCompositeScore(p)})).sort((a,b)=>b.score-a.score);
   return ranked[0] || null;
 }
 
@@ -2997,8 +3002,8 @@ function renderTop10Tab(tab) {
 
   const isComposite = tab === 'composite';
   const ranked = isComposite
-    ? agg.filter(p=>p.gp>=5).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
-    : agg.filter(p=>p.gp>=5).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
+    ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
+    : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
   const tabBtn = (active, label, tab) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${active?'var(--accent)':'transparent'};background:none;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tab}')">${label}</button>`;
   const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(isComposite,'Composite Score','composite')}${tabBtn(!isComposite,'PER (Hollinger)','per')}</div>`;
