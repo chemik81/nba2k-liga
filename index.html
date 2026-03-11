@@ -715,18 +715,19 @@
 <header>
   <div class="logo">NBA 2K26 <span>Liga</span></div>
   <nav>
-    <button class="active" onclick="showView('dashboard')">Dashboard</button>
-    <button onclick="showView('matches')">Mecze</button>
-    <button onclick="showView('stats')">Statystyki</button>
-    <button onclick="showView('add-match')">+ Dodaj Mecz</button>
-    <button onclick="showView('schedule')">📅 Harmonogram</button>
-    <button onclick="showView('aliases')">⚙ Aliasy</button>
+    <button class="active" onclick="showView('dashboard')" data-i18n="nav_dashboard">Dashboard</button>
+    <button onclick="showView('matches')" data-i18n="nav_matches">Mecze</button>
+    <button onclick="showView('stats')" data-i18n="nav_stats">Statystyki</button>
+    <button onclick="showView('add-match')" data-i18n="nav_add_match">+ Dodaj Mecz</button>
+    <button onclick="showView('schedule')" data-i18n="nav_schedule">📅 Harmonogram</button>
+    <button onclick="showView('aliases')" data-i18n="nav_aliases">⚙ Aliasy</button>
   </nav>
   <div style="display:flex;gap:0.5rem;align-items:center">
-    <button id="logout-btn" class="btn btn-ghost" onclick="logout()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🔓 Wyloguj</button>
+    <button id="logout-btn" class="btn btn-ghost" onclick="logout()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="logout">🔓 Wyloguj</button>
     <button id="baza-btn" class="btn btn-ghost" onclick="openSetupModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" title="Zmień konfigurację bazy danych">⚙ Baza</button>
-    <button id="season-btn" class="btn btn-ghost" onclick="openSeasonModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Sezony</button>
+    <button id="season-btn" class="btn btn-ghost" onclick="openSeasonModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="seasons_btn">🏆 Sezony</button>
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" title="Zmien motyw">&#9728;</button>
+    <div style="display:flex;gap:.25rem;align-items:center" id="lang-switcher"><button onclick="setLang('pl')" id="lang-pl" style="padding:.2rem .45rem;border-radius:4px;border:1px solid var(--accent);background:var(--accent);color:#000;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">PL</button><button onclick="setLang('en')" id="lang-en" style="padding:.2rem .45rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">EN</button><button onclick="setLang('nl')" id="lang-nl" style="padding:.2rem .45rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">NL</button></div>
   </div>
 </header>
 
@@ -734,28 +735,28 @@
 
   <!-- DASHBOARD -->
   <div id="view-dashboard" class="view active">
-    <div class="section-title">Podsumowanie Ligi</div>
+    <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
     <div class="leaders-grid" id="leaders-grid">
       <div class="empty" style="grid-column:1/-1;padding:2rem"><div class="icon">🏀</div><p>Dodaj mecze aby zobaczyć liderów</p></div>
     </div>
     <br>
     <div style="margin-bottom:1.5rem">
-      <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem">🏅 Najlepsza Piątka Kolejki</div>
+      <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem" data-i18n="best_five">🏅 Najlepsza Piątka Kolejki</div>
       <div class="card" style="padding:1rem" id="team-of-week-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych z bieżącego tygodnia</div></div>
-      <div style="text-align:center;margin-top:.75rem"><button onclick="openRoundsDetailModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.4rem 1.2rem;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.85rem;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Zobacz więcej →</button></div>
+      <div style="text-align:center;margin-top:.75rem"><button onclick="openRoundsDetailModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.4rem 1.2rem;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.85rem;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'" data-i18n="see_more">Zobacz więcej →</button></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem" id="dashboard-extras">
       <div>
-        <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem">📈 Forma Drużyn</div>
+        <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem" data-i18n="team_form">📈 Forma Drużyn</div>
         <div class="card" style="padding:1rem" id="team-form-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych</div></div>
       </div>
       <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><div class="section-title" style="font-size:1.3rem;margin-bottom:0">⭐ Top 3 Zawodnicy</div><button onclick="openTop10Modal(null, 'Wszystkie sezony')" style="font-size:.75rem;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.3rem .7rem;border-radius:6px;cursor:pointer;font-family:inherit">Zobacz Top 10 →</button></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><div class="section-title" style="font-size:1.3rem;margin-bottom:0" data-i18n="top3">⭐ Top 3 Zawodnicy</div><button onclick="openTop10Modal(null, 'Wszystkie sezony')" style="font-size:.75rem;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.3rem .7rem;border-radius:6px;cursor:pointer;font-family:inherit" data-i18n="see_top10">Zobacz Top 10 →</button></div>
         <div class="card" style="padding:1rem" id="top3-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych</div></div>
       </div>
     </div>
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
-    <div class="section-title">Tabela</div>
+    <div class="section-title" data-i18n="standings">Tabela</div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="stats-table-wrap">
         <table style="min-width:500px">
@@ -774,7 +775,7 @@
 
   <!-- MATCHES -->
   <div id="view-matches" class="view">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem"><div class="section-title" style="margin-bottom:0">Wyniki Meczów</div><div style="display:flex;gap:.75rem;flex-wrap:wrap"><select id="mfs" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie sezony</option></select>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem"><div class="section-title" style="margin-bottom:0" data-i18n="match_results">Wyniki Meczów</div><div style="display:flex;gap:.75rem;flex-wrap:wrap"><select id="mfs" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">'+t('all_seasons')+'</option></select>
         <select id="mft" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie druzyny</option></select><select id="mfp" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszyscy zawodnicy</option></select></div></div>
     <div class="matches-grid" id="matches-list">
       <div class="empty"><div class="icon">📋</div><h3>Brak meczów</h3><p>Dodaj pierwszy mecz klikając "+ Dodaj Mecz"</p></div>
@@ -783,11 +784,11 @@
 
   <!-- STATS -->
   <div id="view-stats" class="view">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem"><div class="section-title" style="margin-bottom:0">Statystyki Zawodników</div><button onclick="openComparatorModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.5rem 1rem;border-radius:6px;font-size:.85rem;cursor:pointer;font-family:inherit">&#x26A1; Porównaj</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="player_stats">Statystyki Zawodników</div><button onclick="openComparatorModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.5rem 1rem;border-radius:6px;font-size:.85rem;cursor:pointer;font-family:inherit" data-i18n="compare">&#x26A1; Porównaj</button></div>
     <div class="filters">
-      <div><label>Sezon</label><select id="filter-season-stats" onchange="renderStats()"><option value="">Wszystkie sezony</option></select></div>
-      <div><label>Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
-      <div><label>Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
+      <div><label data-i18n="season_lbl">Sezon</label><select id="filter-season-stats" onchange="renderStats()"><option value="">Wszystkie sezony</option></select></div>
+      <div><label data-i18n="team_lbl">Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
+      <div><label data-i18n="position_lbl">Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
     </div>
     <div class="card" style="padding:0">
       <div class="stats-table-wrap">
@@ -820,7 +821,7 @@
 
   <!-- ADD MATCH -->
   <div id="view-add-match" class="view">
-    <div class="section-title">Dodaj Mecz</div>
+    <div class="section-title" data-i18n="add_match">Dodaj Mecz</div>
     <div class="card">
       <p style="color:var(--muted);margin-bottom:1.5rem;font-size:0.95rem">Wgraj screenshot z ekranu Game Stats — AI automatycznie odczyta wszystkie statystyki.</p>
 
@@ -891,7 +892,7 @@
   <!-- SCHEDULE -->
   <div id="view-schedule" class="view">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem">
-      <div class="section-title" style="margin-bottom:0">📅 Harmonogram</div>
+      <div class="section-title" style="margin-bottom:0" data-i18n="schedule_title">📅 Harmonogram</div>
       <div id="schedule-admin-btn"></div>
     </div>
     <div id="schedule-upcoming" style="margin-bottom:2rem"></div>
@@ -1899,7 +1900,7 @@ function renderStats() {
 
   const tbody = document.getElementById('stats-body');
   if(!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:2rem;color:var(--muted)">'+t('no_data')+'</td></tr>';
     return;
   }
   tbody.innerHTML = filtered.map((p) => {
@@ -3052,6 +3053,7 @@ async function saveSetup() {
   // Show setup modal only if anthropic key missing (admin needs to configure for adding matches)
   renderDashboard();
   updateAuthUI();
+  applyLangOnLoad();
 })();
 
 function getCurrentRound() {
@@ -4091,6 +4093,171 @@ function rdRenderContent(idx) {
     + section('🥈','2. Piątka','Composite Score — kolejni najlepsi',grid2)
     + '<hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.75rem">'
     + section('🛡️','Defensywna Piątka','STL × 40 + BLK × 25 + GRD × 20 − TO × 5',gridD);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// I18N — LANGUAGE SYSTEM
+// ═══════════════════════════════════════════════════════════════
+let currentLang = localStorage.getItem('nba2k_lang') || 'pl';
+
+const TRANSLATIONS = {
+  pl: {
+    // Nav
+    nav_dashboard: 'Dashboard', nav_matches: 'Mecze', nav_stats: 'Statystyki',
+    nav_add_match: '+ Dodaj Mecz', nav_schedule: '📅 Harmonogram', nav_aliases: '⚙ Aliasy',
+    // Dashboard
+    league_summary: 'Podsumowanie Ligi', best_five: '🏅 Najlepsza Piątka Kolejki',
+    team_form: '📈 Forma Drużyn', top3: '⭐ Top 3 Zawodnicy', standings: 'Tabela',
+    see_top10: 'Zobacz Top 10 →', see_more: 'Zobacz więcej →',
+    // Matches
+    match_results: 'Wyniki Meczów', all_seasons: 'Wszystkie sezony',
+    all_teams: 'Wszystkie drużyny', all_players: 'Wszyscy zawodnicy',
+    add_match: 'Dodaj Mecz', add_match_btn: '+ Dodaj Mecz',
+    // Stats
+    player_stats: 'Statystyki Zawodników', compare: '⚡ Porównaj',
+    season_lbl: 'Sezon', team_lbl: 'Drużyna', position_lbl: 'Pozycja', all_pos: 'Wszystkie',
+    // Table headers
+    th_player: 'Zawodnik', th_team: 'Drużyna', th_gp: 'GP', th_grd: 'GRD',
+    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
+    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
+    // Schedule
+    schedule_title: '📅 Harmonogram', no_schedule: 'Brak zaplanowanych meczów',
+    // Aliases
+    aliases_title: 'Aliasy', apply_aliases: 'Zastosuj aliasy',
+    // Misc
+    logout: '🔓 Wyloguj', settings: '⚙ Baza', seasons_btn: '🏆 Sezony',
+    loading: 'Ładowanie...', save: 'Zapisz', cancel: 'Anuluj', delete: 'Usuń',
+    edit: 'Edytuj', close: 'Zamknij', yes: 'Tak', no: 'Nie',
+    games: 'meczów', game: 'mecz', week: 'Tydzień',
+    win: 'W', loss: 'P', draw: 'R',
+    career_records: '🏆 Rekordy kariery',
+    match_history: 'Historia meczów',
+    hot_streak: t('hot_streak'),
+    player_card: '🃏 Karta',
+    round_label: 'Kolejka',
+    composite_higher: 'wyżej = lepiej', per_higher: 'wyżej = lepiej',
+    save_match: 'Zapisz Mecz',
+    add_player: '+ Dodaj Zawodnika',
+    screenshot: 'Wgraj Screenshot',
+    check_save: 'Sprawdź i Zapisz',
+    no_matches: 'Brak meczów',
+    no_data: 'Brak danych',
+    rivals: '⚔️ Rywalizacja',
+    next_matches: 'Najbliższe mecze',
+    top_scorers: 'Top Strzelcy',
+    last_results: 'Ostatnie wyniki',
+  },
+  en: {
+    nav_dashboard: 'Dashboard', nav_matches: 'Matches', nav_stats: 'Statistics',
+    nav_add_match: '+ Add Match', nav_schedule: '📅 Schedule', nav_aliases: '⚙ Settings',
+    league_summary: 'League Summary', best_five: '🏅 Best Five of the Round',
+    team_form: '📈 Team Form', top3: '⭐ Top 3 Players', standings: 'Standings',
+    see_top10: 'See Top 10 →', see_more: 'See more →',
+    match_results: 'Match Results', all_seasons: 'All seasons',
+    all_teams: 'All teams', all_players: 'All players',
+    add_match: 'Add Match', add_match_btn: '+ Add Match',
+    player_stats: 'Player Statistics', compare: '⚡ Compare',
+    season_lbl: 'Season', team_lbl: 'Team', position_lbl: 'Position', all_pos: 'All',
+    th_player: 'Player', th_team: 'Team', th_gp: 'GP', th_grd: 'GRD',
+    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
+    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
+    schedule_title: '📅 Schedule', no_schedule: 'No scheduled matches',
+    aliases_title: 'Aliases', apply_aliases: 'Apply aliases',
+    logout: '🔓 Logout', settings: '⚙ Settings', seasons_btn: '🏆 Seasons',
+    loading: 'Loading...', save: 'Save', cancel: 'Cancel', delete: 'Delete',
+    edit: 'Edit', close: 'Close', yes: 'Yes', no: 'No',
+    games: 'games', game: 'game', week: 'Week',
+    win: 'W', loss: 'L', draw: 'D',
+    career_records: '🏆 Career Records',
+    match_history: 'Match History',
+    hot_streak: '🔥 HOT STREAK — A- or better in last 3 games!',
+    player_card: '🃏 Card',
+    round_label: 'Round',
+    composite_higher: 'higher = better', per_higher: 'higher = better',
+    save_match: 'Save Match',
+    add_player: '+ Add Player',
+    screenshot: 'Upload Screenshot',
+    check_save: 'Review & Save',
+    no_matches: 'No matches',
+    no_data: 'No data',
+    rivals: '⚔️ Rivalry',
+    next_matches: 'Upcoming matches',
+    top_scorers: 'Top Scorers',
+    last_results: 'Recent results',
+  },
+  nl: {
+    nav_dashboard: 'Dashboard', nav_matches: 'Wedstrijden', nav_stats: 'Statistieken',
+    nav_add_match: '+ Wedstrijd toevoegen', nav_schedule: '📅 Schema', nav_aliases: '⚙ Instellingen',
+    league_summary: 'Liga Overzicht', best_five: '🏅 Beste Vijf van de Ronde',
+    team_form: '📈 Teamvorm', top3: '⭐ Top 3 Spelers', standings: 'Stand',
+    see_top10: 'Zie Top 10 →', see_more: 'Meer zien →',
+    match_results: 'Wedstrijdresultaten', all_seasons: 'Alle seizoenen',
+    all_teams: 'Alle teams', all_players: 'Alle spelers',
+    add_match: 'Wedstrijd toevoegen', add_match_btn: '+ Wedstrijd toevoegen',
+    player_stats: 'Spelerstatistieken', compare: '⚡ Vergelijken',
+    season_lbl: 'Seizoen', team_lbl: 'Team', position_lbl: 'Positie', all_pos: 'Alle',
+    th_player: 'Speler', th_team: 'Team', th_gp: 'GP', th_grd: 'GRD',
+    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
+    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
+    schedule_title: '📅 Schema', no_schedule: 'Geen geplande wedstrijden',
+    aliases_title: 'Aliassen', apply_aliases: 'Aliassen toepassen',
+    logout: '🔓 Uitloggen', settings: '⚙ Instellingen', seasons_btn: '🏆 Seizoenen',
+    loading: 'Laden...', save: 'Opslaan', cancel: 'Annuleren', delete: 'Verwijderen',
+    edit: 'Bewerken', close: 'Sluiten', yes: 'Ja', no: 'Nee',
+    games: 'wedstrijden', game: 'wedstrijd', week: 'Week',
+    win: 'W', loss: 'V', draw: 'G',
+    career_records: '🏆 Carrièrerecords',
+    match_history: 'Wedstrijdgeschiedenis',
+    hot_streak: '🔥 HOT STREAK — A- of beter in laatste 3 wedstrijden!',
+    player_card: '🃏 Kaart',
+    round_label: 'Ronde',
+    composite_higher: 'hoger = beter', per_higher: 'hoger = beter',
+    save_match: 'Wedstrijd opslaan',
+    add_player: '+ Speler toevoegen',
+    screenshot: 'Screenshot uploaden',
+    check_save: 'Controleer & Sla op',
+    no_matches: 'Geen wedstrijden',
+    no_data: 'Geen gegevens',
+    rivals: '⚔️ Rivaliteit',
+    next_matches: 'Komende wedstrijden',
+    top_scorers: 'Topscorers',
+    last_results: 'Recente resultaten',
+  }
+};
+
+function t(key) {
+  return (TRANSLATIONS[currentLang] || TRANSLATIONS.pl)[key] || (TRANSLATIONS.pl)[key] || key;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('nba2k_lang', lang);
+  // Update switcher buttons
+  ['pl','en','nl'].forEach(l => {
+    const btn = document.getElementById('lang-' + l);
+    if(!btn) return;
+    const active = l === lang;
+    btn.style.background = active ? 'var(--accent)' : 'transparent';
+    btn.style.color = active ? '#000' : 'var(--muted)';
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+  });
+  // Update all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if(val) el.textContent = val;
+  });
+  // Re-render dynamic content
+  renderDashboard();
+  renderMatches();
+  renderStats();
+  renderSchedule();
+}
+
+// Apply language on load
+function applyLangOnLoad() {
+  setLang(currentLang);
 }
 
 </script>
