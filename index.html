@@ -797,6 +797,8 @@
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('pos')">POZ<span id="sort-icon-pos" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('gp')">GP<span id="sort-icon-gp" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('avggrade')">GRD<span id="sort-icon-avggrade" class="sort-icon"></span></th>
+            <th style="cursor:pointer;user-select:none;color:var(--accent)" onclick="sortByCol('cs')" title="Composite Score">CS<span id="sort-icon-cs" class="sort-icon"></span></th>
+            <th style="cursor:pointer;user-select:none;color:#3498db" onclick="sortByCol('per')" title="Player Efficiency Rating">PER<span id="sort-icon-per" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('pts')">PTS<span id="sort-icon-pts" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('reb')">REB<span id="sort-icon-reb" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('ast')">AST<span id="sort-icon-ast" class="sort-icon"></span></th>
@@ -1859,6 +1861,8 @@ function renderStats() {
     tppct: p.tpa > 0 ? p.tpm/p.tpa : 0,
     ftpct: p.fta > 0 ? p.ftm/p.fta : 0,
     avggrade: p.gp > 0 ? p.gradeSum/p.gp : 0,
+    cs: calcCompositeScore(p),
+    per: calcPER(p),
   }));
 
   const col = statsSortCol;
@@ -1866,14 +1870,14 @@ function renderStats() {
     let va = ['name','team','pos'].includes(col) ? (a[col]||'').toLowerCase() : (a[col]/Math.max(a.gp,1));
     let vb = ['name','team','pos'].includes(col) ? (b[col]||'').toLowerCase() : (b[col]/Math.max(b.gp,1));
     // fgpct/tppct/ftpct already per-game values
-    if(['fgpct','tppct','ftpct','gp','avggrade'].includes(col)) { va = a[col]; vb = b[col]; }
+    if(['fgpct','tppct','ftpct','gp','avggrade','cs','per'].includes(col)) { va = a[col]; vb = b[col]; }
     if(va < vb) return -1 * statsSortDir;
     if(va > vb) return 1 * statsSortDir;
     return 0;
   });
 
   // Update sort icons
-  const cols = ['name','team','pos','gp','avggrade','pts','reb','ast','stl','blk','to','fgpct','tppct','ftpct'];
+  const cols = ['name','team','pos','gp','avggrade','cs','per','pts','reb','ast','stl','blk','to','fgpct','tppct','ftpct'];
   cols.forEach(c => {
     const el = document.getElementById('sort-icon-' + c);
     if(!el) return;
@@ -1907,6 +1911,8 @@ function renderStats() {
       <td style="color:var(--accent);font-weight:700;font-size:.8rem;${col==='pos'?hl:''}">${p.pos||''}</td>
       <td style="${col==='gp'?hl:''}">${p.gp}</td>
       <td style="${col==='avggrade'?hl:''}"><span class="grade grade-${avgGrade.replace('+','p').replace('-','m')}">${avgGrade}</span></td>
+      <td style="color:var(--accent);font-weight:700;${col==='cs'?hl:''}">${p.cs.toFixed(1)}</td>
+      <td style="color:#3498db;font-weight:700;${col==='per'?hl:''}">${p.per.toFixed(1)}</td>
       <td style="${col==='pts'?hl:''}">${avg(p.pts)}</td>
       <td style="${col==='reb'?hl:''}">${avg(p.reb)}</td>
       <td style="${col==='ast'?hl:''}">${avg(p.ast)}</td>
