@@ -1655,8 +1655,9 @@ function renderMatches() {
       <div class="match-meta">
         <div class="match-date">${formatDate(m.date)}</div>
         <div class="vs-badge">VS</div>
-        ${m.note ? `<div style="font-size:0.75rem;color:var(--muted);max-width:80px;text-align:center">${m.note}</div>` : ''}
+        ${m.note && !/^game\s*\d+$/i.test(m.note.trim()) ? `<div style="font-size:0.75rem;color:var(--muted);max-width:80px;text-align:center">${m.note}</div>` : ''}
         ${m.seasonId ? `<div style="font-size:0.65rem;color:var(--accent);font-weight:700;margin-top:2px">${(seasons.find(s=>s.id===m.seasonId)||{}).name||''}</div>` : ''}
+        ${(()=>{ const r=(rounds||[]).find(r=>m.date>=r.from&&m.date<=r.to); return r?`<div style="font-size:0.6rem;color:var(--muted);font-weight:600;margin-top:1px">${r.label}</div>`:''; })()}
       </div>
       <div class="team-side right">
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem;justify-content:flex-end"><div class="team-name">${m.team2.name}</div>${teamLogo(m.team2.name,36,'.85rem')}</div>
@@ -3040,23 +3041,17 @@ function getCurrentRound() {
   return rounds[rounds.length-1];
 }
 
-function renderTeamOfWeek() {
-  const wrap = document.getElementById('team-of-week-wrap');
-  if(!wrap) return;
-  const round = getCurrentRound();
-  const weekMatches = matches.filter(m => m.date >= round.from && m.date <= round.to);
-  if(!weekMatches.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak meczów w ' + round.label + '</div>';
-    return;
-  }
+function buildRoundFive(roundMatches) {
+  const totalGames = roundMatches.length;
+  // Minimum games: at least 1/6 of total matches in round (min 1, max 3)
+  const minGP = Math.min(3, Math.max(1, Math.ceil(totalGames / 6)));
   const POSITIONS = ['PG','SG','SF','PF','C'];
-  // Gather all players from week matches with their position
   const playerMap = {};
-  weekMatches.forEach(m => {
+  roundMatches.forEach(m => {
     [m.team1, m.team2].forEach(team => {
       (team.players||[]).forEach((p,idx) => {
         const pos = p.pos || POSITIONS[idx] || 'PG';
-        const key = p.name + '|' + team.name + '|' + pos;
+        const key = p.name + '|' + pos;
         if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,gradeSum:0};
         const s = playerMap[key];
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
@@ -3064,35 +3059,69 @@ function renderTeamOfWeek() {
       });
     });
   });
-  const players = Object.values(playerMap).map(p => ({
-    ...p,
-    avgGrade: p.gradeSum/p.gp,
-    score: (p.gradeSum/p.gp)*2 + (p.pts/p.gp)*0.5 + (p.reb/p.gp)*0.3 + (p.ast/p.gp)*0.4
-  }));
-  // Pick best player per position
+  const players = Object.values(playerMap)
+    .filter(p => p.gp >= minGP)
+    .map(p => ({
+      ...p, avgGrade: p.gradeSum/p.gp,
+      score: (p.gradeSum/p.gp)*2.5 + (p.pts/p.gp)*0.5 + (p.reb/p.gp)*0.3 + (p.ast/p.gp)*0.4
+    }));
   const best = {};
   POSITIONS.forEach(pos => {
-    const candidates = players.filter(p => p.pos === pos);
-    if(candidates.length) best[pos] = candidates.sort((a,b)=>b.score-a.score)[0];
+    const c = players.filter(p => p.pos === pos);
+    if(c.length) best[pos] = c.sort((a,b)=>b.score-a.score)[0];
   });
-  if(!Object.keys(best).length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Za mało danych (zawodnicy muszą mieć przypisane pozycje)</div>';
+  return { best, POSITIONS, minGP };
+}
+
+function renderRoundFiveBlock(round, roundMatches) {
+  if(!roundMatches.length) return '';
+  const { best, POSITIONS, minGP } = buildRoundFive(roundMatches);
+  const hasBest = Object.keys(best).length > 0;
+  const cards = POSITIONS.map(pos => {
+    const p = best[pos];
+    if(!p) return '<div class="tow-card"><div class="tow-pos">'+pos+'</div><div style="color:var(--muted);font-size:.75rem">Brak<br>(min.'+minGP+' mecze)</div></div>';
+    const gr = numToGrade(p.avgGrade);
+    const pts=(p.pts/p.gp).toFixed(1), reb=(p.reb/p.gp).toFixed(1), ast=(p.ast/p.gp).toFixed(1);
+    const esc = s => s.replace(/'/g,"\'");
+    return '<div class="tow-card" onclick="openPlayerModal(''+esc(p.name)+'',''+esc(p.team)+'')">'
+      +'<div class="tow-pos">'+pos+'</div>'
+      +'<div class="tow-name">'+p.name+'</div>'
+      +'<div class="tow-team">'+p.team+'</div>'
+      +'<div class="tow-score"><span class="grade grade-'+gr.replace('+','p').replace('-','m')+'">'+gr+'</span></div>'
+      +'<div class="tow-stats">'+pts+' PTS · '+reb+' REB · '+ast+' AST</div>'
+      +'<div style="font-size:.65rem;color:var(--muted)">'+p.gp+' mecz'+(p.gp===1?'':'e/ów')+'</div>'
+      +'</div>';
+  }).join('');
+  return '<div style="margin-bottom:1.5rem">'
+    +'<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;display:flex;align-items:center;gap:.6rem">'
+    +'🏅 '+round.label
+    +'<span style="color:var(--muted);font-weight:400;font-size:.75rem;text-transform:none">· '+roundMatches.length+' mecz'+(roundMatches.length===1?'':'ów')+' · min. '+minGP+' mecz'+(minGP===1?'':'e')+'/zawodnik</span>'
+    +'</div>'
+    +(hasBest ? '<div class="tow-grid">'+cards+'</div>' : '<div style="color:var(--muted);font-size:.85rem">Za mało danych (zawodnicy muszą mieć przypisane pozycje)</div>')
+    +'</div>';
+}
+
+function renderTeamOfWeek() {
+  const wrap = document.getElementById('team-of-week-wrap');
+  if(!wrap) return;
+  const today = new Date().toISOString().slice(0,10);
+
+  const activeRounds = (rounds && rounds.length
+    ? rounds
+    : [{ id:'r1', label:'1. Kolejka', from:'2000-01-01', to:'2026-03-11' }]
+  ).filter(r => r.from <= today).sort((a,b) => a.from.localeCompare(b.from));
+
+  if(!activeRounds.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak zdefiniowanych kolejek — dodaj je w zakładce Aliasy.</div>';
     return;
   }
-  wrap.innerHTML = `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">${round.label} · ${weekMatches.length} mecz${weekMatches.length===1?'':'ów'}</div>
-  <div class="tow-grid">${POSITIONS.map(pos => {
-    const p = best[pos];
-    if(!p) return `<div class="tow-card"><div class="tow-pos">${pos}</div><div style="color:var(--muted);font-size:.8rem">Brak</div></div>`;
-    const gr = numToGrade(p.avgGrade);
-    const pts = (p.pts/p.gp).toFixed(1), reb = (p.reb/p.gp).toFixed(1), ast = (p.ast/p.gp).toFixed(1);
-    return `<div class="tow-card" onclick="openPlayerModal('${p.name.replace(/'/g,"\\'")}','${p.team.replace(/'/g,"\\'")}')">
-      <div class="tow-pos">${pos}</div>
-      <div class="tow-name">${p.name}</div>
-      <div class="tow-team">${p.team}</div>
-      <div class="tow-score"><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></div>
-      <div class="tow-stats">${pts} PTS · ${reb} REB · ${ast} AST</div>
-    </div>`;
-  }).join('')}</div>`;
+
+  const html = activeRounds.map(round => {
+    const roundMatches = matches.filter(m => m.date >= round.from && m.date <= round.to);
+    return renderRoundFiveBlock(round, roundMatches);
+  }).join('');
+
+  wrap.innerHTML = html || '<div style="color:var(--muted);font-size:.9rem">Brak meczów w aktywnych kolejkach</div>';
 }
 
 
