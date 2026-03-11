@@ -1173,6 +1173,24 @@ async function loadData() {
     currentSeasonId = data.record?.currentSeasonId || null;
     schedule = data.record?.schedule || [];
     teams = data.record?.teams || {};
+    // One-time migration: merge logos from localStorage into JSONBin teams
+    try {
+      const localTeams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}');
+      let migrated = false;
+      Object.entries(localTeams).forEach(([name, data]) => {
+        if(data.logo && !teams[name]?.logo) {
+          if(!teams[name]) teams[name] = {};
+          teams[name].logo = data.logo;
+          migrated = true;
+        }
+      });
+      if(migrated) {
+        window.teams = teams;
+        // Save migrated logos to JSONBin silently
+        setTimeout(() => saveData(), 1000);
+        localStorage.removeItem('nba2k_teams'); // clear after migration
+      }
+    } catch(e) {}
     window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
     // Auto-assign matches without seasonId to currentSeason
