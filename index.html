@@ -787,6 +787,7 @@
     <div class="filters">
       <div><label>Sezon</label><select id="filter-season-stats" onchange="renderStats()"><option value="">Wszystkie sezony</option></select></div>
       <div><label>Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
+      <div><label>Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
     </div>
     <div class="card" style="padding:0">
       <div class="stats-table-wrap">
@@ -1852,7 +1853,10 @@ function renderStats() {
   const seasonFilter = document.getElementById('filter-season-stats')?.value || '';
   const allStats = getAggregatedStats(seasonFilter);
   const teamFilter = document.getElementById('filter-team')?.value || '';
-  let filtered = teamFilter ? allStats.filter(p => p.team === teamFilter) : allStats;
+  const posFilter = document.getElementById('filter-pos-stats')?.value || '';
+  let filtered = allStats;
+  if(teamFilter) filtered = filtered.filter(p => p.team === teamFilter);
+  if(posFilter) filtered = filtered.filter(p => p.pos === posFilter);
 
   // Compute pct fields for sorting
   filtered = filtered.map(p => ({
@@ -2006,6 +2010,18 @@ function openPlayerModal(playerName, teamName) {
         </div>`).join('')}
     </div>
 
+    <div style="display:flex;gap:.75rem;margin-bottom:1.25rem">
+      <div style="flex:1;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.25);border-radius:10px;padding:.75rem;text-align:center">
+        <div style="font-size:.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.25rem">Composite Score</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:var(--accent)">${(()=>{const _p={gp,pts:games.reduce((s,g)=>s+(g.pts||0),0),reb:games.reduce((s,g)=>s+(g.reb||0),0),ast:games.reduce((s,g)=>s+(g.ast||0),0),stl:games.reduce((s,g)=>s+(g.stl||0),0),blk:games.reduce((s,g)=>s+(g.blk||0),0),to:games.reduce((s,g)=>s+(g.to||0),0),fgm:games.reduce((s,g)=>s+(g.fgm||0),0),fga:games.reduce((s,g)=>s+(g.fga||0),0),gradeSum:games.reduce((s,g)=>s+gradeToNum(g.grade||'B'),0)};return calcCompositeScore(_p).toFixed(1);})()}</div>
+        <div style="font-size:.7rem;color:var(--muted)">wyżej = lepiej</div>
+      </div>
+      <div style="flex:1;background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.25);border-radius:10px;padding:.75rem;text-align:center">
+        <div style="font-size:.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.25rem">PER</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:#3498db">${(()=>{const _p={gp,pts:games.reduce((s,g)=>s+(g.pts||0),0),reb:games.reduce((s,g)=>s+(g.reb||0),0),ast:games.reduce((s,g)=>s+(g.ast||0),0),stl:games.reduce((s,g)=>s+(g.stl||0),0),blk:games.reduce((s,g)=>s+(g.blk||0),0),to:games.reduce((s,g)=>s+(g.to||0),0),fgm:games.reduce((s,g)=>s+(g.fgm||0),0),fga:games.reduce((s,g)=>s+(g.fga||0),0),ftm:games.reduce((s,g)=>s+(g.ftm||0),0),fta:games.reduce((s,g)=>s+(g.fta||0),0)};return calcPER(_p).toFixed(1);})()}</div>
+        <div style="font-size:.7rem;color:var(--muted)">wyżej = lepiej</div>
+      </div>
+    </div>
     <div id="player-form-chart" style="margin-bottom:1.5rem;padding:1rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px"></div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.75rem;color:var(--muted)">Historia meczów</div>
     <div class="stats-table-wrap">
@@ -3415,6 +3431,8 @@ function renderCmp() {
     {l:'FG%',v1:pct(p1.fgm,p1.fga)+'%',v2:pct(p2.fgm,p2.fga)+'%',n1:p1.fga>0?p1.fgm/p1.fga:0,n2:p2.fga>0?p2.fgm/p2.fga:0,hb:true},
     {l:'3P%',v1:pct(p1.tpm,p1.tpa)+'%',v2:pct(p2.tpm,p2.tpa)+'%',n1:p1.tpa>0?p1.tpm/p1.tpa:0,n2:p2.tpa>0?p2.tpm/p2.tpa:0,hb:true},
     {l:'FT%',v1:pct(p1.ftm,p1.fta)+'%',v2:pct(p2.ftm,p2.fta)+'%',n1:p1.fta>0?p1.ftm/p1.fta:0,n2:p2.fta>0?p2.ftm/p2.fta:0,hb:true},
+    {l:'CS',v1:calcCompositeScore(p1).toFixed(1),v2:calcCompositeScore(p2).toFixed(1),n1:calcCompositeScore(p1),n2:calcCompositeScore(p2),hb:true},
+    {l:'PER',v1:calcPER(p1).toFixed(1),v2:calcPER(p2).toFixed(1),n1:calcPER(p1),n2:calcPER(p2),hb:true},
   ];
   const rows=stats.map(s=>{
     const b1=s.hb?s.n1>s.n2:s.n1<s.n2,b2=s.hb?s.n2>s.n1:s.n2<s.n1;
