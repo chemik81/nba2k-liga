@@ -3083,7 +3083,7 @@ function renderRoundFiveBlock(round, roundMatches) {
     const gr = numToGrade(p.avgGrade);
     const pts=(p.pts/p.gp).toFixed(1), reb=(p.reb/p.gp).toFixed(1), ast=(p.ast/p.gp).toFixed(1);
     const esc = s => s.replace(/'/g,"\'");
-    return '<div class="tow-card" onclick="openPlayerModal(''+esc(p.name)+'',''+esc(p.team)+'')">'
+    return '<div class="tow-card" onclick="openPlayerModal(\'' + esc(p.name) + '\',\'' + esc(p.team) + '\')">'
       +'<div class="tow-pos">'+pos+'</div>'
       +'<div class="tow-name">'+p.name+'</div>'
       +'<div class="tow-team">'+p.team+'</div>'
@@ -3093,7 +3093,7 @@ function renderRoundFiveBlock(round, roundMatches) {
       +'</div>';
   }).join('');
   return '<div style="margin-bottom:1.5rem">'
-    +'<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;display:flex;align-items:center;gap:.6rem">'
+    +'<div style="font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;display:flex;align-items:center;gap:.6rem">'
     +'🏅 '+round.label
     +'<span style="color:var(--muted);font-weight:400;font-size:.75rem;text-transform:none">· '+roundMatches.length+' mecz'+(roundMatches.length===1?'':'ów')+' · min. '+minGP+' mecz'+(minGP===1?'':'e')+'/zawodnik</span>'
     +'</div>'
