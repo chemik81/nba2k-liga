@@ -3063,7 +3063,7 @@ function buildRoundFive(roundMatches) {
     .filter(p => p.gp >= minGP)
     .map(p => ({
       ...p, avgGrade: p.gradeSum/p.gp,
-      score: (p.gradeSum/p.gp)*2.5 + (p.pts/p.gp)*0.5 + (p.reb/p.gp)*0.3 + (p.ast/p.gp)*0.4
+      score: calcCompositeScore(p)
     }));
   const best = {};
   POSITIONS.forEach(pos => {
