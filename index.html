@@ -1130,6 +1130,77 @@ const TRANSLATIONS = {
     next_matches: 'Najbliższe mecze',
     top_scorers: 'Top Strzelcy',
     last_results: 'Ostatnie wyniki',
+    err_data_too_large: '❌ Dane za duże — limit JSONBin to ~100KB',
+    err_names_diff: t('err_names_diff'),
+    teams_updated: '✅ Zaktualizowano drużyny!',
+    err_enter_team: t('err_enter_team'),
+    logo_deleted: t('logo_deleted'),
+    err_pick_two_teams: t('err_pick_two_teams'),
+    err_pick_date2: t('err_pick_date2'),
+    deleted_lbl: t('deleted_lbl'),
+    no_matches_to_merge: t('no_matches_to_merge'),
+    win_streak: t('win_streak'),
+    loss_streak: t('loss_streak'),
+    stat_pts: t('stat_pts'),
+    stat_reb: t('stat_reb'),
+    stat_ast: t('stat_ast'),
+    stat_stl: t('stat_stl'),
+    stat_blk: t('stat_blk'),
+    stat_to: t('stat_to'),
+    hot_streak_has: 'ma',
+    hot_streak_last3: 'ocenę A- lub lepszą w ostatnich 3 meczach',
+    err_save_status: t('err_save_status'),
+    err_json_file: t('err_json_file'),
+    err_enter_teams: t('err_enter_teams'),
+    err_teams_diff: t('err_teams_diff'),
+    err_pick_date: t('err_pick_date'),
+    err_fill_all: t('err_fill_all'),
+    err_date_order: t('err_date_order'),
+    err_fill_both: t('err_fill_both'),
+    round_deleted: t('round_deleted'),
+    match_saved_recap: t('match_saved_recap'),
+    match_saved_simple: t('match_saved_simple'),
+    api_empty_response: t('api_empty_response'),
+    api_parsing: t('api_parsing'),
+    api_no_json: t('api_no_json'),
+    match_saved: t('match_saved'),
+    match_deleted: t('match_deleted'),
+    team_added: '✅ Drużyna dodana:',
+    season_created: 'utworzony i aktywowany',
+    season_reassign: 'zostaną przepisane',
+    no_alias: t('no_alias'),
+    no_teams: 'Brak drużyn',
+    min_games_for_h2h: t('min_games_for_h2h'),
+    no_matches_round: 'Brak meczów w tej kolejce',
+    click_player_profile: t('click_player_profile'),
+    no_matches_selected: t('no_matches_selected'),
+    err_no_master_key: t('err_no_master_key'),
+    err_no_master_key_import: t('err_no_master_key_import'),
+    err_load: '❌ Błąd ładowania danych: ',
+    err_save: t('err_save'),
+    err_connect: t('err_connect'),
+    err_no_api: t('err_no_api'),
+    uploading_file: t('uploading_file'),
+    ai_analyzing: t('ai_analyzing'),
+    ai_spinner: t('ai_spinner'),
+    saving_db: t('saving_db'),
+    merged_ok: t('merged_ok'),
+    generating_prediction: t('generating_prediction'),
+    generating_recap: '⏳ Generuję recap...',
+    save_ok: '✅ Zapisz',
+    delete_btn: '✕ Usuń',
+    merging: t('merging'),
+    no_pos_data: t('no_pos_data'),
+    first_five_lbl: '1. Piątka',
+    second_five_lbl: t('second_five_lbl'),
+    def_five_lbl: t('def_five_lbl'),
+    th_pos: 'Poz',
+    games_count: 'meczów',
+    hot_streak_players: 'zawodnik',
+    hot_streak_suffix: 'ocenę A- lub lepszą w ostatnich',
+    no_shots: t('no_shots'),
+    imported_ok: 'Zaimportowano i zapisano',
+    matches_suffix: 'meczów!',
   },
   en: {
     nav_dashboard: 'Dashboard', nav_matches: 'Matches', nav_stats: 'Statistics',
@@ -1168,6 +1239,77 @@ const TRANSLATIONS = {
     next_matches: 'Upcoming matches',
     top_scorers: 'Top Scorers',
     last_results: 'Recent results',
+    err_data_too_large: '❌ Data too large — JSONBin limit is ~100KB',
+    err_names_diff: '❌ Names must be different',
+    teams_updated: '✅ Teams updated!',
+    err_enter_team: '❌ Enter team name',
+    logo_deleted: '🗑 Logo deleted',
+    err_pick_two_teams: '❌ Pick two different teams',
+    err_pick_date2: '❌ Pick a date',
+    deleted_lbl: '🗑 Deleted',
+    no_matches_to_merge: 'No matches to merge',
+    win_streak: 'W streak',
+    loss_streak: 'L streak',
+    stat_pts: 'Points (avg.)',
+    stat_reb: 'Rebounds (avg.)',
+    stat_ast: 'Assists (avg.)',
+    stat_stl: 'Steals (avg.)',
+    stat_blk: 'Blocks (avg.)',
+    stat_to: 'Turnovers (avg.)',
+    hot_streak_has: 'has',
+    hot_streak_last3: 'grade A- or better in last 3 games',
+    err_save_status: '❌ Save error: ',
+    err_json_file: '❌ JSON file error: ',
+    err_enter_teams: '❌ Enter both teams',
+    err_teams_diff: '❌ Teams must be different',
+    err_pick_date: '❌ Pick a date',
+    err_fill_all: '❌ Fill in all fields',
+    err_date_order: '❌ Start date must be before end date',
+    err_fill_both: '❌ Fill in both fields',
+    round_deleted: '🗑 Round deleted',
+    match_saved_recap: '🎉 Match saved! Generating recap...',
+    match_saved_simple: '🎉 Match saved! You can see it in the Matches tab.',
+    api_empty_response: 'Empty API response. Check console.',
+    api_parsing: '📄 AI response received, parsing JSON...',
+    api_no_json: 'No JSON. AI response: ',
+    match_saved: '✅ Match saved! You can see it in the Matches tab.',
+    match_deleted: '🗑 Match deleted',
+    team_added: '✅ Team added:',
+    season_created: 'created and activated',
+    season_reassign: 'will be reassigned',
+    no_alias: 'No team aliases',
+    no_teams: 'No teams',
+    min_games_for_h2h: 'Minimum 2 games for H2H stats',
+    no_matches_round: 'No matches in this round',
+    click_player_profile: 'Click a player to see their profile',
+    no_matches_selected: 'No matches selected',
+    err_no_master_key: '❌ No Master Key — log in as admin to save data',
+    err_no_master_key_import: '❌ No Master Key — log in as admin to save import!',
+    err_load: '❌ Load error: ',
+    err_save: '❌ Save error: ',
+    err_connect: '❌ Connection error: ',
+    err_no_api: '❌ No Anthropic API key. Click "⚙ Settings" in the header to configure.',
+    uploading_file: '✓ File uploaded — click "Analyze Screenshot" to read stats.',
+    ai_analyzing: '🤖 AI is analyzing the screenshot, please wait...',
+    ai_spinner: '<div class="spinner"></div> Analyzing...',
+    saving_db: '⏳ Saving to database...',
+    merged_ok: '✅ Merged!',
+    generating_prediction: '⏳ Generating AI prediction...',
+    generating_recap: '⏳ Generating recap...',
+    save_ok: '✅ Save',
+    delete_btn: '✕ Delete',
+    merging: '⏳ Merging...',
+    no_pos_data: 'Not enough data (players need assigned positions)',
+    first_five_lbl: 'First Five',
+    second_five_lbl: 'Second Five',
+    def_five_lbl: 'Defensive Five',
+    th_pos: 'Pos',
+    games_count: 'games',
+    hot_streak_players: 'player',
+    hot_streak_suffix: 'with A- or better in last',
+    no_shots: 'no shots',
+    imported_ok: 'Imported and saved',
+    matches_suffix: 'matches!',
   },
   nl: {
     nav_dashboard: 'Dashboard', nav_matches: 'Wedstrijden', nav_stats: 'Statistieken',
@@ -1206,6 +1348,77 @@ const TRANSLATIONS = {
     next_matches: 'Komende wedstrijden',
     top_scorers: 'Topscorers',
     last_results: 'Recente resultaten',
+    err_data_too_large: '❌ Gegevens te groot — JSONBin limiet is ~100KB',
+    err_names_diff: '❌ Namen moeten verschillend zijn',
+    teams_updated: '✅ Teams bijgewerkt!',
+    err_enter_team: '❌ Voer teamnaam in',
+    logo_deleted: '🗑 Logo verwijderd',
+    err_pick_two_teams: '❌ Kies twee verschillende teams',
+    err_pick_date2: '❌ Kies een datum',
+    deleted_lbl: '🗑 Verwijderd',
+    no_matches_to_merge: 'Geen wedstrijden om samen te voegen',
+    win_streak: 'W op rij',
+    loss_streak: 'V op rij',
+    stat_pts: 'Punten (gem.)',
+    stat_reb: 'Rebounds (gem.)',
+    stat_ast: 'Assists (gem.)',
+    stat_stl: 'Steals (gem.)',
+    stat_blk: 'Blocks (gem.)',
+    stat_to: 'Balverliezen (gem.)',
+    hot_streak_has: 'heeft',
+    hot_streak_last3: 'cijfer A- of beter in laatste 3 wedstrijden',
+    err_save_status: '❌ Opslagfout: ',
+    err_json_file: '❌ JSON-bestandsfout: ',
+    err_enter_teams: '❌ Voer beide teams in',
+    err_teams_diff: '❌ Teams moeten verschillend zijn',
+    err_pick_date: '❌ Kies een datum',
+    err_fill_all: '❌ Vul alle velden in',
+    err_date_order: '❌ Begindatum moet vóór einddatum zijn',
+    err_fill_both: '❌ Vul beide velden in',
+    round_deleted: '🗑 Ronde verwijderd',
+    match_saved_recap: '🎉 Wedstrijd opgeslagen! Samenvatting genereren...',
+    match_saved_simple: '🎉 Wedstrijd opgeslagen! Zie de tab Wedstrijden.',
+    api_empty_response: 'Leeg API-antwoord. Controleer de console.',
+    api_parsing: '📄 AI-antwoord ontvangen, JSON parseren...',
+    api_no_json: 'Geen JSON. AI-antwoord: ',
+    match_saved: '✅ Wedstrijd opgeslagen! Zie de tab Wedstrijden.',
+    match_deleted: '🗑 Wedstrijd verwijderd',
+    team_added: '✅ Team toegevoegd:',
+    season_created: 'aangemaakt en geactiveerd',
+    season_reassign: 'worden opnieuw toegewezen',
+    no_alias: 'Geen teamaliassen',
+    no_teams: 'Geen teams',
+    min_games_for_h2h: 'Minimaal 2 wedstrijden voor H2H-statistieken',
+    no_matches_round: 'Geen wedstrijden in deze ronde',
+    click_player_profile: 'Klik op een speler om hun profiel te zien',
+    no_matches_selected: 'Geen wedstrijden geselecteerd',
+    err_no_master_key: '❌ Geen Master Key — log in als admin om gegevens op te slaan',
+    err_no_master_key_import: '❌ Geen Master Key — log in als admin om import op te slaan!',
+    err_load: '❌ Laadstout: ',
+    err_save: '❌ Opslagfout: ',
+    err_connect: '❌ Verbindingsfout: ',
+    err_no_api: '❌ Geen Anthropic API-sleutel. Klik op "⚙ Instellingen" om te configureren.',
+    uploading_file: '✓ Bestand geüpload — klik op "Screenshot analyseren" om stats te lezen.',
+    ai_analyzing: '🤖 AI analyseert de screenshot, even geduld...',
+    ai_spinner: '<div class="spinner"></div> Analyseren...',
+    saving_db: '⏳ Opslaan in database...',
+    merged_ok: '✅ Samengevoegd!',
+    generating_prediction: '⏳ AI-voorspelling genereren...',
+    generating_recap: '⏳ Samenvatting genereren...',
+    save_ok: '✅ Opslaan',
+    delete_btn: '✕ Verwijderen',
+    merging: '⏳ Samenvoegen...',
+    no_pos_data: 'Onvoldoende gegevens (spelers hebben posities nodig)',
+    first_five_lbl: 'Eerste Vijf',
+    second_five_lbl: 'Tweede Vijf',
+    def_five_lbl: 'Defensieve Vijf',
+    th_pos: 'Pos',
+    games_count: 'wedstrijden',
+    hot_streak_players: 'speler',
+    hot_streak_suffix: 'met A- of beter in laatste',
+    no_shots: 'geen worpen',
+    imported_ok: 'Geïmporteerd en opgeslagen',
+    matches_suffix: 'wedstrijden!',
   }
 };
 
@@ -1324,7 +1537,7 @@ function renderAliases() {
         <td style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);color:var(--loss)">${w}</td>
         <td style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);color:var(--win);font-weight:600">${c}</td>
         <td style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);text-align:right">
-          <button onclick="removeAlias('${w}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:0.2rem 0.5rem;cursor:pointer;font-size:0.8rem" onmouseover="this.style.borderColor='var(--loss)';this.style.color='var(--loss)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✕ Usuń</button>
+          <button onclick="removeAlias('${w}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:0.2rem 0.5rem;cursor:pointer;font-size:0.8rem" onmouseover="this.style.borderColor='var(--loss)';this.style.color='var(--loss)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">'+t('delete_btn')+'</button>
         </td>
       </tr>`).join('')}
     </tbody>
@@ -1333,7 +1546,7 @@ function renderAliases() {
 
 async function saveData() {
   if(!jbBin) return;
-  if(!jbKey) { showToast('❌ Brak Master Key — zaloguj się jako admin aby zapisywać dane', 'error'); return; }
+  if(!jbKey) { showToast(t('err_no_master_key'), 'error'); return; }
   try {
     // Compact player data before saving (remove zero-value fields to save space)
     const compactMatches = matches.map(m => ({
@@ -1352,7 +1565,7 @@ async function saveData() {
     const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule, teams, rounds });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
     if(parseFloat(sizeKB) > 95) {
-      showToast(`❌ Dane za duże (${sizeKB}KB) — limit JSONBin to ~100KB. Skontaktuj się z adminem.`, 'error');
+      showToast(t('err_data_too_large')+' ('+sizeKB+'KB)', 'error');
       console.warn('Payload too large:', sizeKB, 'KB');
       return false;
     }
@@ -1439,7 +1652,7 @@ async function loadData() {
     populateTeamFilter();
   } catch(e) {
     console.error('Load error:', e);
-    showToast('❌ Błąd ładowania danych: ' + e.message, 'error');
+    showToast(t('err_load') + e.message, 'error');
   } finally {
     showGlobalLoader(false);
   }
@@ -1554,7 +1767,7 @@ function handleFileSelect(input) {
     preview.src = e.target.result;
     preview.style.display = 'block';
     document.getElementById('parse-btn').disabled = false;
-    setStatus('info', '✓ Plik wgrany — kliknij "Analizuj Screenshot" aby odczytać statystyki.');
+    setStatus('info', t('uploading_file'));
   };
   reader.readAsDataURL(file);
 }
@@ -1582,14 +1795,14 @@ uploadZone.addEventListener('drop', e => {
 async function parseScreenshot() {
   if(!screenshotBase64) return;
   if(!anthropicKey) {
-    setStatus('error', '❌ Brak klucza Anthropic API. Kliknij "⚙ Baza" w nagłówku aby skonfigurować.');
+    setStatus('error', t('err_no_api'));
     return;
   }
   const btn = document.getElementById('parse-btn');
   const btnText = document.getElementById('parse-btn-text');
   btn.disabled = true;
-  btnText.innerHTML = '<div class="spinner"></div> Analizuję...';
-  setStatus('info', '🤖 AI analizuje screenshot, proszę czekać...');
+  btnText.innerHTML = t('ai_spinner');
+  setStatus('info', t('ai_analyzing'));
 
   const prompt = `Analizuj ten screenshot z gry NBA 2K z ekranu "Game Stats".
 
@@ -1640,17 +1853,17 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
     // Check for API errors
     if(data.error) throw new Error('API Error: ' + data.error.message);
-    if(!data.content || !data.content.length) throw new Error('Pusta odpowiedź API. Sprawdź konsolę.');
+    if(!data.content || !data.content.length) throw new Error(t('api_empty_response'));
 
     const text = data.content.map(c => c.text||'').join('');
     console.log('Raw text:', text);
-    setStatus('info', '📄 Odpowiedź AI otrzymana, parsowanie JSON...');
+    setStatus('info', t('api_parsing'));
 
     // Robust JSON extraction
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
     if(firstBrace === -1 || lastBrace === -1) {
-      throw new Error('Brak JSON. Odpowiedź AI: ' + text.substring(0, 200));
+      throw new Error(t('api_no_json') + text.substring(0, 200));
     }
     const jsonStr = text.slice(firstBrace, lastBrace + 1);
     console.log('JSON to parse:', jsonStr);
@@ -1737,12 +1950,12 @@ function saveMatch() {
   saveData().then(() => {
     showToast('✅ Mecz zapisany!', 'success');
     if(anthropicKey) {
-      setStatus('success', '🎉 Mecz zapisany! Generuję recap...');
+      setStatus('success', t('match_saved_recap'));
       generateRecap(_savedMatch.id).then(() => {
         setStatus('success', '🎉 Mecz zapisany z recapem!');
       });
     } else {
-      setStatus('success', '🎉 Mecz zapisany! Możesz zobaczyć go w zakładce Mecze.');
+      setStatus('success', t('match_saved_simple'));
     }
   });
   clearForm();
@@ -1916,7 +2129,7 @@ function buildPlayerTable(players, teamName) {
   }).join('');
   return `<div class="stats-table-wrap"><table>
     <thead><tr>
-      <th style="text-align:left">Zawodnik</th><th>GRD</th>
+      <th style="text-align:left">${t('th_player')}</th><th>GRD</th>
       <th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th>
       <th>FOL</th><th>TO</th><th>FG</th><th>3P</th><th>FT</th>
     </tr></thead>
@@ -1945,7 +2158,7 @@ function deleteMatch(id) {
 function confirmDelete() {
   if(pendingDeleteId === null) return;
   matches = matches.filter(m => Number(m.id) !== pendingDeleteId);
-  saveData().then(() => showToast('🗑 Mecz usunięty', 'info'));
+  saveData().then(() => showToast(t('match_deleted'), 'info'));
   pendingDeleteId = null;
   closeConfirm();
   closeModal();
@@ -2353,7 +2566,7 @@ function triggerImport() {
       _importBuffer = JSON.parse(text);
       showImportPreview(_importBuffer);
     } catch(err) {
-      showToast('❌ Błąd pliku JSON: ' + err.message, 'error');
+      showToast(t('err_json_file') + err.message, 'error');
     }
   };
   inp.click();
@@ -2381,7 +2594,7 @@ function showImportPreview(data) {
   content.innerHTML = `
     <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.25rem">📥 Wybierz mecze do importu</div>
-      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Sezon: <strong style="color:var(--accent)">${season?.name||'?'}</strong> · ${allMatches.length} meczów w pliku</div>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Sezon: <strong style="color:var(--accent)">${season?.name||'?'}</strong> · ${allMatches.length} '+t('games_count')+'</div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <button onclick="document.querySelectorAll('.import-chk').forEach(c=>c.checked=true)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.3rem .75rem;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">✅ Zaznacz wszystkie</button>
         <button onclick="document.querySelectorAll('.import-chk').forEach(c=>c.checked=false)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.3rem .75rem;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">☐ Odznacz wszystkie</button>
@@ -2409,7 +2622,7 @@ function showImportPreview(data) {
 
 async function confirmImport() {
   const checked = [...document.querySelectorAll('.import-chk:checked')].map(c => Number(c.dataset.idx));
-  if(!checked.length) { showToast('Nie zaznaczono żadnych meczów', 'info'); return; }
+  if(!checked.length) { showToast(t('no_matches_selected'), 'info'); return; }
 
   const data = _importBuffer;
   const toImport = checked.map(i => data.matches[i]);
@@ -2437,11 +2650,11 @@ async function confirmImport() {
   matches = [...matches, ...toImport];
 
   if(!jbKey) {
-    showToast('❌ Brak Master Key — zaloguj się jako admin aby zapisać import!', 'error');
+    showToast(t('err_no_master_key_import'), 'error');
     return;
   }
 
-  showToast('⏳ Zapisuję do bazy...', 'info');
+  showToast(t('saving_db'), 'info');
   try {
     const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
       method: 'PUT',
@@ -2450,15 +2663,15 @@ async function confirmImport() {
     });
     if(!res.ok) {
       const err = await res.json();
-      showToast('❌ Błąd zapisu: ' + (err.message || res.status), 'error');
+      showToast(t('err_save_status') + (err.message || res.status), 'error');
       return;
     }
     document.getElementById('import-modal').classList.remove('open');
-    showToast(`✅ Zaimportowano i zapisano ${toImport.length} meczów!`, 'success');
+    showToast(t('imported_ok')+' '+toImport.length+' '+t('matches_suffix'), 'success');
     renderDashboard();
     renderMatches();
   } catch(e) {
-    showToast('❌ Błąd połączenia: ' + e.message, 'error');
+    showToast(t('err_connect') + e.message, 'error');
   }
 }
 
@@ -2479,9 +2692,9 @@ async function saveWalkover() {
   const loser  = document.getElementById('wo-loser')?.value.trim();
   const date   = document.getElementById('wo-date')?.value;
   const note   = document.getElementById('wo-note')?.value.trim() || 'Walkower';
-  if(!winner || !loser) { showToast('❌ Wpisz obie drużyny', 'error'); return; }
-  if(winner === loser)  { showToast('❌ Drużyny muszą być różne', 'error'); return; }
-  if(!date)             { showToast('❌ Wybierz datę', 'error'); return; }
+  if(!winner || !loser) { showToast(t('err_enter_teams'), 'error'); return; }
+  if(winner === loser)  { showToast(t('err_teams_diff'), 'error'); return; }
+  if(!date)             { showToast(t('err_pick_date'), 'error'); return; }
 
   const maxId = matches.length > 0 ? Math.max(...matches.map(m=>Number(m.id))) : 0;
   const newMatch = {
@@ -2511,8 +2724,8 @@ function addRound() {
   const label = document.getElementById('round-label')?.value.trim();
   const from  = document.getElementById('round-from')?.value;
   const to    = document.getElementById('round-to')?.value;
-  if(!label||!from||!to) { showToast('❌ Wypełnij wszystkie pola', 'error'); return; }
-  if(from > to) { showToast('❌ Data od musi być wcześniej niż do', 'error'); return; }
+  if(!label||!from||!to) { showToast(t('err_fill_all'), 'error'); return; }
+  if(from > to) { showToast(t('err_date_order'), 'error'); return; }
   rounds.push({ id: Date.now(), label, from, to });
   rounds.sort((a,b) => a.from.localeCompare(b.from));
   saveData().then(() => { showToast('✅ Kolejka dodana', 'success'); renderRoundsList(); renderTeamOfWeek(); });
@@ -2523,7 +2736,7 @@ function addRound() {
 
 function deleteRound(id) {
   rounds = rounds.filter(r => r.id !== id);
-  saveData().then(() => { showToast('🗑 Kolejka usunięta', 'info'); renderRoundsList(); renderTeamOfWeek(); });
+  saveData().then(() => { showToast(t('round_deleted'), 'info'); renderRoundsList(); renderTeamOfWeek(); });
 }
 
 function renderRoundsList() {
@@ -2553,8 +2766,8 @@ function saveTeamAliases() {
 function addTeamAlias() {
   const wrong = document.getElementById('talias-wrong')?.value.trim();
   const correct = document.getElementById('talias-correct')?.value.trim();
-  if(!wrong||!correct){showToast('❌ Wypełnij oba pola','error');return;}
-  if(wrong===correct){showToast('❌ Nazwy muszą być różne','error');return;}
+  if(!wrong||!correct){showToast(t('err_fill_both'),'error');return;}
+  if(wrong===correct){showToast(t('err_names_diff'),'error');return;}
   teamAliases[wrong]=correct; saveTeamAliases();
   document.getElementById('talias-wrong').value='';
   document.getElementById('talias-correct').value='';
@@ -2572,7 +2785,7 @@ function renderTeamAliases() {
     dl.innerHTML = all.map(tn=>`<option value="${tn}">`).join('');
   }
   const entries = Object.entries(teamAliases);
-  if(!entries.length){container.innerHTML='<p style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak aliasów drużyn.</p>';return;}
+  if(!entries.length){container.innerHTML='<p style="color:var(--muted);font-size:.85rem;padding:.5rem 0">'+t('no_alias')+'</p>';return;}
   container.innerHTML=`<table style="width:100%;border-collapse:collapse"><thead><tr>
     <th style="text-align:left;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border)">Stara nazwa</th>
     <th style="text-align:left;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border)">→ Nowa nazwa</th>
@@ -2593,7 +2806,7 @@ function applyTeamAliasesToAllMatches() {
   const el=document.getElementById('talias-result');
   if(changed>0){
     saveData();renderStats();renderMatches();renderDashboard();
-    if(el){el.textContent=`✅ Zaktualizowano ${changed} drużyn!`;setTimeout(()=>el.textContent='',3000);}
+    if(el){el.textContent=t('teams_updated');setTimeout(()=>el.textContent='',3000);}
   } else {
     if(el){el.textContent='Brak zmian.';setTimeout(()=>el.textContent='',3000);}
   }
@@ -2629,7 +2842,7 @@ function renderTeamsList() {
   const schedTeams = [...new Set(schedule.map(s=>[s.team1,s.team2]).flat().filter(Boolean))];
   const allTeams = [...new Set([...Object.keys(teams), ...matchTeams, ...schedTeams])].sort();
 
-  if(!allTeams.length) { el.innerHTML='<div style="color:var(--muted);font-size:.85rem">Brak drużyn</div>'; return; }
+  if(!allTeams.length) { el.innerHTML='<div style="color:var(--muted);font-size:.85rem">'+t('no_teams')+'</div>'; return; }
 
   el.innerHTML = allTeams.map(name => {
     const t = teams[name] || {};
@@ -2651,12 +2864,12 @@ function renderTeamsList() {
 function addTeamEntry() {
   const inp = document.getElementById('new-team-name');
   const name = inp?.value.trim();
-  if(!name) { showToast('❌ Wpisz nazwę drużyny', 'error'); return; }
+  if(!name) { showToast(t('err_enter_team'), 'error'); return; }
   if(!teams[name]) teams[name] = {};
   saveTeams();
   inp.value = '';
   renderTeamsList();
-  showToast('✅ Drużyna dodana: ' + name, 'success');
+  showToast(t('team_added')+' '+name, 'success');
 }
 
 function uploadTeamLogo(teamName, input) {
@@ -2691,7 +2904,7 @@ function removeTeamLogo(teamName) {
   if(teams[teamName]) delete teams[teamName].logo;
   saveTeams();
   renderTeamsList();
-  showToast('🗑 Logo usunięte', 'info');
+  showToast(t('logo_deleted'), 'info');
 }
 
 // teamLogo checks custom logo first, then falls back to initials
@@ -2778,7 +2991,7 @@ function renderSchedule() {
 
   if(upEl) upEl.innerHTML = upcoming.length
     ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Nadchodzące mecze (${upcoming.length})</div>` + upcoming.map(s=>renderCard(s,false)).join('')
-    : `<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">Brak zaplanowanych meczów</div>`;
+    : `<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">${t('no_schedule')} '+t('games_count')+'</div>`;
 
   if(plEl) plEl.innerHTML = played.length
     ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Rozegrane (${played.length})</div>` + played.map(s=>renderCard(s,true)).join('')
@@ -2816,7 +3029,7 @@ function openScheduleAdd(editId) {
           <option value="">Brak</option>
           ${seasons.map(s=>`<option value="${s.id}" ${existing?.seasonId===s.id?'selected':''}>${s.name}</option>`).join('')}
         </select></div>
-      <button class="btn btn-primary" onclick="saveScheduleMatch(${editId||'null'})" style="width:100%;margin-top:.5rem">✅ Zapisz</button>
+      <button class="btn btn-primary" onclick="saveScheduleMatch(${editId||'null'})" style="width:100%;margin-top:.5rem">'+t('save_ok')+'</button>
     </div>`;
   if(existing) {
     setTimeout(()=>{
@@ -2836,8 +3049,8 @@ function saveScheduleMatch(editId) {
   const time = document.getElementById('sch-time')?.value;
   const streamUrl = document.getElementById('sch-stream')?.value;
   const seasonId = document.getElementById('sch-season')?.value || null;
-  if(!t1||!t2||t1===t2) { showToast('❌ Wybierz dwie różne drużyny', 'error'); return; }
-  if(!date) { showToast('❌ Podaj datę', 'error'); return; }
+  if(!t1||!t2||t1===t2) { showToast(t('err_pick_two_teams'), 'error'); return; }
+  if(!date) { showToast(t('err_pick_date2'), 'error'); return; }
   if(editId) {
     const idx = schedule.findIndex(s=>s.id===editId);
     if(idx!==-1) schedule[idx] = {...schedule[idx], team1:t1, team2:t2, date, time, streamUrl, seasonId};
@@ -2849,13 +3062,13 @@ function saveScheduleMatch(editId) {
 
 function deleteScheduleMatch(id) {
   schedule = schedule.filter(s=>s.id!==id);
-  saveData().then(()=>{ showToast('🗑 Usunięto','info'); renderSchedule(); });
+  saveData().then(()=>{ showToast(t('deleted_lbl'),'info'); renderSchedule(); });
 }
 
 function linkScheduleMatch(schedId) {
   const unlinked = matches.filter(m => !schedule.some(s=>s.matchId===m.id));
   const opts = unlinked.map(m=>`<option value="${m.id}">${formatDate(m.date)}: ${m.team1.name} ${m.team1.score}-${m.team2.score} ${m.team2.name}</option>`).join('');
-  if(!opts) { showToast('Brak meczów do połączenia','info'); return; }
+  if(!opts) { showToast(t('no_matches_to_merge'),'info'); return; }
   const modal = document.getElementById('schedule-modal');
   document.getElementById('schedule-modal-content').innerHTML = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:1rem">🔗 Połącz z meczem</div>
@@ -2875,7 +3088,7 @@ function confirmLinkMatch(schedId) {
 async function predictScheduleMatch(schedId) {
   const s = schedule.find(x=>x.id===schedId);
   if(!s || !anthropicKey) return;
-  showToast('⏳ Generuję predykcję AI...','info');
+  showToast(t('generating_prediction'),'info');
   const t1stats = getAggregatedStats().filter(p=>p.team===s.team1);
   const t2stats = getAggregatedStats().filter(p=>p.team===s.team2);
   const h2h = matches.filter(m=>(m.team1.name===s.team1&&m.team2.name===s.team2)||(m.team1.name===s.team2&&m.team2.name===s.team1));
@@ -2895,7 +3108,7 @@ H2H: ${h2hText}`;
     const idx = schedule.findIndex(x=>x.id===schedId);
     if(idx!==-1) schedule[idx].prediction = pred;
     saveData().then(()=>{ showToast('✅ Predykcja wygenerowana!','success'); renderSchedule(); });
-  } catch(e) { showToast('❌ Błąd: '+e.message,'error'); }
+  } catch(e) { showToast(t('err_connect')+e.message,'error'); }
 }
 
 function renderScheduleDashboard() {
@@ -3028,7 +3241,7 @@ function renderStandings() {
     const l5=tl5[name]||[];
     const l5h='<div class="l5">'+Array.from({length:5},(_,j)=>j>=l5.length?'<span class="l5e"></span>':l5[j]==='w'?'<span class="l5w"></span>':'<span class="l5l"></span>').join('')+'</div>';
     const hc=[...hot].filter(p=>matches.some(m=>[...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>pl.name===p&&(m.team1.name===name||m.team2.name===name)))).length;
-    const _hs=hc>1?'ów ma':'ma';const _hx=hc>1?' x'+hc:'';const hb=hc>0?'<span class="hot" title="\uD83D\uDD25 Hot Streak: '+hc+' zawodnik'+_hs+' ocenę A- lub lepszą w ostatnich 3 meczach">\uD83D\uDD25'+_hx+'</span>':'';
+    const _hs=hc>1?' '+t('hot_streak_has'):'';const _hx=hc>1?' x'+hc:'';const _htitle=String.fromCharCode(128293)+' Hot Streak: '+hc+' '+t('hot_streak_players')+_hs+' '+t('hot_streak_last3');const hb=hc>0?'<span class="hot" title="'+_htitle+'">' +String.fromCharCode(128293)+_hx+'</span>':'';
     return `<tr><td style="padding-left:1.5rem"><span class="rank-num rank-${i+1}">${i+1}</span></td><td style="font-weight:700"><span class="tlink" data-t="${name.replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${name}</span>${hb}</td><td>${gp}</td><td>${s.w}</td><td>${s.l}</td><td style="font-weight:900;color:var(--accent)">${ligaPts}</td><td>${pct}</td><td>${ppg}</td><td>${opp}</td><td>${streaks[name]||'-'}</td><td>${l5h}</td></tr>`;
   }).join('');
   renderTeamForm(sorted);
@@ -3043,11 +3256,11 @@ function renderLeaders() {
     return;
   }
   const leaders = [
-    { stat: 'pts', label: 'Punkty (śr.)', icon: '🏀' },
-    { stat: 'reb', label: 'Zbiórki (śr.)', icon: '💪' },
-    { stat: 'ast', label: 'Asysty (śr.)', icon: '🎯' },
-    { stat: 'stl', label: 'Przechwyty (śr.)', icon: '🐍' },
-    { stat: 'blk', label: 'Bloki (śr.)', icon: '🛡️' },
+    { stat: 'pts', label: t('stat_pts'), icon: '🏀' },
+    { stat: 'reb', label: t('stat_reb'), icon: '💪' },
+    { stat: 'ast', label: t('stat_ast'), icon: '🎯' },
+    { stat: 'stl', label: t('stat_stl'), icon: '🐍' },
+    { stat: 'blk', label: t('stat_blk'), icon: '🛡️' },
   ];
   grid.innerHTML = leaders.map(l => {
     const sorted = [...all].filter(p=>p.gp>=1).sort((a,b) => (b[l.stat]/b.gp) - (a[l.stat]/a.gp));
@@ -3283,13 +3496,13 @@ function renderRoundFiveBlock(round, roundMatches) {
       +'<div class="tow-team">'+p.team+'</div>'
       +'<div class="tow-score"><span class="grade grade-'+gr.replace('+','p').replace('-','m')+'">'+gr+'</span></div>'
       +'<div class="tow-stats">'+pts+' PTS · '+reb+' REB · '+ast+' AST</div>'
-      +'<div style="font-size:.65rem;color:var(--muted)">'+p.gp+' mecz'+(p.gp===1?'':'e/ów')+'</div>'
+      +'<div style="font-size:.65rem;color:var(--muted)">'+p.gp+' '+t('games_count')+'</div>'
       +'</div>';
   }).join('');
   return '<div style="margin-bottom:1.5rem">'
     +'<div style="font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;display:flex;align-items:center;gap:.6rem">'
     +'🏅 '+round.label
-    +'<span style="color:var(--muted);font-weight:400;font-size:.75rem;text-transform:none">· '+roundMatches.length+' mecz'+(roundMatches.length===1?'':'ów')+' · min. '+minGP+' mecz'+(minGP===1?'':'e')+'/zawodnik</span>'
+    +'<span style="color:var(--muted);font-weight:400;font-size:.75rem;text-transform:none">· '+roundMatches.length+' '+t('games_count')+' · min. '+minGP+' mecz'+(minGP===1?'':'e')+'/zawodnik</span>'
     +'</div>'
     +(hasBest ? '<div class="tow-grid">'+cards+'</div>' : '<div style="color:var(--muted);font-size:.85rem">Za mało danych (zawodnicy muszą mieć przypisane pozycje)</div>')
     +'</div>';
@@ -3655,7 +3868,7 @@ function renderSeasonModal() {
               ${isAct ? '<span class="season-badge">AKTYWNY</span>' : ''}
               <button onclick="openTop10Modal('${s.id}','${s.name}')" class="season-modal-btn" style="font-size:.7rem;padding:.2rem .5rem">🏆 Top 10</button>
             </div>
-            <div style="font-size:.8rem;color:var(--muted);margin-top:2px">${s.startDate||''} ${s.endDate?' → '+s.endDate:''} · ${mc} meczów</div>
+            <div style="font-size:.8rem;color:var(--muted);margin-top:2px">${s.startDate||''} ${s.endDate?' → '+s.endDate:''} · ${mc} ${t('games_count')}</div>
             ${renderSeasonMVPBlock(s.id)}
           </div>
           <div style="display:flex;gap:.5rem;margin-left:.75rem;flex-shrink:0">
@@ -3685,7 +3898,7 @@ function createSeason(name) {
   seasons.push({ id, name, startDate: today, endDate: null });
   currentSeasonId = id;
   saveData().then(() => {
-    showToast('✅ Sezon "' + name + '" utworzony i aktywowany!', 'success');
+    showToast('✅ Sezon "' + name + '" ' + t('season_created') + '!', 'success');
     updateSeasonBadge();
     renderSeasonModal();
     renderDashboard();
@@ -3729,7 +3942,7 @@ function mergeSeasons(keepId, removeId) {
   const removeSeason = seasons.find(s => s.id === removeId);
   const keepSeason = seasons.find(s => s.id === keepId);
   if(!removeSeason || !keepSeason) { showToast('❌ Nie znaleziono sezonów', 'error'); return; }
-  if(!confirm(`Połączyć "${removeSeason.name}" → "${keepSeason.name}"?\nWszystkie mecze z "${removeSeason.name}" zostaną przepisane do "${keepSeason.name}", a duplikat zostanie usunięty.`)) return;
+  if(!confirm(`Połączyć "${removeSeason.name}" → "${keepSeason.name}"?\nWszystkie mecze z "${removeSeason.name}" ' + t('season_reassign') + '"${keepSeason.name}", a duplikat zostanie usunięty.`)) return;
   let moved = 0;
   matches.forEach(m => { if(m.seasonId === removeId) { m.seasonId = keepId; moved++; } });
   seasons = seasons.filter(s => s.id !== removeId);
@@ -3755,7 +3968,7 @@ function renderMergeSeasons() {
     const mc = arr.map(s => matches.filter(m => m.seasonId === s.id).length);
     return `<div style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3);border-radius:8px;padding:.75rem 1rem;margin-bottom:.75rem">
       <div style="font-size:.85rem;font-weight:700;color:var(--loss);margin-bottom:.5rem">⚠️ Duplikat: "${arr[0].name}"</div>
-      ${arr.map((s,i) => `<div style="font-size:.8rem;color:var(--muted)">${s.id} · ${mc[i]} meczów</div>`).join('')}
+      ${arr.map((s,i) => `<div style="font-size:.8rem;color:var(--muted)">${s.id} · ${mc[i]} ${t('games_count')}</div>`).join('')}
       <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap">
         ${arr.map((keep,ki) => arr.filter((_,ri)=>ri!==ki).map(remove =>
           `<button onclick="mergeSeasons('${keep.id}','${remove.id}')" style="font-size:.75rem;background:var(--accent);color:#000;border:none;border-radius:6px;padding:.3rem .75rem;cursor:pointer;font-family:inherit">
@@ -3976,7 +4189,7 @@ async function generateRecap(id) {
     return;
   }
 
-  if(recapDiv) recapDiv.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:.9rem">⏳ Generuję recap...</div>';
+  if(recapDiv) recapDiv.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:.9rem">'+t('generating_recap')+'</div>';
 
   const w1 = m.team1.score > m.team2.score;
   const winner = w1 ? m.team1.name : m.team2.name;
@@ -4226,7 +4439,7 @@ function rdRenderContent(idx) {
   const el = document.getElementById('rounds-detail-content');
 
   if(!roundMatches.length) {
-    el.innerHTML = '<div style="color:var(--muted);padding:1rem">Brak meczów w tej kolejce</div>';
+    el.innerHTML = '<div style="color:var(--muted);padding:1rem">'+t('no_matches_round')+'</div>';
     return;
   }
 
@@ -4255,9 +4468,9 @@ function rdRenderContent(idx) {
     +'</div>';
 
   el.innerHTML =
-    section('🥇','1. Piątka','Composite Score — atakująca',grid1)
+    section('🥇',t('first_five_lbl'),'Composite Score — atakująca',grid1)
     + '<hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.75rem">'
-    + section('🥈','2. Piątka','Composite Score — kolejni najlepsi',grid2)
+    + section('🥈',t('second_five_lbl'),'Composite Score',grid2)
     + '<hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.75rem">'
     + section('🛡️','Defensywna Piątka','STL × 40 + BLK × 25 + GRD × 20 − TO × 5',gridD);
 }
