@@ -740,7 +740,7 @@
     </div>
     <br>
     <div style="margin-bottom:1.5rem">
-      <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem">🏅 Najlepsza Piątka Tygodnia</div>
+      <div class="section-title" style="font-size:1.3rem;margin-bottom:.75rem">🏅 Najlepsza Piątka Kolejki</div>
       <div class="card" style="padding:1rem" id="team-of-week-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych z bieżącego tygodnia</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem" id="dashboard-extras">
@@ -920,6 +920,20 @@
         <span id="fix-result" style="margin-left:1rem;font-size:0.85rem;color:var(--win)"></span>
       </div>
 
+
+    <!-- ROUNDS MANAGEMENT -->
+    <div class="card" style="margin-top:1.5rem" id="rounds-admin-section" style="display:none">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">📅 Zarządzanie Kolejkami</div>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Definiuj kolejki ligowe. Najlepsza Piątka na dashboardzie pokazuje graczy z aktualnej kolejki (wg daty).</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+        <div><label>Nazwa kolejki</label><input type="text" id="round-label" placeholder="np. 2. Kolejka"></div>
+        <div><label>Data od</label><input type="date" id="round-from"></div>
+        <div><label>Data do</label><input type="date" id="round-to"></div>
+        <button class="btn btn-primary" onclick="addRound()" style="white-space:nowrap">Dodaj</button>
+      </div>
+      <div id="rounds-list"></div>
+    </div>
+
     <!-- TEAM ALIASES -->
     <div class="card" style="margin-top:1.5rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">🔀 Aliasy Drużyn</div>
@@ -1065,7 +1079,8 @@
 let matches = [];
 let schedule = []; // planned matches
 let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}');
-let teamAliases = JSON.parse(localStorage.getItem('nba2k_team_aliases') || '{}'); // { "wrong": "correct" }
+let teamAliases = JSON.parse(localStorage.getItem('nba2k_team_aliases') || '{}');
+let rounds = []; // { id, label, from, to } // { "wrong": "correct" }
 let seasons = [];
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
@@ -1153,7 +1168,7 @@ async function saveData() {
         return c;
       })}
     }));
-    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule, teams });
+    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule, teams, rounds });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
     if(parseFloat(sizeKB) > 95) {
       showToast(`❌ Dane za duże (${sizeKB}KB) — limit JSONBin to ~100KB. Skontaktuj się z adminem.`, 'error');
@@ -1191,6 +1206,7 @@ async function loadData() {
     currentSeasonId = data.record?.currentSeasonId || null;
     schedule = data.record?.schedule || [];
     teams = data.record?.teams || {};
+    rounds = data.record?.rounds || [];
     // One-time migration: merge logos from localStorage into JSONBin teams
     try {
       const localTeams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}');
@@ -1344,7 +1360,7 @@ function _doShowView(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
   if(id==='stats') { renderStats(); populateTeamFilter(); }
-  if(id==='aliases') { renderAliases(); renderTeamAliases(); renderTeamsSection(); }
+  if(id==='aliases') { renderAliases(); renderTeamAliases(); renderTeamsSection(); renderRoundsList(); }
   updateAuthUI();
 }
 
@@ -2295,6 +2311,47 @@ async function saveWalkover() {
   renderMatches();
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// ROUNDS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+function addRound() {
+  const label = document.getElementById('round-label')?.value.trim();
+  const from  = document.getElementById('round-from')?.value;
+  const to    = document.getElementById('round-to')?.value;
+  if(!label||!from||!to) { showToast('❌ Wypełnij wszystkie pola', 'error'); return; }
+  if(from > to) { showToast('❌ Data od musi być wcześniej niż do', 'error'); return; }
+  rounds.push({ id: Date.now(), label, from, to });
+  rounds.sort((a,b) => a.from.localeCompare(b.from));
+  saveData().then(() => { showToast('✅ Kolejka dodana', 'success'); renderRoundsList(); renderTeamOfWeek(); });
+  document.getElementById('round-label').value = '';
+  document.getElementById('round-from').value = '';
+  document.getElementById('round-to').value = '';
+}
+
+function deleteRound(id) {
+  rounds = rounds.filter(r => r.id !== id);
+  saveData().then(() => { showToast('🗑 Kolejka usunięta', 'info'); renderRoundsList(); renderTeamOfWeek(); });
+}
+
+function renderRoundsList() {
+  const section = document.getElementById('rounds-admin-section');
+  if(section) section.style.display = _isLoggedInSync() ? 'block' : 'none';
+  const el = document.getElementById('rounds-list');
+  if(!el) return;
+  const today = new Date().toISOString().slice(0,10);
+  if(!rounds.length) { el.innerHTML = '<p style="color:var(--muted);font-size:.85rem">Brak zdefiniowanych kolejek.</p>'; return; }
+  el.innerHTML = rounds.map(r => {
+    const active = today >= r.from && today <= r.to;
+    return `<div style="display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:var(--surface2);border:1px solid ${active?'var(--accent)':'var(--border)'};border-radius:8px;margin-bottom:.4rem">
+      ${active ? '<span style="color:var(--accent);font-size:.75rem;font-weight:700">● AKTYWNA</span>' : ''}
+      <span style="font-weight:700;flex:1">${r.label}</span>
+      <span style="color:var(--muted);font-size:.8rem">${r.from} → ${r.to}</span>
+      <button onclick="deleteRound(${r.id})" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer">🗑</button>
+    </div>`;
+  }).join('');
+}
+
 // ═══════════════════════════════════════════════════════════════
 // TEAM ALIASES
 // ═══════════════════════════════════════════════════════════════
@@ -2948,6 +3005,7 @@ async function saveSetup() {
     currentSeasonId = data.record?.currentSeasonId || null;
     schedule = data.record?.schedule || [];
     teams = data.record?.teams || {};
+    rounds = data.record?.rounds || [];
     window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
 
@@ -2972,25 +3030,23 @@ async function saveSetup() {
   updateAuthUI();
 })();
 
-function getWeekBounds() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun,1=Mon,...
-  const diffToMon = (day === 0) ? -6 : 1 - day;
-  const mon = new Date(now); mon.setDate(now.getDate() + diffToMon); mon.setHours(0,0,0,0);
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
-  return { mon, sun };
+function getCurrentRound() {
+  if(!rounds.length) return { label: '1. Kolejka', from: '2000-01-01', to: '2099-12-31' };
+  const today = new Date().toISOString().slice(0,10);
+  for(const r of rounds) {
+    if(today >= r.from && today <= r.to) return r;
+  }
+  // Return last round if past all rounds
+  return rounds[rounds.length-1];
 }
 
 function renderTeamOfWeek() {
   const wrap = document.getElementById('team-of-week-wrap');
   if(!wrap) return;
-  const { mon, sun } = getWeekBounds();
-  const weekMatches = matches.filter(m => {
-    const d = new Date(m.date);
-    return d >= mon && d <= sun;
-  });
+  const round = getCurrentRound();
+  const weekMatches = matches.filter(m => m.date >= round.from && m.date <= round.to);
   if(!weekMatches.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak meczów w bieżącym tygodniu (' + mon.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ' – ' + sun.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ')</div>';
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak meczów w ' + round.label + '</div>';
     return;
   }
   const POSITIONS = ['PG','SG','SF','PF','C'];
@@ -3023,8 +3079,7 @@ function renderTeamOfWeek() {
     wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Za mało danych (zawodnicy muszą mieć przypisane pozycje)</div>';
     return;
   }
-  const weekLabel = mon.toLocaleDateString('pl-PL',{day:'numeric',month:'short'}) + ' – ' + sun.toLocaleDateString('pl-PL',{day:'numeric',month:'short'});
-  wrap.innerHTML = `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Tydzień: ${weekLabel} · ${weekMatches.length} mecz${weekMatches.length===1?'':'ów'}</div>
+  wrap.innerHTML = `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">${round.label} · ${weekMatches.length} mecz${weekMatches.length===1?'':'ów'}</div>
   <div class="tow-grid">${POSITIONS.map(pos => {
     const p = best[pos];
     if(!p) return `<div class="tow-card"><div class="tow-pos">${pos}</div><div style="color:var(--muted);font-size:.8rem">Brak</div></div>`;
