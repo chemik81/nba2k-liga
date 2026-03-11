@@ -1956,8 +1956,8 @@ function openPlayerModal(playerName, teamName) {
       <div style="color:var(--muted);font-size:0.9rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
         ${teamLogo(teamName,24,'.65rem')}<span>${teamName}</span>
         <span style="color:var(--muted)">·</span>
-        <span id="pos-label-${playerName}" style="color:var(--accent);font-weight:700;min-width:1.5rem">${games[0]?.pos||'—'}</span>
-        ${_isLoggedInSync() ? `<select id="pos-select-${playerName}" onchange="savePlayerPosition('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .35rem;font-size:.75rem;font-family:inherit;cursor:pointer">
+        <span class="pos-label" data-player="${playerName.replace(/"/g,'&quot;')}" style="color:var(--accent);font-weight:700;min-width:1.5rem">${games[0]?.pos||'—'}</span>
+        ${_isLoggedInSync() ? `<select data-player="${playerName.replace(/"/g,'&quot;')}" data-team="${teamName.replace(/"/g,'&quot;')}" onchange="savePlayerPositionFromSelect(this)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .35rem;font-size:.75rem;font-family:inherit;cursor:pointer">
           <option value="">— brak —</option>
           ${['PG','SG','SF','PF','C'].map(pos=>`<option value="${pos}" ${(games[0]?.pos||'')=== pos?'selected':''}>${pos}</option>`).join('')}
         </select>` : ''}
@@ -2038,6 +2038,7 @@ function renderFormChart(games, containerId) {
     { key: 'ast', label: 'AST', color: '#3498db' },
     { key: 'reb', label: 'REB', color: '#2ecc71' },
     { key: 'fgPct', label: 'FG%', color: '#e74c3c', pct: true },
+    { key: 'tpPct', label: '3P%', color: '#9b59b6', pct: true },
   ];
 
   // Compute values
@@ -2047,6 +2048,7 @@ function renderFormChart(games, containerId) {
     ast: g.ast||0,
     reb: g.reb||0,
     fgPct: g.fga>0 ? Math.round(g.fgm/g.fga*100) : 0,
+    tpPct: g.tpa>0 ? Math.round(g.tpm/g.tpa*100) : 0,
     grade: g.grade||'B',
     gradeN: g.gradeN||0,
   }));
@@ -3626,10 +3628,18 @@ saveMatch = function() {
 };
 
 
-function savePlayerPosition(playerName, teamName) {
-  const sel = document.getElementById('pos-select-' + CSS.escape(playerName));
-  if(!sel) return;
-  const newPos = sel.value;
+function savePlayerPositionFromSelect(sel) {
+  const playerName = sel.dataset.player;
+  const teamName = sel.dataset.team;
+  savePlayerPosition(playerName, teamName, sel.value);
+}
+
+function savePlayerPosition(playerName, teamName, newPos) {
+  if(newPos === undefined) {
+    const sel = document.getElementById('pos-select-' + CSS.escape(playerName));
+    if(!sel) return;
+    newPos = sel.value;
+  }
   // Update position in all matches
   let changed = 0;
   matches.forEach(m => {
@@ -3642,8 +3652,7 @@ function savePlayerPosition(playerName, teamName) {
   if(changed > 0) {
     saveData().then(() => {
       showToast('✅ Pozycja zaktualizowana: ' + (newPos||'brak'), 'success');
-      const lbl = document.getElementById('pos-label-' + CSS.escape(playerName));
-      if(lbl) lbl.textContent = newPos || '—';
+      document.querySelectorAll('.pos-label').forEach(l => { if(l.dataset.player===playerName) l.textContent = newPos||'—'; });
     });
   } else {
     showToast('❌ Nie znaleziono gracza w meczach', 'error');
