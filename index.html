@@ -1260,16 +1260,11 @@ async function loadData() {
     renderDashboard();
     updateAuthUI();
     // Set default season filters to current season
-    setTimeout(()=>{
-      if(currentSeasonId) {
-        const ss=document.getElementById('filter-season-stats');
-        if(ss) { ss.value=currentSeasonId; }
-        const sm=document.getElementById('mfs');
-        if(sm) { sm.value=currentSeasonId; }
-        renderStats();
-        populateTeamFilter();
-      }
-    },300);
+    // Fill all selects first, then render
+    updateMatchFilters();
+    populateTeamFilter();
+    renderMatches();
+    renderStats();
   } catch(e) {
     console.error('Load error:', e);
     showToast('❌ Błąd ładowania danych: ' + e.message, 'error');
