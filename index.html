@@ -794,7 +794,7 @@
       <div class="stats-table-wrap">
         <table>
           <thead><tr id="stats-thead">
-            <th style="text-align:left; padding-left:1rem; cursor:pointer; user-select:none" onclick="sortByCol('name')"><span>Zawodnik</span><span id="sort-icon-name" class="sort-icon"></span></th>
+            <th style="text-align:left; padding-left:1rem; cursor:pointer; user-select:none" onclick="sortByCol('name')"><span data-i18n="th_player">Zawodnik</span><span id="sort-icon-name" class="sort-icon"></span></th>
             <th style="text-align:left; cursor:pointer; user-select:none" onclick="sortByCol('team')"><span>Drużyna</span><span id="sort-icon-team" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('pos')">POZ<span id="sort-icon-pos" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('gp')">GP<span id="sort-icon-gp" class="sort-icon"></span></th>
@@ -1629,15 +1629,15 @@ function updateMatchFilters() {
   const ss=document.getElementById('mfs');
   if(ss){
     const cs=ss.value;
-    ss.innerHTML='<option value="">Wszystkie sezony</option>'+seasons.map(s=>`<option value="${s.id}"${s.id===cs?' selected':''}>${s.name}</option>`).join('');
+    ss.innerHTML=('<option value="">'+t('all_seasons')+'</option>')+seasons.map(s=>`<option value="${s.id}"${s.id===cs?' selected':''}>${s.name}</option>`).join('');
   }
   const ts=document.getElementById('mft'),ps=document.getElementById('mfp');
   if(!ts||!ps)return;
   const teams=[...new Set(matches.flatMap(m=>[m.team1.name,m.team2.name]))].sort();
   const players=[...new Set(matches.flatMap(m=>[...(m.team1.players||[]),...(m.team2.players||[])].map(p=>p.name)))].sort();
   const ct=ts.value,cp=ps.value;
-  ts.innerHTML='<option value="">Wszystkie druzyny</option>'+teams.map(t=>`<option value="${t}"${t===ct?' selected':''}>${t}</option>`).join('');
-  ps.innerHTML='<option value="">Wszyscy zawodnicy</option>'+players.map(p=>`<option value="${p}"${p===cp?' selected':''}>${p}</option>`).join('');
+  ts.innerHTML=('<option value="">'+t('all_teams')+'</option>')+teams.map(t=>`<option value="${t}"${t===ct?' selected':''}>${t}</option>`).join('');
+  ps.innerHTML=('<option value="">'+t('all_players')+'</option>')+players.map(p=>`<option value="${p}"${p===cp?' selected':''}>${p}</option>`).join('');
 }
 function renderMatches() {
   updateMatchFilters();
@@ -1646,7 +1646,7 @@ function renderMatches() {
   const _raw=(ft||fp||fs)?matches.filter(m=>{if(fs&&m.seasonId!==fs)return false;if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;if(fp&&![...(m.team1.players||[]),...(m.team2.players||[])].some(p=>p.name===fp))return false;return true;}):matches;
   const list=[..._raw].sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!list.length) {
-    container.innerHTML = '<div class="empty"><div class="icon">📋</div><h3>Brak meczów</h3><p>'+(ft||fp?'Brak wyników dla filtra.':'Dodaj pierwszy mecz klikając "+ Dodaj Mecz"')+'</p></div>';
+    container.innerHTML = '<div class="empty"><div class="icon">📋</div><h3>'+t('no_matches')+'</h3><p>'+(ft||fp?t('no_data'):t('add_match_hint'))+'</p></div>';
     return;
   }
   container.innerHTML = list.map(m => {
@@ -1827,12 +1827,12 @@ function populateTeamFilter() {
   const sel = document.getElementById('filter-team');
   const teams = [...new Set(matches.flatMap(m => [m.team1.name, m.team2.name]))];
   const current = sel.value;
-  sel.innerHTML = '<option value="">Wszystkie</option>' + teams.map(t => `<option value="${t}" ${t===current?'selected':''}>${t}</option>`).join('');
+  sel.innerHTML = ('<option value="">'+t('all_pos')+'</option>') + teams.map(t => `<option value="${t}" ${t===current?'selected':''}>${t}</option>`).join('');
   // Also populate season filter in stats
   const ss = document.getElementById('filter-season-stats');
   if(ss) {
     const cs = ss.value;
-    ss.innerHTML = '<option value="">Wszystkie sezony</option>' + seasons.map(s=>`<option value="${s.id}"${s.id===cs?' selected':''}>${s.name}</option>`).join('');
+    ss.innerHTML = ('<option value="">'+t('all_seasons')+'</option>') + seasons.map(s=>`<option value="${s.id}"${s.id===cs?' selected':''}>${s.name}</option>`).join('');
   }
 }
 
@@ -1992,7 +1992,7 @@ function openPlayerModal(playerName, teamName) {
         </select>` : ''}
         <span style="color:var(--muted)">·</span>
         <span>${gp} meczy</span>
-        <button onclick="openPlayerCard('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.2rem .6rem;font-size:.75rem;cursor:pointer;font-family:inherit">🃏 Karta</button>
+        <button onclick="openPlayerCard('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.2rem .6rem;font-size:.75rem;cursor:pointer;font-family:inherit" data-i18n="player_card">🃏 Karta</button>
       </div>
     </div>
 
@@ -2872,7 +2872,7 @@ function renderLeaders() {
   const all = getAggregatedStats();
   const grid = document.getElementById('leaders-grid');
   if(!all.length) {
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:2rem"><div class="icon">🏀</div><p>Dodaj mecze aby zobaczyć liderów</p></div>';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:2rem"><div class="icon">🏀</div><p>'+t('add_matches_for_leaders')+'</p></div>';
     return;
   }
   const leaders = [
@@ -3139,7 +3139,7 @@ function renderTeamOfWeek() {
   ).filter(r => r.from <= today).sort((a,b) => a.from.localeCompare(b.from));
 
   if(!activeRounds.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">Brak zdefiniowanych kolejek — dodaj je w zakładce Aliasy.</div>';
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:.9rem">'+t('no_rounds_defined')+'</div>';
     return;
   }
 
@@ -3148,7 +3148,7 @@ function renderTeamOfWeek() {
     return renderRoundFiveBlock(round, roundMatches);
   }).join('');
 
-  wrap.innerHTML = html || '<div style="color:var(--muted);font-size:.9rem">Brak meczów w aktywnych kolejkach</div>';
+  wrap.innerHTML = html || '<div style="color:var(--muted);font-size:.9rem">'+t('no_round_matches')+'</div>';
 }
 
 
@@ -4122,7 +4122,7 @@ const TRANSLATIONS = {
     th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
     th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
     // Schedule
-    schedule_title: '📅 Harmonogram', no_schedule: 'Brak zaplanowanych meczów',
+    schedule_title: '📅 Harmonogram', no_schedule: t('no_schedule'),
     // Aliases
     aliases_title: 'Aliasy', apply_aliases: 'Zastosuj aliasy',
     // Misc
@@ -4136,17 +4136,17 @@ const TRANSLATIONS = {
     hot_streak: t('hot_streak'),
     player_card: '🃏 Karta',
     round_label: 'Kolejka',
-    composite_higher: 'wyżej = lepiej', per_higher: 'wyżej = lepiej',
+    composite_higher: t('composite_higher'), per_higher: 'wyżej = lepiej',
     save_match: 'Zapisz Mecz',
     add_player: '+ Dodaj Zawodnika',
     screenshot: 'Wgraj Screenshot',
-    check_save: 'Sprawdź i Zapisz',
+    check_save: t('check_save'),
     no_matches: 'Brak meczów',
-    no_data: 'Brak danych',
+    no_data: t('no_data'),
     rivals: '⚔️ Rywalizacja',
-    next_matches: 'Najbliższe mecze',
-    top_scorers: 'Top Strzelcy',
-    last_results: 'Ostatnie wyniki',
+    next_matches: t('next_matches'),
+    top_scorers: t('top_scorers'),
+    last_results: t('last_results'),
   },
   en: {
     nav_dashboard: 'Dashboard', nav_matches: 'Matches', nav_stats: 'Statistics',
@@ -4248,11 +4248,19 @@ function setLang(lang) {
     const val = t(key);
     if(val) el.textContent = val;
   });
-  // Re-render dynamic content
+  // Re-render all dynamic views
   renderDashboard();
   renderMatches();
   renderStats();
-  renderSchedule();
+  if(typeof renderSchedule === 'function') renderSchedule();
+  // Re-render current view
+  const activeView = document.querySelector('.view.active');
+  if(activeView) {
+    const vid = activeView.id.replace('view-','');
+    if(vid === 'stats') renderStats();
+    if(vid === 'matches') renderMatches();
+    if(vid === 'schedule') renderSchedule();
+  }
 }
 
 // Apply language on load
