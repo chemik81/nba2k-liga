@@ -1078,6 +1078,182 @@
 </div>
 
 <script>
+
+// ═══════════════════════════════════════════════════════════════
+// I18N — LANGUAGE SYSTEM
+// ═══════════════════════════════════════════════════════════════
+let currentLang = localStorage.getItem('nba2k_lang') || 'pl';
+
+const TRANSLATIONS = {
+  pl: {
+    // Nav
+    nav_dashboard: 'Dashboard', nav_matches: 'Mecze', nav_stats: 'Statystyki',
+    nav_add_match: '+ Dodaj Mecz', nav_schedule: '📅 Harmonogram', nav_aliases: '⚙ Aliasy',
+    // Dashboard
+    league_summary: 'Podsumowanie Ligi', best_five: '🏅 Najlepsza Piątka Kolejki',
+    team_form: '📈 Forma Drużyn', top3: '⭐ Top 3 Zawodnicy', standings: 'Tabela',
+    see_top10: 'Zobacz Top 10 →', see_more: 'Zobacz więcej →',
+    // Matches
+    match_results: 'Wyniki Meczów', all_seasons: 'Wszystkie sezony',
+    all_teams: 'Wszystkie drużyny', all_players: 'Wszyscy zawodnicy',
+    add_match: 'Dodaj Mecz', add_match_btn: '+ Dodaj Mecz',
+    // Stats
+    player_stats: 'Statystyki Zawodników', compare: '⚡ Porównaj',
+    season_lbl: 'Sezon', team_lbl: 'Drużyna', position_lbl: 'Pozycja', all_pos: 'Wszystkie',
+    // Table headers
+    th_player: 'Zawodnik', th_team: 'Drużyna', th_gp: 'GP', th_grd: 'GRD',
+    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
+    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
+    // Schedule
+    schedule_title: '📅 Harmonogram', no_schedule: t('no_schedule'),
+    // Aliases
+    aliases_title: 'Aliasy', apply_aliases: 'Zastosuj aliasy',
+    // Misc
+    logout: '🔓 Wyloguj', settings: '⚙ Baza', seasons_btn: '🏆 Sezony',
+    loading: 'Ładowanie...', save: 'Zapisz', cancel: 'Anuluj', delete: 'Usuń',
+    edit: 'Edytuj', close: 'Zamknij', yes: 'Tak', no: 'Nie',
+    games: 'meczów', game: 'mecz', week: 'Tydzień',
+    win: 'W', loss: 'P', draw: 'R',
+    career_records: '🏆 Rekordy kariery',
+    match_history: 'Historia meczów',
+    hot_streak: t('hot_streak'),
+    player_card: '🃏 Karta',
+    round_label: 'Kolejka',
+    composite_higher: t('composite_higher'), per_higher: 'wyżej = lepiej',
+    save_match: 'Zapisz Mecz',
+    add_player: '+ Dodaj Zawodnika',
+    screenshot: 'Wgraj Screenshot',
+    check_save: t('check_save'),
+    no_matches: 'Brak meczów',
+    no_data: t('no_data'),
+    rivals: '⚔️ Rywalizacja',
+    next_matches: t('next_matches'),
+    top_scorers: t('top_scorers'),
+    last_results: t('last_results'),
+  },
+  en: {
+    nav_dashboard: 'Dashboard', nav_matches: 'Matches', nav_stats: 'Statistics',
+    nav_add_match: '+ Add Match', nav_schedule: '📅 Schedule', nav_aliases: '⚙ Settings',
+    league_summary: 'League Summary', best_five: '🏅 Best Five of the Round',
+    team_form: '📈 Team Form', top3: '⭐ Top 3 Players', standings: 'Standings',
+    see_top10: 'See Top 10 →', see_more: 'See more →',
+    match_results: 'Match Results', all_seasons: 'All seasons',
+    all_teams: 'All teams', all_players: 'All players',
+    add_match: 'Add Match', add_match_btn: '+ Add Match',
+    player_stats: 'Player Statistics', compare: '⚡ Compare',
+    season_lbl: 'Season', team_lbl: 'Team', position_lbl: 'Position', all_pos: 'All',
+    th_player: 'Player', th_team: 'Team', th_gp: 'GP', th_grd: 'GRD',
+    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
+    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
+    schedule_title: '📅 Schedule', no_schedule: 'No scheduled matches',
+    aliases_title: 'Aliases', apply_aliases: 'Apply aliases',
+    logout: '🔓 Logout', settings: '⚙ Settings', seasons_btn: '🏆 Seasons',
+    loading: 'Loading...', save: 'Save', cancel: 'Cancel', delete: 'Delete',
+    edit: 'Edit', close: 'Close', yes: 'Yes', no: 'No',
+    games: 'games', game: 'game', week: 'Week',
+    win: 'W', loss: 'L', draw: 'D',
+    career_records: '🏆 Career Records',
+    match_history: 'Match History',
+    hot_streak: '🔥 HOT STREAK — A- or better in last 3 games!',
+    player_card: '🃏 Card',
+    round_label: 'Round',
+    composite_higher: 'higher = better', per_higher: 'higher = better',
+    save_match: 'Save Match',
+    add_player: '+ Add Player',
+    screenshot: 'Upload Screenshot',
+    check_save: 'Review & Save',
+    no_matches: 'No matches',
+    no_data: 'No data',
+    rivals: '⚔️ Rivalry',
+    next_matches: 'Upcoming matches',
+    top_scorers: 'Top Scorers',
+    last_results: 'Recent results',
+  },
+  nl: {
+    nav_dashboard: 'Dashboard', nav_matches: 'Wedstrijden', nav_stats: 'Statistieken',
+    nav_add_match: '+ Wedstrijd toevoegen', nav_schedule: '📅 Schema', nav_aliases: '⚙ Instellingen',
+    league_summary: 'Liga Overzicht', best_five: '🏅 Beste Vijf van de Ronde',
+    team_form: '📈 Teamvorm', top3: '⭐ Top 3 Spelers', standings: 'Stand',
+    see_top10: 'Zie Top 10 →', see_more: 'Meer zien →',
+    match_results: 'Wedstrijdresultaten', all_seasons: 'Alle seizoenen',
+    all_teams: 'Alle teams', all_players: 'Alle spelers',
+    add_match: 'Wedstrijd toevoegen', add_match_btn: '+ Wedstrijd toevoegen',
+    player_stats: 'Spelerstatistieken', compare: '⚡ Vergelijken',
+    season_lbl: 'Seizoen', team_lbl: 'Team', position_lbl: 'Positie', all_pos: 'Alle',
+    th_player: 'Speler', th_team: 'Team', th_gp: 'GP', th_grd: 'GRD',
+    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
+    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
+    schedule_title: '📅 Schema', no_schedule: 'Geen geplande wedstrijden',
+    aliases_title: 'Aliassen', apply_aliases: 'Aliassen toepassen',
+    logout: '🔓 Uitloggen', settings: '⚙ Instellingen', seasons_btn: '🏆 Seizoenen',
+    loading: 'Laden...', save: 'Opslaan', cancel: 'Annuleren', delete: 'Verwijderen',
+    edit: 'Bewerken', close: 'Sluiten', yes: 'Ja', no: 'Nee',
+    games: 'wedstrijden', game: 'wedstrijd', week: 'Week',
+    win: 'W', loss: 'V', draw: 'G',
+    career_records: '🏆 Carrièrerecords',
+    match_history: 'Wedstrijdgeschiedenis',
+    hot_streak: '🔥 HOT STREAK — A- of beter in laatste 3 wedstrijden!',
+    player_card: '🃏 Kaart',
+    round_label: 'Ronde',
+    composite_higher: 'hoger = beter', per_higher: 'hoger = beter',
+    save_match: 'Wedstrijd opslaan',
+    add_player: '+ Speler toevoegen',
+    screenshot: 'Screenshot uploaden',
+    check_save: 'Controleer & Sla op',
+    no_matches: 'Geen wedstrijden',
+    no_data: 'Geen gegevens',
+    rivals: '⚔️ Rivaliteit',
+    next_matches: 'Komende wedstrijden',
+    top_scorers: 'Topscorers',
+    last_results: 'Recente resultaten',
+  }
+};
+
+function t(key) {
+  return (TRANSLATIONS[currentLang] || TRANSLATIONS.pl)[key] || (TRANSLATIONS.pl)[key] || key;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('nba2k_lang', lang);
+  // Update switcher buttons
+  ['pl','en','nl'].forEach(l => {
+    const btn = document.getElementById('lang-' + l);
+    if(!btn) return;
+    const active = l === lang;
+    btn.style.background = active ? 'var(--accent)' : 'transparent';
+    btn.style.color = active ? '#000' : 'var(--muted)';
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+  });
+  // Update all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if(val) el.textContent = val;
+  });
+  // Reload page to apply language to all elements
+  location.reload();
+}
+
+// Apply language on load
+function applyLangOnLoad() {
+  // Update switcher buttons appearance without reload
+  ['pl','en','nl'].forEach(l => {
+    const btn = document.getElementById('lang-' + l);
+    if(!btn) return;
+    const active = l === currentLang;
+    btn.style.background = active ? 'var(--accent)' : 'transparent';
+    btn.style.color = active ? '#000' : 'var(--muted)';
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+  });
+  // Translate all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = (TRANSLATIONS[currentLang] || TRANSLATIONS.pl)[key] || (TRANSLATIONS.pl)[key];
+    if(val) el.textContent = val;
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // DATA STORE
 // ═══════════════════════════════════════════════════════════════
@@ -4091,180 +4267,6 @@ function rdRenderContent(idx) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════
-// I18N — LANGUAGE SYSTEM
-// ═══════════════════════════════════════════════════════════════
-let currentLang = localStorage.getItem('nba2k_lang') || 'pl';
-
-const TRANSLATIONS = {
-  pl: {
-    // Nav
-    nav_dashboard: 'Dashboard', nav_matches: 'Mecze', nav_stats: 'Statystyki',
-    nav_add_match: '+ Dodaj Mecz', nav_schedule: '📅 Harmonogram', nav_aliases: '⚙ Aliasy',
-    // Dashboard
-    league_summary: 'Podsumowanie Ligi', best_five: '🏅 Najlepsza Piątka Kolejki',
-    team_form: '📈 Forma Drużyn', top3: '⭐ Top 3 Zawodnicy', standings: 'Tabela',
-    see_top10: 'Zobacz Top 10 →', see_more: 'Zobacz więcej →',
-    // Matches
-    match_results: 'Wyniki Meczów', all_seasons: 'Wszystkie sezony',
-    all_teams: 'Wszystkie drużyny', all_players: 'Wszyscy zawodnicy',
-    add_match: 'Dodaj Mecz', add_match_btn: '+ Dodaj Mecz',
-    // Stats
-    player_stats: 'Statystyki Zawodników', compare: '⚡ Porównaj',
-    season_lbl: 'Sezon', team_lbl: 'Drużyna', position_lbl: 'Pozycja', all_pos: 'Wszystkie',
-    // Table headers
-    th_player: 'Zawodnik', th_team: 'Drużyna', th_gp: 'GP', th_grd: 'GRD',
-    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
-    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
-    // Schedule
-    schedule_title: '📅 Harmonogram', no_schedule: t('no_schedule'),
-    // Aliases
-    aliases_title: 'Aliasy', apply_aliases: 'Zastosuj aliasy',
-    // Misc
-    logout: '🔓 Wyloguj', settings: '⚙ Baza', seasons_btn: '🏆 Sezony',
-    loading: 'Ładowanie...', save: 'Zapisz', cancel: 'Anuluj', delete: 'Usuń',
-    edit: 'Edytuj', close: 'Zamknij', yes: 'Tak', no: 'Nie',
-    games: 'meczów', game: 'mecz', week: 'Tydzień',
-    win: 'W', loss: 'P', draw: 'R',
-    career_records: '🏆 Rekordy kariery',
-    match_history: 'Historia meczów',
-    hot_streak: t('hot_streak'),
-    player_card: '🃏 Karta',
-    round_label: 'Kolejka',
-    composite_higher: t('composite_higher'), per_higher: 'wyżej = lepiej',
-    save_match: 'Zapisz Mecz',
-    add_player: '+ Dodaj Zawodnika',
-    screenshot: 'Wgraj Screenshot',
-    check_save: t('check_save'),
-    no_matches: 'Brak meczów',
-    no_data: t('no_data'),
-    rivals: '⚔️ Rywalizacja',
-    next_matches: t('next_matches'),
-    top_scorers: t('top_scorers'),
-    last_results: t('last_results'),
-  },
-  en: {
-    nav_dashboard: 'Dashboard', nav_matches: 'Matches', nav_stats: 'Statistics',
-    nav_add_match: '+ Add Match', nav_schedule: '📅 Schedule', nav_aliases: '⚙ Settings',
-    league_summary: 'League Summary', best_five: '🏅 Best Five of the Round',
-    team_form: '📈 Team Form', top3: '⭐ Top 3 Players', standings: 'Standings',
-    see_top10: 'See Top 10 →', see_more: 'See more →',
-    match_results: 'Match Results', all_seasons: 'All seasons',
-    all_teams: 'All teams', all_players: 'All players',
-    add_match: 'Add Match', add_match_btn: '+ Add Match',
-    player_stats: 'Player Statistics', compare: '⚡ Compare',
-    season_lbl: 'Season', team_lbl: 'Team', position_lbl: 'Position', all_pos: 'All',
-    th_player: 'Player', th_team: 'Team', th_gp: 'GP', th_grd: 'GRD',
-    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
-    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
-    schedule_title: '📅 Schedule', no_schedule: 'No scheduled matches',
-    aliases_title: 'Aliases', apply_aliases: 'Apply aliases',
-    logout: '🔓 Logout', settings: '⚙ Settings', seasons_btn: '🏆 Seasons',
-    loading: 'Loading...', save: 'Save', cancel: 'Cancel', delete: 'Delete',
-    edit: 'Edit', close: 'Close', yes: 'Yes', no: 'No',
-    games: 'games', game: 'game', week: 'Week',
-    win: 'W', loss: 'L', draw: 'D',
-    career_records: '🏆 Career Records',
-    match_history: 'Match History',
-    hot_streak: '🔥 HOT STREAK — A- or better in last 3 games!',
-    player_card: '🃏 Card',
-    round_label: 'Round',
-    composite_higher: 'higher = better', per_higher: 'higher = better',
-    save_match: 'Save Match',
-    add_player: '+ Add Player',
-    screenshot: 'Upload Screenshot',
-    check_save: 'Review & Save',
-    no_matches: 'No matches',
-    no_data: 'No data',
-    rivals: '⚔️ Rivalry',
-    next_matches: 'Upcoming matches',
-    top_scorers: 'Top Scorers',
-    last_results: 'Recent results',
-  },
-  nl: {
-    nav_dashboard: 'Dashboard', nav_matches: 'Wedstrijden', nav_stats: 'Statistieken',
-    nav_add_match: '+ Wedstrijd toevoegen', nav_schedule: '📅 Schema', nav_aliases: '⚙ Instellingen',
-    league_summary: 'Liga Overzicht', best_five: '🏅 Beste Vijf van de Ronde',
-    team_form: '📈 Teamvorm', top3: '⭐ Top 3 Spelers', standings: 'Stand',
-    see_top10: 'Zie Top 10 →', see_more: 'Meer zien →',
-    match_results: 'Wedstrijdresultaten', all_seasons: 'Alle seizoenen',
-    all_teams: 'Alle teams', all_players: 'Alle spelers',
-    add_match: 'Wedstrijd toevoegen', add_match_btn: '+ Wedstrijd toevoegen',
-    player_stats: 'Spelerstatistieken', compare: '⚡ Vergelijken',
-    season_lbl: 'Seizoen', team_lbl: 'Team', position_lbl: 'Positie', all_pos: 'Alle',
-    th_player: 'Speler', th_team: 'Team', th_gp: 'GP', th_grd: 'GRD',
-    th_pts: 'PTS', th_reb: 'REB', th_ast: 'AST', th_stl: 'STL', th_blk: 'BLK',
-    th_to: 'TO', th_fg: 'FG%', th_3p: '3P%', th_ft: 'FT%',
-    schedule_title: '📅 Schema', no_schedule: 'Geen geplande wedstrijden',
-    aliases_title: 'Aliassen', apply_aliases: 'Aliassen toepassen',
-    logout: '🔓 Uitloggen', settings: '⚙ Instellingen', seasons_btn: '🏆 Seizoenen',
-    loading: 'Laden...', save: 'Opslaan', cancel: 'Annuleren', delete: 'Verwijderen',
-    edit: 'Bewerken', close: 'Sluiten', yes: 'Ja', no: 'Nee',
-    games: 'wedstrijden', game: 'wedstrijd', week: 'Week',
-    win: 'W', loss: 'V', draw: 'G',
-    career_records: '🏆 Carrièrerecords',
-    match_history: 'Wedstrijdgeschiedenis',
-    hot_streak: '🔥 HOT STREAK — A- of beter in laatste 3 wedstrijden!',
-    player_card: '🃏 Kaart',
-    round_label: 'Ronde',
-    composite_higher: 'hoger = beter', per_higher: 'hoger = beter',
-    save_match: 'Wedstrijd opslaan',
-    add_player: '+ Speler toevoegen',
-    screenshot: 'Screenshot uploaden',
-    check_save: 'Controleer & Sla op',
-    no_matches: 'Geen wedstrijden',
-    no_data: 'Geen gegevens',
-    rivals: '⚔️ Rivaliteit',
-    next_matches: 'Komende wedstrijden',
-    top_scorers: 'Topscorers',
-    last_results: 'Recente resultaten',
-  }
-};
-
-function t(key) {
-  return (TRANSLATIONS[currentLang] || TRANSLATIONS.pl)[key] || (TRANSLATIONS.pl)[key] || key;
-}
-
-function setLang(lang) {
-  currentLang = lang;
-  localStorage.setItem('nba2k_lang', lang);
-  // Update switcher buttons
-  ['pl','en','nl'].forEach(l => {
-    const btn = document.getElementById('lang-' + l);
-    if(!btn) return;
-    const active = l === lang;
-    btn.style.background = active ? 'var(--accent)' : 'transparent';
-    btn.style.color = active ? '#000' : 'var(--muted)';
-    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-  });
-  // Update all data-i18n elements
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const val = t(key);
-    if(val) el.textContent = val;
-  });
-  // Reload page to apply language to all elements
-  location.reload();
-}
-
-// Apply language on load
-function applyLangOnLoad() {
-  // Update switcher buttons appearance without reload
-  ['pl','en','nl'].forEach(l => {
-    const btn = document.getElementById('lang-' + l);
-    if(!btn) return;
-    const active = l === currentLang;
-    btn.style.background = active ? 'var(--accent)' : 'transparent';
-    btn.style.color = active ? '#000' : 'var(--muted)';
-    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-  });
-  // Translate all data-i18n elements
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const val = (TRANSLATIONS[currentLang] || TRANSLATIONS.pl)[key] || (TRANSLATIONS.pl)[key];
-    if(val) el.textContent = val;
-  });
-}
 
 </script>
 
