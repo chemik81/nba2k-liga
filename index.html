@@ -776,7 +776,7 @@
   <!-- MATCHES -->
   <div id="view-matches" class="view">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem"><div class="section-title" style="margin-bottom:0" data-i18n="match_results">Wyniki Meczów</div><div style="display:flex;gap:.75rem;flex-wrap:wrap"><select id="mfs" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">'+t('all_seasons')+'</option></select>
-        <select id="mft" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie druzyny</option></select><select id="mfp" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszyscy zawodnicy</option></select></div></div>
+        <select id="mft" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_teams">Wszystkie druzyny</option></select><select id="mfp" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_players">Wszyscy zawodnicy</option></select></div></div>
     <div class="matches-grid" id="matches-list">
       <div class="empty"><div class="icon">📋</div><h3>Brak meczów</h3><p>Dodaj pierwszy mecz klikając "+ Dodaj Mecz"</p></div>
     </div>
@@ -788,15 +788,15 @@
     <div class="filters">
       <div><label data-i18n="season_lbl">Sezon</label><select id="filter-season-stats" onchange="renderStats()"><option value="">Wszystkie sezony</option></select></div>
       <div><label data-i18n="team_lbl">Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
-      <div><label data-i18n="position_lbl">Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
+      <div><label data-i18n="position_lbl">Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_pos">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
     </div>
     <div class="card" style="padding:0">
       <div class="stats-table-wrap">
         <table>
           <thead><tr id="stats-thead">
             <th style="text-align:left; padding-left:1rem; cursor:pointer; user-select:none" onclick="sortByCol('name')"><span data-i18n="th_player">Zawodnik</span><span id="sort-icon-name" class="sort-icon"></span></th>
-            <th style="text-align:left; cursor:pointer; user-select:none" onclick="sortByCol('team')"><span>Drużyna</span><span id="sort-icon-team" class="sort-icon"></span></th>
-            <th style="cursor:pointer;user-select:none" onclick="sortByCol('pos')">POZ<span id="sort-icon-pos" class="sort-icon"></span></th>
+            <th style="text-align:left; cursor:pointer; user-select:none" onclick="sortByCol('team')"><span data-i18n="th_team">Drużyna</span><span id="sort-icon-team" class="sort-icon"></span></th>
+            <th style="cursor:pointer;user-select:none" onclick="sortByCol('pos')"><span data-i18n="th_pos">POZ</span><span id="sort-icon-pos" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('gp')">GP<span id="sort-icon-gp" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none" onclick="sortByCol('avggrade')">GRD<span id="sort-icon-avggrade" class="sort-icon"></span></th>
             <th style="cursor:pointer;user-select:none;color:var(--accent)" onclick="sortByCol('cs')" title="Composite Score">CS<span id="sort-icon-cs" class="sort-icon"></span></th>
@@ -875,7 +875,7 @@
 
     <!-- PARSED RESULT EDITOR -->
     <div id="parsed-result" style="display:none">
-      <div class="section-title" style="margin-top:2rem">Sprawdź i Zapisz</div>
+      <div class="section-title" style="margin-top:2rem" data-i18n="check_save" data-i18n="check_save">Sprawdź i Zapisz</div>
       <div class="card">
         <p style="color:var(--muted);font-size:0.9rem;margin-bottom:1.25rem">AI odczytał poniższe dane. Sprawdź, popraw jeśli trzeba, a następnie zapisz mecz.</p>
         <div id="parsed-match-preview"></div>
@@ -910,7 +910,7 @@
           <input type="text" id="alias-wrong" placeholder="np. JoseiMatzura">
         </div>
         <div>
-          <label>Poprawna nazwa</label>
+          <label data-i18n="alias_correct_lbl">Poprawna nazwa</label>
           <input type="text" id="alias-correct" placeholder="np. JosefMatzura">
         </div>
         <button class="btn btn-primary" onclick="addAlias()">Dodaj</button>
@@ -931,9 +931,9 @@
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem">📅 Zarządzanie Kolejkami</div>
       <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Definiuj kolejki ligowe. Najlepsza Piątka na dashboardzie pokazuje graczy z aktualnej kolejki (wg daty).</p>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
-        <div><label>Nazwa kolejki</label><input type="text" id="round-label" placeholder="np. 2. Kolejka"></div>
-        <div><label>Data od</label><input type="date" id="round-from"></div>
-        <div><label>Data do</label><input type="date" id="round-to"></div>
+        <div><label data-i18n="round_name_lbl">Nazwa kolejki</label><input type="text" id="round-label" placeholder="np. 2. Kolejka"></div>
+        <div><label data-i18n="date_from_lbl">Data od</label><input type="date" id="round-from"></div>
+        <div><label data-i18n="date_to_lbl">Data do</label><input type="date" id="round-to"></div>
         <button class="btn btn-primary" onclick="addRound()" style="white-space:nowrap">Dodaj</button>
       </div>
       <div id="rounds-list"></div>
@@ -997,7 +997,7 @@
     <label style="text-align:left">Hasło dostępu</label>
     <input type="password" id="login-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkLogin()">
     <div id="login-error" class="login-error"></div>
-    <button class="btn btn-primary" style="width:100%" onclick="checkLogin()">Zaloguj się</button>
+    <button class="btn btn-primary" style="width:100%" onclick="checkLogin()" data-i18n="login_btn">Zaloguj się</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="document.getElementById('auth-modal').classList.remove('open')">Anuluj</button>
   </div>
 </div>
@@ -2227,9 +2227,9 @@ function showImportPreview(data) {
           <thead><tr>
             <th style="width:30px"></th>
             <th style="text-align:left">Data</th>
-            <th style="text-align:left">Drużyna 1</th>
+            <th style="text-align:left" data-i18n="team1_lbl">Drużyna 1</th>
             <th>Wynik</th>
-            <th style="text-align:left">Drużyna 2</th>
+            <th style="text-align:left" data-i18n="team2_lbl">Drużyna 2</th>
             <th style="text-align:left">Notatka</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -4248,24 +4248,27 @@ function setLang(lang) {
     const val = t(key);
     if(val) el.textContent = val;
   });
-  // Re-render all dynamic views
-  renderDashboard();
-  renderMatches();
-  renderStats();
-  if(typeof renderSchedule === 'function') renderSchedule();
-  // Re-render current view
-  const activeView = document.querySelector('.view.active');
-  if(activeView) {
-    const vid = activeView.id.replace('view-','');
-    if(vid === 'stats') renderStats();
-    if(vid === 'matches') renderMatches();
-    if(vid === 'schedule') renderSchedule();
-  }
+  // Reload page to apply language to all elements
+  location.reload();
 }
 
 // Apply language on load
 function applyLangOnLoad() {
-  setLang(currentLang);
+  // Update switcher buttons appearance without reload
+  ['pl','en','nl'].forEach(l => {
+    const btn = document.getElementById('lang-' + l);
+    if(!btn) return;
+    const active = l === currentLang;
+    btn.style.background = active ? 'var(--accent)' : 'transparent';
+    btn.style.color = active ? '#000' : 'var(--muted)';
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+  });
+  // Translate all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = (TRANSLATIONS[currentLang] || TRANSLATIONS.pl)[key] || (TRANSLATIONS.pl)[key];
+    if(val) el.textContent = val;
+  });
 }
 
 </script>
