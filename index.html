@@ -3591,8 +3591,16 @@ function renderRoundComparison() {
     </div>`;
 }
 
+function getDefaultRound() {
+  // When no rounds defined, treat all matches as round 1
+  const dates = matches.map(m => m.date).filter(Boolean).sort();
+  const from = dates[0] || '2000-01-01';
+  const to   = dates[dates.length-1] || new Date().toISOString().slice(0,10);
+  return { id:'r1', label:'1. Kolejka', from, to };
+}
+
 function getCurrentRound() {
-  if(!rounds.length) return { label: '1. Kolejka', from: '2000-01-01', to: '2099-12-31' };
+  if(!rounds.length) return getDefaultRound();
   const today = new Date().toISOString().slice(0,10);
   for(const r of rounds) {
     if(today >= r.from && today <= r.to) return r;
@@ -3670,7 +3678,7 @@ function renderTeamOfWeek() {
 
   const activeRounds = (rounds && rounds.length
     ? rounds
-    : [{ id:'r1', label:'1. Kolejka', from:'2000-01-01', to:'2026-03-11' }]
+    : [getDefaultRound()]
   ).filter(r => r.from <= today).sort((a,b) => a.from.localeCompare(b.from));
 
   if(!activeRounds.length) {
@@ -3781,21 +3789,23 @@ function renderTop10Tab(tab) {
   const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 — ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(tab==='composite','Composite Score','composite')}${tabBtn(tab==='per','PER (Hollinger)','per')}${tabBtn(tab==='brick','🧱 Brick of the Round','brick')}</div>`;
 
   if(isBrick) {
-    // Min GP = ceil(total round matches / 6), at least 2
     const activeRounds = rounds.length
       ? [...rounds].sort((a,b)=>a.from.localeCompare(b.from))
-      : [{ from:'2000-01-01', to:'2099-12-31', label:'Wszystkie' }];
+      : [getDefaultRound()];
 
-    // Use current or last round
-    const today = new Date().toISOString().slice(0,10);
-    let brickRound = activeRounds.find(r => today >= r.from && today <= r.to)
-                  || activeRounds[activeRounds.length - 1];
+    // Brick round selector — persisted in window var
+    if(!window._brickRoundIdx) window._brickRoundIdx = activeRounds.length - 1;
+    window._brickRoundIdx = Math.min(window._brickRoundIdx, activeRounds.length - 1);
+    let brickRound = activeRounds[window._brickRoundIdx];
 
-    const roundMatches = _top10SeasonId
-      ? matches.filter(m => m.seasonId === _top10SeasonId && m.date >= brickRound.from && m.date <= brickRound.to)
-      : matches.filter(m => m.date >= brickRound.from && m.date <= brickRound.to);
+    const roundMatches = matches.filter(m => {
+      const inSeason = !_top10SeasonId || m.seasonId === _top10SeasonId;
+      const inRound  = m.date >= brickRound.from && m.date <= brickRound.to;
+      return inSeason && inRound;
+    });
 
-    const minGP = Math.max(2, Math.ceil(roundMatches.length / 6));
+    // Each team plays 2 games per round → minGP = 2
+    const minGP = 2;
 
     // Aggregate FG for round
     const players = {};
@@ -3846,8 +3856,13 @@ function renderTop10Tab(tab) {
       </tr>`;
     }).join('');
 
+    const roundSwitcher = activeRounds.map((r,i) =>
+      `<button onclick="window._brickRoundIdx=${i};renderTop10Tab('brick')" style="padding:.25rem .6rem;border-radius:6px;border:1px solid ${i===window._brickRoundIdx?'var(--accent)':'var(--border)'};background:${i===window._brickRoundIdx?'rgba(245,197,24,.15)':'transparent'};color:${i===window._brickRoundIdx?'var(--accent)':'var(--muted)'};font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:${i===window._brickRoundIdx?'700':'400'}">${r.label}</button>`
+    ).join('');
+
     document.getElementById('top10-modal-content').innerHTML = header +
-      `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> w kolejce</div>
+      `<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">${roundSwitcher}</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> &mdash; ${roundMatches.length} meczów w kolejce</div>
       <div class="stats-table-wrap"><table>
         <thead><tr>
           <th>#</th>
@@ -4648,7 +4663,7 @@ function openRoundsDetailModal() {
   const today = new Date().toISOString().slice(0,10);
   const activeRounds = (rounds && rounds.length
     ? rounds
-    : [{id:'r1',label:'1. Kolejka',from:'2000-01-01',to:'2026-03-11'}]
+    : [getDefaultRound()]
   ).filter(r => r.from <= today).sort((a,b)=>a.from.localeCompare(b.from));
 
   if(!activeRounds.length) { showToast('Brak kolejek','info'); return; }
