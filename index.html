@@ -2928,8 +2928,8 @@ function renderSchedule() {
     ? `<button class="btn btn-primary" onclick="openScheduleAdd()">📅 Planowany mecz</button> <button class="btn btn-ghost" onclick="showView('add-match')" style="margin-left:.5rem">🏀 Dodaj wynik meczu</button>`
     : '';
 
-  const upcoming = schedule.filter(s => !s.played).sort((a,b) => new Date(a.date) - new Date(b.date));
-  const played   = schedule.filter(s =>  s.played).sort((a,b) => new Date(b.date) - new Date(a.date));
+  const upcoming = schedule.filter(s => !s.played).sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00')));
+  const played   = schedule.filter(s =>  s.played).sort((a,b)=>new Date(b.date+'T'+(b.time||'00:00'))-new Date(a.date+'T'+(a.time||'00:00')));
 
   const renderCard = (s, showPlayed) => {
     const matchResult = s.matchId ? matches.find(m => Number(m.id) === Number(s.matchId)) : null;
@@ -3114,7 +3114,7 @@ H2H: ${h2hText}`;
 function renderScheduleDashboard() {
   const el = document.getElementById('schedule-dashboard');
   if(!el) return;
-  const upcoming = schedule.filter(s=>!s.played).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,3);
+  const upcoming = schedule.filter(s=>!s.played).sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00'))).slice(0,3);
   if(!upcoming.length) { el.style.display='none'; return; }
   el.style.display='block';
   el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
