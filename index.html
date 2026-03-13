@@ -756,6 +756,8 @@
       </div>
     </div>
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
+    <div id="milestone-banner" style="margin-bottom:1.5rem"></div>
+    <div id="round-comparison-wrap" style="margin-bottom:1.5rem"></div>
     <div class="section-title" data-i18n="standings">Tabela</div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="stats-table-wrap">
@@ -3140,6 +3142,8 @@ function renderDashboard() {
   renderLeaders();
   renderTeamOfWeek();
   updateSeasonBadge();
+  renderMilestoneBanner();
+  renderRoundComparison();
 }
 
 function getHotPlayers() {
@@ -3435,6 +3439,157 @@ async function saveSetup() {
   updateAuthUI();
   applyLangOnLoad();
 })();
+
+
+// ═══════════════════════════════════════════════════════════════
+// MILESTONE BANNER
+// ═══════════════════════════════════════════════════════════════
+function renderMilestoneBanner() {
+  const el = document.getElementById('milestone-banner');
+  if(!el) return;
+
+  const MILESTONES_PTS  = [100,250,500,1000,2000];
+  const MILESTONES_REB  = [50,100,250,500];
+  const MILESTONES_AST  = [50,100,250,500];
+  const MILESTONES_GP   = [5,10,20,30,50];
+
+  const agg = getAggregatedStats();
+  const hits = [];
+
+  agg.forEach(p => {
+    const prev = JSON.parse(localStorage.getItem('nba2k_ms_'+p.name) || 'null') || {};
+    const cur  = { pts: p.pts, reb: p.reb, ast: p.ast, gp: p.gp };
+
+    const check = (key, milestones, icon, label) => {
+      const old = prev[key] || 0;
+      const now = cur[key]  || 0;
+      milestones.forEach(m => {
+        if(old < m && now >= m) hits.push({ player: p.name, team: p.team, icon, text: `${m} ${label}`, val: m });
+      });
+    };
+    check('pts', MILESTONES_PTS, '🏀', t('stat_pts').replace(' (śr.)','').replace(' (avg.)','').replace(' (gem.)',''));
+    check('reb', MILESTONES_REB, '💪', t('stat_reb').replace(' (śr.)','').replace(' (avg.)','').replace(' (gem.)',''));
+    check('ast', MILESTONES_AST, '🎯', t('stat_ast').replace(' (śr.)','').replace(' (avg.)','').replace(' (gem.)',''));
+    check('gp',  MILESTONES_GP,  '🎮', 'GP');
+
+    // Save new state
+    localStorage.setItem('nba2k_ms_'+p.name, JSON.stringify(cur));
+  });
+
+  if(!hits.length) { el.innerHTML=''; return; }
+
+  el.innerHTML = `
+    <div style="background:linear-gradient(135deg,rgba(245,197,24,.12),rgba(245,197,24,.04));border:1px solid rgba(245,197,24,.3);border-radius:12px;padding:1rem 1.25rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:2px;color:var(--accent);margin-bottom:.75rem">🏆 MILESTONES</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+        ${hits.map(h => `
+          <div style="background:rgba(245,197,24,.1);border:1px solid rgba(245,197,24,.25);border-radius:8px;padding:.4rem .75rem;font-size:.85rem;display:flex;align-items:center;gap:.4rem">
+            <span style="font-size:1.1rem">${h.icon}</span>
+            <span style="cursor:pointer;font-weight:700;color:var(--accent)" onclick="openPlayerModal('${h.player}','${h.team}')">${h.player}</span>
+            <span style="color:var(--muted)">osiągnął</span>
+            <span style="font-weight:700">${h.text}</span>
+            <span style="color:var(--muted)">w karierze!</span>
+          </div>`).join('')}
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.5rem;text-align:right">kliknij gracza aby zobaczyć profil</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ROUND COMPARISON (kolejka do kolejki)
+// ═══════════════════════════════════════════════════════════════
+function renderRoundComparison() {
+  const el = document.getElementById('round-comparison-wrap');
+  if(!el) return;
+
+  const sortedRounds = [...rounds].sort((a,b)=>a.from.localeCompare(b.from));
+  if(sortedRounds.length < 2) { el.innerHTML=''; return; }
+
+  // Use last two rounds
+  const r1 = sortedRounds[sortedRounds.length - 2];
+  const r2 = sortedRounds[sortedRounds.length - 1];
+
+  const m1 = matches.filter(m => m.date >= r1.from && m.date <= r1.to);
+  const m2 = matches.filter(m => m.date >= r2.from && m.date <= r2.to);
+
+  if(!m1.length && !m2.length) { el.innerHTML=''; return; }
+
+  // Aggregate per player per round
+  function aggRound(ms) {
+    const players = {};
+    ms.forEach(m => {
+      [m.team1, m.team2].forEach(t => {
+        (t.players||[]).forEach(p => {
+          if(!players[p.name]) players[p.name] = { name:p.name, team:t.name, gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, gradeSum:0, fgm:0, fga:0 };
+          const pl = players[p.name];
+          pl.gp++; pl.pts+=p.pts||0; pl.reb+=p.reb||0; pl.ast+=p.ast||0;
+          pl.stl+=p.stl||0; pl.blk+=p.blk||0; pl.to+=p.to||0;
+          pl.gradeSum+=gradeToNum(p.grade||'B');
+          pl.fgm+=p.fgm||0; pl.fga+=p.fga||0;
+        });
+      });
+    });
+    return players;
+  }
+
+  const agg1 = aggRound(m1);
+  const agg2 = aggRound(m2);
+
+  // Players who appear in both rounds
+  const both = Object.keys(agg2).filter(n => agg1[n]);
+  if(!both.length) { el.innerHTML=''; return; }
+
+  // Calculate CS delta for each player
+  const deltas = both.map(name => {
+    const p1 = agg1[name], p2 = agg2[name];
+    const cs1 = calcCompositeScore(p1), cs2 = calcCompositeScore(p2);
+    const gr1 = p1.gp>0 ? numToGrade(p1.gradeSum/p1.gp) : 'B';
+    const gr2 = p2.gp>0 ? numToGrade(p2.gradeSum/p2.gp) : 'B';
+    const pts1 = p1.gp>0?(p1.pts/p1.gp).toFixed(1):0;
+    const pts2 = p2.gp>0?(p2.pts/p2.gp).toFixed(1):0;
+    return { name, team: p2.team, cs1, cs2, delta: cs2-cs1, gr1, gr2, pts1, pts2, p1, p2 };
+  }).sort((a,b) => b.delta - a.delta);
+
+  const improved = deltas.filter(d => d.delta > 0).slice(0,3);
+  const declined = deltas.filter(d => d.delta < 0).sort((a,b)=>a.delta-b.delta).slice(0,3);
+
+  function playerRow(d) {
+    const arrow = d.delta > 0 ? '▲' : '▼';
+    const color = d.delta > 0 ? 'var(--win)' : 'var(--loss)';
+    const sign  = d.delta > 0 ? '+' : '';
+    return `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:.9rem;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openPlayerModal('${d.name}','${d.team}')" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${d.name}</div>
+        <div style="font-size:.72rem;color:var(--muted)">${d.team}</div>
+      </div>
+      <div style="text-align:center;min-width:50px">
+        <div style="font-size:.7rem;color:var(--muted)">${r1.label}</div>
+        <span class="grade grade-${d.gr1.replace('+','p').replace('-','m')}">${d.gr1}</span>
+        <div style="font-size:.72rem;color:var(--muted)">${d.pts1} PPG</div>
+      </div>
+      <div style="font-size:1.2rem;color:var(--muted)">→</div>
+      <div style="text-align:center;min-width:50px">
+        <div style="font-size:.7rem;color:var(--muted)">${r2.label}</div>
+        <span class="grade grade-${d.gr2.replace('+','p').replace('-','m')}">${d.gr2}</span>
+        <div style="font-size:.72rem;color:var(--muted)">${d.pts2} PPG</div>
+      </div>
+      <div style="min-width:52px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${color}">${arrow} ${sign}${d.delta.toFixed(1)}<div style="font-size:.65rem;font-weight:400;color:var(--muted)">CS</div></div>
+    </div>`;
+  }
+
+  const hasR2 = m2.length > 0;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="card" style="padding:1rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:1px;color:var(--win);margin-bottom:.75rem">📈 NAJWIĘKSZY PROGRES<div style="font-size:.72rem;font-weight:400;color:var(--muted)">${r1.label} → ${r2.label}</div></div>
+        ${improved.length ? improved.map(playerRow).join('') : '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">'+( hasR2 ? 'Brak danych' : r2.label+' jeszcze nie rozegrana')+'</div>'}
+      </div>
+      <div class="card" style="padding:1rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:1px;color:var(--loss);margin-bottom:.75rem">📉 NAJWIĘKSZY SPADEK<div style="font-size:.72rem;font-weight:400;color:var(--muted)">${r1.label} → ${r2.label}</div></div>
+        ${declined.length ? declined.map(playerRow).join('') : '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">'+( hasR2 ? 'Brak danych' : r2.label+' jeszcze nie rozegrana')+'</div>'}
+      </div>
+    </div>`;
+}
 
 function getCurrentRound() {
   if(!rounds.length) return { label: '1. Kolejka', from: '2000-01-01', to: '2099-12-31' };
