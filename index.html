@@ -3823,7 +3823,7 @@ function renderTop10Tab(tab) {
 
     // Filter min GP and sort by FG% ascending (worst first)
     const bricks = Object.values(players)
-      .filter(p => p.gp >= minGP && p.fga > 0)
+      .filter(p => p.gp >= minGP && p.fga > 0 && p.pos !== 'PG')
       .map(p => ({
         ...p,
         fgPct: Math.round(p.fgm / p.fga * 100),
@@ -3862,7 +3862,7 @@ function renderTop10Tab(tab) {
 
     document.getElementById('top10-modal-content').innerHTML = header +
       `<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">${roundSwitcher}</div>
-      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> &mdash; ${roundMatches.length} meczów w kolejce</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> &mdash; bez PG &mdash; ${roundMatches.length} meczów w kolejce</div>
       <div class="stats-table-wrap"><table>
         <thead><tr>
           <th>#</th>
