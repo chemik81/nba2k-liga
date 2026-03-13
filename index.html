@@ -3772,12 +3772,100 @@ function renderTop10Tab(tab) {
   }).join('');
 
   const isComposite = tab === 'composite';
+  const isBrick = tab === 'brick';
   const ranked = isComposite
     ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
     : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
   const tabBtn = (active, label, tab) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${active?'var(--accent)':'transparent'};background:none;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tab}')">${label}</button>`;
-  const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(isComposite,'Composite Score','composite')}${tabBtn(!isComposite,'PER (Hollinger)','per')}</div>`;
+  const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 &mdash; ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(isComposite,'Composite Score','composite')}${tabBtn(!isComposite,'PER (Hollinger)','per')}${tabBtn(tab==='brick','🧱 Brick of the Round','brick')}</div>`;
+
+  if(isBrick) {
+    // Min GP = ceil(total round matches / 6), at least 2
+    const activeRounds = rounds.length
+      ? [...rounds].sort((a,b)=>a.from.localeCompare(b.from))
+      : [{ from:'2000-01-01', to:'2099-12-31', label:'Wszystkie' }];
+
+    // Use current or last round
+    const today = new Date().toISOString().slice(0,10);
+    let brickRound = activeRounds.find(r => today >= r.from && today <= r.to)
+                  || activeRounds[activeRounds.length - 1];
+
+    const roundMatches = _top10SeasonId
+      ? matches.filter(m => m.seasonId === _top10SeasonId && m.date >= brickRound.from && m.date <= brickRound.to)
+      : matches.filter(m => m.date >= brickRound.from && m.date <= brickRound.to);
+
+    const minGP = Math.max(2, Math.ceil(roundMatches.length / 6));
+
+    // Aggregate FG for round
+    const players = {};
+    roundMatches.forEach(m => {
+      [m.team1, m.team2].forEach(t => {
+        (t.players||[]).forEach(p => {
+          if(!players[p.name]) players[p.name] = { name:p.name, team:t.name, pos:p.pos||'', gp:0, fgm:0, fga:0, tpm:0, tpa:0, pts:0, gradeSum:0 };
+          const pl = players[p.name];
+          pl.gp++; pl.fgm+=p.fgm||0; pl.fga+=p.fga||0;
+          pl.tpm+=p.tpm||0; pl.tpa+=p.tpa||0;
+          pl.pts+=p.pts||0; pl.gradeSum+=gradeToNum(p.grade||'B');
+        });
+      });
+    });
+
+    // Filter min GP and sort by FG% ascending (worst first)
+    const bricks = Object.values(players)
+      .filter(p => p.gp >= minGP && p.fga > 0)
+      .map(p => ({
+        ...p,
+        fgPct: Math.round(p.fgm / p.fga * 100),
+        tpPct: p.tpa > 0 ? Math.round(p.tpm / p.tpa * 100) : null,
+        missedPerGame: ((p.fga - p.fgm) / p.gp).toFixed(1),
+        avgPts: (p.pts / p.gp).toFixed(1),
+        avgGrd: numToGrade(p.gradeSum / p.gp),
+      }))
+      .sort((a,b) => a.fgPct - b.fgPct)
+      .slice(0, 10);
+
+    const brickEmojis = ['🧱','😬','💀','😵','🪣','🫠','😤','🥴','😐','🤌'];
+
+    const brickRows = bricks.map((p,i) => {
+      const esc = s => s.replace(/'/g,"\'");
+      const gr = p.avgGrd;
+      const badness = i === 0 ? 'background:rgba(255,80,80,.07);' : '';
+      return `<tr style="cursor:pointer;${badness}" onclick="document.getElementById('top10-modal').classList.remove('open');setTimeout(()=>openPlayerModal('${esc(p.name)}','${esc(p.team)}'),200)">
+        <td style="text-align:center;font-size:1.2rem">${brickEmojis[i]||i+1}</td>
+        <td style="font-weight:700">${p.name}</td>
+        <td style="color:var(--muted);font-size:.85rem">${p.pos}</td>
+        <td style="color:var(--muted);font-size:.85rem">${p.team}</td>
+        <td><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></td>
+        <td style="font-weight:900;font-size:1.1rem;color:var(--loss)">${p.fgPct}%</td>
+        <td style="color:var(--muted)">${p.fgm}/${p.fga}</td>
+        <td style="color:var(--loss)">${p.missedPerGame}</td>
+        <td style="color:${p.tpPct!==null&&p.tpPct<30?'var(--loss)':'var(--muted)'}">${p.tpPct!==null?p.tpPct+'%':'-'}</td>
+        <td style="color:var(--accent)">${p.avgPts}</td>
+        <td style="font-size:.8rem;color:var(--muted)">${p.gp}/${roundMatches.length}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('top10-modal-content').innerHTML = header +
+      `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> w kolejce</div>
+      <div class="stats-table-wrap"><table>
+        <thead><tr>
+          <th>#</th>
+          <th style="text-align:left">Zawodnik</th>
+          <th>Poz</th>
+          <th style="text-align:left">Drużyna</th>
+          <th>GRD</th>
+          <th style="color:var(--loss)">FG%</th>
+          <th style="color:var(--muted)">FGM/A</th>
+          <th style="color:var(--loss)">Pudła/GP</th>
+          <th>3P%</th>
+          <th>PPG</th>
+          <th style="color:var(--muted)">GP</th>
+        </tr></thead>
+        <tbody>${bricks.length ? brickRows : '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--muted)">Za mało danych (min. '+minGP+' mecze w kolejce)</td></tr>'}</tbody>
+      </table></div>`;
+    return;
+  }
 
   if(isComposite) {
     document.getElementById('top10-modal-content').innerHTML = header +
