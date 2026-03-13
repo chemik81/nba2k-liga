@@ -1554,26 +1554,54 @@ async function saveData() {
   if(!jbBin) return;
   if(!jbKey) { showToast(t('err_no_master_key'), 'error'); return; }
   try {
-    // Compact player data before saving (remove zero-value fields to save space)
-    const compactMatches = matches.map(m => ({
-      ...m,
-      team1: { ...m.team1, players: (m.team1.players||[]).map(p => {
-        const c = { name: p.name, grade: p.grade };
-        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta'].forEach(k => { if(p[k]) c[k] = p[k]; }); if(p.pos) c.pos = p.pos;
-        return c;
-      })},
-      team2: { ...m.team2, players: (m.team2.players||[]).map(p => {
-        const c = { name: p.name, grade: p.grade };
-        ['pts','reb','ast','stl','blk','fol','to','fgm','fga','tpm','tpa','ftm','fta'].forEach(k => { if(p[k]) c[k] = p[k]; }); if(p.pos) c.pos = p.pos;
-        return c;
-      })}
-    }));
-    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons, currentSeasonId, schedule, teams, rounds });
+    // ── Aggressive compaction ─────────────────────────────────────────────
+    // Short player key map: saves ~40% on player data
+    const PK = { pts:'p', reb:'r', ast:'a', stl:'s', blk:'b', to:'t',
+                 fgm:'fm', fga:'fa', tpm:'tm', tpa:'ta', ftm:'xm', fta:'xa',
+                 fol:'f', pos:'po', grade:'g', name:'n' };
+    const packPlayer = p => {
+      const c = {};
+      if(p.name)  c.n  = p.name;
+      if(p.grade) c.g  = p.grade;
+      if(p.pos)   c.po = p.pos;
+      ['pts','reb','ast','stl','blk','to','fgm','fga','tpm','tpa','ftm','fta','fol']
+        .forEach(k => { if(p[k]) c[PK[k]] = p[k]; });
+      return c;
+    };
+    const packTeam = t => ({
+      name: t.name,
+      score: t.score,
+      // pack quarters as comma string instead of array
+      ...(t.quarters?.length ? { q: t.quarters.join(',') } : {}),
+      players: (t.players||[]).map(packPlayer)
+    });
+    const compactMatches = matches.map(m => {
+      const cm = { id: m.id, date: m.date, seasonId: m.seasonId,
+                   team1: packTeam(m.team1), team2: packTeam(m.team2) };
+      // Keep small optional fields, drop large ones (recap stripped to save space)
+      if(m.note)     cm.note     = m.note;
+      if(m.walkover) cm.walkover = m.walkover;
+      if(m.roundId)  cm.roundId  = m.roundId;
+      if(m.recap)    cm.recap    = m.recap;
+      return cm;
+    });
+    // Strip AI predictions from schedule (regeneratable, saves space)
+    const compactSchedule = (schedule||[]).map(s => {
+      const cs = { ...s };
+      if(cs.prediction) delete cs.prediction;
+      return cs;
+    });
+    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons,
+      currentSeasonId, schedule: compactSchedule, teams, rounds });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
-    if(parseFloat(sizeKB) > 95) {
-      showToast(t('err_data_too_large')+' ('+sizeKB+'KB)', 'error');
+    // Warn at 80KB, hard stop at 150KB
+    if(parseFloat(sizeKB) > 150) {
+      showToast(t('err_data_too_large')+' ('+sizeKB+'KB — max 150KB)', 'error');
       console.warn('Payload too large:', sizeKB, 'KB');
       return false;
+    }
+    if(parseFloat(sizeKB) > 80) {
+      console.warn('Payload getting large:', sizeKB, 'KB');
     }
     const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
       method: 'PUT',
@@ -1600,7 +1628,27 @@ async function loadData() {
     const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}/latest`, { headers });
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    matches = data.record?.matches || [];
+    const rawMatches = data.record?.matches || [];
+    // Unpack short keys if needed (backwards compatible)
+    const unpackPlayer = p => {
+      if(p.name !== undefined) return p; // old format
+      return {
+        name: p.n||'', grade: p.g||'B', pos: p.po||'',
+        pts:p.p||0, reb:p.r||0, ast:p.a||0, stl:p.s||0, blk:p.b||0,
+        to:p.t||0, fgm:p.fm||0, fga:p.fa||0, tpm:p.tm||0, tpa:p.ta||0,
+        ftm:p.xm||0, fta:p.xa||0, fol:p.f||0
+      };
+    };
+    const unpackTeam = t => ({
+      ...t,
+      quarters: t.q ? t.q.split(',').map(Number) : (t.quarters||[]),
+      players: (t.players||[]).map(unpackPlayer)
+    });
+    matches = rawMatches.map(m => ({
+      ...m,
+      team1: unpackTeam(m.team1||{}),
+      team2: unpackTeam(m.team2||{})
+    }));
     aliases = data.record?.aliases || {};
     seasons = data.record?.seasons || [];
     currentSeasonId = data.record?.currentSeasonId || null;
@@ -1614,13 +1662,13 @@ async function loadData() {
       const compressLogo = (dataUrl, cb) => {
         const img = new Image();
         img.onload = () => {
-          const MAX = 48;
+          const MAX = 32;
           const scale = Math.min(MAX/img.width, MAX/img.height, 1);
           const canvas = document.createElement('canvas');
           canvas.width = Math.round(img.width*scale);
           canvas.height = Math.round(img.height*scale);
           canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-          cb(canvas.toDataURL('image/jpeg', 0.6));
+          cb(canvas.toDataURL('image/jpeg', 0.4));
         };
         img.src = dataUrl;
       };
@@ -3001,7 +3049,7 @@ function renderSchedule() {
     const adminActions = isAdmin ? `
       <div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
         ${!s.played ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="linkScheduleMatch(${s.id})">🔗 Połącz z meczem</button>` : ''}
-        ${!s.played && anthropicKey ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="predictScheduleMatch(${s.id})">🤖 Predykcja AI</button>` : ''}
+        ${!s.played && anthropicKey && _isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="predictScheduleMatch(${s.id})">🤖 Predykcja AI</button>` : ''}
         <button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="openScheduleEdit(${s.id})">✏️ Edytuj</button>
         <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .7rem" onclick="deleteScheduleMatch(${s.id})">🗑</button>
       </div>` : '';
@@ -3131,6 +3179,7 @@ function confirmLinkMatch(schedId) {
 }
 
 async function predictScheduleMatch(schedId) {
+  if(!_isLoggedInSync()) { showToast('❌ Tylko admin może generować predykcje', 'error'); return; }
   const s = schedule.find(x=>x.id===schedId);
   if(!s || !anthropicKey) return;
   showToast(t('generating_prediction'),'info');
