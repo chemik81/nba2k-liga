@@ -791,6 +791,7 @@
       <div><label data-i18n="season_lbl">Sezon</label><select id="filter-season-stats" onchange="renderStats()"><option value="">Wszystkie sezony</option></select></div>
       <div><label data-i18n="team_lbl">Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
       <div><label data-i18n="position_lbl">Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_pos">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
+      <div><label data-i18n="round_lbl">Kolejka</label><select id="filter-round-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie</option></select></div>
     </div>
     <div class="card" style="padding:0">
       <div class="stats-table-wrap">
@@ -1132,6 +1133,7 @@ const TRANSLATIONS = {
     next_matches: 'Najbliższe mecze',
     top_scorers: 'Top Strzelcy',
     last_results: 'Ostatnie wyniki',
+    round_lbl: 'Kolejka',
     err_data_too_large: '❌ Dane za duże — limit JSONBin to ~100KB',
     err_names_diff: '❌ Nazwy muszą być różne',
     teams_updated: '✅ Zaktualizowano drużyny!',
@@ -1241,6 +1243,7 @@ const TRANSLATIONS = {
     next_matches: 'Upcoming matches',
     top_scorers: 'Top Scorers',
     last_results: 'Recent results',
+    round_lbl: 'Round',
     err_data_too_large: '❌ Data too large — JSONBin limit is ~100KB',
     err_names_diff: '❌ Names must be different',
     teams_updated: '✅ Teams updated!',
@@ -1350,6 +1353,7 @@ const TRANSLATIONS = {
     next_matches: 'Komende wedstrijden',
     top_scorers: 'Topscorers',
     last_results: 'Recente resultaten',
+    round_lbl: 'Ronde',
     err_data_too_large: '❌ Gegevens te groot — JSONBin limiet is ~100KB',
     err_names_diff: '❌ Namen moeten verschillend zijn',
     teams_updated: '✅ Teams bijgewerkt!',
@@ -2206,6 +2210,19 @@ function getAggregatedStats(seasonFilter) {
 }
 
 function populateTeamFilter() {
+  // Populate round filter
+  const rsel = document.getElementById('filter-round-stats');
+  if(rsel) {
+    const curR = rsel.value;
+    const allRounds = rounds.length ? rounds : [getDefaultRound()];
+    rsel.innerHTML = '<option value="">Wszystkie kolejki</option>' +
+      allRounds.map(r => `<option value="${r.id}"${r.id===curR?' selected':''}>${r.label}</option>`).join('');
+    // Default to active round if nothing selected
+    if(!curR) {
+      const active = getCurrentRound();
+      if(active) rsel.value = active.id || '';
+    }
+  }
   const sel = document.getElementById('filter-team');
   const teams = [...new Set(matches.flatMap(m => [m.team1.name, m.team2.name]))];
   const current = sel.value;
@@ -2234,9 +2251,35 @@ function sortByCol(col) {
 
 function renderStats() {
   const seasonFilter = document.getElementById('filter-season-stats')?.value || '';
-  const allStats = getAggregatedStats(seasonFilter);
+  const roundFilterId = document.getElementById('filter-round-stats')?.value || '';
   const teamFilter = document.getElementById('filter-team')?.value || '';
   const posFilter = document.getElementById('filter-pos-stats')?.value || '';
+
+  // Get matches filtered by round if selected
+  let statsMatches = matches;
+  if(roundFilterId) {
+    const allRounds = rounds.length ? rounds : [getDefaultRound()];
+    const selRound = allRounds.find(r => r.id == roundFilterId);
+    if(selRound) statsMatches = matches.filter(m => m.date >= selRound.from && m.date <= selRound.to);
+  }
+  if(seasonFilter) statsMatches = statsMatches.filter(m => m.seasonId === seasonFilter);
+
+  // Build aggregated stats from filtered matches
+  const playerMap = {};
+  statsMatches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team.players||[]).forEach(p => {
+        const key = p.name + '|' + team.name;
+        if(!playerMap[key]) playerMap[key] = { name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0 };
+        const s = playerMap[key];
+        s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0); s.stl+=(p.stl||0); s.blk+=(p.blk||0);
+        s.to+=(p.to||0); s.fgm+=(p.fgm||0); s.fga+=(p.fga||0); s.tpm+=(p.tpm||0); s.tpa+=(p.tpa||0); s.ftm+=(p.ftm||0); s.fta+=(p.fta||0);
+        s.gradeSum += gradeToNum(p.grade||'B');
+      });
+    });
+  });
+  const allStats = Object.values(playerMap);
+
   let filtered = allStats;
   if(teamFilter) filtered = filtered.filter(p => p.team === teamFilter);
   if(posFilter) filtered = filtered.filter(p => p.pos === posFilter);
