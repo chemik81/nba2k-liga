@@ -1543,7 +1543,7 @@ function renderAliases() {
         <td style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);color:var(--loss)">${w}</td>
         <td style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);color:var(--win);font-weight:600">${c}</td>
         <td style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);text-align:right">
-          <button onclick="removeAlias('${w}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:0.2rem 0.5rem;cursor:pointer;font-size:0.8rem" onmouseover="this.style.borderColor='var(--loss)';this.style.color='var(--loss)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">'+t('delete_btn')+'</button>
+          <button onclick="removeAlias('${w}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:0.2rem 0.5rem;cursor:pointer;font-size:0.8rem" onmouseover="this.style.borderColor='var(--loss)';this.style.color='var(--loss)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">${t('delete_btn')}</button>
         </td>
       </tr>`).join('')}
     </tbody>
@@ -1859,7 +1859,21 @@ async function parseScreenshot() {
   btnText.innerHTML = t('ai_spinner');
   setStatus('info', t('ai_analyzing'));
 
+  // Build known players list from existing matches + aliases for better OCR
+  const knownPlayers = [...new Set(
+    matches.flatMap(m => [...(m.team1.players||[]), ...(m.team2.players||[])].map(p => p.name))
+  )].filter(Boolean).sort();
+  const aliasValues = Object.values(aliases).filter(Boolean);
+  const allKnown = [...new Set([...knownPlayers, ...aliasValues])].sort();
+  const knownPlayersHint = allKnown.length
+    ? `\n\nZNANI GRACZE W LIDZE (użyj tych nazw gdy pasują fonetycznie/wizualnie do tego co widzisz na screenie):\n${allKnown.join(', ')}`
+    : '';
+
   const prompt = `Analizuj ten screenshot z gry NBA 2K z ekranu "Game Stats".
+
+BARDZO WAŻNE - NAZWY GRACZY: Nicki graczy na screenie mogą być zniekształcone przez OCR (podobne litery: 0/O, 1/I/l, rn/m, vv/w, ci/d). 
+Porównaj każdą rozpoznaną nazwę z listą znanych graczy i wybierz najbliższe dopasowanie jeśli różnica to 1-2 znaki.
+Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego dopasowania na liście.${knownPlayersHint}
 
 BARDZO WAŻNE - NAZWY DRUŻYN: Nazwy drużyn to NIE są nicki zawodników. Szukaj ich w:
 1. Nagłówku każdej sekcji tabeli (tekst nad listą zawodników, np. "Katowice Aliens PL", "Illegal Esports")
