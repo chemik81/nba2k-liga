@@ -1847,6 +1847,7 @@ uploadZone.addEventListener('drop', e => {
 // AI PARSING
 // ═══════════════════════════════════════════════════════════════
 async function parseScreenshot() {
+  if(!_isLoggedInSync()) { showToast('❌ Tylko admin może analizować screenshoty', 'error'); return; }
   if(!screenshotBase64) return;
   if(!anthropicKey) {
     setStatus('error', t('err_no_api'));
@@ -4530,6 +4531,7 @@ function renderRecapBlock(text) {
 }
 
 async function generateRecap(id) {
+  if(!_isLoggedInSync()) { showToast('❌ Tylko admin może generować recapy', 'error'); return; }
   const m = matches.find(x => Number(x.id) === Number(id));
   if(!m) return;
   const recapDiv = document.getElementById('match-recap-' + id);
