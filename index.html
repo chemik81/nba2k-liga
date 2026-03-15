@@ -2121,6 +2121,21 @@ function saveMatch() {
   const _savedMatch = pendingMatch;
   matches.unshift(_savedMatch);
   pendingMatch = null;
+  // Remove processed screenshot from Worker KV queue
+  if(window._currentDiscordScreenshot) {
+    const s = window._currentDiscordScreenshot;
+    window._currentDiscordScreenshot = null;
+    if(workerUrl && s.id) {
+      const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+      fetch(workerUrl.replace(/\/$/, '') + '/pending-screenshots/' + encodeURIComponent(s.id), {
+        method: 'DELETE',
+        headers: { 'X-Admin-Token': adminToken }
+      }).catch(() => {});
+    }
+    // Also remove from local array
+    const li = pendingScreenshots.findIndex(x => x.id === s.id);
+    if(li !== -1) pendingScreenshots.splice(li, 1);
+  }
   saveData().then(() => {
     showToast('✅ Mecz zapisany!', 'success');
     if(hasAI()) {
@@ -2138,6 +2153,7 @@ function saveMatch() {
 }
 
 function clearForm() {
+  window._currentDiscordScreenshot = null;
   screenshotBase64 = null;
   document.getElementById('screenshot-input').value = '';
   document.getElementById('screenshot-preview').style.display = 'none';
@@ -3947,6 +3963,14 @@ async function loadDiscordScreenshot(idx) {
       document.getElementById('parse-btn').scrollIntoView({ behavior:'smooth', block:'center' });
       showToast('✅ Screenshot załadowany — kliknij Analizuj!', 'success');
 
+      // Store reference to this discord screenshot for date extraction
+      window._currentDiscordScreenshot = pendingScreenshots[idx];
+      // Set match date from discord message timestamp
+      const discordDate = pendingScreenshots[idx].timestamp?.slice(0,10);
+      if(discordDate) {
+        const dateInput = document.getElementById('match-date');
+        if(dateInput) dateInput.value = discordDate;
+      }
       // Mark as processed in queue
       pendingScreenshots[idx].processed = true;
       renderDiscordQueue();
