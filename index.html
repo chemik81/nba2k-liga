@@ -861,6 +861,18 @@
         </div>
       </div>
 
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap">
+        <span style="font-size:.75rem;color:var(--muted)">Model:</span>
+        <button id="ss-model-sonnet" onclick="setScreenshotModel('claude-sonnet-4-20250514')"
+          style="padding:.2rem .6rem;border-radius:6px;border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit">
+          ✨ Sonnet
+        </button>
+        <button id="ss-model-haiku" onclick="setScreenshotModel('claude-haiku-4-5-20251001')"
+          style="padding:.2rem .6rem;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit">
+          💨 Haiku
+        </button>
+        <span style="font-size:.72rem;color:var(--muted)" id="ss-model-cost">~$0.018</span>
+      </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="parse-btn" onclick="parseScreenshot()" disabled>
           <span id="parse-btn-text">🤖 Analizuj Screenshot</span>
@@ -1507,6 +1519,40 @@ let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let aiModel = localStorage.getItem('nba2k_ai_model') || 'claude-sonnet-4-20250514';
 const MODEL_SCREENSHOT = () => aiModel;
 const MODEL_CHEAP = () => aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel;
+
+function setScreenshotModel(model) {
+  aiModel = model;
+  localStorage.setItem('nba2k_ai_model', model);
+  const isHaiku = model.includes('haiku');
+  const sonnetBtn = document.getElementById('ss-model-sonnet');
+  const haikuBtn  = document.getElementById('ss-model-haiku');
+  const costEl    = document.getElementById('ss-model-cost');
+  if(sonnetBtn) {
+    sonnetBtn.style.borderColor  = isHaiku ? 'var(--border)' : 'var(--accent)';
+    sonnetBtn.style.background   = isHaiku ? 'transparent' : 'rgba(245,197,24,.12)';
+    sonnetBtn.style.color        = isHaiku ? 'var(--muted)' : 'var(--accent)';
+    sonnetBtn.style.borderWidth  = isHaiku ? '1px' : '2px';
+  }
+  if(haikuBtn) {
+    haikuBtn.style.borderColor   = isHaiku ? 'var(--accent)' : 'var(--border)';
+    haikuBtn.style.background    = isHaiku ? 'rgba(245,197,24,.12)' : 'transparent';
+    haikuBtn.style.color         = isHaiku ? 'var(--accent)' : 'var(--muted)';
+    haikuBtn.style.borderWidth   = isHaiku ? '2px' : '1px';
+  }
+  if(costEl) costEl.textContent = isHaiku ? '~$0.005' : '~$0.018';
+  // Also sync setup modal radio if open
+  const radio = document.querySelector('input[name="ai-model"][value="' + model + '"]');
+  if(radio) {
+    radio.checked = true;
+    document.querySelectorAll('input[name="ai-model"]').forEach(x => {
+      const lbl = x.closest('label');
+      if(lbl) {
+        lbl.style.borderColor = x.checked ? 'var(--accent)' : 'var(--border)';
+        lbl.style.background  = x.checked ? 'rgba(245,197,24,.06)' : '';
+      }
+    });
+  }
+}
 let pendingMatch = null;
 let screenshotBase64 = null;
 let screenshotMimeType = 'image/jpeg';
@@ -1787,7 +1833,7 @@ function applyAliasesToMatch(match) {
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
-  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); }
+  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel), 50); }
   if(PROTECTED_VIEWS.includes(id)) {
     isLoggedIn().then(logged => {
       if(!logged) {
