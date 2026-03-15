@@ -3954,8 +3954,12 @@ async function loadDiscordScreenshot(idx) {
       // Show preview
       const zone = document.getElementById('upload-zone');
       if(zone) {
-        zone.innerHTML = `<img src="${dataUrl}" style="max-width:100%;max-height:200px;border-radius:8px">
-          <p style="color:var(--win);margin-top:.5rem;font-size:.85rem">✅ Screenshot z Discord załadowany</p>`;
+        zone.innerHTML = `
+          <img src="${dataUrl}"
+            style="max-width:100%;max-height:500px;border-radius:8px;cursor:zoom-in;display:block;margin:0 auto"
+            onclick="this.style.maxHeight=this.style.maxHeight==='none'?'500px':'none';this.style.cursor=this.style.maxHeight==='none'?'zoom-out':'zoom-in'"
+            title="Kliknij aby powiększyć/zmniejszyć">
+          <p style="color:var(--win);margin-top:.5rem;font-size:.85rem">✅ Screenshot z Discord załadowany &mdash; <span style="color:var(--muted)">kliknij obrazek aby powiększyć</span></p>`;
       }
       document.getElementById('parse-btn').disabled = false;
 
@@ -4970,7 +4974,7 @@ WAŻNE ZASADY:
 - Dużo punktów przy złej skuteczności (poniżej 45%) i wielu stratach (3+) to NIE jest dobry mecz ofensywny — zaznacz to.
 - Gracze z 0 FGA w tym meczu: \${zeroShotsText || 'brak'}.
 - SPECJALNE ZASADY DLA KONKRETNYCH GRACZY:
-  * chemik81pl: gdy jego ocena to B lub wyższa (B, B+, A-, A, A+), zawsze napisz o nim z lekką pochwałą i uznaniem — podkreśl jego wkład, nawet jeśli statystyki nie są spektakularne. Traktuj go jak gracza który "cicho robi robotę".
+  * chemik81pl: gdy jego ocena to B lub wyższa (B, B+, A-, A, A+), zawsze napisz o nim z lekką pochwałą i uznaniem — podkreśl jego wkład, nawet jeśli statystyki nie są spektakularne. Traktuj go jak gracza który "cicho robi robotę". WYJĄTEK DEFENSYWNY: chemik81pl mimo że gra na pozycji SF, zawsze kryje C przeciwnej drużyny (nie PG jak wynikałoby ze standardowych zasad krycia). Stosuj tę regułę zawsze — oceniaj jego defensywę względem punktów i skuteczności rywala grającego na C.
   * SniperKPL: możesz pisać o nim naprzemiennie jako "SniperKPL" lub "Saper" — używaj przydomka "Saper" mniej więcej co drugi raz gdy go wspominasz.
 
 ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG rywala, SF kryje PG rywala, PF kryje C rywala, C kryje SF rywala.
