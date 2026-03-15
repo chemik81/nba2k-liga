@@ -1541,7 +1541,7 @@ async function callAnthropic(model, max_tokens, messages) {
       adminToken = localStorage.getItem('nba2k_pw_hash') || 'c8b583e26e557d2231acf77e064362620471401652ec527b7be7bfdd3a4c06e8';
       localStorage.setItem('nba2k_admin_token_hash', adminToken);
     }
-    const res = await fetch(workerUrl.replace(/\//, '').replace(/\/$/, '') + '/anthropic', {
+    const res = await fetch(workerUrl.replace(/\/$/, '') + '/anthropic', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3560,7 +3560,8 @@ async function checkLogin() {
         fail();
       }
     } catch(e) {
-      loginError.textContent = '❌ Błąd połączenia z Workerem';
+      console.error('Worker auth error:', e);
+      loginError.textContent = '❌ Błąd: ' + e.message + ' (sprawdź konsolę F12)';
     }
   } else {
     // ── Fallback: local hash check (no Worker configured) ──
