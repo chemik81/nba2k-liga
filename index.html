@@ -2013,6 +2013,17 @@ Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, be
   }
 }
 POZYCJE: Zawodnicy są zawsze w tej samej kolejności od góry: 1=PG, 2=SG, 3=SF (Lock), 4=PF, 5=C. Dodaj pole "pos" do każdego zawodnika.
+
+KOLEJNOŚĆ KOLUMN na ekranie Game Stats (od lewej do prawej):
+GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA
+
+WAŻNE — TO (Turnovers/Straty):
+- TO to 7. kolumna od lewej (po BLK, przed PF/fouls)
+- TO to zazwyczaj mała liczba: 0, 1, 2, 3 (rzadko więcej niż 5)
+- NIE myl TO z PF (faule osobiste) — PF jest zaraz po TO
+- NIE myl TO z AST (asysty) — AST jest znacznie wcześniej
+- Jeśli widzisz np. kolumnę "3" po BLK — to prawdopodobnie TO=3
+
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
   try {
