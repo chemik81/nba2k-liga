@@ -1211,7 +1211,7 @@ const TRANSLATIONS = {
     err_load: '❌ Błąd ładowania danych: ',
     err_save: '❌ Błąd zapisu: ',
     err_connect: '❌ Błąd połączenia: ',
-    err_no_api: '❌ Brak klucza Anthropic API. Kliknij "⚙ Baza" w nagłówku aby skonfigurować.',
+    err_no_api: '❌ Brak konfiguracji AI — podaj Worker URL w ⚙ Baza',
     uploading_file: '✓ Plik wgrany — kliknij "Analizuj Screenshot" aby odczytać statystyki.',
     ai_analyzing: '🤖 AI analizuje screenshot, proszę czekać...',
     ai_spinner: '<div class="spinner"></div> Analizuję...',
@@ -1321,7 +1321,7 @@ const TRANSLATIONS = {
     err_load: '❌ Load error: ',
     err_save: '❌ Save error: ',
     err_connect: '❌ Connection error: ',
-    err_no_api: '❌ No Anthropic API key. Click "⚙ Settings" in the header to configure.',
+    err_no_api: '❌ No AI configured — enter Worker URL in ⚙ Settings',
     uploading_file: '✓ File uploaded — click "Analyze Screenshot" to read stats.',
     ai_analyzing: '🤖 AI is analyzing the screenshot, please wait...',
     ai_spinner: '<div class="spinner"></div> Analyzing...',
@@ -1431,7 +1431,7 @@ const TRANSLATIONS = {
     err_load: '❌ Laadstout: ',
     err_save: '❌ Opslagfout: ',
     err_connect: '❌ Verbindingsfout: ',
-    err_no_api: '❌ Geen Anthropic API-sleutel. Klik op "⚙ Instellingen" om te configureren.',
+    err_no_api: '❌ Geen AI geconfigureerd — voer Worker URL in bij ⚙ Instellingen',
     uploading_file: '✓ Bestand geüpload — klik op "Screenshot analyseren" om stats te lezen.',
     ai_analyzing: '🤖 AI analyseert de screenshot, even geduld...',
     ai_spinner: '<div class="spinner"></div> Analyseren...',
@@ -1524,6 +1524,9 @@ let workerUrl = localStorage.getItem('nba2k_worker_url') || '';
 let aiModel = localStorage.getItem('nba2k_ai_model') || 'claude-sonnet-4-20250514';
 const MODEL_SCREENSHOT = () => aiModel;
 const MODEL_CHEAP = () => aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel;
+
+// True if any AI backend is configured
+function hasAI() { return !!(workerUrl || anthropicKey); }
 
 // Central Anthropic call — uses Worker if configured, else direct key
 async function callAnthropic(model, max_tokens, messages) {
@@ -1949,8 +1952,8 @@ uploadZone.addEventListener('drop', e => {
 async function parseScreenshot() {
   if(!_isLoggedInSync()) { showToast('❌ Tylko admin może analizować screenshoty', 'error'); return; }
   if(!screenshotBase64) return;
-  if(!anthropicKey) {
-    setStatus('error', t('err_no_api'));
+  if(!hasAI()) {
+    setStatus('error', 'Brak konfiguracji AI — podaj Worker URL w ⚙ Baza');
     return;
   }
   const btn = document.getElementById('parse-btn');
@@ -2108,7 +2111,7 @@ function saveMatch() {
   pendingMatch = null;
   saveData().then(() => {
     showToast('✅ Mecz zapisany!', 'success');
-    if(anthropicKey) {
+    if(hasAI()) {
       setStatus('success', t('match_saved_recap'));
       generateRecap(_savedMatch.id).then(() => {
         setStatus('success', '🎉 Mecz zapisany z recapem!');
@@ -3154,7 +3157,7 @@ function renderSchedule() {
     const adminActions = isAdmin ? `
       <div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
         ${!s.played ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="linkScheduleMatch(${s.id})">🔗 Połącz z meczem</button>` : ''}
-        ${!s.played && anthropicKey && _isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="predictScheduleMatch(${s.id})">🤖 Predykcja AI</button>` : ''}
+        ${!s.played && hasAI() && _isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="predictScheduleMatch(${s.id})">🤖 Predykcja AI</button>` : ''}
         <button class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem" onclick="openScheduleEdit(${s.id})">✏️ Edytuj</button>
         <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .7rem" onclick="deleteScheduleMatch(${s.id})">🗑</button>
       </div>` : '';
@@ -3286,7 +3289,7 @@ function confirmLinkMatch(schedId) {
 async function predictScheduleMatch(schedId) {
   if(!_isLoggedInSync()) { showToast('❌ Tylko admin może generować predykcje', 'error'); return; }
   const s = schedule.find(x=>x.id===schedId);
-  if(!s || !anthropicKey) return;
+  if(!s || !hasAI()) return;
   showToast(t('generating_prediction'),'info');
   const t1stats = getAggregatedStats().filter(p=>p.team===s.team1);
   const t2stats = getAggregatedStats().filter(p=>p.team===s.team2);
@@ -4856,8 +4859,8 @@ async function generateRecap(id) {
   if(!m) return;
   const recapDiv = document.getElementById('match-recap-' + id);
 
-  if(!anthropicKey) {
-    if(recapDiv) showToast('❌ Brak Anthropic API Key — skonfiguruj w ⚙ Baza', 'error');
+  if(!hasAI()) {
+    if(recapDiv) showToast('❌ Brak konfiguracji AI — podaj Worker URL w ⚙ Baza', 'error');
     return;
   }
 
