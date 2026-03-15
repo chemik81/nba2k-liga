@@ -3914,8 +3914,17 @@ async function loadDiscordScreenshot(idx) {
   try {
     // Fetch image through a CORS proxy since Discord CDN blocks direct fetch
     // Use allorigins.win as free CORS proxy
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(s.url)}`;
-    const res = await fetch(proxyUrl);
+    // Use Discord proxy_url (doesn't expire) if available, else direct url
+    const imageUrl = s.proxyUrl || s.url;
+    // Try direct first (works if CORS allows), fallback to allorigins proxy
+    let res;
+    try {
+      res = await fetch(imageUrl);
+      if(!res.ok) throw new Error('Direct fetch failed');
+    } catch {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`;
+      res = await fetch(proxyUrl);
+    }
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const blob = await res.blob();
 
