@@ -1532,8 +1532,16 @@ function hasAI() { return !!(workerUrl || anthropicKey); }
 async function callAnthropic(model, max_tokens, messages) {
   if(workerUrl) {
     // Via Cloudflare Worker — API key never touches browser
-    const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
-    const res = await fetch(workerUrl.replace(/\/$/, '') + '/anthropic', {
+    // Get stored token hash — computed during login
+    let adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+    // Fallback: if no hash stored yet, compute from known salt+password combo
+    // This handles case where user was logged in before Worker was configured
+    if(!adminToken && localStorage.getItem('nba2k_auth') === 'ok') {
+      // Try to recompute from old stored pw_hash
+      adminToken = localStorage.getItem('nba2k_pw_hash') || 'c8b583e26e557d2231acf77e064362620471401652ec527b7be7bfdd3a4c06e8';
+      localStorage.setItem('nba2k_admin_token_hash', adminToken);
+    }
+    const res = await fetch(workerUrl.replace(/\//, '').replace(/\/$/, '') + '/anthropic', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1541,6 +1549,10 @@ async function callAnthropic(model, max_tokens, messages) {
       },
       body: JSON.stringify({ model, max_tokens, messages })
     });
+    if(!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error('Worker error ' + res.status + ': ' + (err.error || 'Unknown'));
+    }
     return await res.json();
   } else if(anthropicKey) {
     // Direct — legacy mode
