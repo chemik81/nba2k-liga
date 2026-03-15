@@ -2160,7 +2160,14 @@ function saveMatch() {
   });
   clearForm();
   document.getElementById('parsed-result').style.display = 'none';
-  setTimeout(() => showView('matches'), anthropicKey ? 3500 : 1500);
+  // If screen came from Discord queue, reload page to clear the queue panel
+  const wasDiscord = !!window._discordScreenshotWasUsed;
+  window._discordScreenshotWasUsed = false;
+  if(wasDiscord) {
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    setTimeout(() => showView('matches'), hasAI() ? 3500 : 1500);
+  }
 }
 
 function clearForm() {
@@ -3980,6 +3987,7 @@ async function loadDiscordScreenshot(idx) {
 
       // Store reference to this discord screenshot for date extraction
       window._currentDiscordScreenshot = pendingScreenshots[idx];
+      window._discordScreenshotWasUsed = true;
       // Set match date from discord message timestamp
       const discordDate = pendingScreenshots[idx].timestamp?.slice(0,10);
       if(discordDate) {
@@ -4942,21 +4950,54 @@ async function generateRecap(id) {
   // PG is guarded by SF, SG by SG, SF by PG, PF by C, C by PF
   const GUARD_MAP = { PF:'PG', SG:'SG', PG:'SF', C:'PF', SF:'C' }; // PG kryje PF, SG kryje SG, SF kryje PG, PF kryje C, C kryje SF
   const getByPos = (team, pos) => (team.players||[]).find(p => p.pos === pos);
+  // Special exceptions: chemik81pl (SF) always guards C instead of PG
+  const PLAYER_EXCEPTIONS = {
+    'chemik81pl': { guardPos: 'C', overridesPos: 'SF' }
+  };
+
   const duelLines = [];
+
+  // Helper: build one duel line
+  const makeDuel = (def, defPosLabel, atk, atkPos) => {
+    const fgPct = atk.fga>0 ? Math.round(atk.fgm/atk.fga*100)+'%' : 'brak rzutów';
+    return `POJEDYNEK: ${def.name}[${defPosLabel}] KRYJE ${atk.name}[${atkPos}] — atakujący: ${atk.pts}pkt FG:${atk.fgm||0}/${atk.fga||0}(${fgPct}) TO:${atk.to||0} ocena:${atk.grade} | obrońca: ${def.stl||0}prz ${def.blk||0}blk ocena:${def.grade}`;
+  };
+
+  // Track which positions have been handled by exceptions
+  const handledDefenders = new Set(); // 'team1_SF', 'team2_SF' etc.
+  const handledAttackers = new Set(); // 'team1_C', 'team2_C' etc.
+
+  // Apply player exceptions first
+  for(const [playerName, exc] of Object.entries(PLAYER_EXCEPTIONS)) {
+    for(const team of [m.team1, m.team2]) {
+      const defPlayer = (team.players||[]).find(p => p.name === playerName && p.pos === exc.overridesPos);
+      if(!defPlayer) continue;
+      const oppTeam = team === m.team1 ? m.team2 : m.team1;
+      const atkPlayer = getByPos(oppTeam, exc.guardPos);
+      if(!atkPlayer) continue;
+      // Add exception duel
+      duelLines.push(makeDuel(defPlayer, exc.overridesPos+'*', atkPlayer, exc.guardPos));
+      // Mark as handled
+      const teamKey = team === m.team1 ? 'team1' : 'team2';
+      const oppKey  = team === m.team1 ? 'team2' : 'team1';
+      handledDefenders.add(teamKey + '_' + exc.overridesPos);
+      handledAttackers.add(oppKey + '_' + exc.guardPos);
+    }
+  }
+
+  // Standard GUARD_MAP for remaining positions
   for(const [atkPos, grdPos] of Object.entries(GUARD_MAP)) {
     // team1 attacker guarded by team2 defender
-    const atk1 = getByPos(m.team1, atkPos);
-    const def1 = getByPos(m.team2, grdPos);
-    if(atk1 && def1) {
-      const fgPct1 = atk1.fga>0 ? Math.round(atk1.fgm/atk1.fga*100)+'%' : 'brak rzutów';
-      duelLines.push(`POJEDYNEK: ${def1.name}[${grdPos}] KRYJE ${atk1.name}[${atkPos}] — atakujący: ${atk1.pts}pkt FG:${atk1.fgm||0}/${atk1.fga||0}(${fgPct1}) TO:${atk1.to||0} ocena:${atk1.grade} | obrońca: ${def1.stl||0}prz ${def1.blk||0}blk ocena:${def1.grade}`);
+    if(!handledAttackers.has('team1_' + atkPos) && !handledDefenders.has('team2_' + grdPos)) {
+      const atk1 = getByPos(m.team1, atkPos);
+      const def1 = getByPos(m.team2, grdPos);
+      if(atk1 && def1) duelLines.push(makeDuel(def1, grdPos, atk1, atkPos));
     }
     // team2 attacker guarded by team1 defender
-    const atk2 = getByPos(m.team2, atkPos);
-    const def2 = getByPos(m.team1, grdPos);
-    if(atk2 && def2) {
-      const fgPct2 = atk2.fga>0 ? Math.round(atk2.fgm/atk2.fga*100)+'%' : 'brak rzutów';
-      duelLines.push(`POJEDYNEK: ${def2.name}[${grdPos}] KRYJE ${atk2.name}[${atkPos}] — atakujący: ${atk2.pts}pkt FG:${atk2.fgm||0}/${atk2.fga||0}(${fgPct2}) TO:${atk2.to||0} ocena:${atk2.grade} | obrońca: ${def2.stl||0}prz ${def2.blk||0}blk ocena:${def2.grade}`);
+    if(!handledAttackers.has('team2_' + atkPos) && !handledDefenders.has('team1_' + grdPos)) {
+      const atk2 = getByPos(m.team2, atkPos);
+      const def2 = getByPos(m.team1, grdPos);
+      if(atk2 && def2) duelLines.push(makeDuel(def2, grdPos, atk2, atkPos));
     }
   }
   const duelsText = duelLines.length ? '\nBEZPOŚREDNIE POJEDYNKI (kto atakuje, kto broni):\n' + duelLines.join('\n') : '';
