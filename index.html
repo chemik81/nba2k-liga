@@ -696,11 +696,13 @@
     <input type="text" id="setup-bin" placeholder="np. 64f3a1b2c3d4e5f6a7b8c9d0">
 
     <div style="border-top:1px solid var(--border);margin:1.25rem 0"></div>
-    <div style="background:var(--surface2);border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--muted);line-height:1.6">
-      <span class="step-badge">5</span> Wejdź na <strong style="color:var(--text)">console.anthropic.com</strong> → <strong style="color:var(--text)">API Keys</strong> → utwórz nowy klucz
+    <div style="background:rgba(88,101,242,.08);border:1px solid rgba(88,101,242,.25);border-radius:8px;padding:.75rem 1rem;margin-bottom:.75rem;font-size:.85rem;color:var(--muted);line-height:1.6">
+      <span class="step-badge" style="background:#5865f2">5</span>
+      Cloudflare Worker przechowuje klucz Anthropic bezpiecznie — nie musisz go tu wpisywać.
     </div>
-    <label>Anthropic API Key <span style="color:var(--muted);font-weight:400">(tylko w Twojej przeglądarce)</span></label>
-    <input type="password" id="setup-anthropic" placeholder="sk-ant-...">
+    <label>Cloudflare Worker URL</label>
+    <input type="text" id="setup-worker" placeholder="https://twoj-worker.workers.dev" style="font-size:.85rem">
+    <input type="hidden" id="setup-anthropic" value="">
 
     <div style="border-top:1px solid var(--border);margin:1.25rem 0"></div>
     <label>Model AI <span style="color:var(--muted);font-weight:400">(balans jakość vs koszt)</span></label>
@@ -837,6 +839,7 @@
 
   <!-- ADD MATCH -->
   <div id="view-add-match" class="view">
+    <div id="discord-queue-panel" style="margin-bottom:1.5rem;display:none"></div>
     <div class="section-title" data-i18n="add_match">Dodaj Mecz</div>
     <div class="card">
       <p style="color:var(--muted);margin-bottom:1.5rem;font-size:0.95rem">Wgraj screenshot z ekranu Game Stats — AI automatycznie odczyta wszystkie statystyki.</p>
@@ -1502,7 +1505,8 @@ function applyLangOnLoad() {
 // DATA STORE
 // ═══════════════════════════════════════════════════════════════
 let matches = [];
-let schedule = []; // planned matches
+let schedule = [];
+let pendingScreenshots = []; // { id, url, author, timestamp, channelId, messageId } // planned matches
 let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}');
 let teamAliases = JSON.parse(localStorage.getItem('nba2k_team_aliases') || '{}');
 let rounds = []; // { id, label, from, to } // { "wrong": "correct" }
@@ -1516,9 +1520,42 @@ const PUBLIC_JB_BIN = '69a6c311ae596e708f5abaf8';
 let jbKey = localStorage.getItem('nba2k_jb_key') || ''; // Master Key: admin only
 let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
+let workerUrl = localStorage.getItem('nba2k_worker_url') || '';
 let aiModel = localStorage.getItem('nba2k_ai_model') || 'claude-sonnet-4-20250514';
 const MODEL_SCREENSHOT = () => aiModel;
 const MODEL_CHEAP = () => aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel;
+
+// Central Anthropic call — uses Worker if configured, else direct key
+async function callAnthropic(model, max_tokens, messages) {
+  if(workerUrl) {
+    // Via Cloudflare Worker — API key never touches browser
+    const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+    const res = await fetch(workerUrl.replace(/\/$/, '') + '/anthropic', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': adminToken,
+      },
+      body: JSON.stringify({ model, max_tokens, messages })
+    });
+    return await res.json();
+  } else if(anthropicKey) {
+    // Direct — legacy mode
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({ model, max_tokens, messages })
+    });
+    return await res.json();
+  } else {
+    throw new Error('Brak konfiguracji AI — podaj Worker URL w ⚙ Baza');
+  }
+}
 
 function setScreenshotModel(model) {
   aiModel = model;
@@ -1654,7 +1691,7 @@ async function saveData() {
       return cs;
     });
     const payload = JSON.stringify({ matches: compactMatches, aliases, seasons,
-      currentSeasonId, schedule: compactSchedule, teams, rounds });
+      currentSeasonId, schedule: compactSchedule, teams, rounds, pendingScreenshots });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
     // Warn at 80KB, hard stop at 150KB
     if(parseFloat(sizeKB) > 150) {
@@ -1717,6 +1754,7 @@ async function loadData() {
     schedule = data.record?.schedule || [];
     teams = data.record?.teams || {};
     rounds = data.record?.rounds || [];
+    pendingScreenshots = data.record?.pendingScreenshots || [];
     // One-time migration: merge logos from localStorage into JSONBin teams
     try {
       const localTeams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}');
@@ -1833,7 +1871,7 @@ function applyAliasesToMatch(match) {
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
-  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel), 50); }
+  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel), 50); setTimeout(initDiscordQueue, 100); }
   if(PROTECTED_VIEWS.includes(id)) {
     isLoggedIn().then(logged => {
       if(!logged) {
@@ -1963,23 +2001,13 @@ POZYCJE: Zawodnicy są zawsze w tej samej kolejności od góry: 1=PG, 2=SG, 3=SF
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: MODEL_SCREENSHOT(),
-        max_tokens: 4000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: screenshotMimeType, data: screenshotBase64 } },
-            { type: 'text', text: prompt }
-          ]
-        }]
-      })
-    });
-
-    const data = await response.json();
+    const data = await callAnthropic(MODEL_SCREENSHOT(), 4000, [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: screenshotMimeType, data: screenshotBase64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]);
     console.log('API response:', JSON.stringify(data));
 
     // Check for API errors
@@ -3273,8 +3301,7 @@ Statystyki ${s.team1}: ${fmtTeam(t1stats)}
 Statystyki ${s.team2}: ${fmtTeam(t2stats)}
 H2H: ${h2hText}`;
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODEL_CHEAP(),max_tokens:200,messages:[{role:'user',content:prompt}]})});
-    const data = await res.json();
+    const data = await callAnthropic(MODEL_CHEAP(), 200, [{role:'user',content:prompt}]);
     const pred = data.content?.[0]?.text||'';
     const idx = schedule.findIndex(x=>x.id===schedId);
     if(idx!==-1) schedule[idx].prediction = pred;
@@ -3471,50 +3498,76 @@ async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
-// Password hash - admin should change this via localStorage('nba2k_pw_hash')
-const _PW_SALT = 'nba2k26liga2025';
-const CORRECT_HASH = (async () => {
-  const stored = localStorage.getItem('nba2k_pw_hash');
-  if(stored) return stored;
-  return Promise.resolve('c8b583e26e557d2231acf77e064362620471401652ec527b7be7bfdd3a4c06e8'); // pre-computed salted hash
-})();
+
+// Synchronous check — reads flag set after successful login
+function _isLoggedInSync() {
+  return localStorage.getItem('nba2k_auth') === 'ok';
+}
 
 async function isLoggedIn() {
-  const stored = localStorage.getItem('nba2k_auth');
-  const correct = await CORRECT_HASH;
-  return stored === correct;
+  return _isLoggedInSync();
 }
-
-// Synchronous check for use in templates
-function _isLoggedInSync() {
-  const stored = localStorage.getItem('nba2k_auth');
-  // Compare against cached hash if available
-  return stored && stored === _cachedHash;
-}
-let _cachedHash = null;
-CORRECT_HASH.then(h => { _cachedHash = h; });
 
 async function checkLogin() {
-  const val = document.getElementById('login-input').value;
-  const hash = await sha256(_PW_SALT + val);
-  const correct = await CORRECT_HASH;
-  if(hash === correct) {
-    localStorage.setItem('nba2k_auth', hash);
-    document.getElementById('auth-modal').classList.remove('open');
-    // Continue to the requested view
-    if(pendingAuthView) { const v = pendingAuthView; pendingAuthView = null; showView(v); }
-  } else {
-    const box = document.querySelector('#auth-modal .login-box');
+  const val = document.getElementById('login-input').value.trim();
+  if(!val) return;
+
+  const loginError = document.getElementById('login-error');
+  const loginInput = document.getElementById('login-input');
+  const box = document.querySelector('#auth-modal .login-box');
+
+  const fail = () => {
     box.classList.add('shake');
     setTimeout(() => box.classList.remove('shake'), 400);
-    document.getElementById('login-error').textContent = '❌ Nieprawidłowe hasło';
-    document.getElementById('login-input').value = '';
-    document.getElementById('login-input').focus();
+    loginError.textContent = '❌ Nieprawidłowe hasło';
+    loginInput.value = '';
+    loginInput.focus();
+  };
+
+  if(workerUrl) {
+    // ── Verify via Cloudflare Worker (hash never stored in HTML) ──
+    try {
+      loginError.textContent = '⏳ Sprawdzanie...';
+      const hash = await sha256('nba2k26liga2025' + val);
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: hash, site: 'nba' })
+      });
+      const data = await res.json();
+      if(data.ok) {
+        localStorage.setItem('nba2k_auth', 'ok');
+        localStorage.setItem('nba2k_admin_token_hash', hash);
+        document.getElementById('auth-modal').classList.remove('open');
+        if(pendingAuthView) { const v = pendingAuthView; pendingAuthView = null; showView(v); }
+        updateAuthUI();
+      } else {
+        fail();
+      }
+    } catch(e) {
+      loginError.textContent = '❌ Błąd połączenia z Workerem';
+    }
+  } else {
+    // ── Fallback: local hash check (no Worker configured) ──
+    const _PW_SALT = 'nba2k26liga2025';
+    const STORED_HASH = localStorage.getItem('nba2k_pw_hash')
+      || 'c8b583e26e557d2231acf77e064362620471401652ec527b7be7bfdd3a4c06e8';
+    const hash = await sha256(_PW_SALT + val);
+    if(hash === STORED_HASH) {
+      localStorage.setItem('nba2k_auth', 'ok');
+      localStorage.setItem('nba2k_admin_token_hash', hash);
+      document.getElementById('auth-modal').classList.remove('open');
+      if(pendingAuthView) { const v = pendingAuthView; pendingAuthView = null; showView(v); }
+      updateAuthUI();
+    } else {
+      fail();
+    }
   }
 }
 
 function logout() {
   localStorage.removeItem('nba2k_auth');
+  localStorage.removeItem('nba2k_admin_token_hash');
   showView('dashboard');
   updateAuthUI();
 }
@@ -3544,7 +3597,7 @@ document.getElementById('match-date').value = new Date().toISOString().split('T'
 function openSetupModal() {
   // Pre-fill existing values (masked)
   if(jbBin) document.getElementById('setup-bin').value = jbBin;
-  if(anthropicKey) document.getElementById('setup-anthropic').value = anthropicKey;
+  if(workerUrl) { const w = document.getElementById('setup-worker'); if(w) w.value = workerUrl; }
   // Set correct radio
   const savedModel = localStorage.getItem('nba2k_ai_model') || 'claude-sonnet-4-20250514';
   document.querySelectorAll('input[name="ai-model"]').forEach(r => {
@@ -3583,16 +3636,19 @@ async function saveSetup() {
     const data = await res.json();
 
     const aKey = document.getElementById('setup-anthropic').value.trim();
-    if(!aKey) throw new Error('Podaj Anthropic API Key');
+    // Anthropic key optional — Worker handles it if workerUrl is set
 
     jbKey = key;
     jbBin = bin;
     anthropicKey = aKey;
+    const wUrl = document.getElementById('setup-worker')?.value?.trim() || '';
+    workerUrl = wUrl;
     const selectedModel = document.querySelector('input[name="ai-model"]:checked')?.value || 'claude-sonnet-4-20250514';
     aiModel = selectedModel;
     localStorage.setItem('nba2k_jb_key', key);
     localStorage.setItem('nba2k_jb_bin', bin);
     localStorage.setItem('nba2k_anthropic_key', aKey);
+    localStorage.setItem('nba2k_worker_url', wUrl);
     localStorage.setItem('nba2k_ai_model', selectedModel);
     // Also save bin ID in saveData so others can read
     // Bin ID is baked into the URL after first admin setup
@@ -3604,6 +3660,7 @@ async function saveSetup() {
     schedule = data.record?.schedule || [];
     teams = data.record?.teams || {};
     rounds = data.record?.rounds || [];
+    pendingScreenshots = data.record?.pendingScreenshots || [];
     window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
 
@@ -3779,6 +3836,173 @@ function renderRoundComparison() {
       </div>
     </div>`;
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// DISCORD SCREENSHOT QUEUE
+// ═══════════════════════════════════════════════════════════════
+
+function renderDiscordQueue() {
+  const el = document.getElementById('discord-queue-panel');
+  if(!el || !_isLoggedInSync()) return;
+
+  if(!pendingScreenshots.length) {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="background:rgba(88,101,242,.08);border:1px solid rgba(88,101,242,.3);border-radius:12px;padding:1rem 1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;color:#5865f2">
+          <img src="https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/636e0a69f118df70ad7828d4_icon_clyde_blurple_RGB.svg"
+            style="width:18px;height:18px;vertical-align:middle;margin-right:.4rem" onerror="this.style.display='none'">
+          KOLEJKA DISCORD (${pendingScreenshots.length})
+        </div>
+        <button onclick="refreshDiscordQueue()" style="background:rgba(88,101,242,.15);border:1px solid rgba(88,101,242,.3);color:#5865f2;border-radius:6px;padding:.25rem .7rem;font-size:.75rem;cursor:pointer;font-family:inherit">
+          🔄 Odśwież
+        </button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        ${pendingScreenshots.map((s,i) => `
+          <div style="display:flex;align-items:center;gap:.75rem;background:var(--surface2);border-radius:8px;padding:.6rem .75rem;flex-wrap:wrap">
+            <img src="${s.url}" style="width:80px;height:50px;object-fit:cover;border-radius:4px;cursor:pointer;flex-shrink:0"
+              onclick="window.open('${s.url}','_blank')" title="Kliknij aby powiększyć">
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:.8rem;font-weight:700">${s.author || 'Nieznany'}</div>
+              <div style="font-size:.72rem;color:var(--muted)">${s.channelName||'#screeny'} · ${formatDate(s.timestamp?.slice(0,10)||'')}</div>
+              ${s.processed ? '<div style="font-size:.72rem;color:var(--win)">✅ Przetworzony</div>' : ''}
+            </div>
+            <div style="display:flex;gap:.4rem;flex-shrink:0">
+              ${!s.processed ? `
+                <button onclick="loadDiscordScreenshot(${i})"
+                  style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit">
+                  📥 Załaduj
+                </button>` : ''}
+              <button onclick="dismissDiscordScreenshot(${i})"
+                style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .6rem;font-size:.8rem;cursor:pointer;font-family:inherit">
+                ✕
+              </button>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+async function loadDiscordScreenshot(idx) {
+  const s = pendingScreenshots[idx];
+  if(!s) return;
+
+  showToast('⏳ Pobieranie screenshota z Discord...', 'info');
+  try {
+    // Fetch image through a CORS proxy since Discord CDN blocks direct fetch
+    // Use allorigins.win as free CORS proxy
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(s.url)}`;
+    const res = await fetch(proxyUrl);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      screenshotBase64 = dataUrl.split(',')[1];
+      screenshotMimeType = blob.type || 'image/png';
+
+      // Show preview
+      const zone = document.getElementById('upload-zone');
+      if(zone) {
+        zone.innerHTML = `<img src="${dataUrl}" style="max-width:100%;max-height:200px;border-radius:8px">
+          <p style="color:var(--win);margin-top:.5rem;font-size:.85rem">✅ Screenshot z Discord załadowany</p>`;
+      }
+      document.getElementById('parse-btn').disabled = false;
+
+      // Mark as loaded (scroll to analyze button)
+      document.getElementById('parse-btn').scrollIntoView({ behavior:'smooth', block:'center' });
+      showToast('✅ Screenshot załadowany — kliknij Analizuj!', 'success');
+
+      // Mark as processed in queue
+      pendingScreenshots[idx].processed = true;
+      renderDiscordQueue();
+    };
+    reader.readAsDataURL(blob);
+  } catch(e) {
+    // Fallback: open in new tab and ask user to save + upload manually
+    showToast('⚠️ Nie można pobrać automatycznie — otwieram w nowej karcie', 'info');
+    window.open(s.url, '_blank');
+  }
+}
+
+async function dismissDiscordScreenshot(idx) {
+  const item = pendingScreenshots[idx];
+  if(!item) return;
+  if(workerUrl) {
+    try {
+      const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+      await fetch(workerUrl.replace(/\/$/, '') + '/pending-screenshots/' + item.id, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Token': adminToken }
+      });
+    } catch(e) { console.warn('Delete failed:', e); }
+  } else {
+    pendingScreenshots.splice(idx, 1);
+    await saveData();
+  }
+  pendingScreenshots.splice(idx, 1);
+  renderDiscordQueue();
+}
+
+async function refreshDiscordQueue() {
+  if(workerUrl) {
+    await loadDiscordQueueFromWorker();
+  } else {
+    await loadData();
+  }
+  renderDiscordQueue();
+  showToast('🔄 Kolejka odświeżona', 'info');
+}
+
+async function loadDiscordQueueFromWorker() {
+  if(!workerUrl) return;
+  try {
+    const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+    const res = await fetch(workerUrl.replace(/\/$/, '') + '/pending-screenshots', {
+      headers: { 'X-Admin-Token': adminToken }
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    pendingScreenshots = data.screenshots || [];
+  } catch(e) {
+    console.warn('Could not load Discord queue:', e);
+  }
+}
+
+// Called from _doShowView when switching to add-match
+function initDiscordQueue() {
+  if(workerUrl && _isLoggedInSync()) {
+    loadDiscordQueueFromWorker().then(() => renderDiscordQueue());
+  } else {
+    renderDiscordQueue();
+  }
+}
+
+// Public API endpoint for n8n webhook to add screenshots
+// n8n calls: PUT to JSONBin with pendingScreenshots array updated
+// We expose a helper to understand the expected format:
+/*
+  Expected pendingScreenshots item from n8n:
+  {
+    id: "discord_msg_id",
+    url: "https://cdn.discordapp.com/attachments/.../screenshot.png",
+    author: "KapitanDruzyny",
+    authorId: "discord_user_id",
+    channelId: "channel_id",
+    channelName: "screeny-meczow",
+    timestamp: "2026-03-15T20:00:00.000Z",
+    processed: false
+  }
+*/
 
 function getDefaultRound() {
   // When no rounds defined, treat all matches as round 1
@@ -4718,13 +4942,8 @@ STATYSTYKI ${m.team2.name} [pozycja]:
 ${formatPlayers(m.team2)}${duelsText}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: MODEL_CHEAP(), max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
-    });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.error?.message || 'API error');
+    const data = await callAnthropic(MODEL_CHEAP(), 400, [{ role: 'user', content: prompt }]);
+    if(data.error) throw new Error(data.error?.message || 'API error');
     const recap = data.content?.[0]?.text || '';
     // Save recap to match
     const idx = matches.findIndex(x => Number(x.id) === Number(id));
