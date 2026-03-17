@@ -2044,12 +2044,13 @@ POZYCJE: Zawodnicy są zawsze w tej samej kolejności od góry: 1=PG, 2=SG, 3=SF
 KOLEJNOŚĆ KOLUMN na ekranie Game Stats (od lewej do prawej):
 GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA
 
-WAŻNE — TO (Turnovers/Straty):
-- TO to 7. kolumna od lewej (po BLK, przed PF/fouls)
-- TO to zazwyczaj mała liczba: 0, 1, 2, 3 (rzadko więcej niż 5)
-- NIE myl TO z PF (faule osobiste) — PF jest zaraz po TO
-- NIE myl TO z AST (asysty) — AST jest znacznie wcześniej
-- Jeśli widzisz np. kolumnę "3" po BLK — to prawdopodobnie TO=3
+WAŻNE — rozróżnienie BLK / TO / PF (najczęstsze błędy OCR):
+- BLK (bloki) = 6. kolumna. Zazwyczaj 0-3, rzadko więcej niż 4.
+- TO (turnovers/straty) = 7. kolumna, zaraz PO BLK. Zazwyczaj 0-4.
+- PF (faule osobiste) = 8. kolumna, zaraz PO TO. Zazwyczaj 0-5, limit w NBA 2K to 6.
+- ZASADA: jeśli masz wątpliwość między dwiema kolejnymi kolumnami — lewa to BLK, środkowa to TO, prawa to PF.
+- NIE zamieniaj TO z BLK ani PF — są w ściśle określonej kolejności.
+- Liczby w tych kolumnach są małe (0-5). Jeśli widzisz dużą liczbę (np. 12) w miejscu BLK/TO/PF — to błąd odczytu, wstaw 0.
 
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
@@ -2199,6 +2200,7 @@ function saveMatch() {
 
 function clearForm() {
   window._currentDiscordScreenshot = null;
+  const ep = document.getElementById('edit-stats-panel'); if(ep) ep.remove();
   screenshotBase64 = null;
   const _g = id => document.getElementById(id);
   if(_g('screenshot-input'))  _g('screenshot-input').value = '';
@@ -4873,21 +4875,107 @@ function openRivalryModal() {
 let editingMatchId = null;
 
 function editMatch(id) {
-  const m=matches.find(x=>Number(x.id)===Number(id));
-  if(!m)return;
-  editingMatchId=Number(id);
-  pendingMatch=JSON.parse(JSON.stringify(m));
+  const m = matches.find(x => Number(x.id) === Number(id));
+  if(!m) return;
+  editingMatchId = Number(id);
+  pendingMatch = JSON.parse(JSON.stringify(m));
   document.getElementById('match-modal').classList.remove('open');
-  setTimeout(()=>{
+
+  setTimeout(() => {
     showView('add-match');
-    document.getElementById('match-date').value=m.date||'';
-    document.getElementById('match-note').value=m.note||'';
+    document.getElementById('match-date').value = m.date||'';
+    document.getElementById('match-note').value = m.note||'';
     renderParsedPreview(pendingMatch);
-    document.getElementById('parsed-result').style.display='block';
-    setStatus('info','✏️ Tryb edycji — popraw dane i kliknij Zapisz zmiany.');
-    const btn=document.querySelector('[onclick="saveMatch()"]');
-    if(btn)btn.innerHTML='💾 Zapisz zmiany';
-  },200);
+    document.getElementById('parsed-result').style.display = 'block';
+    setStatus('info', '✏️ Tryb edycji — popraw dane i kliknij Zapisz zmiany.');
+    const btn = document.querySelector('[onclick="saveMatch()"]');
+    if(btn) btn.innerHTML = '💾 Zapisz zmiany';
+
+    // ── Inject editable stats table ──────────────────────────────────────
+    const pr = document.getElementById('parsed-result');
+    if(!pr) return;
+
+    const STATS = ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+    const LABELS = ['PTS','REB','AST','STL','BLK','TO','PF','FGM','FGA','3PM','3PA','FTM','FTA'];
+
+    const buildTeamRows = (team, teamIdx) =>
+      (team.players||[]).map((p, pi) => `
+        <tr>
+          <td style="padding:.3rem .5rem;font-size:.8rem;font-weight:700;white-space:nowrap">${p.name}</td>
+          <td style="padding:.3rem .5rem">
+            <select onchange="editMatchGrade(${teamIdx},${pi},this.value)"
+              style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .3rem;font-size:.8rem;font-family:inherit">
+              ${['A+','A','A-','B+','B','B-','C+','C','C-','D'].map(g =>
+                `<option${p.grade===g?' selected':''}>${g}</option>`).join('')}
+            </select>
+          </td>
+          ${STATS.map((s,si) => `
+            <td style="padding:.2rem .3rem">
+              <input type="number" min="0" max="99" value="${p[s]||0}"
+                onchange="editMatchStat(${teamIdx},${pi},'${s}',+this.value)"
+                style="width:42px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .3rem;font-size:.8rem;text-align:center;font-family:inherit">
+            </td>`).join('')}
+        </tr>`).join('');
+
+    const tableHtml = (team, teamIdx) => `
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:1px;margin:.75rem 0 .25rem;color:var(--accent)">${team.name} — ${team.score} pkt</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+          <thead><tr>
+            <th style="text-align:left;padding:.3rem .5rem;color:var(--muted)">Gracz</th>
+            <th style="padding:.3rem .5rem;color:var(--muted)">GRD</th>
+            ${LABELS.map(l => `<th style="padding:.2rem .3rem;color:var(--muted)">${l}</th>`).join('')}
+          </tr></thead>
+          <tbody>${buildTeamRows(team, teamIdx)}</tbody>
+        </table>
+      </div>`;
+
+    // Add editable table before the existing preview tabs
+    const editPanel = document.createElement('div');
+    editPanel.id = 'edit-stats-panel';
+    editPanel.style.cssText = 'background:var(--surface2);border:1px solid var(--accent);border-radius:10px;padding:1rem;margin-bottom:1rem';
+    editPanel.innerHTML = `
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;margin-bottom:.5rem">
+        ✏️ Edycja statystyk
+      </div>
+      ${tableHtml(pendingMatch.team1, 1)}
+      ${tableHtml(pendingMatch.team2, 2)}`;
+
+    // Score editing
+    editPanel.innerHTML += `
+      <div style="display:flex;gap:1rem;margin-top:.75rem;flex-wrap:wrap">
+        <div>
+          <label style="font-size:.75rem;color:var(--muted)">Wynik ${pendingMatch.team1.name}</label>
+          <input type="number" value="${pendingMatch.team1.score}" min="0" max="200"
+            onchange="pendingMatch.team1.score=+this.value"
+            style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.9rem;font-family:inherit;display:block;margin-top:.25rem">
+        </div>
+        <div>
+          <label style="font-size:.75rem;color:var(--muted)">Wynik ${pendingMatch.team2.name}</label>
+          <input type="number" value="${pendingMatch.team2.score}" min="0" max="200"
+            onchange="pendingMatch.team2.score=+this.value"
+            style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.9rem;font-family:inherit;display:block;margin-top:.25rem">
+        </div>
+      </div>`;
+
+    pr.insertBefore(editPanel, pr.firstChild);
+  }, 200);
+}
+
+function editMatchStat(teamIdx, playerIdx, stat, value) {
+  if(!pendingMatch) return;
+  const team = teamIdx === 1 ? pendingMatch.team1 : pendingMatch.team2;
+  if(team.players && team.players[playerIdx]) {
+    team.players[playerIdx][stat] = value;
+  }
+}
+
+function editMatchGrade(teamIdx, playerIdx, grade) {
+  if(!pendingMatch) return;
+  const team = teamIdx === 1 ? pendingMatch.team1 : pendingMatch.team2;
+  if(team.players && team.players[playerIdx]) {
+    team.players[playerIdx].grade = grade;
+  }
 }
 
 const _origSaveMatchEdit = saveMatch;
