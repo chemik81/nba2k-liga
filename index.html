@@ -1786,8 +1786,7 @@ async function loadData() {
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
       if(res.ok) {
         const data = await res.json();
-        // Only use KV data if it has actual matches (not empty/migrated-empty)
-        if(data.record && data.record.matches && data.record.matches.length > 0) {
+        if(data.record) {
           record = data.record;
         }
       }
