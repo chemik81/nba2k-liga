@@ -4444,6 +4444,31 @@ function openEventDetail(id) {
             style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem;font-family:inherit">
           <button class="btn btn-primary" onclick="addPlayerManually('${id}')">Dodaj</button>
         </div>
+      </div>` : ''}
+
+    ${_isLoggedInSync() && ev.type === 'draft' && ev.status === 'closed' ? `
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">👑 AKCJE ADMINA</div>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+          ${!(ev.teams||[]).length ? `
+            <button onclick="assignCaptains('${id}')" class="btn btn-primary">
+              🎲 Losuj kapitanów
+            </button>
+            <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">
+              🎯 Wybierz kapitanów ręcznie
+            </button>
+          ` : `
+            <button onclick="startDraft('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">
+              🎯 Start Draft
+            </button>
+            <button onclick="assignCaptains('${id}')" class="btn btn-ghost">
+              🔄 Losuj kapitanów ponownie
+            </button>
+            <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">
+              ✏️ Zmień kapitanów ręcznie
+            </button>
+          `}
+        </div>
       </div>` : ''}`;
 
   document.getElementById('event-detail-modal').classList.add('open');
@@ -4521,6 +4546,119 @@ function loginWithDiscord() {
 
 
 // ═══ DRAFT SYSTEM ════════════════════════════════════════════
+
+function openManualCaptainsModal(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !ev.players?.length) { showToast('❌ Brak graczy', 'error'); return; }
+  const n = ev.numTeams || 2;
+  const teamNames = (ev.teams||[]).map(t => t.name).concat(['Drużyna A','Drużyna B','Drużyna C','Drużyna D','Drużyna E','Drużyna F','Drużyna G','Drużyna H']);
+
+  const rows = Array.from({length: n}, (_, i) => {
+    const currentCaptainId = (ev.teams||[])[i]?.captain?.id || '';
+    const currentName = teamNames[i] || ('Drużyna ' + (i+1));
+    const options = ev.players.map(p =>
+      `<option value="${p.id}" ${p.id === currentCaptainId ? 'selected' : ''}>${p.name}${p.discordTag && p.discordTag !== p.name ? ' ('+p.discordTag+')' : ''}</option>`
+    ).join('');
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;align-items:center;padding:.75rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <div>
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.3rem">Nazwa drużyny</div>
+          <input type="text" id="mc-teamname-${i}" value="${currentName}"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem">
+        </div>
+        <div>
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.3rem">Kapitan</div>
+          <select id="mc-captain-${i}"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem">
+            <option value="">— wybierz kapitana —</option>
+            ${options}
+          </select>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('manual-captains-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🎯 WYBIERZ KAPITANÓW</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Przypisz kapitana do każdej drużyny i opcjonalnie zmień jej nazwę.</div>
+    <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.25rem" id="mc-teams-list">
+      ${rows}
+    </div>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="confirmManualCaptains('${eventId}',${n})">✅ Zatwierdź kapitanów</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('manual-captains-modal').classList.remove('open')">Anuluj</button>
+    </div>`;
+  document.getElementById('manual-captains-modal').classList.add('open');
+}
+
+async function confirmManualCaptains(eventId, n) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+
+  const teams = [];
+  const usedIds = new Set();
+  for(let i = 0; i < n; i++) {
+    const name = document.getElementById('mc-teamname-'+i)?.value?.trim() || ('Drużyna ' + (i+1));
+    const captainId = document.getElementById('mc-captain-'+i)?.value;
+    if(!captainId) { showToast('❌ Wybierz kapitana dla każdej drużyny', 'error'); return; }
+    if(usedIds.has(captainId)) { showToast('❌ Ten sam gracz nie może być kapitanem dwóch drużyn', 'error'); return; }
+    usedIds.add(captainId);
+    const captain = ev.players.find(p => p.id === captainId);
+    if(!captain) { showToast('❌ Nie znaleziono gracza', 'error'); return; }
+    teams.push({ name, captain, players: [captain] });
+  }
+
+  ev.teams = teams;
+  const captainIds = new Set(teams.map(t => t.captain.id));
+  const method = ev.draftMethod || 'snake';
+
+  if(method === 'random') {
+    const remaining = ev.players.filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5);
+    remaining.forEach((p, i) => ev.teams[i % n].players.push(p));
+    ev.draftPool = [];
+    ev.status = 'active';
+    await saveData();
+    document.getElementById('manual-captains-modal').classList.remove('open');
+    renderEvents();
+    openEventDetail(eventId);
+    showToast('🎲 Drużyny przydzielone!', 'success');
+    return;
+  }
+
+  if(method === 'balanced') {
+    const remaining = ev.players.filter(p => !captainIds.has(p.id));
+    const scored = remaining.map(p => {
+      const pm = matches.filter(m => [...(m.team1.players||[]),...(m.team2.players||[])].some(x => x.name === p.name));
+      if(!pm.length) return { p, score: 0 };
+      const stats = pm.reduce((acc, m) => {
+        const pl = [...(m.team1.players||[]),...(m.team2.players||[])].find(x => x.name === p.name);
+        if(pl) { acc.pts += pl.pts||0; acc.reb += pl.reb||0; acc.ast += pl.ast||0; acc.stl += pl.stl||0; acc.blk += pl.blk||0; acc.gp++; }
+        return acc;
+      }, {pts:0,reb:0,ast:0,stl:0,blk:0,gp:0});
+      const gp = stats.gp || 1;
+      return { p, score: (stats.pts/gp)*0.4+(stats.reb/gp)*0.2+(stats.ast/gp)*0.2+(stats.stl/gp)*0.1+(stats.blk/gp)*0.1 };
+    }).sort((a,b) => b.score - a.score);
+    const assignOrder = buildDraftOrder('snake', n, scored.length);
+    scored.forEach(({p}, i) => ev.teams[assignOrder[i]].players.push(p));
+    ev.draftPool = [];
+    ev.status = 'active';
+    await saveData();
+    document.getElementById('manual-captains-modal').classList.remove('open');
+    renderEvents();
+    openEventDetail(eventId);
+    showToast('⚖️ Drużyny zbalansowane!', 'success');
+    return;
+  }
+
+  ev.draftPool = ev.players.filter(p => !captainIds.has(p.id));
+  ev.draftTurn = 0;
+  ev.draftOrder = buildDraftOrder(method, n, ev.draftPool.length);
+  ev.status = 'closed';
+  await saveData();
+  document.getElementById('manual-captains-modal').classList.remove('open');
+  renderEvents();
+  openEventDetail(eventId);
+  showToast('✅ Kapitanowie przypisani!', 'success');
+}
 
 async function assignCaptains(eventId) {
   const ev = events.find(e => e.id === eventId);
@@ -6084,6 +6222,14 @@ function rdRenderContent(idx) {
   <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('event-detail-modal').classList.remove('open')">✕</button>
     <div id="event-detail-content"></div>
+  </div>
+</div>
+
+<!-- MANUAL CAPTAINS MODAL -->
+<div class="modal-overlay" id="manual-captains-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1200">
+  <div class="modal" style="max-width:560px;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('manual-captains-modal').classList.remove('open')">✕</button>
+    <div id="manual-captains-content"></div>
   </div>
 </div>
 
