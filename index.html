@@ -1665,11 +1665,9 @@ function renderAliases() {
 }
 
 async function saveData() {
-  if(!jbBin) return;
-  if(!jbKey) { showToast(t('err_no_master_key'), 'error'); return; }
+  if(!jbKey && !workerUrl) { showToast(t('err_no_master_key'), 'error'); return; }
   try {
-    // ── Aggressive compaction ─────────────────────────────────────────────
-    // Short player key map: saves ~40% on player data
+    // ── Compact player data ───────────────────────────────────────────────
     const PK = { pts:'p', reb:'r', ast:'a', stl:'s', blk:'b', to:'t',
                  fgm:'fm', fga:'fa', tpm:'tm', tpa:'ta', ftm:'xm', fta:'xa',
                  fol:'f', pos:'po', grade:'g', name:'n' };
@@ -1683,49 +1681,74 @@ async function saveData() {
       return c;
     };
     const packTeam = t => ({
-      name: t.name,
-      score: t.score,
-      // pack quarters as comma string instead of array
+      name: t.name, score: t.score,
       ...(t.quarters?.length ? { q: t.quarters.join(',') } : {}),
       players: (t.players||[]).map(packPlayer)
     });
     const compactMatches = matches.map(m => {
       const cm = { id: m.id, date: m.date, seasonId: m.seasonId,
                    team1: packTeam(m.team1), team2: packTeam(m.team2) };
-      // Keep small optional fields, drop large ones (recap stripped to save space)
       if(m.note)     cm.note     = m.note;
       if(m.walkover) cm.walkover = m.walkover;
       if(m.roundId)  cm.roundId  = m.roundId;
       if(m.recap)    cm.recap    = m.recap;
       return cm;
     });
-    // Strip AI predictions from schedule (regeneratable, saves space)
     const compactSchedule = (schedule||[]).map(s => {
-      const cs = { ...s };
-      if(cs.prediction) delete cs.prediction;
-      return cs;
+      const cs = { ...s }; if(cs.prediction) delete cs.prediction; return cs;
     });
-    const payload = JSON.stringify({ matches: compactMatches, aliases, seasons,
-      currentSeasonId, schedule: compactSchedule, teams, rounds, pendingScreenshots });
-    const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
-    // Warn at 80KB, hard stop at 150KB
-    if(parseFloat(sizeKB) > 150) {
-      showToast(t('err_data_too_large')+' ('+sizeKB+'KB — max 150KB)', 'error');
-      console.warn('Payload too large:', sizeKB, 'KB');
-      return false;
+    // Save logos to localStorage, strip from cloud payload
+    const localLogos = {};
+    const teamsWithoutLogos = Object.fromEntries(
+      Object.entries(teams).map(([name, data]) => {
+        if(data.logo) localLogos[name] = data.logo;
+        const { logo, ...rest } = data;
+        return [name, rest];
+      })
+    );
+    if(Object.keys(localLogos).length) {
+      localStorage.setItem('nba2k_logos', JSON.stringify(localLogos));
     }
-    if(parseFloat(sizeKB) > 80) {
-      console.warn('Payload getting large:', sizeKB, 'KB');
+    const record = { matches: compactMatches, aliases, seasons,
+      currentSeasonId, schedule: compactSchedule, teams: teamsWithoutLogos,
+      rounds, pendingScreenshots };
+    const payload = JSON.stringify({ record });
+    const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
+    console.log('Payload size:', sizeKB, 'KB');
+
+    // ── Save to Cloudflare KV via Worker (primary) ────────────────────────
+    if(workerUrl) {
+      const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+        body: payload
+      });
+      if(!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        showToast('❌ Błąd zapisu (Worker): ' + (err.error||res.status), 'error');
+        return false;
+      }
+      return true;
+    }
+
+    // ── Fallback: JSONBin (legacy) ────────────────────────────────────────
+    if(!jbKey) { showToast(t('err_no_master_key'), 'error'); return false; }
+    const sizeKBnum = parseFloat(sizeKB);
+    if(sizeKBnum > 150) {
+      showToast(t('err_data_too_large')+' ('+sizeKB+'KB)', 'error'); return false;
+    }
+    if(sizeKBnum > 90) {
+      showToast('⚠️ Dane zajmują '+sizeKB+'KB — rozważ migrację na Cloudflare KV', 'info');
     }
     const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': jbKey },
-      body: payload
+      body: JSON.stringify({ ...JSON.parse(payload).record })
     });
     if(!res.ok) {
       const err = await res.json().catch(()=>({}));
       showToast(`❌ Błąd zapisu (${res.status}): ${err.message||'nieznany błąd'}`, 'error');
-      console.error('SaveData error:', res.status, err);
       return false;
     }
     return true;
@@ -1733,19 +1756,45 @@ async function saveData() {
 }
 
 async function loadData() {
-  if(!jbBin) return; // jbKey not required for public read
   try {
     showGlobalLoader(true);
-    const headers = { 'Content-Type': 'application/json' };
-    if(jbKey) headers['X-Master-Key'] = jbKey;
-    else headers['X-Access-Key'] = PUBLIC_JB_READ_KEY;
-    const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}/latest`, { headers });
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    const rawMatches = data.record?.matches || [];
-    // Unpack short keys if needed (backwards compatible)
+    let record = null;
+
+    // ── Primary: Cloudflare KV via Worker ────────────────────────────────
+    if(workerUrl) {
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
+      if(res.ok) {
+        const data = await res.json();
+        record = data.record;
+      }
+    }
+
+    // ── Fallback / Migration source: JSONBin ─────────────────────────────
+    if(!record && jbBin) {
+      const headers = { 'Content-Type': 'application/json' };
+      if(jbKey) headers['X-Master-Key'] = jbKey;
+      else headers['X-Access-Key'] = PUBLIC_JB_READ_KEY;
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${jbBin}/latest`, { headers });
+      if(res.ok) {
+        const data = await res.json();
+        record = data.record;
+        // ── Auto-migrate JSONBin → KV if Worker configured ────────────────
+        if(workerUrl && jbKey && record) {
+          console.log('Migrating data from JSONBin to Cloudflare KV...');
+          // Will be saved to KV on next saveData() call
+          showToast('📦 Migracja danych do Cloudflare KV...', 'info');
+          setTimeout(() => saveData().then(() =>
+            showToast('✅ Migracja zakończona — dane w Cloudflare KV!', 'success')
+          ), 1000);
+        }
+      }
+    }
+
+    if(!record) { showGlobalLoader(false); return; }
+
+    // ── Unpack data ───────────────────────────────────────────────────────
     const unpackPlayer = p => {
-      if(p.name !== undefined) return p; // old format
+      if(p.name !== undefined) return p;
       return {
         name: p.n||'', grade: p.g||'B', pos: p.po||'',
         pts:p.p||0, reb:p.r||0, ast:p.a||0, stl:p.s||0, blk:p.b||0,
@@ -1758,58 +1807,33 @@ async function loadData() {
       quarters: t.q ? t.q.split(',').map(Number) : (t.quarters||[]),
       players: (t.players||[]).map(unpackPlayer)
     });
+    const rawMatches = record.matches || [];
     matches = rawMatches.map(m => ({
       ...m,
       team1: unpackTeam(m.team1||{}),
       team2: unpackTeam(m.team2||{})
     }));
-    aliases = data.record?.aliases || {};
-    seasons = data.record?.seasons || [];
-    currentSeasonId = data.record?.currentSeasonId || null;
-    schedule = data.record?.schedule || [];
-    teams = data.record?.teams || {};
-    rounds = data.record?.rounds || [];
-    pendingScreenshots = data.record?.pendingScreenshots || [];
-    // One-time migration: merge logos from localStorage into JSONBin teams
+    aliases          = record.aliases || {};
+    seasons          = record.seasons || [];
+    currentSeasonId  = record.currentSeasonId || null;
+    schedule         = record.schedule || [];
+    teams            = record.teams || {};
+    rounds           = record.rounds || [];
+    pendingScreenshots = record.pendingScreenshots || [];
+
+    // Merge logos from localStorage
     try {
-      const localTeams = JSON.parse(localStorage.getItem('nba2k_teams') || '{}');
-      let migrated = false;
-      const compressLogo = (dataUrl, cb) => {
-        const img = new Image();
-        img.onload = () => {
-          const MAX = 32;
-          const scale = Math.min(MAX/img.width, MAX/img.height, 1);
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.width*scale);
-          canvas.height = Math.round(img.height*scale);
-          canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-          cb(canvas.toDataURL('image/jpeg', 0.4));
-        };
-        img.src = dataUrl;
-      };
-      const entries = Object.entries(localTeams).filter(([n,d]) => d.logo && !teams[n]?.logo);
-      let pending = entries.length;
-      if(pending === 0) { migrated = false; }
-      entries.forEach(([name, data]) => {
-        compressLogo(data.logo, compressed => {
-          if(!teams[name]) teams[name] = {};
-          teams[name].logo = compressed;
-          migrated = true;
-          pending--;
-          if(pending === 0) {
-            window.teams = teams;
-            setTimeout(() => saveData(), 500);
-            localStorage.removeItem('nba2k_teams');
-            renderDashboard();
-            renderMatches();
-          }
-        });
+      const localLogos = JSON.parse(localStorage.getItem('nba2k_logos') || '{}');
+      Object.entries(localLogos).forEach(([name, logo]) => {
+        if(!teams[name]) teams[name] = {};
+        teams[name].logo = logo;
       });
-      // migration handled in compressLogo callbacks above
     } catch(e) {}
+
     window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
-    // Auto-assign matches without seasonId to currentSeason
+
+    // Auto-assign matches without seasonId
     if(currentSeasonId) {
       let _changed = 0;
       matches.forEach(m => { if(!m.seasonId) { m.seasonId = currentSeasonId; _changed++; } });
@@ -1819,14 +1843,14 @@ async function loadData() {
     updateAuthUI();
     updateMatchFilters();
     populateTeamFilter();
+
   } catch(e) {
     console.error('Load error:', e);
-    showToast(t('err_load') + e.message, 'error');
+    showToast('❌ Błąd ładowania danych: ' + e.message, 'error');
   } finally {
     showGlobalLoader(false);
   }
 }
-
 function showGlobalLoader(show) {
   let el = document.getElementById('global-loader');
   if(el) el.style.display = show ? 'flex' : 'none';
@@ -2173,12 +2197,15 @@ function saveMatch() {
 function clearForm() {
   window._currentDiscordScreenshot = null;
   screenshotBase64 = null;
-  document.getElementById('screenshot-input').value = '';
-  document.getElementById('screenshot-preview').style.display = 'none';
-  document.getElementById('match-note').value = '';
-  document.getElementById('parse-btn').disabled = true;
-  document.getElementById('parse-btn-text').textContent = '🤖 Analizuj Screenshot';
-  document.getElementById('parsed-result').style.display = 'none';
+  const _g = id => document.getElementById(id);
+  if(_g('screenshot-input'))  _g('screenshot-input').value = '';
+  if(_g('screenshot-preview')) _g('screenshot-preview').style.display = 'none';
+  if(_g('match-note'))        _g('match-note').value = '';
+  if(_g('parse-btn'))         _g('parse-btn').disabled = true;
+  if(_g('parse-btn-text'))    _g('parse-btn-text').textContent = '🤖 Analizuj Screenshot';
+  if(_g('parsed-result'))     _g('parsed-result').style.display = 'none';
+  const uploadZone = _g('upload-zone');
+  if(uploadZone) uploadZone.innerHTML = '<input type="file" accept="image/*" id="screenshot-input" onchange="handleFileSelect(this)"><div class="upload-icon">📸</div><h3>Wgraj Screenshot z Meczu</h3><p>Kliknij lub przeciągnij plik · PNG, JPG, WebP</p>';
   setStatus('', '');
 }
 
