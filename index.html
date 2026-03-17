@@ -736,7 +736,7 @@
     <button onclick="showView('add-match')" data-i18n="nav_add_match">+ Dodaj Mecz</button>
     <button onclick="showView('schedule')" data-i18n="nav_schedule">📅 Harmonogram</button>
     <button onclick="showView('aliases')" data-i18n="nav_aliases">⚙ Aliasy</button>
-    <button id="nav-events" onclick="showView('events')" style="display:none">🏆 Eventy</button>
+    <button id="nav-events" onclick="showView('events')">🏆 Eventy</button>
   </nav>
   <div style="display:flex;gap:0.5rem;align-items:center">
     <button id="logout-btn" class="btn btn-ghost" onclick="logout()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="logout">🔓 Wyloguj</button>
@@ -3743,8 +3743,7 @@ function updateAuthUI() {
   isLoggedIn().then(logged => {
     const logoutBtn = document.getElementById('logout-btn');
     if(logoutBtn) logoutBtn.style.display = logged ? 'inline-flex' : 'none';
-    const eventsBtn = document.getElementById('nav-events');
-    if(eventsBtn) eventsBtn.style.display = logged ? 'inline-flex' : 'none';
+
     const bazaBtn = document.getElementById('baza-btn');
     if(bazaBtn) bazaBtn.style.display = logged ? 'inline-flex' : 'none';
     const seasonBtn = document.getElementById('season-btn');
@@ -3755,7 +3754,7 @@ function updateAuthUI() {
 }
 
 let pendingAuthView = null;
-const PROTECTED_VIEWS = ['add-match', 'aliases', 'events'];
+const PROTECTED_VIEWS = ['add-match', 'aliases'];
 
 // Set today's date
 document.getElementById('match-date').value = new Date().toISOString().split('T')[0];
