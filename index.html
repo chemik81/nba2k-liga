@@ -3846,12 +3846,28 @@ async function saveSetup() {
 
 // Initial render
 (async () => {
+  // Check if returning from Discord OAuth
+  const _urlParams = new URLSearchParams(window.location.search);
+  const _discordParam = _urlParams.get('discord_user');
+  if(_discordParam) {
+    try {
+      discordUser = JSON.parse(atob(_discordParam));
+      localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch(e) { console.error('Discord user parse error', e); }
+  } else {
+    try {
+      const _stored = localStorage.getItem('nba2k_discord_user');
+      if(_stored) discordUser = JSON.parse(_stored);
+    } catch(e) {}
+  }
+
   // Always load data - credentials are embedded
   await loadData();
-  // Show setup modal only if anthropic key missing (admin needs to configure for adding matches)
   renderDashboard();
   updateAuthUI();
   applyLangOnLoad();
+  if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
 })();
 
 
