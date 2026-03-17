@@ -4489,99 +4489,530 @@ async function randomizeTeams(id) {
   showToast('🎲 Drużyny wylosowane!', 'success');
 }
 
-function openEventDetail(id) {
+function openEventDetail(id, tab) {
+  const ev = events.find(e => e.id === id);
+  if(!ev) return;
+  window._currentEventId = id;
+  renderEventDetailTab(id, tab || 'info');
+  document.getElementById('event-detail-modal').classList.add('open');
+}
+
+function renderEventDetailTab(id, tab, sortCol, sortDir) {
   const ev = events.find(e => e.id === id);
   if(!ev) return;
   const type = EVENT_TYPES[ev.type] || { label: ev.type };
   const status = EVENT_STATUS[ev.status] || { label: ev.status, color: 'var(--muted)' };
+  const isAdmin = _isLoggedInSync();
+  const evMatches = ev.matches || [];
 
-  const playersList = (ev.players||[]).map((p,i) => `
-    <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)">
-      ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem">👤</div>'}
-      <span style="font-weight:600;font-size:.9rem">${p.name}</span>
-      ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
-      ${_isLoggedInSync() ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')"
-        style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
-    </div>`).join('');
+  const tabs = [
+    { id: 'info',  label: 'ℹ️ Szczegóły' },
+    { id: 'matches', label: `🏀 Mecze (${evMatches.length})` },
+    { id: 'stats', label: '📊 Statystyki' },
+  ];
 
-  const teamsHtml = (ev.teams||[]).map(t => `
-    <div style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:.5rem">
-      <div style="font-weight:700;margin-bottom:.5rem">${t.name}</div>
-      ${(t.players||[]).map(p => `<div style="font-size:.85rem;padding:.2rem 0">${p.name}</div>`).join('')}
-    </div>`).join('');
+  const tabBar = tabs.map(t =>
+    `<button onclick="renderEventDetailTab('${id}','${t.id}')"
+      style="padding:.5rem 1rem;border:none;border-bottom:2px solid ${tab===t.id?'var(--accent)':'transparent'};
+      background:none;color:${tab===t.id?'var(--accent)':'var(--muted)'};font-weight:${tab===t.id?'700':'400'};
+      cursor:pointer;font-family:inherit;font-size:.85rem;transition:all .2s;white-space:nowrap">${t.label}</button>`
+  ).join('');
+
+  let tabContent = '';
+
+  if(tab === 'info') {
+    const playersList = (ev.players||[]).map(p => `
+      <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)">
+        ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem">👤</div>'}
+        <span style="font-weight:600;font-size:.9rem">${p.name}</span>
+        ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
+        ${isAdmin ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')" style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
+      </div>`).join('');
+
+    const teamsHtml = (ev.teams||[]).map(t => `
+      <div style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:.5rem">
+        <div style="font-weight:700;margin-bottom:.4rem">${t.name} <span style="font-size:.75rem;color:var(--muted)">(kpt: ${t.captain?.name||'—'})</span></div>
+        ${(t.players||[]).map(p => `<div style="font-size:.85rem;padding:.15rem 0;color:${p.id===t.captain?.id?'var(--accent)':'var(--text)'}">
+          ${p.id===t.captain?.id?'★ ':''}${p.name}</div>`).join('')}
+      </div>`).join('');
+
+    tabContent = `
+      ${ev.teams?.length ? `<div style="margin-bottom:1.25rem"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">🏀 DRUŻYNY</div>${teamsHtml}</div>` : ''}
+      <div style="margin-bottom:1.25rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">
+          👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
+        </div>
+        ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
+      </div>
+
+      ${ev.status === 'open' && !isAdmin ? `
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          ${discordUser ? `
+            ${(ev.players||[]).find(p => p.id === discordUser.id) ? `
+              <div style="color:var(--win);font-weight:700;text-align:center;padding:.75rem">✅ Jesteś zapisany na ten event!</div>
+              <button onclick="cancelSignup('${ev.id}')" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.5rem">Wypisz się</button>
+            ` : `
+              <button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">🎮 Zapisz się</button>
+            `}
+          ` : `
+            <button onclick="loginWithDiscord()" style="width:100%;background:#5865F2;color:#fff;border:none;border-radius:8px;padding:.8rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
+              <svg width="20" height="20" viewBox="0 0 71 55" fill="none"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.4a.2.2 0 0 0-.2.1 40.7 40.7 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.5a.2.2 0 0 0-.2-.1A58.4 58.4 0 0 0 10.5 4.9a.2.2 0 0 0-.1.1C1.5 18.1-.9 31 .3 43.6a.2.2 0 0 0 .1.2 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 42 42 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4l1.1-.8a.2.2 0 0 1 .2 0c11.5 5.3 24 5.3 35.4 0a.2.2 0 0 1 .2 0l1.1.8a.2.2 0 0 1 0 .4 36.1 36.1 0 0 1-5.5 2.6.2.2 0 0 0-.1.3 47.1 47.1 0 0 0 3.6 5.9.2.2 0 0 0 .2.1 58.6 58.6 0 0 0 17.7-9 .2.2 0 0 0 .1-.2C73 29.2 69.4 16.4 60.2 5a.2.2 0 0 0-.1-.1zM23.7 36c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z" fill="#fff"/></svg>
+              Zaloguj się przez Discord
+            </button>
+          `}
+        </div>` : ''}
+
+      ${isAdmin && ev.status === 'open' ? `
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem">➕ DODAJ GRACZA RĘCZNIE</div>
+          <div style="display:flex;gap:.5rem">
+            <input id="manual-player-name" type="text" placeholder="Nick gracza"
+              style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem;font-family:inherit">
+            <button class="btn btn-primary" onclick="addPlayerManually('${id}')">Dodaj</button>
+          </div>
+        </div>` : ''}
+
+      ${isAdmin && ev.type === 'draft' && ev.status === 'closed' ? `
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">👑 AKCJE ADMINA</div>
+          <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+            ${!(ev.teams||[]).length ? `
+              <button onclick="assignCaptains('${id}')" class="btn btn-primary">🎲 Losuj kapitanów</button>
+              <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">🎯 Wybierz ręcznie</button>
+            ` : `
+              <button onclick="startDraft('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">🎯 Start Draft</button>
+              <button onclick="assignCaptains('${id}')" class="btn btn-ghost">🔄 Losuj ponownie</button>
+              <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">✏️ Zmień ręcznie</button>
+            `}
+          </div>
+        </div>` : ''}`;
+  }
+
+  else if(tab === 'matches') {
+    const matchCards = evMatches.length ? evMatches.map((m,i) => `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem;cursor:pointer"
+        onclick="openEventMatchDetail('${id}',${i})">
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:1rem">
+          <div>
+            <div style="font-weight:700;font-size:1rem">${m.team1?.name||'—'}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${m.team1?.score>m.team2?.score?'var(--accent)':'var(--text)'}">${m.team1?.score??'—'}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="color:var(--muted);font-size:.75rem">${m.date||''}</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;margin:.3rem auto;font-size:.75rem;font-weight:800;color:var(--muted)">VS</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;font-size:1rem">${m.team2?.name||'—'}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${m.team2?.score>m.team1?.score?'var(--accent)':'var(--text)'}">${m.team2?.score??'—'}</div>
+          </div>
+        </div>
+        ${isAdmin ? `<button onclick="event.stopPropagation();deleteEventMatch('${id}',${i})"
+          style="margin-top:.5rem;background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;float:right">🗑 Usuń</button>` : ''}
+      </div>`).join('')
+    : '<div style="color:var(--muted);text-align:center;padding:2rem">Brak meczów — dodaj pierwszy screen poniżej</div>';
+
+    tabContent = `
+      <div style="margin-bottom:1rem">${matchCards}</div>
+      ${isAdmin ? `
+        <div style="border-top:1px solid var(--border);padding-top:1rem">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">📸 DODAJ MECZ ZE SCREENA</div>
+          <div style="border:2px dashed var(--border);border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;position:relative;transition:border-color .2s"
+            id="ev-upload-zone" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'" ondrop="evDropFile(event,'${id}')">
+            <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+              onchange="evFileSelected(event,'${id}')">
+            <div style="font-size:2rem;margin-bottom:.5rem">📸</div>
+            <div style="font-weight:600;font-size:.9rem">Wrzuć screenshot lub kliknij</div>
+            <div style="color:var(--muted);font-size:.8rem;margin-top:.25rem">PNG, JPG — ekran Game Stats z NBA 2K</div>
+          </div>
+          <div id="ev-parse-status-${id}" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:8px;font-size:.85rem"></div>
+          <div id="ev-parse-preview-${id}" style="display:none;margin-top:.75rem"></div>
+        </div>` : ''}`;
+  }
+
+  else if(tab === 'stats') {
+    tabContent = renderEventStats(ev, sortCol, sortDir);
+  }
 
   document.getElementById('event-detail-content').innerHTML = `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:2px;margin-bottom:.25rem">${ev.title}</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">${ev.title}</div>
     <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
       <span style="font-size:.85rem;color:var(--muted)">${type.label}</span>
       ${ev.date ? `<span style="font-size:.85rem;color:var(--muted)">📅 ${formatDate(ev.date)}</span>` : ''}
       <span style="font-weight:700;color:${status.color};font-size:.85rem">${status.label}</span>
     </div>
-    ${ev.description ? `<p style="color:var(--muted);font-size:.9rem;margin-bottom:1rem">${ev.description}</p>` : ''}
+    ${ev.description ? `<p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">${ev.description}</p>` : ''}
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.25rem;overflow-x:auto">${tabBar}</div>
+    ${tabContent}`;
+}
 
-    ${ev.teams?.length ? `<div style="margin-bottom:1rem"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">🏀 DRUŻYNY</div>${teamsHtml}</div>` : ''}
+function renderEventStats(ev, sortCol, sortDir) {
+  sortCol = sortCol || 'pts';
+  sortDir = (sortDir === undefined) ? -1 : sortDir;
+  const evMatches = ev.matches || [];
+  if(!evMatches.length) return '<div style="color:var(--muted);text-align:center;padding:2rem 1rem">Brak meczów — dodaj screeny w zakładce Mecze</div>';
 
-    <div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">
-        👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
+  // Build player map
+  const playerMap = {};
+  const teamWins = {}, teamGames = {};
+  evMatches.forEach(m => {
+    const winner = (m.team1?.score||0) > (m.team2?.score||0) ? m.team1?.name : m.team2?.name;
+    [m.team1, m.team2].forEach(team => {
+      if(!team) return;
+      teamGames[team.name] = (teamGames[team.name]||0) + 1;
+      if(team.name === winner) teamWins[team.name] = (teamWins[team.name]||0) + 1;
+      (team.players||[]).forEach((p, idx) => {
+        const POSITIONS = ['PG','SG','SF','PF','C'];
+        const pos = p.pos || POSITIONS[idx] || 'PG';
+        const key = p.name + '|' + team.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        const s = playerMap[key];
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
+        s.ftm+=p.ftm||0; s.fta+=p.fta||0;
+        s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+
+  let players = Object.values(playerMap).map(p => ({
+    ...p,
+    fgpct: p.fga>0 ? p.fgm/p.fga : 0,
+    tppct: p.tpa>0 ? p.tpm/p.tpa : 0,
+    ftpct: p.fta>0 ? p.ftm/p.fta : 0,
+    avggrade: p.gp>0 ? p.gradeSum/p.gp : 0,
+    cs: calcCompositeScore(p),
+    per: calcPER(p),
+  }));
+
+  // Sort
+  const strCols = ['name','team','pos'];
+  players.sort((a,b) => {
+    let va = strCols.includes(sortCol) ? (a[sortCol]||'').toLowerCase() : (['fgpct','tppct','ftpct','gp','avggrade','cs','per'].includes(sortCol) ? a[sortCol] : a[sortCol]/Math.max(a.gp,1));
+    let vb = strCols.includes(sortCol) ? (b[sortCol]||'').toLowerCase() : (['fgpct','tppct','ftpct','gp','avggrade','cs','per'].includes(sortCol) ? b[sortCol] : b[sortCol]/Math.max(b.gp,1));
+    if(va < vb) return -1 * sortDir;
+    if(va > vb) return 1 * sortDir;
+    return 0;
+  });
+
+  // Standings
+  const teamStandings = Object.keys(teamGames).map(name => ({
+    name, w: teamWins[name]||0, l: teamGames[name]-(teamWins[name]||0), gp: teamGames[name]
+  })).sort((a,b) => b.w-a.w || a.l-b.l);
+
+  const standingsHtml = teamStandings.length > 1 ? `
+    <div style="margin-bottom:1.5rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">🏆 TABELA</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead><tr style="background:var(--surface2)">
+          <th style="text-align:left;padding:.5rem .75rem;color:var(--muted);font-size:.75rem;letter-spacing:1px">#</th>
+          <th style="text-align:left;padding:.5rem .75rem;color:var(--muted);font-size:.75rem;letter-spacing:1px">DRUŻYNA</th>
+          <th style="padding:.5rem .75rem;color:var(--muted);font-size:.75rem;letter-spacing:1px;text-align:center">M</th>
+          <th style="padding:.5rem .75rem;color:var(--muted);font-size:.75rem;letter-spacing:1px;text-align:center">W</th>
+          <th style="padding:.5rem .75rem;color:var(--muted);font-size:.75rem;letter-spacing:1px;text-align:center">L</th>
+          <th style="padding:.5rem .75rem;color:var(--muted);font-size:.75rem;letter-spacing:1px;text-align:center">W%</th>
+        </tr></thead>
+        <tbody>${teamStandings.map((t,i) => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:.5rem .75rem;font-weight:700;color:${i===0?'var(--accent)':i===1?'#ccc':i===2?'#cd7f32':'var(--muted)'}">${i+1}</td>
+            <td style="padding:.5rem .75rem;font-weight:600">${t.name}</td>
+            <td style="padding:.5rem .75rem;text-align:center">${t.gp}</td>
+            <td style="padding:.5rem .75rem;text-align:center;color:var(--win);font-weight:700">${t.w}</td>
+            <td style="padding:.5rem .75rem;text-align:center;color:var(--loss)">${t.l}</td>
+            <td style="padding:.5rem .75rem;text-align:center;color:var(--muted)">${t.gp>0?Math.round(t.w/t.gp*100):0}%</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
+
+  // Sort header helper
+  const evId = ev.id;
+  const th = (col, label, style='') => {
+    const active = col === sortCol;
+    const nextDir = active ? sortDir * -1 : -1;
+    const icon = active ? (sortDir === -1 ? ' ▼' : ' ▲') : '';
+    return `<th style="cursor:pointer;user-select:none;${active?'color:var(--accent);':style}" onclick="renderEventDetailTab('${evId}','stats','${col}',${nextDir})">${label}${icon}</th>`;
+  };
+
+  const rows = players.map(p => {
+    const avg = v => p.gp>0 ? (v/p.gp).toFixed(1) : '0.0';
+    const fgPct = p.fga>0 ? Math.round(p.fgm/p.fga*100) : 0;
+    const tpPct = p.tpa>0 ? Math.round(p.tpm/p.tpa*100) : 0;
+    const ftPct = p.fta>0 ? Math.round(p.ftm/p.fta*100) : 0;
+    const avgGrade = numToGrade(p.avggrade);
+    const hl = 'color:var(--accent);font-weight:700';
+    return `<tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="openEventPlayerModal('${evId}','${p.name}','${p.team}')">
+      <td style="padding:.6rem .75rem;font-weight:600;${sortCol==='name'?hl:''}">${p.name}</td>
+      <td style="padding:.6rem .5rem;color:var(--muted);font-size:.82rem;${sortCol==='team'?hl:''}">${p.team}</td>
+      <td style="padding:.6rem .5rem;text-align:center;color:var(--accent);font-weight:700;font-size:.8rem">${p.pos||''}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='gp'?hl:''}">${p.gp}</td>
+      <td style="padding:.6rem .5rem;text-align:center"><span class="grade grade-${avgGrade.replace('+','p').replace('-','m')}">${avgGrade}</span></td>
+      <td style="padding:.6rem .5rem;text-align:center;color:var(--accent);font-weight:700;${sortCol==='cs'?hl:''}">${p.cs.toFixed(1)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;color:#3498db;font-weight:700;${sortCol==='per'?hl:''}">${p.per.toFixed(1)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='pts'?hl:''}">${avg(p.pts)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='reb'?hl:''}">${avg(p.reb)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='ast'?hl:''}">${avg(p.ast)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='stl'?hl:''}">${avg(p.stl)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='blk'?hl:''}">${avg(p.blk)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='to'?hl:''}">${avg(p.to)}</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='fgpct'?hl:''}">${fgPct}%</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='tppct'?hl:''}">${tpPct}%</td>
+      <td style="padding:.6rem .5rem;text-align:center;${sortCol==='ftpct'?hl:''}">${ftPct}%</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    ${standingsHtml}
+    <div class="card" style="padding:0;margin-bottom:0">
+      <div class="stats-table-wrap">
+        <table>
+          <thead><tr style="background:var(--surface2)">
+            ${th('name','Zawodnik','text-align:left;padding-left:.75rem')}
+            ${th('team','Drużyna','text-align:left')}
+            <th style="color:var(--muted);font-size:.8rem;letter-spacing:1px">POZ</th>
+            ${th('gp','GP')}
+            ${th('avggrade','GRD')}
+            ${th('cs','CS','color:var(--accent)')}
+            ${th('per','PER','color:#3498db')}
+            ${th('pts','PTS')}
+            ${th('reb','REB')}
+            ${th('ast','AST')}
+            ${th('stl','STL')}
+            ${th('blk','BLK')}
+            ${th('to','TO')}
+            ${th('fgpct','FG%')}
+            ${th('tppct','3P%')}
+            ${th('ftpct','FT%')}
+          </tr></thead>
+          <tbody>${rows || '<tr><td colspan="16" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>'}</tbody>
+        </table>
       </div>
-      ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
+    </div>`;
+}
+
+function openEventPlayerModal(eventId, playerName, teamName) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  const evMatches = ev.matches || [];
+  const games = [];
+  evMatches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      if(team?.name !== teamName) return;
+      const p = (team.players||[]).find(x => x.name === playerName);
+      if(!p) return;
+      const opp = team === m.team1 ? m.team2 : m.team1;
+      games.push({ date: m.date, opp: opp?.name||'?',
+        pts:p.pts||0, reb:p.reb||0, ast:p.ast||0, stl:p.stl||0, blk:p.blk||0,
+        to:p.to||0, fgm:p.fgm||0, fga:p.fga||0, tpm:p.tpm||0, tpa:p.tpa||0,
+        ftm:p.ftm||0, fta:p.fta||0, grade:p.grade||'B', pos:p.pos||'',
+      });
+    });
+  });
+  if(!games.length) { showToast('Brak danych gracza', 'info'); return; }
+  const gp = games.length;
+  const sum = k => games.reduce((s,g) => s+(g[k]||0), 0);
+  const avg = k => (sum(k)/gp).toFixed(1);
+  const fgPct = sum('fga')>0 ? Math.round(sum('fgm')/sum('fga')*100) : 0;
+  const tpPct = sum('tpa')>0 ? Math.round(sum('tpm')/sum('tpa')*100) : 0;
+  const ftPct = sum('fta')>0 ? Math.round(sum('ftm')/sum('fta')*100) : 0;
+  const avgGradeNum = games.reduce((s,g)=>s+gradeToNum(g.grade||'B'),0)/gp;
+  const avgGrade = numToGrade(avgGradeNum);
+
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = `
+    <div style="margin-bottom:1.25rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:2px">${playerName}</div>
+      <div style="color:var(--muted);font-size:.85rem">${teamName} · ${games[0]?.pos||''} · ${gp} meczów · <span class="grade grade-${avgGrade.replace('+','p').replace('-','m')}">${avgGrade}</span></div>
     </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:.5rem;margin-bottom:1.25rem">
+      ${[['PTS',avg('pts')],['REB',avg('reb')],['AST',avg('ast')],['STL',avg('stl')],['BLK',avg('blk')],['TO',avg('to')],['FG%',fgPct+'%'],['3P%',tpPct+'%'],['FT%',ftPct+'%']].map(([l,v])=>`
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem;text-align:center">
+          <div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:.2rem">${l}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${v}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem">📋 MECZE</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem;min-width:480px">
+        <thead><tr style="background:var(--surface2)">
+          <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);font-size:.72rem">DATA</th>
+          <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);font-size:.72rem">VS</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">GRD</th>
+          <th style="padding:.4rem .4rem;color:var(--accent);font-size:.72rem;font-weight:800">PTS</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">REB</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">AST</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">STL</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">BLK</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">TO</th>
+          <th style="padding:.4rem .4rem;color:var(--muted);font-size:.72rem">FG</th>
+        </tr></thead>
+        <tbody>${games.map(g => {
+          const gr = g.grade||'B';
+          return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:.4rem .6rem;color:var(--muted);font-size:.78rem">${g.date||'—'}</td>
+            <td style="padding:.4rem .6rem;font-weight:600;font-size:.82rem">${g.opp}</td>
+            <td style="padding:.4rem .4rem;text-align:center"><span class="grade grade-${gr.replace('+','p').replace('-','m')}">${gr}</span></td>
+            <td style="padding:.4rem .4rem;text-align:center;font-weight:700;color:var(--accent)">${g.pts}</td>
+            <td style="padding:.4rem .4rem;text-align:center">${g.reb}</td>
+            <td style="padding:.4rem .4rem;text-align:center">${g.ast}</td>
+            <td style="padding:.4rem .4rem;text-align:center">${g.stl}</td>
+            <td style="padding:.4rem .4rem;text-align:center">${g.blk}</td>
+            <td style="padding:.4rem .4rem;text-align:center">${g.to}</td>
+            <td style="padding:.4rem .4rem;text-align:center;font-size:.78rem">${g.fgm}/${g.fga}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  document.getElementById('match-modal').classList.add('open');
+}
 
-    ${ev.status === 'open' && !_isLoggedInSync() ? `
-      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-        ${discordUser ? `
-          ${(ev.players||[]).find(p => p.id === discordUser.id) ? `
-            <div style="color:var(--win);font-weight:700;text-align:center;padding:.75rem">✅ Jesteś zapisany na ten event!</div>
-            <button onclick="cancelSignup('${ev.id}')" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.5rem">Wypisz się</button>
-          ` : `
-            <button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">
-              🎮 Zapisz się na event
-            </button>
-          `}
-        ` : `
-          <button onclick="loginWithDiscord()" style="width:100%;background:#5865F2;color:#fff;border:none;border-radius:8px;padding:.8rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
-            <svg width="20" height="20" viewBox="0 0 71 55" fill="none"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.4a.2.2 0 0 0-.2.1 40.7 40.7 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.5a.2.2 0 0 0-.2-.1A58.4 58.4 0 0 0 10.5 4.9a.2.2 0 0 0-.1.1C1.5 18.1-.9 31 .3 43.6a.2.2 0 0 0 .1.2 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 42 42 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4l1.1-.8a.2.2 0 0 1 .2 0c11.5 5.3 24 5.3 35.4 0a.2.2 0 0 1 .2 0l1.1.8a.2.2 0 0 1 0 .4 36.1 36.1 0 0 1-5.5 2.6.2.2 0 0 0-.1.3 47.1 47.1 0 0 0 3.6 5.9.2.2 0 0 0 .2.1 58.6 58.6 0 0 0 17.7-9 .2.2 0 0 0 .1-.2C73 29.2 69.4 16.4 60.2 5a.2.2 0 0 0-.1-.1zM23.7 36c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z" fill="#fff"/></svg>
-            Zaloguj się przez Discord aby się zapisać
-          </button>
-        `}
-      </div>` : ''}
-    ${_isLoggedInSync() && ev.status === 'open' ? `
-      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem">➕ DODAJ GRACZA RĘCZNIE</div>
-        <div style="display:flex;gap:.5rem">
-          <input id="manual-player-name" type="text" placeholder="Nick gracza"
-            style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem;font-family:inherit">
-          <button class="btn btn-primary" onclick="addPlayerManually('${id}')">Dodaj</button>
-        </div>
-      </div>` : ''}
+// Event match screenshot upload
+let _evParseBase64 = null, _evParseMime = null, _evParsePending = null;
 
-    ${_isLoggedInSync() && ev.type === 'draft' && ev.status === 'closed' ? `
-      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">👑 AKCJE ADMINA</div>
-        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-          ${!(ev.teams||[]).length ? `
-            <button onclick="assignCaptains('${id}')" class="btn btn-primary">
-              🎲 Losuj kapitanów
-            </button>
-            <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">
-              🎯 Wybierz kapitanów ręcznie
-            </button>
-          ` : `
-            <button onclick="startDraft('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">
-              🎯 Start Draft
-            </button>
-            <button onclick="assignCaptains('${id}')" class="btn btn-ghost">
-              🔄 Losuj kapitanów ponownie
-            </button>
-            <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">
-              ✏️ Zmień kapitanów ręcznie
-            </button>
-          `}
-        </div>
-      </div>` : ''}`;
+function evFileSelected(e, eventId) {
+  const file = e.target.files[0];
+  if(file) evLoadFile(file, eventId);
+}
+function evDropFile(e, eventId) {
+  e.preventDefault();
+  document.getElementById('ev-upload-zone').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if(file) evLoadFile(file, eventId);
+}
+function evLoadFile(file, eventId) {
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    _evParseMime = file.type || 'image/png';
+    _evParseBase64 = dataUrl.split(',')[1];
+    const zone = document.getElementById('ev-upload-zone');
+    if(zone) zone.style.backgroundImage = `url(${dataUrl})`;
+    evParseScreenshot(eventId);
+  };
+  reader.readAsDataURL(file);
+}
 
-  document.getElementById('event-detail-modal').classList.add('open');
+async function evParseScreenshot(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !_evParseBase64) return;
+  const statusEl = document.getElementById('ev-parse-status-' + eventId);
+  const previewEl = document.getElementById('ev-parse-preview-' + eventId);
+  if(!statusEl) return;
+
+  statusEl.style.display = 'block';
+  statusEl.style.background = 'rgba(79,195,247,.1)';
+  statusEl.style.border = '1px solid rgba(79,195,247,.3)';
+  statusEl.style.color = '#4fc3f7';
+  statusEl.textContent = '🤖 Analizuję screenshot...';
+  if(previewEl) previewEl.style.display = 'none';
+
+  // Build known players hint from event players
+  const knownPlayers = (ev.players||[]).map(p => p.name).filter(Boolean);
+  const knownHint = knownPlayers.length ? `\n\nGRACZE W TYM EVENCIE (użyj tych nazw):\n${knownPlayers.join(', ')}` : '';
+
+  const prompt = `Analizuj screenshot z gry NBA 2K — ekran Game Stats.
+Wyodrębnij dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown):
+{"team1":{"name":"NAZWA","score":67,"quarters":[18,17,16,16],"players":[{"name":"Nick","pos":"PG","grade":"B+","pts":24,"reb":5,"ast":9,"stl":1,"blk":0,"to":3,"fgm":7,"fga":20,"tpm":2,"tpa":6,"ftm":4,"fta":4}]},"team2":{"name":"NAZWA","score":87,"quarters":[27,16,20,24],"players":[...]}}
+POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
+KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
+
+  try {
+    const data = await callAnthropic(MODEL_SCREENSHOT(), 4000, [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: _evParseMime, data: _evParseBase64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]);
+    if(data.error) throw new Error(data.error.message);
+    const text = data.content.map(c => c.text||'').join('');
+    const j = text.slice(text.indexOf('{'), text.lastIndexOf('}')+1);
+    const parsed = JSON.parse(j);
+    _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
+
+    statusEl.style.background = 'rgba(46,204,113,.1)';
+    statusEl.style.border = '1px solid rgba(46,204,113,.3)';
+    statusEl.style.color = 'var(--win)';
+    statusEl.textContent = `✅ ${parsed.team1.name} ${parsed.team1.score} — ${parsed.team2.score} ${parsed.team2.name}`;
+
+    if(previewEl) {
+      previewEl.style.display = 'block';
+      previewEl.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:8px;padding:.75rem 1rem;gap:1rem;flex-wrap:wrap">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:800">
+            ${parsed.team1.name} <span style="color:var(--accent)">${parsed.team1.score}</span>
+            <span style="color:var(--muted);font-size:.9rem;margin:0 .5rem">—</span>
+            <span style="color:var(--accent)">${parsed.team2.score}</span> ${parsed.team2.name}
+          </div>
+          <div style="display:flex;gap:.5rem">
+            <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz mecz</button>
+            <button onclick="document.getElementById('ev-parse-preview-${eventId}').style.display='none';_evParsePending=null" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
+          </div>
+        </div>`;
+    }
+  } catch(err) {
+    statusEl.style.background = 'rgba(232,69,60,.1)';
+    statusEl.style.border = '1px solid rgba(232,69,60,.3)';
+    statusEl.style.color = 'var(--loss)';
+    statusEl.textContent = '❌ ' + err.message;
+  }
+}
+
+async function evSaveMatch(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !_evParsePending) return;
+  if(!ev.matches) ev.matches = [];
+  ev.matches.push(_evParsePending);
+  _evParsePending = null;
+  _evParseBase64 = null;
+  await saveData();
+  showToast('✅ Mecz zapisany!', 'success');
+  renderEventDetailTab(eventId, 'matches');
+}
+
+async function deleteEventMatch(eventId, matchIdx) {
+  if(!confirm('Usunąć ten mecz?')) return;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  ev.matches.splice(matchIdx, 1);
+  await saveData();
+  renderEventDetailTab(eventId, 'matches');
+  showToast('🗑 Mecz usunięty', 'info');
+}
+
+function openEventMatchDetail(eventId, matchIdx) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  const m = (ev.matches||[])[matchIdx];
+  if(!m) return;
+  const w1 = m.team1?.score > m.team2?.score;
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = `
+    <div class="modal-score-row">
+      <div>
+        <div class="modal-team">${m.team1?.name||'—'}</div>
+        <div class="modal-score-big" style="${!w1?'color:var(--text)':''}">${m.team1?.score??'—'}</div>
+        <div class="quarters">${(m.team1?.quarters||[]).map((s,i)=>'<div class="q-box">Q'+(i+1)+': '+s+'</div>').join('')}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:2px;color:var(--muted)">FINAL</div>
+        <div style="font-size:1.5rem;margin:.5rem 0">🏀</div>
+        <div style="font-size:.8rem;color:var(--muted)">${m.date||''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="modal-team">${m.team2?.name||'—'}</div>
+        <div class="modal-score-big" style="${w1?'color:var(--text)':''}">${m.team2?.score??'—'}</div>
+        <div class="quarters" style="justify-content:flex-end">${(m.team2?.quarters||[]).map((s,i)=>'<div class="q-box">Q'+(i+1)+': '+s+'</div>').join('')}</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'ev-tab-t1')">${m.team1?.name||'Team 1'}</button>
+      <button class="tab-btn" onclick="switchTab(this,'ev-tab-t2')">${m.team2?.name||'Team 2'}</button>
+    </div>
+    <div id="ev-tab-t1" class="tab-content active">${buildPlayerTable(m.team1?.players||[], m.team1?.name||'')}</div>
+    <div id="ev-tab-t2" class="tab-content">${buildPlayerTable(m.team2?.players||[], m.team2?.name||'')}</div>`;
+  document.getElementById('match-modal').classList.add('open');
 }
 
 async function addPlayerManually(eventId) {
