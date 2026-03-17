@@ -2251,6 +2251,8 @@ function saveMatch() {
 function clearForm() {
   window._currentDiscordScreenshot = null;
   const ep = document.getElementById('edit-stats-panel'); if(ep) ep.remove();
+  const checkTitle = document.querySelector('[data-i18n="check_save"]');
+  if(checkTitle) checkTitle.style.display = '';
   screenshotBase64 = null;
   const _g = id => document.getElementById(id);
   if(_g('screenshot-input'))  _g('screenshot-input').value = '';
@@ -4935,9 +4937,14 @@ function editMatch(id) {
     showView('add-match');
     document.getElementById('match-date').value = m.date||'';
     document.getElementById('match-note').value = m.note||'';
-    // Don't call renderParsedPreview — edit panel replaces it
+    // Clear only the preview content, keep save button
     const pr2 = document.getElementById('parsed-result');
-    if(pr2) { pr2.innerHTML = ''; pr2.style.display = 'block'; }
+    if(pr2) pr2.style.display = 'block';
+    const pmp = document.getElementById('parsed-match-preview');
+    if(pmp) pmp.innerHTML = '';
+    // Hide the "Sprawdź i Zapisz" title in edit mode
+    const checkTitle = pr2?.querySelector('[data-i18n="check_save"]');
+    if(checkTitle) checkTitle.style.display = 'none';
     setStatus('info', '✏️ Tryb edycji — popraw dane i kliknij Zapisz zmiany.');
     const btn = document.querySelector('[onclick="saveMatch()"]');
     if(btn) btn.innerHTML = '💾 Zapisz zmiany';
