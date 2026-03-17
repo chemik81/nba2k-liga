@@ -4765,6 +4765,37 @@ async function startDraft(eventId) {
   openDraftView(eventId);
 }
 
+let _draftPollInterval = null;
+
+function stopDraftPolling() {
+  if(_draftPollInterval) { clearInterval(_draftPollInterval); _draftPollInterval = null; }
+}
+
+function startDraftPolling(eventId) {
+  stopDraftPolling();
+  if(!workerUrl) return;
+  _draftPollInterval = setInterval(async () => {
+    const overlay = document.getElementById('draft-overlay');
+    if(!overlay || overlay.style.display === 'none') { stopDraftPolling(); return; }
+    try {
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
+      if(!res.ok) return;
+      const fresh = await res.json();
+      const freshEvents = fresh.record?.events || fresh.events || fresh.data?.events;
+      if(!freshEvents) return;
+      const freshEv = freshEvents.find(e => e.id === eventId);
+      if(!freshEv) return;
+      const localEv = events.find(e => e.id === eventId);
+      if(!localEv || freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status) {
+        const idx = events.findIndex(e => e.id === eventId);
+        if(idx !== -1) events[idx] = freshEv;
+        renderDraftView(eventId);
+        if(freshEv.status !== 'draft') stopDraftPolling();
+      }
+    } catch(e) { /* ignore network errors */ }
+  }, 4000);
+}
+
 function openDraftView(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
@@ -4780,6 +4811,7 @@ function openDraftView(eventId) {
   }
   overlay.style.display = 'block';
   renderDraftView(eventId);
+  startDraftPolling(eventId);
 }
 
 function renderDraftView(eventId) {
@@ -4801,9 +4833,15 @@ function renderDraftView(eventId) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.8rem;letter-spacing:2px">🎯 DRAFT — ${ev.title}</div>
-          <div style="font-size:.8rem;color:var(--muted);margin-top:.1rem">${{'snake':'🐍 Snake','linear':'➡️ Linear','random':'🎲 Losowanie','balanced':'⚖️ Balanced'}[ev.draftMethod||'snake']}</div>
+          <div style="display:flex;align-items:center;gap:.75rem;margin-top:.1rem">
+            <span style="font-size:.8rem;color:var(--muted)">${{'snake':'🐍 Snake','linear':'➡️ Linear','random':'🎲 Losowanie','balanced':'⚖️ Balanced'}[ev.draftMethod||'snake']}</span>
+            <span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--win)">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--win);display:inline-block;animation:hpulse 1.5s infinite"></span>
+              LIVE
+            </span>
+          </div>
         </div>
-        <button onclick="document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
+        <button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">
           ✕ Zamknij
         </button>
@@ -4893,6 +4931,7 @@ async function finishDraft(eventId) {
   ev.status = 'active';
   ev.draftPool = [];
   await saveData();
+  stopDraftPolling();
   document.getElementById('draft-overlay').style.display = 'none';
   renderEvents();
   openEventDetail(eventId);
