@@ -5724,4 +5724,20 @@ function rdRenderContent(idx) {
   </div>
 </div>
 
+<!-- EVENT MODAL -->
+<div class="modal-overlay" id="event-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="document.getElementById('event-modal').classList.remove('open')">✕</button>
+    <div id="event-modal-content"></div>
+  </div>
+</div>
+
+<!-- EVENT DETAIL MODAL -->
+<div class="modal-overlay" id="event-detail-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('event-detail-modal').classList.remove('open')">✕</button>
+    <div id="event-detail-content"></div>
+  </div>
+</div>
+
 </html>
