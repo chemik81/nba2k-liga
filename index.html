@@ -4261,7 +4261,8 @@ function renderEvents() {
           style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń</button>
         ${ev.status === 'open' ? `<button onclick="event.stopPropagation();closeEventSignups('${ev.id}')"
           style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🔒 Zamknij zapisy</button>` : ''}
-        ${ev.status === 'closed' && ev.type === 'draft' ? `<button onclick="event.stopPropagation();startDraft('${ev.id}')"
+        ${ev.status === 'closed' && ev.type === 'draft' && !(ev.teams||[]).length ? `<button onclick="event.stopPropagation();assignCaptains('${ev.id}')" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj kapitanów</button>` : ''}
+        ${ev.status === 'closed' && ev.type === 'draft' && (ev.teams||[]).length ? `<button onclick="event.stopPropagation();startDraft('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Start Draft</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'pickup' ? `<button onclick="event.stopPropagation();randomizeTeams('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj drużyny</button>` : ''}
@@ -4289,6 +4290,19 @@ function openCreateEventModal(editId) {
     <input id="ev-date" type="date" value="${ev?.date||''}"
       style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
 
+    <label style="margin-top:.75rem">Liczba drużyn (tylko dla Draftu)</label>
+    <select id="ev-numteams" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
+      ${[2,3,4,5,6,7,8].map(n => `<option value="${n}"${(ev?.numTeams||2)==n?' selected':''}>${n} drużyny/drużyn</option>`).join('')}
+    </select>
+
+    <label style="margin-top:.75rem">Metoda draftu</label>
+    <select id="ev-draftmethod" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
+      <option value="snake"${(ev?.draftMethod||'snake')==='snake'?' selected':''}>🐍 Snake (A→B→B→A→A→B...)</option>
+      <option value="linear"${ev?.draftMethod==='linear'?' selected':''}>➡️ Linear (A→B→A→B...)</option>
+      <option value="random"${ev?.draftMethod==='random'?' selected':''}>🎲 Losowanie (bez draftu)</option>
+      <option value="balanced"${ev?.draftMethod==='balanced'?' selected':''}>⚖️ Balanced (na podstawie statystyk ligi)</option>
+    </select>
+
     <label style="margin-top:.75rem">Maks. graczy (opcjonalne)</label>
     <input id="ev-max" type="number" min="2" max="100" value="${ev?.maxPlayers||''}" placeholder="bez limitu"
       style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
@@ -4312,15 +4326,17 @@ async function saveEvent(editId) {
   const title = document.getElementById('ev-title').value.trim();
   const type  = document.getElementById('ev-type').value;
   const date  = document.getElementById('ev-date').value;
-  const max   = +document.getElementById('ev-max').value || null;
-  const desc  = document.getElementById('ev-desc').value.trim();
+  const max      = +document.getElementById('ev-max').value || null;
+  const numTeams    = +document.getElementById('ev-numteams').value || 2;
+  const draftMethod = document.getElementById('ev-draftmethod').value || 'snake';
+  const desc        = document.getElementById('ev-desc').value.trim();
   if(!title) { showToast('❌ Wpisz nazwę eventu', 'error'); return; }
 
   if(editId) {
     const idx = events.findIndex(e => e.id === editId);
-    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, description: desc };
+    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, numTeams, draftMethod, description: desc };
   } else {
-    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max,
+    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max, numTeams, draftMethod,
       description: desc, status: 'open', players: [], teams: [],
       createdAt: new Date().toISOString() });
   }
@@ -4503,9 +4519,248 @@ function loginWithDiscord() {
   window.location.href = workerUrl.replace(/\/$/, '') + '/discord-login';
 }
 
-function startDraft(id) {
-  showToast('🎯 Draft — funkcja w budowie', 'info');
+
+// ═══ DRAFT SYSTEM ════════════════════════════════════════════
+
+async function assignCaptains(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !ev.players?.length) { showToast('❌ Brak graczy', 'error'); return; }
+  const n = ev.numTeams || 2;
+  if(ev.players.length < n) { showToast('❌ Za mało graczy na ' + n + ' drużyny', 'error'); return; }
+
+  // Shuffle and pick captains
+  const shuffled = [...ev.players].sort(() => Math.random() - 0.5);
+  const teamNames = ['Drużyna A','Drużyna B','Drużyna C','Drużyna D','Drużyna E','Drużyna F','Drużyna G','Drużyna H'];
+  ev.teams = Array.from({length: n}, (_, i) => ({
+    name: teamNames[i] || 'Drużyna ' + (i+1),
+    captain: shuffled[i],
+    players: [shuffled[i]], // captain is first player
+  }));
+  // Remove captains from available pool
+  const captainIds = new Set(ev.teams.map(t => t.captain.id));
+  const method = ev.draftMethod || 'snake';
+
+  if(method === 'random') {
+    // Assign remaining players randomly to teams
+    const remaining = ev.players.filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5);
+    remaining.forEach((p, i) => ev.teams[i % n].players.push(p));
+    ev.draftPool = [];
+    ev.status = 'active';
+    await saveData();
+    renderEvents();
+    openEventDetail(eventId);
+    showToast('🎲 Drużyny losowo przydzielone!', 'success');
+    return;
+  }
+
+  if(method === 'balanced') {
+    // Sort players by composite score from league stats
+    const remaining = ev.players.filter(p => !captainIds.has(p.id));
+    const scored = remaining.map(p => {
+      const pm = matches.filter(m =>
+        [...(m.team1.players||[]),...(m.team2.players||[])].some(x => x.name === p.name)
+      );
+      if(!pm.length) return { p, score: 0 };
+      const stats = pm.reduce((acc, m) => {
+        const pl = [...(m.team1.players||[]),...(m.team2.players||[])].find(x => x.name === p.name);
+        if(pl) { acc.pts += pl.pts||0; acc.reb += pl.reb||0; acc.ast += pl.ast||0;
+                 acc.stl += pl.stl||0; acc.blk += pl.blk||0; acc.gp++; }
+        return acc;
+      }, {pts:0,reb:0,ast:0,stl:0,blk:0,gp:0});
+      const gp = stats.gp || 1;
+      const score = (stats.pts/gp)*0.4 + (stats.reb/gp)*0.2 + (stats.ast/gp)*0.2 +
+                    (stats.stl/gp)*0.1 + (stats.blk/gp)*0.1;
+      return { p, score };
+    }).sort((a,b) => b.score - a.score);
+
+    // Serpentine assignment by score: best→team0, 2nd→team1, 3rd→team2, 4th→team2, 5th→team1...
+    const assignOrder = buildDraftOrder('snake', n, scored.length);
+    scored.forEach(({p}, i) => ev.teams[assignOrder[i]].players.push(p));
+    ev.draftPool = [];
+    ev.status = 'active';
+    await saveData();
+    renderEvents();
+    openEventDetail(eventId);
+    showToast('⚖️ Drużyny zbalansowane na podstawie statystyk!', 'success');
+    return;
+  }
+
+  ev.draftPool = ev.players.filter(p => !captainIds.has(p.id));
+  ev.draftTurn = 0;
+  ev.draftOrder = buildDraftOrder(method, n, ev.draftPool.length);
+  ev.status = 'closed';
+  await saveData();
+  renderEvents();
+  openEventDetail(eventId);
+  showToast('🎲 Kapitanowie wylosowani!', 'success');
 }
+
+function buildDraftOrder(method, numTeams, totalPicks) {
+  if(method === 'linear') {
+    // Linear: 0,1,2,0,1,2,0,1,2...
+    return Array.from({length: totalPicks}, (_, i) => i % numTeams);
+  }
+  // Default: snake
+  const order = [];
+  let round = 0;
+  while(order.length < totalPicks) {
+    const forward = round % 2 === 0;
+    const indices = forward
+      ? Array.from({length: numTeams}, (_, i) => i)
+      : Array.from({length: numTeams}, (_, i) => numTeams - 1 - i);
+    for(const i of indices) {
+      if(order.length < totalPicks) order.push(i);
+    }
+    round++;
+  }
+  return order;
+}
+
+async function startDraft(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  if(!ev.teams?.length) { showToast('❌ Najpierw wylosuj kapitanów', 'error'); return; }
+  ev.status = 'draft';
+  ev.draftTurn = ev.draftTurn || 0;
+  await saveData();
+  renderEvents();
+  openDraftView(eventId);
+}
+
+function openDraftView(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  document.getElementById('event-detail-modal').classList.remove('open');
+
+  // Use a full-screen overlay for draft
+  let overlay = document.getElementById('draft-overlay');
+  if(!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'draft-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9999;overflow-y:auto;padding:1rem';
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'block';
+  renderDraftView(eventId);
+}
+
+function renderDraftView(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  const overlay = document.getElementById('draft-overlay');
+  if(!ev || !overlay) return;
+
+  const pool = ev.draftPool || [];
+  const order = ev.draftOrder || [];
+  const turn = ev.draftTurn || 0;
+  const isDone = turn >= order.length;
+  const currentTeamIdx = isDone ? -1 : order[turn];
+  const currentTeam = isDone ? null : ev.teams[currentTeamIdx];
+  const isMyTurn = currentTeam && discordUser && currentTeam.captain?.id === discordUser.id;
+  const isAdmin = _isLoggedInSync();
+
+  overlay.innerHTML = `
+    <div style="max-width:900px;margin:0 auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.8rem;letter-spacing:2px">🎯 DRAFT — ${ev.title}</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-top:.1rem">${{'snake':'🐍 Snake','linear':'➡️ Linear','random':'🎲 Losowanie','balanced':'⚖️ Balanced'}[ev.draftMethod||'snake']}</div>
+        </div>
+        <button onclick="document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
+          style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">
+          ✕ Zamknij
+        </button>
+      </div>
+
+      ${isDone ? `
+        <div style="text-align:center;padding:2rem;background:var(--surface2);border-radius:12px;margin-bottom:1rem">
+          <div style="font-size:2rem;margin-bottom:.5rem">🏆</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px">DRAFT ZAKOŃCZONY!</div>
+          ${isAdmin ? `<button onclick="finishDraft('${eventId}')" class="btn btn-primary" style="margin-top:1rem">✅ Zatwierdź drużyny</button>` : ''}
+        </div>
+      ` : `
+        <div style="background:var(--surface2);border:2px solid var(--accent);border-radius:12px;padding:1rem;margin-bottom:1rem;text-align:center">
+          <div style="font-size:.8rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Teraz wybiera</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;color:var(--accent)">${currentTeam?.name}</div>
+          <div style="font-size:.85rem;color:var(--muted)">Kapitan: ${currentTeam?.captain?.name}</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-top:.25rem">Pick ${turn + 1} z ${order.length}</div>
+          ${isMyTurn ? '<div style="color:var(--win);font-weight:700;margin-top:.5rem">👆 Twoja kolej! Wybierz gracza poniżej.</div>' : ''}
+          ${isAdmin && !isMyTurn ? `<button onclick="adminPickFor('${eventId}')" style="margin-top:.5rem;background:transparent;border:1px solid var(--muted);color:var(--muted);border-radius:6px;padding:.2rem .6rem;font-size:.75rem;cursor:pointer;font-family:inherit">👑 Wybierz za kapitana</button>` : ''}
+        </div>
+      `}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <!-- Available players -->
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">
+            👥 DOSTĘPNI (${pool.length})
+          </div>
+          <div style="display:flex;flex-direction:column;gap:.35rem">
+            ${pool.map(p => `
+              <div style="display:flex;align-items:center;gap:.5rem;background:var(--surface2);border-radius:8px;padding:.5rem .75rem;
+                ${(isMyTurn || (isAdmin && !isDone)) ? 'cursor:pointer;border:1px solid var(--border)' : 'border:1px solid transparent'}"
+                ${(isMyTurn || (isAdmin && !isDone)) ? `onclick="draftPickPlayer('${eventId}','${p.id}')" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"` : ''}>
+                ${p.avatar ? `<img src="${p.avatar}" style="width:26px;height:26px;border-radius:50%">` : '<div style="width:26px;height:26px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center">👤</div>'}
+                <span style="font-weight:600;font-size:.9rem">${p.name}</span>
+                ${(isMyTurn || (isAdmin && !isDone)) ? '<span style="margin-left:auto;color:var(--accent);font-size:.8rem">+ Pick</span>' : ''}
+              </div>`).join('')}
+            ${pool.length === 0 && !isDone ? '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Wszyscy gracze wybrani</div>' : ''}
+          </div>
+        </div>
+
+        <!-- Teams -->
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">🏀 DRUŻYNY</div>
+          ${ev.teams.map((t, ti) => `
+            <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;
+              ${ti === currentTeamIdx && !isDone ? 'border:2px solid var(--accent)' : 'border:1px solid var(--border)'}">
+              <div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem">${t.name} <span style="font-size:.75rem;color:var(--muted)">(kpt: ${t.captain?.name})</span></div>
+              ${(t.players||[]).map(p => `<div style="font-size:.8rem;padding:.1rem 0;color:${p.id === t.captain?.id ? 'var(--accent)' : 'var(--text)'}">${p.id === t.captain?.id ? '★ ' : ''}${p.name}</div>`).join('')}
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function draftPickPlayer(eventId, playerId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  const turn = ev.draftTurn || 0;
+  const order = ev.draftOrder || [];
+  if(turn >= order.length) return;
+
+  const teamIdx = order[turn];
+  const playerIdx = (ev.draftPool||[]).findIndex(p => p.id === playerId);
+  if(playerIdx === -1) return;
+
+  const player = ev.draftPool[playerIdx];
+  ev.teams[teamIdx].players.push(player);
+  ev.draftPool.splice(playerIdx, 1);
+  ev.draftTurn = turn + 1;
+
+  await saveData();
+  renderDraftView(eventId);
+  renderEvents();
+}
+
+async function adminPickFor(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !ev.draftPool?.length) return;
+  // Auto-pick first available player
+  await draftPickPlayer(eventId, ev.draftPool[0].id);
+}
+
+async function finishDraft(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  ev.status = 'active';
+  ev.draftPool = [];
+  await saveData();
+  document.getElementById('draft-overlay').style.display = 'none';
+  renderEvents();
+  openEventDetail(eventId);
+  showToast('🏆 Draft zakończony! Drużyny gotowe.', 'success');
+}
+
 
 function getDefaultRound() {
   // When no rounds defined, treat all matches as round 1
