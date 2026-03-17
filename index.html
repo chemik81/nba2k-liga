@@ -4404,7 +4404,7 @@ async function loadTestEvents() {
       id:'test_ev_2',
       title:'Draft w trakcie — Snake 4 drużyny',
       type:'draft', date: today,
-      description:'Symulacja trwającego draftu — 3 pick'i już wykonane.',
+      description:'Symulacja trwającego draftu — 3 picki już wykonane.',
       status:'draft',
       maxPlayers:20, numTeams:4,
       players: players20,
@@ -4416,7 +4416,7 @@ async function loadTestEvents() {
       ],
       draftPool: players20.filter((_,i) => ![0,1,2,3,4,5,6,7,14].includes(i)),
       draftTurn:7,
-      draftOrder:(()=>{const o=[];let r=0;while(o.length<16){const f=r%2===0;const idx=f?[0,1,2,3]:[3,2,1,0];for(const i of idx){if(o.length<16)o.push(i);}r++;}return o;})(),
+      draftOrder:[0,1,2,3,3,2,1,0,0,1,2,3,3,2,1,0],
       draftMethod:'snake',
       createdAt: new Date().toISOString(),
     },
@@ -4856,9 +4856,9 @@ function buildDraftOrder(method, numTeams, totalPicks) {
     const indices = forward
       ? Array.from({length: numTeams}, (_, i) => i)
       : Array.from({length: numTeams}, (_, i) => numTeams - 1 - i);
-    for(const i of indices) {
+    indices.forEach(function(i) {
       if(order.length < totalPicks) order.push(i);
-    }
+    });
     round++;
   }
   return order;
