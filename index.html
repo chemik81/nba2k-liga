@@ -2125,26 +2125,76 @@ function renderParsedPreview(match) {
 }
 
 function renderTeamTable(team, idx) {
-  const rows = team.players.map(p => `
+  const inpStyle = 'width:38px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .2rem;font-size:.8rem;text-align:center;font-family:inherit';
+  const inpStyleW = 'width:52px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .2rem;font-size:.8rem;text-align:center;font-family:inherit';
+
+  const rows = team.players.map((p, pi) => `
     <tr>
-      <td>${p.name}</td>
-      <td style="color:var(--accent);font-weight:700;font-size:.8rem">${p.pos||'-'}</td>
-      <td><span class="grade grade-${(p.grade||'B').replace('+','p').replace('-','m')}">${p.grade||'B'}</span></td>
-      <td>${p.pts||0}</td><td>${p.reb||0}</td><td>${p.ast||0}</td><td>${p.stl||0}</td><td>${p.blk||0}</td>
-      <td>${p.fgm}/${p.fga}</td><td>${p.tpm}/${p.tpa}</td><td>${p.ftm}/${p.fta}</td>
+      <td style="padding:.25rem .4rem">
+        <input type="text" value="${p.name}" style="width:110px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .3rem;font-size:.8rem;font-family:inherit"
+          oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].name=this.value">
+      </td>
+      <td style="padding:.25rem .3rem">
+        <select style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .2rem;font-size:.75rem;font-family:inherit"
+          onchange="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].pos=this.value">
+          ${['PG','SG','SF','PF','C'].map(pos=>`<option${(p.pos||'')=== pos?' selected':''}>${pos}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:.25rem .3rem">
+        <select style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .2rem;font-size:.75rem;font-family:inherit"
+          onchange="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].grade=this.value">
+          ${['A+','A','A-','B+','B','B-','C+','C','C-','D'].map(g=>`<option${(p.grade||'B')===g?' selected':''}>${g}</option>`).join('')}
+        </select>
+      </td>
+      ${[['pts',p.pts],['reb',p.reb],['ast',p.ast],['stl',p.stl],['blk',p.blk],['to',p.to],['fol',p.fol]].map(([k,v])=>`
+        <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${v||0}" style="${inpStyle}"
+          oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].${k}=+this.value"></td>`).join('')}
+      <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${p.fgm||0}" style="${inpStyle}"
+        oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].fgm=+this.value"></td>
+      <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${p.fga||0}" style="${inpStyle}"
+        oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].fga=+this.value"></td>
+      <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${p.tpm||0}" style="${inpStyle}"
+        oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].tpm=+this.value"></td>
+      <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${p.tpa||0}" style="${inpStyle}"
+        oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].tpa=+this.value"></td>
+      <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${p.ftm||0}" style="${inpStyle}"
+        oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].ftm=+this.value"></td>
+      <td style="padding:.25rem .2rem"><input type="number" min="0" max="99" value="${p.fta||0}" style="${inpStyle}"
+        oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].fta=+this.value"></td>
     </tr>`).join('');
+
   const q = team.quarters || [];
   return `
     <div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.5rem">
-        ${team.name} <span style="color:var(--accent)">${team.score}</span>
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap">
+        <input type="text" value="${team.name}"
+          style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);padding:.3rem .6rem;outline:none"
+          oninput="pendingMatch.${idx===1?'team1':'team2'}.name=this.value">
+        <input type="number" value="${team.score}" min="0" max="200"
+          style="width:60px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--accent);padding:.3rem .5rem;text-align:center;outline:none"
+          oninput="pendingMatch.${idx===1?'team1':'team2'}.score=+this.value">
       </div>
-      <div class="quarters" style="margin-bottom:1rem">
-        ${q.map((s,i)=>`<div class="q-box">Q${i+1}: ${s}</div>`).join('')}
+      <div class="quarters" style="margin-bottom:.75rem">
+        ${q.map((s,i)=>`<div class="q-box" style="cursor:pointer" title="kliknij aby edytować">Q${i+1}:
+          <input type="number" value="${s}" min="0" max="99"
+            style="width:32px;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:.8rem;text-align:center;font-family:inherit;padding:0"
+            oninput="pendingMatch.${idx===1?'team1':'team2'}.quarters[${i}]=+this.value">
+        </div>`).join('')}
       </div>
       <div style="overflow-x:auto">
         <table>
-          <thead><tr><th style="text-align:left">Zawodnik</th><th>Poz</th><th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FGM/A</th><th>3PM/A</th><th>FTM/A</th></tr></thead>
+          <thead><tr>
+            <th style="text-align:left;font-size:.75rem">Gracz</th>
+            <th style="font-size:.75rem">Poz</th>
+            <th style="font-size:.75rem">GRD</th>
+            <th style="font-size:.75rem">PTS</th><th style="font-size:.75rem">REB</th>
+            <th style="font-size:.75rem">AST</th><th style="font-size:.75rem">STL</th>
+            <th style="font-size:.75rem">BLK</th><th style="font-size:.75rem">TO</th>
+            <th style="font-size:.75rem">PF</th>
+            <th style="font-size:.75rem">FGM</th><th style="font-size:.75rem">FGA</th>
+            <th style="font-size:.75rem">3PM</th><th style="font-size:.75rem">3PA</th>
+            <th style="font-size:.75rem">FTM</th><th style="font-size:.75rem">FTA</th>
+          </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -4901,8 +4951,19 @@ function editMatch(id) {
     const buildTeamRows = (team, teamIdx) =>
       (team.players||[]).map((p, pi) => `
         <tr>
-          <td style="padding:.3rem .5rem;font-size:.8rem;font-weight:700;white-space:nowrap">${p.name}</td>
           <td style="padding:.3rem .5rem">
+            <input type="text" value="${p.name}"
+              onchange="editMatchPlayer(${teamIdx},${pi},'name',this.value)"
+              style="width:110px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .3rem;font-size:.8rem;font-family:inherit">
+          </td>
+          <td style="padding:.3rem .3rem">
+            <select onchange="editMatchPlayer(${teamIdx},${pi},'pos',this.value)"
+              style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .2rem;font-size:.75rem;font-family:inherit">
+              ${['PG','SG','SF','PF','C'].map(pos =>
+                `<option${(p.pos||'')=== pos?' selected':''}>${pos}</option>`).join('')}
+            </select>
+          </td>
+          <td style="padding:.3rem .3rem">
             <select onchange="editMatchGrade(${teamIdx},${pi},this.value)"
               style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .3rem;font-size:.8rem;font-family:inherit">
               ${['A+','A','A-','B+','B','B-','C+','C','C-','D'].map(g =>
@@ -4923,7 +4984,8 @@ function editMatch(id) {
         <table style="width:100%;border-collapse:collapse;font-size:.8rem">
           <thead><tr>
             <th style="text-align:left;padding:.3rem .5rem;color:var(--muted)">Gracz</th>
-            <th style="padding:.3rem .5rem;color:var(--muted)">GRD</th>
+            <th style="padding:.3rem .3rem;color:var(--muted)">Poz</th>
+            <th style="padding:.3rem .3rem;color:var(--muted)">GRD</th>
             ${LABELS.map(l => `<th style="padding:.2rem .3rem;color:var(--muted)">${l}</th>`).join('')}
           </tr></thead>
           <tbody>${buildTeamRows(team, teamIdx)}</tbody>
@@ -4960,6 +5022,14 @@ function editMatch(id) {
 
     pr.insertBefore(editPanel, pr.firstChild);
   }, 200);
+}
+
+function editMatchPlayer(teamIdx, playerIdx, field, value) {
+  if(!pendingMatch) return;
+  const team = teamIdx === 1 ? pendingMatch.team1 : pendingMatch.team2;
+  if(team.players && team.players[playerIdx]) {
+    team.players[playerIdx][field] = value;
+  }
 }
 
 function editMatchStat(teamIdx, playerIdx, stat, value) {
