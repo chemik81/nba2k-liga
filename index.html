@@ -4992,6 +4992,10 @@ function editMatch(id) {
         </table>
       </div>`;
 
+    // Remove any existing edit panel first
+    const oldPanel = document.getElementById('edit-stats-panel');
+    if(oldPanel) oldPanel.remove();
+
     // Add editable table before the existing preview tabs
     const editPanel = document.createElement('div');
     editPanel.id = 'edit-stats-panel';
