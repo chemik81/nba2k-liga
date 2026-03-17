@@ -796,10 +796,10 @@
   <div id="view-events" class="view">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.5rem">
       <div class="section-title" style="margin-bottom:0">🏆 Eventy</div>
-      <button onclick="openCreateEventModal()" class="btn btn-primary" style="flex-shrink:0;white-space:nowrap">+ Nowy Event</button>
+      <button id="btn-new-event" onclick="openCreateEventModal()" class="btn btn-primary" style="flex-shrink:0;white-space:nowrap;display:none">+ Nowy Event</button>
     </div>
     <div id="events-list">
-      <div class="empty"><div class="icon">🏆</div><p>Brak eventów — kliknij "+ Nowy Event" aby stworzyć pierwszy.</p></div>
+      <div class="empty"><div class="icon">🏆</div><p>Brak eventów.</p></div>
     </div>
   </div>
 
@@ -4234,11 +4234,15 @@ const EVENT_STATUS = {
 function renderEvents() {
   const el = document.getElementById('events-list');
   if(!el) return;
+  const btnNew = document.getElementById('btn-new-event');
+  if(btnNew) btnNew.style.display = _isLoggedInSync() ? '' : 'none';
   if(!events.length) {
-    el.innerHTML = '<div class="empty"><div class="icon">🏆</div><p>Brak eventów — kliknij "+ Nowy Event" aby stworzyć pierwszy.</p></div>';
+    el.innerHTML = _isLoggedInSync()
+      ? '<div class="empty"><div class="icon">🏆</div><p>Brak eventów — kliknij &quot;+ Nowy Event&quot; aby stworzyć pierwszy.</p></div>'
+      : '<div class="empty"><div class="icon">🏆</div><p>Brak eventów.</p></div>';
     return;
   }
-  el.innerHTML = [...events].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0)).map(ev => {
+    el.innerHTML = [...events].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0)).map(ev => {
     const type = EVENT_TYPES[ev.type] || { label: ev.type };
     const status = EVENT_STATUS[ev.status] || { label: ev.status, color: 'var(--muted)' };
     const playerCount = (ev.players||[]).length;
@@ -4295,14 +4299,6 @@ function openCreateEventModal(editId) {
       ${[2,3,4,5,6,7,8].map(n => `<option value="${n}"${(ev?.numTeams||2)==n?' selected':''}>${n} drużyny/drużyn</option>`).join('')}
     </select>
 
-    <label style="margin-top:.75rem">Metoda draftu</label>
-    <select id="ev-draftmethod" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
-      <option value="snake"${(ev?.draftMethod||'snake')==='snake'?' selected':''}>🐍 Snake (A→B→B→A→A→B...)</option>
-      <option value="linear"${ev?.draftMethod==='linear'?' selected':''}>➡️ Linear (A→B→A→B...)</option>
-      <option value="random"${ev?.draftMethod==='random'?' selected':''}>🎲 Losowanie (bez draftu)</option>
-      <option value="balanced"${ev?.draftMethod==='balanced'?' selected':''}>⚖️ Balanced (na podstawie statystyk ligi)</option>
-    </select>
-
     <label style="margin-top:.75rem">Maks. graczy (opcjonalne)</label>
     <input id="ev-max" type="number" min="2" max="100" value="${ev?.maxPlayers||''}" placeholder="bez limitu"
       style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
@@ -4328,15 +4324,14 @@ async function saveEvent(editId) {
   const date  = document.getElementById('ev-date').value;
   const max      = +document.getElementById('ev-max').value || null;
   const numTeams    = +document.getElementById('ev-numteams').value || 2;
-  const draftMethod = document.getElementById('ev-draftmethod').value || 'snake';
-  const desc        = document.getElementById('ev-desc').value.trim();
+  const desc = document.getElementById('ev-desc').value.trim();
   if(!title) { showToast('❌ Wpisz nazwę eventu', 'error'); return; }
 
   if(editId) {
     const idx = events.findIndex(e => e.id === editId);
-    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, numTeams, draftMethod, description: desc };
+    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, numTeams, description: desc };
   } else {
-    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max, numTeams, draftMethod,
+    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max, numTeams,
       description: desc, status: 'open', players: [], teams: [],
       createdAt: new Date().toISOString() });
   }
@@ -4754,18 +4749,97 @@ function buildDraftOrder(method, numTeams, totalPicks) {
   return order;
 }
 
-async function startDraft(eventId) {
+function startDraft(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
   if(!ev.teams?.length) { showToast('❌ Najpierw wylosuj kapitanów', 'error'); return; }
+
+  // Show method selection modal
+  document.getElementById('start-draft-eventid').value = eventId;
+  // Pre-select existing method if set
+  const sel = document.getElementById('start-draft-method');
+  if(sel && ev.draftMethod) sel.value = ev.draftMethod;
+  document.getElementById('start-draft-modal').classList.add('open');
+}
+
+async function confirmStartDraft() {
+  const eventId = document.getElementById('start-draft-eventid').value;
+  const method  = document.getElementById('start-draft-method').value || 'snake';
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+
+  // Recalculate draftPool/Order with chosen method (captains already set)
+  const captainIds = new Set((ev.teams||[]).map(t => t.captain?.id).filter(Boolean));
+  const n = ev.teams.length;
+
+  if(method === 'random') {
+    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5);
+    remaining.forEach((p, i) => ev.teams[i % n].players.push(p));
+    ev.draftPool = [];
+    ev.draftMethod = method;
+    ev.status = 'active';
+    await saveData();
+    document.getElementById('start-draft-modal').classList.remove('open');
+    renderEvents();
+    openEventDetail(eventId);
+    showToast('🎲 Gracze losowo przydzieleni!', 'success');
+    return;
+  }
+
+  if(method === 'balanced') {
+    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id));
+    const scored = remaining.map(p => {
+      const pm = matches.filter(m => [...(m.team1.players||[]),...(m.team2.players||[])].some(x => x.name === p.name));
+      if(!pm.length) return { p, score: 0 };
+      const stats = pm.reduce((acc, m) => {
+        const pl = [...(m.team1.players||[]),...(m.team2.players||[])].find(x => x.name === p.name);
+        if(pl) { acc.pts+=pl.pts||0; acc.reb+=pl.reb||0; acc.ast+=pl.ast||0; acc.stl+=pl.stl||0; acc.blk+=pl.blk||0; acc.gp++; }
+        return acc;
+      }, {pts:0,reb:0,ast:0,stl:0,blk:0,gp:0});
+      const gp = stats.gp||1;
+      return { p, score: (stats.pts/gp)*.4+(stats.reb/gp)*.2+(stats.ast/gp)*.2+(stats.stl/gp)*.1+(stats.blk/gp)*.1 };
+    }).sort((a,b) => b.score-a.score);
+    const assignOrder = buildDraftOrder('snake', n, scored.length);
+    // Reset teams to only captains first
+    ev.teams.forEach(t => { t.players = [t.captain]; });
+    scored.forEach(({p}, i) => ev.teams[assignOrder[i]].players.push(p));
+    ev.draftPool = [];
+    ev.draftMethod = method;
+    ev.status = 'active';
+    await saveData();
+    document.getElementById('start-draft-modal').classList.remove('open');
+    renderEvents();
+    openEventDetail(eventId);
+    showToast('⚖️ Drużyny zbalansowane!', 'success');
+    return;
+  }
+
+  // Snake or Linear — start interactive draft
+  ev.teams.forEach(t => { t.players = [t.captain]; }); // reset to captains only
+  ev.draftPool = (ev.players||[]).filter(p => !captainIds.has(p.id));
+  ev.draftTurn = 0;
+  ev.draftOrder = buildDraftOrder(method, n, ev.draftPool.length);
+  ev.draftMethod = method;
   ev.status = 'draft';
-  ev.draftTurn = ev.draftTurn || 0;
   await saveData();
+  document.getElementById('start-draft-modal').classList.remove('open');
   renderEvents();
   openDraftView(eventId);
 }
 
 let _draftPollInterval = null;
+
+function updateDraftMethodDesc() {
+  const descs = {
+    snake:    'Kapitanowie wybierają graczy po kolei, odwracając kolejność co rundę (A→B→C→D→D→C→B→A). Najbardziej sprawiedliwa metoda.',
+    linear:   'Kapitanowie wybierają w stałej kolejności (A→B→C→D→A→B→C→D...). Prosta, ale faworyzuje pierwsze drużyny.',
+    random:   'Gracze są losowo przydzielani do drużyn. Brak interaktywnego wyboru — draft kończy się od razu.',
+    balanced: 'Gracze przydzielani automatycznie wg statystyk z ligi — najlepsi rozłożeni równomiernie między drużyny.',
+  };
+  const sel = document.getElementById('start-draft-method');
+  const desc = document.getElementById('draft-method-desc');
+  if(sel && desc) desc.textContent = descs[sel.value] || '';
+}
 
 function stopDraftPolling() {
   if(_draftPollInterval) { clearInterval(_draftPollInterval); _draftPollInterval = null; }
@@ -6261,6 +6335,30 @@ function rdRenderContent(idx) {
   <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('event-detail-modal').classList.remove('open')">✕</button>
     <div id="event-detail-content"></div>
+  </div>
+</div>
+
+<!-- START DRAFT METHOD MODAL -->
+<div class="modal-overlay" id="start-draft-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1200">
+  <div class="modal" style="max-width:480px">
+    <button class="modal-close" onclick="document.getElementById('start-draft-modal').classList.remove('open')">&#x2715;</button>
+    <input type="hidden" id="start-draft-eventid">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">&#x1F3AF; START DRAFTU</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Wybierz metod&#x0119; draftu przed rozpocz&#x0119;ciem.</div>
+    <label style="margin-top:0">Metoda draftu</label>
+    <select id="start-draft-method" onchange="updateDraftMethodDesc()" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:.5rem">
+      <option value="snake">&#x1F40D; Snake &#x2014; A&#x2192;B&#x2192;C&#x2192;D&#x2192;D&#x2192;C&#x2192;B&#x2192;A (zalecane)</option>
+      <option value="linear">&#x27A1;&#xFE0F; Linear &#x2014; A&#x2192;B&#x2192;C&#x2192;D&#x2192;A&#x2192;B&#x2192;C&#x2192;D</option>
+      <option value="random">&#x1F3B2; Losowanie &#x2014; gracze przydzielani losowo</option>
+      <option value="balanced">&#x2696;&#xFE0F; Balanced &#x2014; przydzielanie wg statystyk ligi</option>
+    </select>
+    <div style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1.25rem;font-size:.82rem;color:var(--muted);line-height:1.6" id="draft-method-desc">
+      Kapitanowie wybieraj&#x105; graczy po kolei, odwracaj&#x105;c kolejno&#x15B;&#x107; co rund&#x0119;. Najbardziej sprawiedliwa metoda.
+    </div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;font-size:1rem" onclick="confirmStartDraft()">&#x1F3AF; Rozpocznij draft</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('start-draft-modal').classList.remove('open')">Anuluj</button>
+    </div>
   </div>
 </div>
 
