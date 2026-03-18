@@ -2209,7 +2209,7 @@ WAŻNE — rozróżnienie BLK / TO / PF (najczęstsze błędy OCR):
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
   try {
-    const data = await callAI(MODEL_SCREENSHOT(), 4000, [{
+    const data = await callAI(MODEL_SCREENSHOT(), 8192, [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: screenshotMimeType, data: screenshotBase64 } },
@@ -5084,7 +5084,7 @@ POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
 KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
 
   try {
-    const data = await callAI(MODEL_SCREENSHOT(), 4000, [{
+    const data = await callAI(MODEL_SCREENSHOT(), 8192, [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: _evParseMime, data: _evParseBase64 } },
