@@ -1639,7 +1639,7 @@ let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let workerUrl = localStorage.getItem('nba2k_worker_url') || 'https://kw5-elite-proxy.igor-bernakiewicz.workers.dev';
 const _storedModel = localStorage.getItem('nba2k_ai_model') || '';
-let aiModel = _storedModel === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : (_storedModel || 'gemini-2.5-flash');
+let aiModel = (_storedModel && _storedModel.includes('gemini') && _storedModel !== 'gemini-2.5-flash') ? 'gemini-2.5-flash' : (_storedModel || 'gemini-2.5-flash');
 // geminiKey lives in Cloudflare Worker as GEMINI_API_KEY secret — not stored in browser
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
 const MODEL_SCREENSHOT = () => aiModel;
