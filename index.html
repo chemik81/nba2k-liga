@@ -7058,18 +7058,32 @@ function openRosterCalculator() {
     .map(p => ({ ...p, cs: calcCompositeScore(p) }))
     .sort((a,b) => b.cs - a.cs);
 
-  const options = players.map(p =>
-    `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — CS: ${p.cs.toFixed(1)}</option>`
-  ).join('');
+  // Group players by position, fallback to all if position unknown
+  const byPos = {};
+  ['PG','SG','SF','PF','C'].forEach(pos => {
+    byPos[pos] = players.filter(p => p.pos === pos);
+  });
+  // Players without position assigned — show in all slots as fallback
+  const noPos = players.filter(p => !p.pos);
 
-  const slots = ['PG','SG','SF','PF','C'].map((pos, i) => `
+  const slots = ['PG','SG','SF','PF','C'].map((pos, i) => {
+    const posPlayers = [...byPos[pos], ...noPos].sort((a,b) => b.cs - a.cs);
+    const opts = posPlayers.length
+      ? posPlayers.map(p => `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — CS: ${p.cs.toFixed(1)}</option>`).join('')
+      : players.map(p => `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — CS: ${p.cs.toFixed(1)}</option>`).join('');
+    const count = posPlayers.length || players.length;
+    return `
     <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;color:var(--accent);width:2rem;font-size:.9rem">${pos}</span>
+      <div style="flex-shrink:0;text-align:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;color:var(--accent);font-size:.9rem">${pos}</div>
+        <div style="font-size:.65rem;color:var(--muted)">${count}gr.</div>
+      </div>
       <select id="rc-slot-${i}" onchange="calcRoster()" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.4rem .6rem;font-family:inherit;font-size:.85rem">
-        <option value="">— wybierz gracza —</option>
-        ${options}
+        <option value="">— wybierz ${pos} —</option>
+        ${opts}
       </select>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   document.getElementById('player-modal-content').innerHTML = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🏗️ KALKULATOR SKŁADU</div>
