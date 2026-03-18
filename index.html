@@ -7156,11 +7156,14 @@ function openRosterCalculator() {
   const byPos = {};
   ['PG','SG','SF','PF','C'].forEach(pos => { byPos[pos] = players.filter(p => p.pos === pos); });
   const noPos = players.filter(p => !p.pos);
+  // SF i PF mogą grać wymiennie
+  const sfpf = players.filter(p => p.pos === 'SF' || p.pos === 'PF');
 
   const scoreLabel = metric === 'per' ? 'PER' : 'CS';
 
   const slots = ['PG','SG','SF','PF','C'].map((pos, i) => {
-    const posPlayers = [...byPos[pos], ...noPos].sort((a,b) => b.score - a.score);
+    const basePlayers = (pos === 'SF' || pos === 'PF') ? sfpf : byPos[pos];
+    const posPlayers = [...new Map([...basePlayers, ...noPos].map(p => [p.name+'|||'+p.team, p])).values()].sort((a,b) => b.score - a.score);
     const list = posPlayers.length ? posPlayers : players;
     const opts = list.map(p =>
       `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — ${scoreLabel}: ${p.score.toFixed(1)}</option>`
