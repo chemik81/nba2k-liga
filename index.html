@@ -2291,16 +2291,6 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 function renderParsedPreview(match) {
   const container = document.getElementById('parsed-match-preview');
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:1.5rem">
-      <div>
-        <label style="display:block;font-size:0.75rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem">Nazwa drużyny 1</label>
-        <input id="edit-team1-name" type="text" value="${match.team1.name}" style="width:100%;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;padding:0.6rem 0.9rem;outline:none" oninput="pendingMatch.team1.name=this.value">
-      </div>
-      <div>
-        <label style="display:block;font-size:0.75rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem">Nazwa drużyny 2</label>
-        <input id="edit-team2-name" type="text" value="${match.team2.name}" style="width:100%;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;padding:0.6rem 0.9rem;outline:none" oninput="pendingMatch.team2.name=this.value">
-      </div>
-    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">
       ${renderTeamTable(match.team1, 1)}
       ${renderTeamTable(match.team2, 2)}
@@ -2472,7 +2462,7 @@ function teamInitials(name) {
 }
 function teamLogo(name, size=40, fontSize='1rem') {
   if(typeof teams !== 'undefined' && teams[name]?.logo)
-    return `<img src="${teams[name].logo}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0">`;
+    return `<img src="${teams[name].logo}" style="width:${size}px;height:${size}px;border-radius:8px;object-fit:contain;background:rgba(255,255,255,0.08);flex-shrink:0;padding:2px">`;
   const color = teamColor(name);
   const initials = teamInitials(name);
   return `<div style="width:${size}px;height:${size}px;border-radius:8px;background:${color};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${fontSize};color:#fff;flex-shrink:0;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,.4)">${initials}</div>`;
@@ -6143,7 +6133,7 @@ function openTeamModal(tn){
       +'<td>'+(p.fga>0?Math.round(p.fgm/p.fga*100):0)+'%</td><td>'+(p.tpa>0?Math.round(p.tpm/p.tpa*100):0)+'%</td><td>'+(p.fta>0?Math.round(p.ftm/p.fta*100):0)+'%</td></tr>';
   }).join('');
   document.getElementById('team-modal-content').innerHTML=
-    '<div style="margin-bottom:1.5rem"><div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem">'+teamLogo(tn,52,'1.2rem')+'<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">'+tn+'</div></div>'
+    '<div style="margin-bottom:1.5rem"><div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem">'+teamLogo(tn,40,'1rem')+'<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">'+tn+'</div></div>'
     +'<div style="display:flex;gap:1.5rem;margin-top:0.5rem;flex-wrap:wrap">'
     +'<span style="color:var(--win);font-weight:700">'+w+'W</span><span style="color:var(--loss);font-weight:700">'+l+'L</span>'
     +'<span style="color:var(--muted)">PPG: <strong style="color:var(--text)">'+(gp>0?(pf/gp).toFixed(1):'0.0')+'</strong></span>'
