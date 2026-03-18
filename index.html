@@ -4545,7 +4545,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
       </div>
 
-      ${ev.status === 'open' && !isAdmin ? `
+      ${ev.status === 'open' ? `
         <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
           ${discordUser ? `
             ${(ev.players||[]).find(p => p.id === discordUser.id) ? `
