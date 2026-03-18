@@ -1638,7 +1638,8 @@ let jbKey = localStorage.getItem('nba2k_jb_key') || ''; // Master Key: admin onl
 let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let workerUrl = localStorage.getItem('nba2k_worker_url') || 'https://kw5-elite-proxy.igor-bernakiewicz.workers.dev';
-let aiModel = localStorage.getItem('nba2k_ai_model') || 'gemini-2.0-flash';
+const _storedModel = localStorage.getItem('nba2k_ai_model') || '';
+let aiModel = _storedModel === 'gemini-1.5-flash' ? 'gemini-2.0-flash' : (_storedModel || 'gemini-2.0-flash');
 // geminiKey lives in Cloudflare Worker as GEMINI_API_KEY secret — not stored in browser
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
 const MODEL_SCREENSHOT = () => aiModel;
@@ -1708,7 +1709,7 @@ async function callGemini(model, max_tokens, messages) {
 
 // Universal AI call — picks provider based on aiModel
 async function callAI(model, max_tokens, messages) {
-  if(model === 'gemini-2.0-flash' || model === 'gemini-1.5-pro') {
+  if(model && model.includes('gemini')) {
     return callGemini(model, max_tokens, messages);
   }
   return callAnthropic(model, max_tokens, messages);
