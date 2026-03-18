@@ -2000,8 +2000,14 @@ function applyAlias(name) {
 
 // Apply aliases to all players in a match
 function applyAliasesToMatch(match) {
-  if(match.team1?.players) match.team1.players = match.team1.players.map(p => ({...p, name: applyAlias(p.name)}));
-  if(match.team2?.players) match.team2.players = match.team2.players.map(p => ({...p, name: applyAlias(p.name)}));
+  const normalizePlayer = p => {
+    const n = {...p, name: applyAlias(p.name)};
+    // Normalize fouls field: AI returns 'fouls', app uses 'fol'
+    if(n.fouls !== undefined && n.fol === undefined) { n.fol = n.fouls; }
+    return n;
+  };
+  if(match.team1?.players) match.team1.players = match.team1.players.map(normalizePlayer);
+  if(match.team2?.players) match.team2.players = match.team2.players.map(normalizePlayer);
   return match;
 }
 
@@ -2216,13 +2222,13 @@ function renderParsedPreview(match) {
 }
 
 function renderTeamTable(team, idx) {
-  const inpStyle = 'width:38px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .2rem;font-size:.8rem;text-align:center;font-family:inherit';
-  const inpStyleW = 'width:52px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .2rem;font-size:.8rem;text-align:center;font-family:inherit';
+  const inpStyle = 'width:32px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:.1rem .1rem;font-size:.72rem;text-align:center;font-family:inherit';
+  const inpStyleW = 'width:44px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:.1rem .1rem;font-size:.72rem;text-align:center;font-family:inherit';
 
   const rows = team.players.map((p, pi) => `
     <tr>
       <td style="padding:.25rem .4rem">
-        <input type="text" value="${p.name}" style="width:110px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .3rem;font-size:.8rem;font-family:inherit"
+        <input type="text" value="${p.name}" style="width:90px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:.1rem .2rem;font-size:.72rem;font-family:inherit"
           oninput="pendingMatch.${idx===1?'team1':'team2'}.players[${pi}].name=this.value">
       </td>
       <td style="padding:.25rem .3rem">
@@ -2278,13 +2284,13 @@ function renderTeamTable(team, idx) {
             <th style="text-align:left;font-size:.75rem">Gracz</th>
             <th style="font-size:.75rem">Poz</th>
             <th style="font-size:.75rem">GRD</th>
-            <th style="font-size:.75rem">PTS</th><th style="font-size:.75rem">REB</th>
-            <th style="font-size:.75rem">AST</th><th style="font-size:.75rem">STL</th>
-            <th style="font-size:.75rem">BLK</th><th style="font-size:.75rem">TO</th>
-            <th style="font-size:.75rem">PF</th>
-            <th style="font-size:.75rem">FGM</th><th style="font-size:.75rem">FGA</th>
-            <th style="font-size:.75rem">3PM</th><th style="font-size:.75rem">3PA</th>
-            <th style="font-size:.75rem">FTM</th><th style="font-size:.75rem">FTA</th>
+            <th style="font-size:.65rem">PTS</th><th style="font-size:.65rem">REB</th>
+            <th style="font-size:.65rem">AST</th><th style="font-size:.65rem">STL</th>
+            <th style="font-size:.65rem">BLK</th><th style="font-size:.65rem">TO</th>
+            <th style="font-size:.65rem">PF</th>
+            <th style="font-size:.65rem">FGM</th><th style="font-size:.65rem">FGA</th>
+            <th style="font-size:.65rem">3PM</th><th style="font-size:.65rem">3PA</th>
+            <th style="font-size:.65rem">FTM</th><th style="font-size:.65rem">FTA</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
