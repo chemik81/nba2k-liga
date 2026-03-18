@@ -705,6 +705,10 @@
     <input type="hidden" id="setup-anthropic" value="">
 
     <div style="border-top:1px solid var(--border);margin:1.25rem 0"></div>
+    <label>Discord Webhook URL <span style="color:var(--muted);font-weight:400">(opcjonalne — powiadomienia o meczach)</span></label>
+    <input type="text" id="setup-webhook" placeholder="https://discord.com/api/webhooks/..." style="font-size:.85rem">
+
+    <div style="border-top:1px solid var(--border);margin:1.25rem 0"></div>
     <label>Model AI <span style="color:var(--muted);font-weight:400">(balans jakość vs koszt)</span></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
       <label id="model-sonnet-lbl" style="display:flex;align-items:flex-start;gap:.6rem;padding:.75rem;border:2px solid var(--accent);border-radius:8px;cursor:pointer;background:rgba(245,197,24,.06)">
@@ -817,7 +821,8 @@
 
   <!-- STATS -->
   <div id="view-stats" class="view">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="player_stats">Statystyki Zawodników</div><button onclick="openComparatorModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.5rem 1rem;border-radius:6px;font-size:.85rem;cursor:pointer;font-family:inherit" data-i18n="compare">&#x26A1; Porównaj</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="player_stats">Statystyki Zawodników</div><button onclick="openComparatorModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.5rem 1rem;border-radius:6px;font-size:.85rem;cursor:pointer;font-family:inherit" data-i18n="compare">&#x26A1; Porównaj</button>
+      <button onclick="openRosterCalculator()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.5rem 1rem;border-radius:6px;font-size:.85rem;cursor:pointer;font-family:inherit">🏗️ Kalkulator składu</button></div>
     <div class="filters">
       <div><label data-i18n="season_lbl">Sezon</label><select id="filter-season-stats" onchange="renderStats()"><option value="">Wszystkie sezony</option></select></div>
       <div><label data-i18n="team_lbl">Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
@@ -1543,6 +1548,7 @@ let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let workerUrl = localStorage.getItem('nba2k_worker_url') || 'https://kw5-elite-proxy.igor-bernakiewicz.workers.dev';
 let aiModel = localStorage.getItem('nba2k_ai_model') || 'claude-sonnet-4-20250514';
+let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
 const MODEL_SCREENSHOT = () => aiModel;
 const MODEL_CHEAP = () => aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel;
 
@@ -2249,6 +2255,7 @@ function saveMatch() {
   }
   saveData().then(() => {
     showToast('✅ Mecz zapisany!', 'success');
+    sendMatchWebhook(_savedMatch);
     if(hasAI()) {
       setStatus('success', t('match_saved_recap'));
       generateRecap(_savedMatch.id).then(() => {
@@ -2726,6 +2733,7 @@ function openPlayerModal(playerName, teamName) {
         <span style="color:var(--muted)">·</span>
         <span>${gp} meczy</span>
         <button onclick="openPlayerCard('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.2rem .6rem;font-size:.75rem;cursor:pointer;font-family:inherit" data-i18n="player_card">🃏 Karta</button>
+        <button onclick="openPlayerH2H('${playerName}','${teamName}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.2rem .6rem;font-size:.75rem;cursor:pointer;font-family:inherit">⚔️ H2H</button>
       </div>
     </div>
 
@@ -3787,6 +3795,8 @@ function openSetupModal() {
     });
   });
   document.getElementById('setup-error').textContent = '';
+  const _wh = document.getElementById('setup-webhook');
+  if(_wh) _wh.value = discordWebhookUrl || '';
   document.getElementById('setup-modal').classList.add('open');
 }
 
@@ -3821,6 +3831,9 @@ async function saveSetup() {
     localStorage.setItem('nba2k_anthropic_key', aKey);
     localStorage.setItem('nba2k_worker_url', wUrl);
     localStorage.setItem('nba2k_ai_model', selectedModel);
+    const wHook = document.getElementById('setup-webhook')?.value?.trim() || '';
+    discordWebhookUrl = wHook;
+    localStorage.setItem('nba2k_discord_webhook', wHook);
     // Also save bin ID in saveData so others can read
     // Bin ID is baked into the URL after first admin setup
 
@@ -3871,6 +3884,7 @@ async function saveSetup() {
   updateAuthUI();
   applyLangOnLoad();
   if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
+  checkEventUrlParam();
 })();
 
 
@@ -5551,6 +5565,7 @@ async function finishDraft(eventId) {
   ev.status = 'active';
   ev.draftPool = [];
   await saveData();
+  sendEventWebhook('🏆 Draft zakończony!', '**' + (ev.title||'') + '**\n' + (ev.teams||[]).map(t => t.name + ': ' + (t.players||[]).map(p=>p.name).join(', ')).join('\n'), 0x2ecc71);
   stopDraftPolling();
   document.getElementById('draft-overlay').style.display = 'none';
   renderEvents();
@@ -6846,6 +6861,298 @@ function rdRenderContent(idx) {
     + section('🛡️','Defensywna Piątka','STL × 40 + BLK × 25 + GRD × 20 − TO × 5',gridD);
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════
+// DISCORD WEBHOOK — match notifications
+// ═══════════════════════════════════════════════════════════════
+async function sendMatchWebhook(match) {
+  if(!discordWebhookUrl) return;
+  try {
+    const w = match.team1.score > match.team2.score ? match.team1.name : match.team2.name;
+    const embed = {
+      title: '🏀 Nowy mecz zapisany!',
+      color: 0xf5c518,
+      fields: [
+        { name: match.team1.name, value: '**' + match.team1.score + '**', inline: true },
+        { name: 'vs', value: '—', inline: true },
+        { name: match.team2.name, value: '**' + match.team2.score + '**', inline: true },
+        { name: '🏆 Zwycięzca', value: w, inline: true },
+        { name: '📅 Data', value: match.date || '—', inline: true },
+      ],
+      footer: { text: 'NBA 2K Liga' },
+      timestamp: new Date().toISOString(),
+    };
+    if(match.note) embed.fields.push({ name: '📝 Notatka', value: match.note, inline: false });
+    // Top scorers
+    const allPlayers = [...(match.team1.players||[]), ...(match.team2.players||[])];
+    const topPts = [...allPlayers].sort((a,b)=>(b.pts||0)-(a.pts||0))[0];
+    if(topPts) embed.fields.push({ name: '⭐ Najlepszy strzelec', value: topPts.name + ' — ' + topPts.pts + ' PTS', inline: true });
+    await fetch(discordWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed] })
+    });
+  } catch(e) { console.warn('Webhook error:', e); }
+}
+
+async function sendEventWebhook(title, description, color) {
+  if(!discordWebhookUrl) return;
+  try {
+    await fetch(discordWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [{ title, description, color: color||0xf5c518, footer: { text: 'NBA 2K Liga' }, timestamp: new Date().toISOString() }] })
+    });
+  } catch(e) { console.warn('Webhook error:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// H2H MIĘDZY GRACZAMI
+// ═══════════════════════════════════════════════════════════════
+function openPlayerH2H(playerName, teamName) {
+  // Get all opponents this player has faced
+  const opponents = new Set();
+  matches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      if(team.name !== teamName) return;
+      const opp = team === m.team1 ? m.team2 : m.team1;
+      (opp.players||[]).forEach(p => opponents.add(p.name + '|||' + opp.name));
+    });
+  });
+
+  const oppList = [...opponents].sort().map(key => {
+    const [name, team] = key.split('|||');
+    return `<div onclick="renderPlayerH2H('${playerName.replace(/'/g,"\\'")}','${teamName.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}','${team.replace(/'/g,"\\'")}');event.stopPropagation()"
+      style="padding:.5rem .75rem;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);margin-bottom:.4rem;background:var(--surface2);transition:border-color .2s"
+      onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <span style="font-weight:600">${name}</span>
+      <span style="color:var(--muted);font-size:.8rem">${team}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('player-modal-content').innerHTML = `
+    <div style="margin-bottom:1.25rem">
+      <button onclick="openPlayerModal('${playerName.replace(/'/g,"\\'")}','${teamName.replace(/'/g,"\\'")}');event.stopPropagation()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:0;font-family:inherit">← Wróć</button>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-top:.5rem">⚔️ H2H — ${playerName}</div>
+      <div style="color:var(--muted);font-size:.85rem">Wybierz przeciwnika do porównania</div>
+    </div>
+    <div id="h2h-opp-list">${oppList || '<div style="color:var(--muted)">Brak danych H2H</div>'}</div>
+    <div id="h2h-result" style="margin-top:1rem"></div>`;
+  document.getElementById('player-modal').classList.add('open');
+}
+
+function renderPlayerH2H(p1name, p1team, p2name, p2team) {
+  const p1games = [], p2games = [];
+  matches.forEach(m => {
+    let p1data = null, p2data = null, sameMatch = false;
+    [m.team1, m.team2].forEach(team => {
+      const p1 = team.name === p1team ? (team.players||[]).find(p => p.name === p1name) : null;
+      const p2 = team.name === p2team ? (team.players||[]).find(p => p.name === p2name) : null;
+      if(p1) p1data = { ...p1, date: m.date };
+      if(p2) p2data = { ...p2, date: m.date };
+    });
+    // Only count games where both played (same match)
+    const p1inMatch = [...(m.team1.players||[]),...(m.team2.players||[])].some(p => p.name === p1name);
+    const p2inMatch = [...(m.team1.players||[]),...(m.team2.players||[])].some(p => p.name === p2name);
+    if(p1inMatch && p2inMatch) {
+      if(p1data) p1games.push(p1data);
+      if(p2data) p2games.push(p2data);
+    }
+  });
+
+  if(!p1games.length) {
+    document.getElementById('h2h-result').innerHTML = '<div style="color:var(--muted);font-size:.85rem">Brak wspólnych meczów</div>';
+    return;
+  }
+
+  const avg = (games, key) => games.length ? (games.reduce((s,g)=>s+(g[key]||0),0)/games.length).toFixed(1) : '0.0';
+  const stats = [
+    ['PTS', avg(p1games,'pts'), avg(p2games,'pts')],
+    ['REB', avg(p1games,'reb'), avg(p2games,'reb')],
+    ['AST', avg(p1games,'ast'), avg(p2games,'ast')],
+    ['STL', avg(p1games,'stl'), avg(p2games,'stl')],
+    ['BLK', avg(p1games,'blk'), avg(p2games,'blk')],
+    ['TO',  avg(p1games,'to'),  avg(p2games,'to')],
+  ];
+
+  const p1cs = calcCompositeScore({ gp:p1games.length, pts:p1games.reduce((s,g)=>s+(g.pts||0),0), reb:p1games.reduce((s,g)=>s+(g.reb||0),0), ast:p1games.reduce((s,g)=>s+(g.ast||0),0), stl:p1games.reduce((s,g)=>s+(g.stl||0),0), blk:p1games.reduce((s,g)=>s+(g.blk||0),0), to:p1games.reduce((s,g)=>s+(g.to||0),0), fgm:p1games.reduce((s,g)=>s+(g.fgm||0),0), fga:p1games.reduce((s,g)=>s+(g.fga||0),0), gradeSum:p1games.reduce((s,g)=>s+gradeToNum(g.grade||'B'),0) });
+  const p2cs = calcCompositeScore({ gp:p2games.length, pts:p2games.reduce((s,g)=>s+(g.pts||0),0), reb:p2games.reduce((s,g)=>s+(g.reb||0),0), ast:p2games.reduce((s,g)=>s+(g.ast||0),0), stl:p2games.reduce((s,g)=>s+(g.stl||0),0), blk:p2games.reduce((s,g)=>s+(g.blk||0),0), to:p2games.reduce((s,g)=>s+(g.to||0),0), fgm:p2games.reduce((s,g)=>s+(g.fgm||0),0), fga:p2games.reduce((s,g)=>s+(g.fga||0),0), gradeSum:p2games.reduce((s,g)=>s+gradeToNum(g.grade||'B'),0) });
+
+  const statRows = stats.map(([label, v1, v2]) => {
+    const n1 = parseFloat(v1), n2 = parseFloat(v2);
+    const toKey = label === 'TO';
+    const p1wins = toKey ? n1 < n2 : n1 > n2;
+    const p2wins = toKey ? n2 < n1 : n2 > n1;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:${p1wins?'var(--accent)':'var(--text)'};font-size:1rem">${v1}</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted);font-size:.75rem;font-weight:700;letter-spacing:1px">${label}</td>
+      <td style="padding:.5rem .75rem;text-align:left;font-weight:700;color:${p2wins?'var(--accent)':'var(--text)'};font-size:1rem">${v2}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('h2h-result').innerHTML = `
+    <div style="background:var(--surface2);border-radius:10px;padding:1rem;border:1px solid var(--border)">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.5rem;align-items:center;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
+        <div style="text-align:right">
+          <div style="font-weight:700">${p1name}</div>
+          <div style="font-size:.75rem;color:var(--muted)">${p1team}</div>
+        </div>
+        <div style="text-align:center;font-size:.8rem;color:var(--muted);font-weight:700">${p1games.length} wspólnych<br>meczów</div>
+        <div>
+          <div style="font-weight:700">${p2name}</div>
+          <div style="font-size:.75rem;color:var(--muted)">${p2team}</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">${statRows}</table>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.5rem;align-items:center;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+        <div style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:${p1cs>p2cs?'var(--accent)':'var(--muted)'}">${p1cs.toFixed(1)}</div>
+        <div style="text-align:center;font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:1px">CS</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:${p2cs>p1cs?'var(--accent)':'var(--muted)'}">${p2cs.toFixed(1)}</div>
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KALKULATOR SKŁADU
+// ═══════════════════════════════════════════════════════════════
+function openRosterCalculator() {
+  // Get all players with stats
+  const playerMap = {};
+  matches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team.players||[]).forEach(p => {
+        const key = p.name + '|||' + team.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gradeSum:0};
+        const s = playerMap[key];
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+
+  const players = Object.values(playerMap)
+    .filter(p => p.gp > 0)
+    .map(p => ({ ...p, cs: calcCompositeScore(p) }))
+    .sort((a,b) => b.cs - a.cs);
+
+  const options = players.map(p =>
+    `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — CS: ${p.cs.toFixed(1)}</option>`
+  ).join('');
+
+  const slots = ['PG','SG','SF','PF','C'].map((pos, i) => `
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;color:var(--accent);width:2rem;font-size:.9rem">${pos}</span>
+      <select id="rc-slot-${i}" onchange="calcRoster()" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.4rem .6rem;font-family:inherit;font-size:.85rem">
+        <option value="">— wybierz gracza —</option>
+        ${options}
+      </select>
+    </div>`).join('');
+
+  document.getElementById('player-modal-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">🏗️ KALKULATOR SKŁADU</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Wybierz 5 graczy i sprawdź siłę składu</div>
+    <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.25rem">${slots}</div>
+    <div id="rc-result"></div>`;
+  document.getElementById('player-modal').classList.add('open');
+}
+
+function calcRoster() {
+  const playerMap = {};
+  matches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team.players||[]).forEach(p => {
+        const key = p.name + '|||' + team.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gradeSum:0};
+        const s = playerMap[key]; s.gp++;
+        s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+
+  const POSITIONS = ['PG','SG','SF','PF','C'];
+  const selected = POSITIONS.map((pos, i) => {
+    const val = document.getElementById('rc-slot-' + i)?.value;
+    if(!val) return null;
+    return playerMap[val] || null;
+  }).filter(Boolean);
+
+  if(!selected.length) { document.getElementById('rc-result').innerHTML = ''; return; }
+
+  const totalCS = selected.reduce((s,p) => s + calcCompositeScore(p), 0);
+  const avgCS = totalCS / selected.length;
+  const avgPPG = selected.reduce((s,p) => s + (p.pts/p.gp), 0) / selected.length;
+  const avgRPG = selected.reduce((s,p) => s + (p.reb/p.gp), 0) / selected.length;
+  const avgAPG = selected.reduce((s,p) => s + (p.ast/p.gp), 0) / selected.length;
+  const totalFGM = selected.reduce((s,p) => s+p.fgm, 0);
+  const totalFGA = selected.reduce((s,p) => s+p.fga, 0);
+  const fgPct = totalFGA > 0 ? Math.round(totalFGM/totalFGA*100) : 0;
+
+  // Rating label
+  const rating = avgCS >= 18 ? { label: 'ELITE ⭐', color: '#f5c518' }
+    : avgCS >= 14 ? { label: 'STRONG 💪', color: '#2ecc71' }
+    : avgCS >= 10 ? { label: 'SOLID 👍', color: '#3498db' }
+    : { label: 'BUILDING 🔨', color: '#e67e22' };
+
+  const playerCards = selected.map(p => {
+    const cs = calcCompositeScore(p);
+    const gr = numToGrade(p.gradeSum/p.gp);
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem;text-align:center;flex:1;min-width:80px">
+      <div style="font-size:.7rem;font-weight:700;color:var(--muted);margin-bottom:.2rem">${p.pos||'—'}</div>
+      <div style="font-weight:700;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:var(--accent)">${cs.toFixed(1)}</div>
+      <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:.7rem">${gr}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('rc-result').innerHTML = `
+    <div style="background:linear-gradient(135deg,rgba(245,197,24,.08),rgba(245,197,24,.03));border:1px solid rgba(245,197,24,.25);border-radius:12px;padding:1rem;margin-bottom:1rem">
+      <div style="text-align:center;margin-bottom:.75rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${rating.color}">${rating.label}</div>
+        <div style="font-size:.75rem;color:var(--muted)">Ocena składu</div>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">${playerCards}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;text-align:center">
+        ${[['AVG CS', avgCS.toFixed(1)], ['PPG', avgPPG.toFixed(1)], ['RPG', avgRPG.toFixed(1)], ['APG', avgAPG.toFixed(1)], ['FG%', fgPct+'%'], ['Graczy', selected.length+'/5']].map(([l,v]) => `
+          <div style="background:var(--bg);border-radius:6px;padding:.4rem">
+            <div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px">${l}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:var(--text)">${v}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PUBLICZNY LINK DO EVENTU
+// ═══════════════════════════════════════════════════════════════
+function getEventPublicUrl(eventId) {
+  const base = window.location.href.split('?')[0].split('#')[0];
+  return base + '?event=' + encodeURIComponent(eventId);
+}
+
+function copyEventLink(eventId) {
+  const url = getEventPublicUrl(eventId);
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('🔗 Link skopiowany!', 'success');
+  }).catch(() => {
+    prompt('Skopiuj link:', url);
+  });
+}
+
+// Check on load if URL has ?event= param and open it
+function checkEventUrlParam() {
+  const params = new URLSearchParams(window.location.search);
+  const evId = params.get('event');
+  if(evId) {
+    setTimeout(() => {
+      showView('events');
+      setTimeout(() => openEventDetail(evId), 300);
+    }, 500);
+  }
+}
 
 
 </script>
