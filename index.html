@@ -709,18 +709,25 @@
     <input type="text" id="setup-webhook" placeholder="https://discord.com/api/webhooks/..." style="font-size:.85rem">
 
     <div style="border-top:1px solid var(--border);margin:1.25rem 0"></div>
-    <label>Model AI <span style="color:var(--muted);font-weight:400">(balans jakość vs koszt)</span></label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
-      <label id="model-sonnet-lbl" style="display:flex;align-items:flex-start;gap:.6rem;padding:.75rem;border:2px solid var(--accent);border-radius:8px;cursor:pointer;background:rgba(245,197,24,.06)">
-        <input type="radio" name="ai-model" id="model-sonnet" value="claude-sonnet-4-20250514" checked style="margin-top:.15rem;accent-color:var(--accent)">
-        <div><div style="font-weight:700;font-size:.85rem">Sonnet 4 ✨</div><div style="font-size:.75rem;color:var(--muted)">Najlepsza jakość OCR<br>~$0.018/screenshot</div></div>
+    <label>Model AI do analizy screenów <span style="color:var(--muted);font-weight:400">(dla screenów)</span></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem;margin-bottom:.5rem">
+      <label id="model-gemini-lbl" style="display:flex;align-items:flex-start;gap:.5rem;padding:.65rem;border:2px solid var(--accent);border-radius:8px;cursor:pointer;background:rgba(245,197,24,.06)">
+        <input type="radio" name="ai-model" id="model-gemini" value="gemini-1.5-flash" checked style="margin-top:.15rem;accent-color:var(--accent)">
+        <div><div style="font-weight:700;font-size:.82rem">Gemini Flash 🆓</div><div style="font-size:.7rem;color:var(--muted)">Darmowy<br>1500/dzień</div></div>
       </label>
-      <label id="model-haiku-lbl" style="display:flex;align-items:flex-start;gap:.6rem;padding:.75rem;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+      <label id="model-sonnet-lbl" style="display:flex;align-items:flex-start;gap:.5rem;padding:.65rem;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+        <input type="radio" name="ai-model" id="model-sonnet" value="claude-sonnet-4-20250514" style="margin-top:.15rem;accent-color:var(--accent)">
+        <div><div style="font-weight:700;font-size:.82rem">Sonnet 4 ✨</div><div style="font-size:.7rem;color:var(--muted)">Najlepsza jakość<br>~$0.018/screen</div></div>
+      </label>
+      <label id="model-haiku-lbl" style="display:flex;align-items:flex-start;gap:.5rem;padding:.65rem;border:1px solid var(--border);border-radius:8px;cursor:pointer">
         <input type="radio" name="ai-model" id="model-haiku" value="claude-haiku-4-5-20251001" style="margin-top:.15rem;accent-color:var(--accent)">
-        <div><div style="font-weight:700;font-size:.85rem">Haiku 4.5 💨</div><div style="font-size:.75rem;color:var(--muted)">73% taniej<br>~$0.005/screenshot</div></div>
+        <div><div style="font-weight:700;font-size:.82rem">Haiku 4.5 💨</div><div style="font-size:.7rem;color:var(--muted)">73% taniej<br>~$0.005/screen</div></div>
       </label>
     </div>
-    <div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Haiku używany też do recapów i predykcji gdy wybrany. Sonnet tylko do screenshotów gdy wybrany Sonnet.</div>
+    <div id="gemini-key-row" style="margin-bottom:.75rem;padding:.6rem .75rem;background:rgba(46,204,113,.06);border:1px solid rgba(46,204,113,.2);border-radius:8px;font-size:.78rem;color:var(--muted)">
+      ✅ Klucz Gemini jest bezpiecznie przechowywany w Cloudflare Worker jako secret <code style="color:var(--win)">GEMINI_API_KEY</code>. Nie musisz go tutaj podawać.
+    </div>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Gemini Flash — darmowy, dobra jakość OCR. Claude Sonnet/Haiku — płatny, do recapów i predykcji.</div>
     <div id="setup-error" style="color:var(--loss);font-size:0.85rem;margin-top:0.75rem;min-height:1.2rem"></div>
 
     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1rem" onclick="saveSetup()">
@@ -889,15 +896,19 @@
 
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap">
         <span style="font-size:.75rem;color:var(--muted)">Model:</span>
-        <button id="ss-model-sonnet" onclick="setScreenshotModel('claude-sonnet-4-20250514')"
+        <button id="ss-model-gemini" onclick="setScreenshotModel('gemini-1.5-flash')"
           style="padding:.2rem .6rem;border-radius:6px;border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit">
+          🆓 Gemini
+        </button>
+        <button id="ss-model-sonnet" onclick="setScreenshotModel('claude-sonnet-4-20250514')"
+          style="padding:.2rem .6rem;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit">
           ✨ Sonnet
         </button>
         <button id="ss-model-haiku" onclick="setScreenshotModel('claude-haiku-4-5-20251001')"
           style="padding:.2rem .6rem;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit">
           💨 Haiku
         </button>
-        <span style="font-size:.72rem;color:var(--muted)" id="ss-model-cost">~$0.018</span>
+        <span style="font-size:.72rem;color:var(--muted)" id="ss-model-cost">🆓 darmowy</span>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="parse-btn" onclick="parseScreenshot()" disabled>
@@ -1627,10 +1638,11 @@ let jbKey = localStorage.getItem('nba2k_jb_key') || ''; // Master Key: admin onl
 let jbBin = localStorage.getItem('nba2k_jb_bin') || PUBLIC_JB_BIN;
 let anthropicKey = localStorage.getItem('nba2k_anthropic_key') || '';
 let workerUrl = localStorage.getItem('nba2k_worker_url') || 'https://kw5-elite-proxy.igor-bernakiewicz.workers.dev';
-let aiModel = localStorage.getItem('nba2k_ai_model') || 'claude-sonnet-4-20250514';
+let aiModel = localStorage.getItem('nba2k_ai_model') || 'gemini-1.5-flash';
+// geminiKey lives in Cloudflare Worker as GEMINI_API_KEY secret — not stored in browser
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
 const MODEL_SCREENSHOT = () => aiModel;
-const MODEL_CHEAP = () => aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel;
+const MODEL_CHEAP = () => aiModel.includes('gemini') ? 'gemini-1.5-flash' : (aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel);
 
 // True if any AI backend is configured
 function hasAI() { return !!(workerUrl || anthropicKey); }
@@ -1679,25 +1691,54 @@ async function callAnthropic(model, max_tokens, messages) {
   }
 }
 
+async function callGemini(model, max_tokens, messages) {
+  if(!workerUrl) throw new Error('Brak Worker URL — skonfiguruj w ⚙ Baza');
+  const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+  const res = await fetch(workerUrl.replace(/\/$/, '') + '/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+    body: JSON.stringify({ model, max_tokens, messages })
+  });
+  if(!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error('Gemini error ' + res.status + ': ' + (err.error || 'Unknown'));
+  }
+  return await res.json();
+}
+
+// Universal AI call — picks provider based on aiModel
+async function callAI(model, max_tokens, messages) {
+  if(model === 'gemini-1.5-flash' || model === 'gemini-1.5-pro') {
+    return callGemini(model, max_tokens, messages);
+  }
+  return callAnthropic(model, max_tokens, messages);
+}
+
+function updateModelRadioStyles() {
+  const m = document.querySelector('input[name="ai-model"]:checked')?.value || aiModel;
+  ['gemini','sonnet','haiku'].forEach(id => {
+    const lbl = document.getElementById('model-'+id+'-lbl');
+    const isActive = (id==='gemini' && m.includes('gemini')) || (id==='sonnet' && m.includes('sonnet')) || (id==='haiku' && m.includes('haiku'));
+    if(lbl) { lbl.style.border = isActive ? '2px solid var(--accent)' : '1px solid var(--border)'; lbl.style.background = isActive ? 'rgba(245,197,24,.06)' : 'transparent'; }
+  });
+  const gkRow = document.getElementById('gemini-key-row');
+  if(gkRow) gkRow.style.display = m.includes('gemini') ? 'block' : 'none';
+}
+
 function setScreenshotModel(model) {
   aiModel = model;
   localStorage.setItem('nba2k_ai_model', model);
-  const isHaiku = model.includes('haiku');
+  const isGemini = model.includes('gemini');
+  const isHaiku  = model.includes('haiku');
+  const geminiBtn = document.getElementById('ss-model-gemini');
   const sonnetBtn = document.getElementById('ss-model-sonnet');
   const haikuBtn  = document.getElementById('ss-model-haiku');
   const costEl    = document.getElementById('ss-model-cost');
-  if(sonnetBtn) {
-    sonnetBtn.style.borderColor  = isHaiku ? 'var(--border)' : 'var(--accent)';
-    sonnetBtn.style.background   = isHaiku ? 'transparent' : 'rgba(245,197,24,.12)';
-    sonnetBtn.style.color        = isHaiku ? 'var(--muted)' : 'var(--accent)';
-    sonnetBtn.style.borderWidth  = isHaiku ? '1px' : '2px';
-  }
-  if(haikuBtn) {
-    haikuBtn.style.borderColor   = isHaiku ? 'var(--accent)' : 'var(--border)';
-    haikuBtn.style.background    = isHaiku ? 'rgba(245,197,24,.12)' : 'transparent';
-    haikuBtn.style.color         = isHaiku ? 'var(--accent)' : 'var(--muted)';
-    haikuBtn.style.borderWidth   = isHaiku ? '2px' : '1px';
-  }
+  const active  = 'border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent)';
+  const inactive = 'border:1px solid var(--border);background:transparent;color:var(--muted)';
+  if(geminiBtn) geminiBtn.style.cssText += ';' + (isGemini ? active : inactive);
+  if(sonnetBtn) sonnetBtn.style.cssText += ';' + (!isGemini && !isHaiku ? active : inactive);
+  if(haikuBtn)  haikuBtn.style.cssText  += ';' + (isHaiku ? active : inactive);
   if(costEl) costEl.textContent = isHaiku ? '~$0.005' : '~$0.018';
   // Also sync setup modal radio if open
   const radio = document.querySelector('input[name="ai-model"][value="' + model + '"]');
@@ -2021,7 +2062,7 @@ function applyAliasesToMatch(match) {
 function showView(id) {
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
   if(id==='events') { setTimeout(renderEvents, 50); }
-  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel), 50); setTimeout(initDiscordQueue, 100); }
+  if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel||'gemini-1.5-flash'), 50); setTimeout(initDiscordQueue, 100); }
   if(PROTECTED_VIEWS.includes(id)) {
     isLoggedIn().then(logged => {
       if(!logged) {
@@ -2163,7 +2204,7 @@ WAŻNE — rozróżnienie BLK / TO / PF (najczęstsze błędy OCR):
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
   try {
-    const data = await callAnthropic(MODEL_SCREENSHOT(), 4000, [{
+    const data = await callAI(MODEL_SCREENSHOT(), 4000, [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: screenshotMimeType, data: screenshotBase64 } },
@@ -3548,7 +3589,7 @@ Statystyki ${s.team1}: ${fmtTeam(t1stats)}
 Statystyki ${s.team2}: ${fmtTeam(t2stats)}
 H2H: ${h2hText}`;
   try {
-    const data = await callAnthropic(MODEL_CHEAP(), 200, [{role:'user',content:prompt}]);
+    const data = await callAI(MODEL_CHEAP(), 200, [{role:'user',content:prompt}]);
     const pred = data.content?.[0]?.text||'';
     const idx = schedule.findIndex(x=>x.id===schedId);
     if(idx!==-1) schedule[idx].prediction = pred;
@@ -3881,6 +3922,11 @@ function openSetupModal() {
   document.getElementById('setup-error').textContent = '';
   const _wh = document.getElementById('setup-webhook');
   if(_wh) _wh.value = discordWebhookUrl || '';
+  // Set correct radio for current model
+  const _mr = document.querySelector('input[name="ai-model"][value="'+aiModel+'"]');
+  if(_mr) _mr.checked = true;
+  updateModelRadioStyles();
+
   document.getElementById('setup-modal').classList.add('open');
 }
 
@@ -3908,8 +3954,9 @@ async function saveSetup() {
     anthropicKey = aKey;
     const wUrl = document.getElementById('setup-worker')?.value?.trim() || '';
     workerUrl = wUrl;
-    const selectedModel = document.querySelector('input[name="ai-model"]:checked')?.value || 'claude-sonnet-4-20250514';
+    const selectedModel = document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini-1.5-flash';
     aiModel = selectedModel;
+    // Gemini key stored in Worker as GEMINI_API_KEY secret
     localStorage.setItem('nba2k_jb_key', key);
     localStorage.setItem('nba2k_jb_bin', bin);
     localStorage.setItem('nba2k_anthropic_key', aKey);
@@ -5027,7 +5074,7 @@ POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
 KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
 
   try {
-    const data = await callAnthropic(MODEL_SCREENSHOT(), 4000, [{
+    const data = await callAI(MODEL_SCREENSHOT(), 4000, [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: _evParseMime, data: _evParseBase64 } },
@@ -6772,7 +6819,7 @@ STATYSTYKI ${m.team2.name} [pozycja]:
 ${formatPlayers(m.team2)}${duelsText}`;
 
   try {
-    const data = await callAnthropic(MODEL_CHEAP(), 400, [{ role: 'user', content: prompt }]);
+    const data = await callAI(MODEL_CHEAP(), 400, [{ role: 'user', content: prompt }]);
     if(data.error) throw new Error(data.error?.message || 'API error');
     const recap = data.content?.[0]?.text || '';
     // Save recap to match
