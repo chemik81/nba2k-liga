@@ -2142,6 +2142,30 @@ uploadZone.addEventListener('drop', e => {
 // ═══════════════════════════════════════════════════════════════
 // AI PARSING
 // ═══════════════════════════════════════════════════════════════
+function robustJsonParse(str) {
+  // 1. Try straight parse first
+  try { return JSON.parse(str); } catch(e) {}
+
+  // 2. Fix trailing commas before } or ]
+  let s = str.replace(/,(\s*[}\]])/g, '$1');
+  try { return JSON.parse(s); } catch(e) {}
+
+  // 3. Fix missing commas between } and { or ] and [
+  s = s.replace(/}(\s*{)/g, '},$1').replace(/](\s*\[)/g, '],$1');
+  try { return JSON.parse(s); } catch(e) {}
+
+  // 5. Try to fix truncated JSON by finding last complete object
+  // Walk backwards from end to find last valid closing brace
+  for(let i = s.length - 1; i >= 0; i--) {
+    if(s[i] === '}') {
+      try { return JSON.parse(s.slice(0, i + 1)); } catch(e) { continue; }
+    }
+  }
+
+  // 6. Give up
+  throw new SyntaxError('Cannot parse JSON from AI response');
+}
+
 async function parseScreenshot() {
   if(!_isLoggedInSync()) { showToast('❌ Tylko admin może analizować screenshoty', 'error'); return; }
   if(!screenshotBase64) return;
@@ -2239,7 +2263,7 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
       .replace(/,(\s*[}\]])/g, '$1')
       .replace(/[-]/g, ' ')
       .trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = robustJsonParse(jsonStr);
 
     let rawMatch = {
       id: Date.now(),
