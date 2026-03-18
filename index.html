@@ -3345,8 +3345,9 @@ function uploadTeamLogo(teamName, input) {
       const h = Math.round(img.height * scale);
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
       const compressed = canvas.toDataURL('image/png');
       const kb = (compressed.length * 0.75 / 1024).toFixed(1);
       if(!teams[teamName]) teams[teamName] = {};
@@ -3362,6 +3363,12 @@ function uploadTeamLogo(teamName, input) {
 
 function removeTeamLogo(teamName) {
   if(teams[teamName]) delete teams[teamName].logo;
+  // Also remove from localStorage logos cache
+  try {
+    const logos = JSON.parse(localStorage.getItem('nba2k_logos') || '{}');
+    delete logos[teamName];
+    localStorage.setItem('nba2k_logos', JSON.stringify(logos));
+  } catch(e) {}
   saveTeams();
   renderTeamsList();
   showToast(t('logo_deleted'), 'info');
