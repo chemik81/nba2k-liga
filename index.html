@@ -2118,7 +2118,9 @@ Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego d
 KOLUMNY W TABELI (kolejność): GRD | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
 KRYTYCZNE: Kolumna 7 = FOULS (faule osobiste) → zapisz jako "fouls". Kolumna 8 = TO (straty) → zapisz jako "to". NIE mylić tych dwóch kolumn!
 
-NAZWY DRUŻYN: Dopasuj logotyp z ekranu do znanych drużyn ligi: Aliens Katowice, Katowice PL, Big Brain Basketball, Illegal Esports V2, Polish Boars, Polish Snickers, White Market, Sternritters, The Outlawz. Jeśli logotyp pasuje — użyj dokładnie tej nazwy.
+NAZWY DRUŻYN: Dopasuj logotyp widoczny na ekranie do poniższej listy drużyn ligi (użyj DOKŁADNIE tej nazwy):
+${Object.keys(teams||{}).length ? Object.keys(teams).join(', ') : 'Aliens Katowice, Katowice PL, Big Brain Basketball, Illegal Esports V2, Polish Boars, Polish Snickers, White Market, Sternritters, The Outlawz'}
+Jeśli logotyp pasuje do jednej z drużyn — użyj dokładnie tej nazwy z listy.
 Jeśli w nagłówku tabeli widzisz nick gracza zamiast nazwy drużyny (np. "xXxxxxxZZZZ") — ZIGNORUJ i użyj nazwy z logotypu lub "Drużyna 1"/"Drużyna 2".
 
 Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, bez komentarzy):
@@ -3283,7 +3285,7 @@ function renderTeamsList() {
   el.innerHTML = allTeams.map(name => {
     const t = teams[name] || {};
     const logoHtml = t.logo
-      ? `<img src="${t.logo}" style="width:40px;height:40px;border-radius:8px;object-fit:contain;background:#fff">`
+      ? `<img src="${t.logo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--border)">`
       : teamLogo(name, 40, '1rem');
     return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.5rem">
       ${logoHtml}
@@ -3297,6 +3299,7 @@ function renderTeamsList() {
         <input type="file" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadTeamLogo('${name.replace(/'/g,"\'")}', this)">
       </label>
       ${t.logo ? `<button onclick="removeTeamLogo('${name.replace(/'/g,"\'")}'"  style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .6rem;font-size:.75rem;cursor:pointer">✕ Logo</button>` : ''}
+      <button onclick="deleteTeam('${name.replace(/'/g,"\'")}')" style="background:transparent;border:1px solid var(--loss);color:var(--loss);border-radius:6px;padding:.3rem .6rem;font-size:.75rem;cursor:pointer" title="Śsyń drużynę">🗑</button>
     </div>`;
   }).join('');
 }
@@ -3348,6 +3351,28 @@ function removeTeamLogo(teamName) {
   saveTeams();
   renderTeamsList();
   showToast(t('logo_deleted'), 'info');
+}
+
+async function deleteTeam(teamName) {
+  // Check if team has any matches
+  const hasMatches = matches.some(m => m.team1.name === teamName || m.team2.name === teamName);
+  if(hasMatches) {
+    showToast('❌ Nie można usunąć drużyny — ma zapisane mecze (' +
+      matches.filter(m => m.team1.name === teamName || m.team2.name === teamName).length + ')', 'error');
+    return;
+  }
+  // Check schedule
+  const inSchedule = (schedule||[]).some(s => s.team1 === teamName || s.team2 === teamName);
+  if(inSchedule) {
+    showToast('❌ Nie można usunąć — drużyna jest w harmonogramie', 'error');
+    return;
+  }
+  if(!confirm('Usunąć drużynę "' + teamName + '"?')) return;
+  if(teams[teamName]) delete teams[teamName];
+  window.teams = teams;
+  await saveData();
+  renderTeamsList();
+  showToast('🗑 Usunięto: ' + teamName, 'info');
 }
 
 // teamLogo checks custom logo first, then falls back to initials
@@ -8009,6 +8034,25 @@ function rcValidateDupes(changedIdx) {
   }
   calcRoster();
 }
+async function deleteTeam(teamName) {
+  // Check if team has any matches
+  const hasMatches = matches.some(m => m.team1.name === teamName || m.team2.name === teamName);
+  if(hasMatches) {
+    showToast('❌ Nie można usunąć drużyny — ma zapisane mecze!', 'error');
+    return;
+  }
+  if(!confirm('Usunąć drużynę "' + teamName + '"?')) return;
+  if(teams[teamName]) delete teams[teamName];
+  // Remove from schedule
+  schedule = (schedule||[]).filter(s => s.team1 !== teamName && s.team2 !== teamName);
+  // Remove aliases pointing to this team
+  Object.keys(aliases).forEach(k => { if(aliases[k] === teamName) delete aliases[k]; });
+  window.teams = teams;
+  await saveData();
+  renderTeamsList();
+  showToast('✅ Drużyna usunięta: ' + teamName, 'success');
+}
+
 </script>
 
   <!-- IMPORT MODAL -->
