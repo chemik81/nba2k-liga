@@ -7128,42 +7128,44 @@ function renderPlayerH2H(p1name, p1team, p2name, p2team) {
 // KALKULATOR SKŁADU
 // ═══════════════════════════════════════════════════════════════
 function openRosterCalculator() {
-  // Get all players with stats
+  const metric = window._rcMetric || 'cs';
+
+  // Build player list — key by name|||team so each team stint is separate
   const playerMap = {};
   matches.forEach(m => {
     [m.team1, m.team2].forEach(team => {
       (team.players||[]).forEach(p => {
-        const key = p.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,teams:new Set(),pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gradeSum:0};
+        const key = p.name + '|||' + team.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
         const s = playerMap[key];
-        s.teams.add(team.name);
         if(p.pos) s.pos = p.pos;
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
-        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gradeSum+=gradeToNum(p.grade||'B');
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
+        s.ftm+=p.ftm||0; s.fta+=p.fta||0; s.gradeSum+=gradeToNum(p.grade||'B');
       });
     });
   });
 
+  const scoreOf = p => metric === 'per' ? calcPER(p) : calcRawScore(p);
   const players = Object.values(playerMap)
     .filter(p => p.gp > 0)
-    .map(p => ({ ...p, teams: p.teams||new Set(), cs: calcRawScore(p) }))
-    .sort((a,b) => b.cs - a.cs);
+    .map(p => ({ ...p, score: scoreOf(p) }))
+    .sort((a,b) => b.score - a.score);
 
-  // Group players by position, fallback to all if position unknown
   const byPos = {};
-  ['PG','SG','SF','PF','C'].forEach(pos => {
-    byPos[pos] = players.filter(p => p.pos === pos);
-  });
-  // Players without position assigned — show in all slots as fallback
+  ['PG','SG','SF','PF','C'].forEach(pos => { byPos[pos] = players.filter(p => p.pos === pos); });
   const noPos = players.filter(p => !p.pos);
 
+  const scoreLabel = metric === 'per' ? 'PER' : 'CS';
+
   const slots = ['PG','SG','SF','PF','C'].map((pos, i) => {
-    const posPlayers = [...byPos[pos], ...noPos].sort((a,b) => b.cs - a.cs);
-    const opts = posPlayers.length
-      ? posPlayers.map(p => `<option value="${p.name}|||x">${p.name}${p.teams&&p.teams.size>0?' ('+[...p.teams].join('/')+')':''} — CS: ${p.cs.toFixed(1)}</option>`).join('')
-      : players.map(p => `<option value="${p.name}|||x">${p.name}${p.teams&&p.teams.size>0?' ('+[...p.teams].join('/')+')':''} — CS: ${p.cs.toFixed(1)}</option>`).join('');
-    const count = posPlayers.length || players.length;
+    const posPlayers = [...byPos[pos], ...noPos].sort((a,b) => b.score - a.score);
+    const list = posPlayers.length ? posPlayers : players;
+    const opts = list.map(p =>
+      `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — ${scoreLabel}: ${p.score.toFixed(1)}</option>`
+    ).join('');
+    const count = list.length;
     return `
     <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
       <div style="flex-shrink:0;text-align:center">
@@ -7182,48 +7184,44 @@ function openRosterCalculator() {
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px">${t('rc_title')}</div>
       <div style="display:flex;gap:.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.2rem">
         <button id="rc-metric-cs" onclick="setRosterMetric('cs')"
-          style="padding:.3rem .8rem;border:none;border-radius:6px;background:var(--accent);color:#000;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.85rem;cursor:pointer;transition:all .2s">CS</button>
+          style="padding:.3rem .8rem;border:none;border-radius:6px;background:${metric==='cs'?'var(--accent)':'transparent'};color:${metric==='cs'?'#000':'var(--muted)'};font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.85rem;cursor:pointer;transition:all .2s">CS</button>
         <button id="rc-metric-per" onclick="setRosterMetric('per')"
-          style="padding:.3rem .8rem;border:none;border-radius:6px;background:transparent;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;transition:all .2s">PER</button>
+          style="padding:.3rem .8rem;border:none;border-radius:6px;background:${metric==='per'?'#3498db':'transparent'};color:${metric==='per'?'#fff':'var(--muted)'};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;transition:all .2s">PER</button>
       </div>
     </div>
     <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">${t('rc_subtitle')}</div>
     <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.25rem">${slots}</div>
     <div id="rc-result"></div>`;
-  window._rcMetric = 'cs';
   document.getElementById('player-modal').classList.add('open');
 }
 
 function setRosterMetric(metric) {
+  // Save current selections before rebuilding
+  const saved = ['PG','SG','SF','PF','C'].map((_,i) => document.getElementById('rc-slot-'+i)?.value || '');
   window._rcMetric = metric;
-  const csBtn  = document.getElementById('rc-metric-cs');
-  const perBtn = document.getElementById('rc-metric-per');
-  if(csBtn && perBtn) {
-    csBtn.style.background  = metric==='cs'  ? 'var(--accent)' : 'transparent';
-    csBtn.style.color       = metric==='cs'  ? '#000' : 'var(--muted)';
-    perBtn.style.background = metric==='per' ? '#3498db' : 'transparent';
-    perBtn.style.color      = metric==='per' ? '#fff' : 'var(--muted)';
-  }
+  // Rebuild dropdowns with new metric sorting + restore selections
+  openRosterCalculator();
+  saved.forEach((val, i) => {
+    const sel = document.getElementById('rc-slot-'+i);
+    if(sel && val) sel.value = val;
+  });
   calcRoster();
 }
 
 function calcRoster() {
   const metric = window._rcMetric || 'cs';
   const playerMap = {};
-  // Track all teams a player has played for (for defensive proxy)
-  const teamDefMap = {}; // team -> [opp scores]
+  const teamDefMap = {};
   matches.forEach(m => {
     [m.team1, m.team2].forEach((team, ti) => {
       const opp = ti===0?m.team2:m.team1;
       if(!teamDefMap[team.name]) teamDefMap[team.name] = [];
       teamDefMap[team.name].push(opp.score||0);
       (team.players||[]).forEach(p => {
-        // Key by player name only — aggregate across all teams
-        const key = p.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name, teams:new Set(), pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
+        // Key by name|||team — same as dropdown values
+        const key = p.name + '|||' + team.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
         const s = playerMap[key]; s.gp++;
-        s.teams.add(team.name);
-        // Update pos to latest known
         if(p.pos) s.pos = p.pos;
         s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
@@ -7238,9 +7236,7 @@ function calcRoster() {
   const selected = POSITIONS.map((pos, i) => {
     const val = document.getElementById('rc-slot-' + i)?.value;
     if(!val) return null;
-    // val is "name|||team" for display — extract name to look up merged stats
-    const name = val.split('|||')[0];
-    return playerMap[name] || null;
+    return playerMap[val] || null;
   }).filter(Boolean);
 
   if(!selected.length) { document.getElementById('rc-result').innerHTML = ''; return; }
@@ -7260,7 +7256,7 @@ function calcRoster() {
   const tpPct  = totalTPA > 0 ? Math.round(totalTPM/totalTPA*100) : 0;
 
   // ── Defensywa: średnia punktów traconych przez drużyny graczy
-  const defScores = selected.flatMap(p => [...(p.teams||[])].flatMap(t => teamDefMap[t] || []));
+  const defScores = selected.flatMap(p => teamDefMap[p.team] || []);
   const avgDefPts = defScores.length ? (defScores.reduce((s,v)=>s+v,0)/defScores.length) : null;
 
   // ── CS i ocena
@@ -7272,9 +7268,10 @@ function calcRoster() {
 
   // Skala 7 poziomów oparta o avgCS i minCS (słabe ogniwo obniża ocenę)
   const effectiveCS = avgCS * 0.75 + minCS * 0.25;
-  const RATING_THRESHOLDS = metric === 'per'
-    ? [25, 20, 15, 10, 5, 2, 0]
-    : [20, 17, 14, 11, 8, 5, 0];
+  // Compute all player scores for percentile-based rating
+  const allScores = Object.values(playerMap).filter(p=>p.gp>0).map(p => metric==='per' ? calcPER(p) : calcRawScore(p)).sort((a,b)=>a-b);
+  const pct = (q) => allScores.length ? allScores[Math.floor(allScores.length*q/100)] : 0;
+  const RATING_THRESHOLDS = [pct(95), pct(80), pct(65), pct(45), pct(30), pct(15), 0];
   const RATINGS = [
     { min:RATING_THRESHOLDS[0], label:t('rc_god'),       color:'#f5c518', desc:t('rc_god_desc') },
     { min:RATING_THRESHOLDS[1], label:t('rc_elite'),     color:'#e8b800', desc:t('rc_elite_desc') },
@@ -7295,8 +7292,8 @@ function calcRoster() {
     const isWeak = cs === minCS && selected.length > 1 && (avgCS - cs) > avgCS * 0.30;
     return `<div style="background:var(--surface2);border:1px solid ${isWeak?'rgba(231,76,60,.4)':'var(--border)'};border-radius:8px;padding:.6rem;text-align:center;flex:1;min-width:80px">
       <div style="font-size:.7rem;font-weight:700;color:var(--accent);margin-bottom:.15rem">${p.pos||POSITIONS[i]||'?'}</div>
-      <div style="font-weight:700;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem" title="${p.name}">${p.name}</div>
-      <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem">${[...(p.teams||[])].join(', ')}</div>
+      <div style="font-weight:700;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem" title="${p.name} (${p.team})">${p.name}</div>
+      <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem">${p.team||''}</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;color:${isWeak?'#e74c3c':scoreColor}">${cs.toFixed(1)}</div>
       <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:.68rem">${gr}</span>
       ${isWeak && selected.length===5?'<div style="font-size:.62rem;color:#e74c3c;margin-top:.15rem">'+t('rc_weak_link')+'</div>':''}
