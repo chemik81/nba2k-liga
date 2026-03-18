@@ -7095,15 +7095,22 @@ function openRosterCalculator() {
 
 function calcRoster() {
   const playerMap = {};
+  // Also track what opponents scored against each player's team (defensive proxy)
+  const teamDefMap = {}; // team -> [opp scores]
   matches.forEach(m => {
-    [m.team1, m.team2].forEach(team => {
+    [m.team1, m.team2].forEach((team, ti) => {
+      const opp = ti===0?m.team2:m.team1;
+      if(!teamDefMap[team.name]) teamDefMap[team.name] = [];
+      teamDefMap[team.name].push(opp.score||0);
       (team.players||[]).forEach(p => {
         const key = p.name + '|||' + team.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
         const s = playerMap[key]; s.gp++;
         s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
-        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gradeSum+=gradeToNum(p.grade||'B');
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
+        s.ftm+=p.ftm||0; s.fta+=p.fta||0;
+        s.gradeSum+=gradeToNum(p.grade||'B');
       });
     });
   });
@@ -7117,45 +7124,108 @@ function calcRoster() {
 
   if(!selected.length) { document.getElementById('rc-result').innerHTML = ''; return; }
 
-  const totalCS = selected.reduce((s,p) => s + calcCompositeScore(p), 0);
-  const avgCS = totalCS / selected.length;
-  const avgPPG = selected.reduce((s,p) => s + (p.pts/p.gp), 0) / selected.length;
-  const avgRPG = selected.reduce((s,p) => s + (p.reb/p.gp), 0) / selected.length;
-  const avgAPG = selected.reduce((s,p) => s + (p.ast/p.gp), 0) / selected.length;
+  // ── Potencjał ofensywny (suma PPG wszystkich 5 graczy = szacowane punkty drużyny)
+  const teamPPG = selected.reduce((s,p) => s + p.pts/p.gp, 0);
+  const teamRPG = selected.reduce((s,p) => s + p.reb/p.gp, 0);
+  const teamAPG = selected.reduce((s,p) => s + p.ast/p.gp, 0);
+  const teamSPG = selected.reduce((s,p) => s + p.stl/p.gp, 0);
+  const teamBPG = selected.reduce((s,p) => s + p.blk/p.gp, 0);
+  const teamTO  = selected.reduce((s,p) => s + p.to/p.gp, 0);
   const totalFGM = selected.reduce((s,p) => s+p.fgm, 0);
   const totalFGA = selected.reduce((s,p) => s+p.fga, 0);
-  const fgPct = totalFGA > 0 ? Math.round(totalFGM/totalFGA*100) : 0;
+  const totalTPM = selected.reduce((s,p) => s+p.tpm, 0);
+  const totalTPA = selected.reduce((s,p) => s+p.tpa, 0);
+  const fgPct  = totalFGA > 0 ? Math.round(totalFGM/totalFGA*100) : 0;
+  const tpPct  = totalTPA > 0 ? Math.round(totalTPM/totalTPA*100) : 0;
 
-  // Rating label
-  const rating = avgCS >= 18 ? { label: 'ELITE ⭐', color: '#f5c518' }
-    : avgCS >= 14 ? { label: 'STRONG 💪', color: '#2ecc71' }
-    : avgCS >= 10 ? { label: 'SOLID 👍', color: '#3498db' }
-    : { label: 'BUILDING 🔨', color: '#e67e22' };
+  // ── Defensywa: średnia punktów traconych przez drużyny graczy
+  const defScores = selected.flatMap(p => teamDefMap[p.team] || []);
+  const avgDefPts = defScores.length ? (defScores.reduce((s,v)=>s+v,0)/defScores.length) : null;
 
-  const playerCards = selected.map(p => {
-    const cs = calcCompositeScore(p);
+  // ── CS i ocena
+  const csValues = selected.map(p => calcCompositeScore(p));
+  const avgCS = csValues.reduce((s,v)=>s+v,0) / selected.length;
+  const minCS = Math.min(...csValues);
+
+  // Skala 7 poziomów oparta o avgCS i minCS (słabe ogniwo obniża ocenę)
+  const effectiveCS = avgCS * 0.75 + minCS * 0.25;
+  const RATINGS = [
+    { min:20,  label:'GOD TIER 👑', color:'#f5c518', desc:'Dominujący skład, żaden slot nie jest słaby' },
+    { min:17,  label:'ELITE ⭐',     color:'#e8b800', desc:'Bardzo silny skład, zdolny wygrać każdy mecz' },
+    { min:14,  label:'STRONG 💪',   color:'#2ecc71', desc:'Solidna piątka z wyraźnymi atutami' },
+    { min:11,  label:'SOLID 👍',    color:'#3498db', desc:'Kompetentny skład bez wyraźnych dziur' },
+    { min:8,   label:'AVERAGE 😐',  color:'#95a5a6', desc:'Przeciętny skład, jest pole do poprawy' },
+    { min:5,   label:'WEAK 📉',     color:'#e67e22', desc:'Skład potrzebuje wzmocnienia na kilku pozycjach' },
+    { min:0,   label:'REBUILDING 🔨',color:'#e74c3c',desc:'Projekt na przyszłość — brakuje doświadczenia' },
+  ];
+  const rating = RATINGS.find(r => effectiveCS >= r.min) || RATINGS[RATINGS.length-1];
+
+  // ── CS bar per player
+  const maxPossibleCS = 25;
+  const playerCards = selected.map((p, i) => {
+    const cs = csValues[i];
     const gr = numToGrade(p.gradeSum/p.gp);
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem;text-align:center;flex:1;min-width:80px">
-      <div style="font-size:.7rem;font-weight:700;color:var(--muted);margin-bottom:.2rem">${p.pos||'—'}</div>
-      <div style="font-weight:700;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:var(--accent)">${cs.toFixed(1)}</div>
-      <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:.7rem">${gr}</span>
+    const barW = Math.min(Math.round(cs/maxPossibleCS*100), 100);
+    const isWeak = cs === minCS && selected.length > 1;
+    return `<div style="background:var(--surface2);border:1px solid ${isWeak?'rgba(231,76,60,.4)':'var(--border)'};border-radius:8px;padding:.6rem;text-align:center;flex:1;min-width:80px">
+      <div style="font-size:.7rem;font-weight:700;color:var(--accent);margin-bottom:.15rem">${p.pos||POSITIONS[i]||'?'}</div>
+      <div style="font-weight:700;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.2rem" title="${p.name}">${p.name}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;color:${isWeak?'#e74c3c':'var(--accent)'}">${cs.toFixed(1)}</div>
+      <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:.68rem">${gr}</span>
+      ${isWeak && selected.length===5?'<div style="font-size:.62rem;color:#e74c3c;margin-top:.15rem">⚠️ słabe ogniwo</div>':''}
     </div>`;
   }).join('');
 
+  // ── Legenda
+  const legendRows = RATINGS.map(r => `
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.2rem 0">
+      <div style="width:8px;height:8px;border-radius:50%;background:${r.color};flex-shrink:0"></div>
+      <span style="font-weight:700;font-size:.75rem;color:${r.color};width:110px">${r.label}</span>
+      <span style="font-size:.72rem;color:var(--muted)">${r.desc}</span>
+    </div>`).join('');
+
+  // ── Statystyki zespołowe
+  const teamStats = [
+    { label:'📊 Śr. punkty', value: teamPPG.toFixed(1), sub:'sumaryczne PPG', color:'var(--accent)' },
+    { label:'🛡️ Śr. tracone', value: avgDefPts !== null ? avgDefPts.toFixed(1) : '—', sub:'na podstawie meczów drużyn', color:'#e74c3c' },
+    { label:'🏀 Zbiórki', value: teamRPG.toFixed(1), sub:'łącznie RPG', color:'#4fc3f7' },
+    { label:'🎯 Asysty', value: teamAPG.toFixed(1), sub:'łącznie APG', color:'#2ecc71' },
+    { label:'🦅 Przech.', value: teamSPG.toFixed(1), sub:'łącznie SPG', color:'#9b59b6' },
+    { label:'🛡️ Bloki', value: teamBPG.toFixed(1), sub:'łącznie BPG', color:'#1abc9c' },
+    { label:'💔 Straty', value: teamTO.toFixed(1), sub:'łącznie TOPG', color:'#e67e22' },
+    { label:'🎳 FG%', value: fgPct+'%', sub:'z pola łącznie', color:'var(--text)' },
+    { label:'🏹 3P%', value: tpPct+'%', sub:'za 3 łącznie', color:'var(--text)' },
+  ].map(s => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem">
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem">${s.label}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:${s.color}">${s.value}</div>
+      <div style="font-size:.65rem;color:var(--muted);margin-top:.1rem">${s.sub}</div>
+    </div>`).join('');
+
   document.getElementById('rc-result').innerHTML = `
-    <div style="background:linear-gradient(135deg,rgba(245,197,24,.08),rgba(245,197,24,.03));border:1px solid rgba(245,197,24,.25);border-radius:12px;padding:1rem;margin-bottom:1rem">
-      <div style="text-align:center;margin-bottom:.75rem">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${rating.color}">${rating.label}</div>
-        <div style="font-size:.75rem;color:var(--muted)">Ocena składu</div>
+    <div style="border:2px solid ${rating.color}33;border-radius:12px;overflow:hidden;margin-bottom:0">
+      <!-- Rating header -->
+      <div style="background:linear-gradient(135deg,${rating.color}18,${rating.color}08);padding:1rem;text-align:center;border-bottom:1px solid ${rating.color}33">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:${rating.color};letter-spacing:2px">${rating.label}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${rating.desc}</div>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:.1rem">Effective CS: <span style="color:${rating.color};font-weight:700">${effectiveCS.toFixed(1)}</span> · AVG CS: <span style="font-weight:700">${avgCS.toFixed(1)}</span></div>
       </div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">${playerCards}</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;text-align:center">
-        ${[['AVG CS', avgCS.toFixed(1)], ['PPG', avgPPG.toFixed(1)], ['RPG', avgRPG.toFixed(1)], ['APG', avgAPG.toFixed(1)], ['FG%', fgPct+'%'], ['Graczy', selected.length+'/5']].map(([l,v]) => `
-          <div style="background:var(--bg);border-radius:6px;padding:.4rem">
-            <div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px">${l}</div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:var(--text)">${v}</div>
-          </div>`).join('')}
+
+      <!-- Player cards -->
+      <div style="padding:.75rem;border-bottom:1px solid var(--border)">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">${playerCards}</div>
+      </div>
+
+      <!-- Team stats -->
+      <div style="padding:.75rem;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.6rem">⚡ POTENCJAŁ ZESPOŁU (sumaryczne per game)</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem">${teamStats}</div>
+      </div>
+
+      <!-- Legend -->
+      <div style="padding:.75rem;background:var(--surface2)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.5rem">📋 SKALA OCEN</div>
+        ${legendRows}
       </div>
     </div>`;
 }
