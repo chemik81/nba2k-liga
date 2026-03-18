@@ -7128,7 +7128,7 @@ function renderPlayerH2H(p1name, p1team, p2name, p2team) {
 // KALKULATOR SKŁADU
 // ═══════════════════════════════════════════════════════════════
 function openRosterCalculator() {
-  const metric = window._rcMetric || 'cs';
+  const metric = window._rcMetric || 'per';
 
   // Build player list — key by name|||team so each team stint is separate
   const playerMap = {};
@@ -7227,7 +7227,7 @@ function setRosterMetric(metric) {
 }
 
 function calcRoster() {
-  const metric = window._rcMetric || 'cs';
+  const metric = window._rcMetric || 'per';
   const playerMap = {};
   const teamDefMap = {};
   matches.forEach(m => {
