@@ -7166,7 +7166,7 @@ function openRosterCalculator() {
     const posPlayers = [...new Map([...basePlayers, ...noPos].map(p => [p.name+'|||'+p.team, p])).values()].sort((a,b) => b.score - a.score);
     const list = posPlayers.length ? posPlayers : players;
     const opts = list.map(p =>
-      `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — ${scoreLabel}: ${p.score.toFixed(1)}</option>`
+      `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — ${scoreLabel}: ${p.score.toFixed(1)} · ${p.gp}GP</option>`
     ).join('');
     const count = list.length;
     return `
@@ -7175,7 +7175,7 @@ function openRosterCalculator() {
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;color:var(--accent);font-size:.9rem">${pos}</div>
         <div style="font-size:.65rem;color:var(--muted)">${count}${t('rc_players')}</div>
       </div>
-      <select id="rc-slot-${i}" onchange="calcRoster()" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.4rem .6rem;font-family:inherit;font-size:.85rem">
+      <select id="rc-slot-${i}" onchange="rcValidateDupes(${i})" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.4rem .6rem;font-family:inherit;font-size:.85rem">
         <option value="">— ${t('rc_pick')} ${pos} —</option>
         ${opts}
       </select>
@@ -7196,6 +7196,21 @@ function openRosterCalculator() {
     <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.25rem">${slots}</div>
     <div id="rc-result"></div>`;
   document.getElementById('player-modal').classList.add('open');
+}
+
+function rcValidateDupes(changedIdx) {
+  const vals = ['PG','SG','SF','PF','C'].map((_,i) => document.getElementById('rc-slot-'+i)?.value || '');
+  const changedVal = vals[changedIdx];
+  if(changedVal) {
+    vals.forEach((v, i) => {
+      if(i !== changedIdx && v === changedVal) {
+        const sel = document.getElementById('rc-slot-'+i);
+        if(sel) sel.value = '';
+        showToast('⚠️ Ten gracz jest już wybrany na innej pozycji', 'info');
+      }
+    });
+  }
+  calcRoster();
 }
 
 function setRosterMetric(metric) {
