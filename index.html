@@ -7166,7 +7166,7 @@ function calcRoster() {
     const cs = csValues[i];
     const gr = numToGrade(p.gradeSum/p.gp);
     const barW = Math.min(Math.round(cs/maxPossibleCS*100), 100);
-    const isWeak = cs === minCS && selected.length > 1;
+    const isWeak = cs === minCS && selected.length > 1 && (avgCS - cs) > avgCS * 0.30;
     return `<div style="background:var(--surface2);border:1px solid ${isWeak?'rgba(231,76,60,.4)':'var(--border)'};border-radius:8px;padding:.6rem;text-align:center;flex:1;min-width:80px">
       <div style="font-size:.7rem;font-weight:700;color:var(--accent);margin-bottom:.15rem">${p.pos||POSITIONS[i]||'?'}</div>
       <div style="font-weight:700;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.2rem" title="${p.name}">${p.name}</div>
