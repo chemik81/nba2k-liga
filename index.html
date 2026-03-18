@@ -2118,10 +2118,10 @@ Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego d
 KOLUMNY W TABELI (kolejność): GRD | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
 KRYTYCZNE: Kolumna 7 = FOULS (faule osobiste) → zapisz jako "fouls". Kolumna 8 = TO (straty) → zapisz jako "to". NIE mylić tych dwóch kolumn!
 
-NAZWY DRUŻYN: Dopasuj logotyp widoczny na ekranie do poniższej listy drużyn ligi (użyj DOKŁADNIE tej nazwy):
+NAZWY DRUŻYN: Dopasuj logotyp do poniższej listy (użyj DOKŁADNIE tej nazwy):
 ${Object.keys(teams||{}).length ? Object.keys(teams).join(', ') : 'Aliens Katowice, Katowice PL, Big Brain Basketball, Illegal Esports V2, Polish Boars, Polish Snickers, White Market, Sternritters, The Outlawz'}
-Jeśli logotyp pasuje do jednej z drużyn — użyj dokładnie tej nazwy z listy.
-Jeśli w nagłówku tabeli widzisz nick gracza zamiast nazwy drużyny (np. "xXxxxxxZZZZ") — ZIGNORUJ i użyj nazwy z logotypu lub "Drużyna 1"/"Drużyna 2".
+UWAGA na podobne logotypy: "Aliens Katowice" ma ZIELONY kolor i zielonego aliena. "Katowice PL" ma CZERWONY kolor i czerwonego/białego aliena. To dwie RÓŻNE drużyny — rozróżniaj po kolorze!
+Jeśli w nagłówku tabeli widzisz nick gracza zamiast nazwy (np. "xXxxxxxZZZZ") — ZIGNORUJ, użyj nazwy z logotypu lub "Drużyna 1"/"Drużyna 2".
 
 Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, bez komentarzy):
 {
@@ -2209,16 +2209,6 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 function renderParsedPreview(match) {
   const container = document.getElementById('parsed-match-preview');
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:1.5rem">
-      <div>
-        <label style="display:block;font-size:0.75rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem">Nazwa drużyny 1</label>
-        <input id="edit-team1-name" type="text" value="${match.team1.name}" style="width:100%;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;padding:0.6rem 0.9rem;outline:none" oninput="pendingMatch.team1.name=this.value">
-      </div>
-      <div>
-        <label style="display:block;font-size:0.75rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem">Nazwa drużyny 2</label>
-        <input id="edit-team2-name" type="text" value="${match.team2.name}" style="width:100%;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;padding:0.6rem 0.9rem;outline:none" oninput="pendingMatch.team2.name=this.value">
-      </div>
-    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">
       ${renderTeamTable(match.team1, 1)}
       ${renderTeamTable(match.team2, 2)}
