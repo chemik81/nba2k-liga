@@ -2211,9 +2211,13 @@ Porównaj każdą rozpoznaną nazwę z listą znanych graczy i wybierz najbliżs
 Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego dopasowania na liście.${knownPlayersHint}
 
 BARDZO WAŻNE - NAZWY DRUŻYN: Nazwy drużyn to NIE są nicki zawodników. Szukaj ich w:
-1. Nagłówku każdej sekcji tabeli (tekst nad listą zawodników, np. "Katowice Aliens PL", "Illegal Esports")
-2. Logo/emblemat po lewej stronie ekranu - pod spodem często jest nazwa
+1. Nagłówku każdej sekcji tabeli (tekst nad listą zawodników)
+2. Logo/emblemat po lewej stronie ekranu — rozpoznaj nazwę drużyny z logo (herb, tarcza, maskotka) — napis na lub pod logiem to nazwa drużyny
 3. Na górze/dole ekranu jako tytuły
+
+KRYTYCZNA ZASADA — UNIKAJ BŁĘDU KAPITANA: W Pro-Am/Rec w NBA 2K, tam gdzie normalnie jest nazwa drużyny, CZASAMI zamiast nazwy drużyny pojawia się nick kapitana (właściciela team ownera). Jeśli widzisz pojedynczy nick gracza (podobny do nicków zawodników w tabeli) w miejscu gdzie powinna być nazwa drużyny — ZIGNORUJ go i zamiast tego użyj nazwy z logotypu lub "Drużyna 1"/"Drużyna 2". Przykład: jeśli nad tabelą graczy widzisz "xXxxxxxZZZZZZZxxxx" — to nick kapitana, NIE nazwa drużyny.
+
+ROZPOZNAWANIE Z LOGOTYPU: Jeśli na ekranie widoczne jest logo drużyny (po lewej stronie lub w nagłówku), przeczytaj napis na logotypie lub rozpoznaj drużynę wizualnie. Napis na logo ma pierwszeństwo nad tekstem w nagłówku tabeli.
 
 Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, bez komentarzy):
 {
@@ -5142,7 +5146,8 @@ async function evParseScreenshot(eventId) {
 Wyodrębnij dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown):
 {"team1":{"name":"NAZWA","score":67,"quarters":[18,17,16,16],"players":[{"name":"Nick","pos":"PG","grade":"B+","pts":24,"reb":5,"ast":9,"stl":1,"blk":0,"to":3,"fgm":7,"fga":20,"tpm":2,"tpa":6,"ftm":4,"fta":4}]},"team2":{"name":"NAZWA","score":87,"quarters":[27,16,20,24],"players":[...]}}
 POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
-KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
+KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA
+NAZWY DRUŻYN: Szukaj na logotypie (herb/tarcza po lewej) — napis na logo to nazwa drużyny. Jeśli w nagłówku tabeli widzisz nick podobny do nicków graczy (np. "xXxxxxxZZZ") — to nick kapitana, NIE nazwa drużyny — użyj wtedy nazwy z logo lub "Drużyna 1"/"Drużyna 2".${knownHint}`;
 
   try {
     const data = await callAI(MODEL_SCREENSHOT(), 8192, [{
