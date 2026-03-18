@@ -5699,6 +5699,18 @@ function renderTeamOfWeek() {
 }
 
 
+function calcRawScore(p) {
+  // CS bez kary za mało meczów — czysta jakość gracza per game
+  const gp = Math.max(p.gp, 1);
+  const gradeScore = (p.gradeSum / gp) / 13 * 100;
+  const ptsScore   = Math.min((p.pts / gp) / 50 * 100, 100);
+  const astScore   = Math.min((p.ast / gp) / 15 * 100, 100);
+  const rebScore   = Math.min((p.reb / gp) / 20 * 100, 100);
+  const stlScore   = Math.min((p.stl / gp) / 4  * 100, 100);
+  const blkScore   = Math.min((p.blk / gp) / 3  * 100, 100);
+  return ptsScore*0.25 + stlScore*0.20 + blkScore*0.18 + rebScore*0.15 + astScore*0.12 + gradeScore*0.10;
+}
+
 function calcCompositeScore(p) {
   // Composite: PTS(25%) + STL(20%) + BLK(18%) + REB(15%) + AST(12%) + ocena(10%)
   // Współczynnik GP (maturity) — mocna kara za mało meczów:
@@ -7043,9 +7055,11 @@ function openRosterCalculator() {
   matches.forEach(m => {
     [m.team1, m.team2].forEach(team => {
       (team.players||[]).forEach(p => {
-        const key = p.name + '|||' + team.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gradeSum:0};
+        const key = p.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name,teams:new Set(),pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gradeSum:0};
         const s = playerMap[key];
+        s.teams.add(team.name);
+        if(p.pos) s.pos = p.pos;
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gradeSum+=gradeToNum(p.grade||'B');
@@ -7055,7 +7069,7 @@ function openRosterCalculator() {
 
   const players = Object.values(playerMap)
     .filter(p => p.gp > 0)
-    .map(p => ({ ...p, cs: calcCompositeScore(p) }))
+    .map(p => ({ ...p, teams: p.teams||new Set(), cs: calcRawScore(p) }))
     .sort((a,b) => b.cs - a.cs);
 
   // Group players by position, fallback to all if position unknown
@@ -7069,8 +7083,8 @@ function openRosterCalculator() {
   const slots = ['PG','SG','SF','PF','C'].map((pos, i) => {
     const posPlayers = [...byPos[pos], ...noPos].sort((a,b) => b.cs - a.cs);
     const opts = posPlayers.length
-      ? posPlayers.map(p => `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — CS: ${p.cs.toFixed(1)}</option>`).join('')
-      : players.map(p => `<option value="${p.name}|||${p.team}">${p.name} (${p.team}) — CS: ${p.cs.toFixed(1)}</option>`).join('');
+      ? posPlayers.map(p => `<option value="${p.name}|||x">${p.name}${p.teams&&p.teams.size>0?' ('+[...p.teams].join('/')+')':''} — CS: ${p.cs.toFixed(1)}</option>`).join('')
+      : players.map(p => `<option value="${p.name}|||x">${p.name}${p.teams&&p.teams.size>0?' ('+[...p.teams].join('/')+')':''} — CS: ${p.cs.toFixed(1)}</option>`).join('');
     const count = posPlayers.length || players.length;
     return `
     <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
@@ -7095,7 +7109,7 @@ function openRosterCalculator() {
 
 function calcRoster() {
   const playerMap = {};
-  // Also track what opponents scored against each player's team (defensive proxy)
+  // Track all teams a player has played for (for defensive proxy)
   const teamDefMap = {}; // team -> [opp scores]
   matches.forEach(m => {
     [m.team1, m.team2].forEach((team, ti) => {
@@ -7103,9 +7117,13 @@ function calcRoster() {
       if(!teamDefMap[team.name]) teamDefMap[team.name] = [];
       teamDefMap[team.name].push(opp.score||0);
       (team.players||[]).forEach(p => {
-        const key = p.name + '|||' + team.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        // Key by player name only — aggregate across all teams
+        const key = p.name;
+        if(!playerMap[key]) playerMap[key] = {name:p.name, teams:new Set(), pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
         const s = playerMap[key]; s.gp++;
+        s.teams.add(team.name);
+        // Update pos to latest known
+        if(p.pos) s.pos = p.pos;
         s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
@@ -7119,7 +7137,9 @@ function calcRoster() {
   const selected = POSITIONS.map((pos, i) => {
     const val = document.getElementById('rc-slot-' + i)?.value;
     if(!val) return null;
-    return playerMap[val] || null;
+    // val is "name|||team" for display — extract name to look up merged stats
+    const name = val.split('|||')[0];
+    return playerMap[name] || null;
   }).filter(Boolean);
 
   if(!selected.length) { document.getElementById('rc-result').innerHTML = ''; return; }
@@ -7139,11 +7159,11 @@ function calcRoster() {
   const tpPct  = totalTPA > 0 ? Math.round(totalTPM/totalTPA*100) : 0;
 
   // ── Defensywa: średnia punktów traconych przez drużyny graczy
-  const defScores = selected.flatMap(p => teamDefMap[p.team] || []);
+  const defScores = selected.flatMap(p => [...(p.teams||[])].flatMap(t => teamDefMap[t] || []));
   const avgDefPts = defScores.length ? (defScores.reduce((s,v)=>s+v,0)/defScores.length) : null;
 
   // ── CS i ocena
-  const csValues = selected.map(p => calcCompositeScore(p));
+  const csValues = selected.map(p => calcRawScore(p));
   const avgCS = csValues.reduce((s,v)=>s+v,0) / selected.length;
   const minCS = Math.min(...csValues);
 
@@ -7169,7 +7189,8 @@ function calcRoster() {
     const isWeak = cs === minCS && selected.length > 1 && (avgCS - cs) > avgCS * 0.30;
     return `<div style="background:var(--surface2);border:1px solid ${isWeak?'rgba(231,76,60,.4)':'var(--border)'};border-radius:8px;padding:.6rem;text-align:center;flex:1;min-width:80px">
       <div style="font-size:.7rem;font-weight:700;color:var(--accent);margin-bottom:.15rem">${p.pos||POSITIONS[i]||'?'}</div>
-      <div style="font-weight:700;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.2rem" title="${p.name}">${p.name}</div>
+      <div style="font-weight:700;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem" title="${p.name}">${p.name}</div>
+      <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem">${[...(p.teams||[])].join(', ')}</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;color:${isWeak?'#e74c3c':'var(--accent)'}">${cs.toFixed(1)}</div>
       <span class="grade grade-${gr.replace('+','p').replace('-','m')}" style="font-size:.68rem">${gr}</span>
       ${isWeak && selected.length===5?'<div style="font-size:.62rem;color:#e74c3c;margin-top:.15rem">⚠️ słabe ogniwo</div>':''}
