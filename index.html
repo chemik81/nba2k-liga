@@ -1812,20 +1812,9 @@ async function saveData() {
     const compactSchedule = (schedule||[]).map(s => {
       const cs = { ...s }; if(cs.prediction) delete cs.prediction; return cs;
     });
-    // Save logos to localStorage, strip from cloud payload
-    const localLogos = {};
-    const teamsWithoutLogos = Object.fromEntries(
-      Object.entries(teams).map(([name, data]) => {
-        if(data.logo) localLogos[name] = data.logo;
-        const { logo, ...rest } = data;
-        return [name, rest];
-      })
-    );
-    if(Object.keys(localLogos).length) {
-      localStorage.setItem('nba2k_logos', JSON.stringify(localLogos));
-    }
+    // Teams saved with logos to KV — available to all users
     const record = { matches: compactMatches, aliases, seasons,
-      currentSeasonId, schedule: compactSchedule, teams: teamsWithoutLogos,
+      currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -1939,14 +1928,7 @@ async function loadData() {
     pendingScreenshots = record.pendingScreenshots || [];
     events = record.events || [];
 
-    // Merge logos from localStorage
-    try {
-      const localLogos = JSON.parse(localStorage.getItem('nba2k_logos') || '{}');
-      Object.entries(localLogos).forEach(([name, logo]) => {
-        if(!teams[name]) teams[name] = {};
-        teams[name].logo = logo;
-      });
-    } catch(e) {}
+    // Logos now stored in KV with teams data
 
     window.teams = teams;
     localStorage.setItem('nba2k_aliases', JSON.stringify(aliases));
@@ -3363,12 +3345,7 @@ function uploadTeamLogo(teamName, input) {
 
 function removeTeamLogo(teamName) {
   if(teams[teamName]) delete teams[teamName].logo;
-  // Also remove from localStorage logos cache
-  try {
-    const logos = JSON.parse(localStorage.getItem('nba2k_logos') || '{}');
-    delete logos[teamName];
-    localStorage.setItem('nba2k_logos', JSON.stringify(logos));
-  } catch(e) {}
+
   saveTeams();
   renderTeamsList();
   showToast(t('logo_deleted'), 'info');
