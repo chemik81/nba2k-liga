@@ -1734,12 +1734,16 @@ function setScreenshotModel(model) {
   const sonnetBtn = document.getElementById('ss-model-sonnet');
   const haikuBtn  = document.getElementById('ss-model-haiku');
   const costEl    = document.getElementById('ss-model-cost');
-  const active  = 'border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent)';
-  const inactive = 'border:1px solid var(--border);background:transparent;color:var(--muted)';
-  if(geminiBtn) geminiBtn.style.cssText += ';' + (isGemini ? active : inactive);
-  if(sonnetBtn) sonnetBtn.style.cssText += ';' + (!isGemini && !isHaiku ? active : inactive);
-  if(haikuBtn)  haikuBtn.style.cssText  += ';' + (isHaiku ? active : inactive);
-  if(costEl) costEl.textContent = isHaiku ? '~$0.005' : '~$0.018';
+  const setBtn = (btn, active) => {
+    if(!btn) return;
+    btn.style.border     = active ? '2px solid var(--accent)' : '1px solid var(--border)';
+    btn.style.background = active ? 'rgba(245,197,24,.12)' : 'transparent';
+    btn.style.color      = active ? 'var(--accent)' : 'var(--muted)';
+  };
+  setBtn(geminiBtn, isGemini);
+  setBtn(sonnetBtn, !isGemini && !isHaiku);
+  setBtn(haikuBtn, isHaiku);
+  if(costEl) costEl.textContent = isGemini ? '🆓 darmowy' : isHaiku ? '~$0.005' : '~$0.018';
   // Also sync setup modal radio if open
   const radio = document.querySelector('input[name="ai-model"][value="' + model + '"]');
   if(radio) {
