@@ -2429,7 +2429,10 @@ function renderMatches() {
         <div class="quarters" style="margin-top:0.25rem">${(m.team1.quarters||[]).map((s,i)=>`<div class="q-box">Q${i+1}:${s}</div>`).join('')}</div>
       </div>
       <div class="match-meta">
-        <div class="match-date">${formatDate(m.date)}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:.4rem">
+          <div class="match-date">${formatDate(m.date)}</div>
+          <button onclick="event.stopPropagation();shareMatch(${m.id})" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px;border-radius:4px;transition:color .2s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+        </div>
         <div class="vs-badge">VS</div>
         ${m.note && !/^game\s*\d+$/i.test(m.note.trim()) ? `<div style="font-size:0.75rem;color:var(--muted);max-width:80px;text-align:center">${m.note}</div>` : ''}
         ${m.seasonId ? `<div style="font-size:0.65rem;color:var(--accent);font-weight:700;margin-top:2px">${(seasons.find(s=>s.id===m.seasonId)||{}).name||''}</div>` : ''}
@@ -2463,7 +2466,10 @@ function openMatch(id) {
       <div style="text-align:center">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:0.85rem;letter-spacing:2px;color:var(--muted);text-transform:uppercase">Final</div>
         <div style="font-size:1.5rem;margin:0.5rem 0">🏀</div>
-        <div style="font-size:0.8rem;color:var(--muted)">${formatDate(m.date)}</div>
+        <div style="display:flex;align-items:center;gap:.5rem;justify-content:center">
+          <div style="font-size:0.8rem;color:var(--muted)">${formatDate(m.date)}</div>
+          <button onclick="shareMatch(${m.id})" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+        </div>
         <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
         ${_isLoggedInSync() ? `<div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin-top:.25rem">
           <button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="generateRecap(${id})">📝 Recap</button>
@@ -6731,6 +6737,16 @@ function generateMatchCard(matchId, useShare) {
   var m = matches.find(function(x){ return Number(x.id) === Number(matchId); });
   if(!m) return;
 
+  // Find round label for this match
+  var roundLabel = '';
+  if(rounds && rounds.length) {
+    var r = rounds.find(function(r){ return m.date >= r.from && m.date <= r.to; });
+    if(r) roundLabel = r.label;
+  }
+
+  // Logo size for canvas
+  var LOGO_SIZE = 48;
+
   var W = 860, PAD = 32;
   var canvas = document.createElement('canvas');
   canvas.width = W;
@@ -6739,7 +6755,8 @@ function generateMatchCard(matchId, useShare) {
   var ctx = canvas.getContext('2d');
   function measureHeight() {
     var y = PAD;
-    y += 52; // header team names
+    if(roundLabel) y += 22; // round label row
+    y += 60; // header team names + logos
     y += 36; // score
     y += 24; // date + quarters
     y += 20; // spacer
@@ -6785,36 +6802,95 @@ function generateMatchCard(matchId, useShare) {
   ctx.fillRect(0, 0, W, 4);
 
   var y = PAD + 4;
-
-  // HEADER: team names + score
   var w1 = m.team1.score > m.team2.score;
   ctx.textBaseline = 'top';
 
-  // Team 1
-  ctx.font = 'bold 28px Arial';
-  ctx.fillStyle = w1 ? '#f5c518' : '#e8eaf0';
-  ctx.fillText(m.team1.name.toUpperCase(), PAD, y);
+  // ROUND LABEL (if exists)
+  if(roundLabel) {
+    ctx.font = 'bold 12px Arial';
+    ctx.fillStyle = '#f5c518';
+    var rlw = ctx.measureText(roundLabel.toUpperCase()).width;
+    // pill bg
+    ctx.fillStyle = 'rgba(245,197,24,0.12)';
+    ctx.beginPath();
+    ctx.roundRect((W - rlw - 20)/2, y, rlw + 20, 18, 4);
+    ctx.fill();
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#f5c518';
+    ctx.fillText(roundLabel.toUpperCase(), (W - rlw)/2, y + 4);
+    y += 26;
+  }
 
-  // Score
-  ctx.font = 'bold 44px Arial';
-  ctx.fillStyle = '#f5c518';
-  var sc1 = String(m.team1.score);
-  var sc2 = String(m.team2.score);
-  var scW1 = ctx.measureText(sc1 + ' — ' + sc2).width;
-  var scX = (W - scW1) / 2;
-  ctx.fillStyle = w1 ? '#f5c518' : '#e8eaf0';
-  ctx.fillText(sc1, scX, y - 4);
-  ctx.fillStyle = '#6b7494';
-  ctx.fillText(' — ', scX + ctx.measureText(sc1).width, y - 4);
-  ctx.fillStyle = !w1 ? '#f5c518' : '#e8eaf0';
-  ctx.fillText(sc2, scX + ctx.measureText(sc1 + ' — ').width, y - 4);
+  // Helper: draw logo or initials circle
+  function drawLogo(teamName, cx, cy, size) {
+    var tObj = (typeof teams !== 'undefined') ? teams[teamName] : null;
+    if(tObj && tObj.logo) {
+      var img = new Image();
+      img.src = tObj.logo;
+      // draw with clip circle
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, size/2, 0, Math.PI*2);
+      ctx.clip();
+      ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+      ctx.restore();
+    } else {
+      // initials circle
+      var colors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e91e63'];
+      var hash = 0;
+      for(var ci=0; ci<teamName.length; ci++) hash = teamName.charCodeAt(ci) + ((hash<<5)-hash);
+      var col = colors[Math.abs(hash) % colors.length];
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, size/2, 0, Math.PI*2);
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.font = 'bold ' + Math.round(size*0.38) + 'px Arial';
+      ctx.fillStyle = '#fff';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      var words = teamName.trim().split(/\s+/);
+      var initials = words.length >= 2 ? (words[0][0]+words[words.length-1][0]).toUpperCase() : teamName.slice(0,2).toUpperCase();
+      ctx.fillText(initials, cx, cy);
+      ctx.restore();
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+    }
+  }
 
-  // Team 2 (right aligned)
-  ctx.font = 'bold 28px Arial';
+  // HEADER: logo + name left, score center, logo + name right
+  var logoY = y + LOGO_SIZE/2;
+
+  // Team 1 logo
+  drawLogo(m.team1.name, PAD + LOGO_SIZE/2, logoY, LOGO_SIZE);
+  ctx.font = 'bold 24px Arial';
+  ctx.fillStyle = w1 ? '#f5c518' : '#e8eaf0';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(m.team1.name.toUpperCase(), PAD + LOGO_SIZE + 10, logoY);
+
+  // Team 2 logo + name (right aligned)
+  ctx.font = 'bold 24px Arial';
   ctx.fillStyle = !w1 ? '#f5c518' : '#e8eaf0';
   var t2w = ctx.measureText(m.team2.name.toUpperCase()).width;
-  ctx.fillText(m.team2.name.toUpperCase(), W - PAD - t2w, y);
+  ctx.fillText(m.team2.name.toUpperCase(), W - PAD - LOGO_SIZE - 10 - t2w, logoY);
+  drawLogo(m.team2.name, W - PAD - LOGO_SIZE/2, logoY, LOGO_SIZE);
 
+  y += LOGO_SIZE + 10;
+  ctx.textBaseline = 'top';
+
+  // SCORE
+  ctx.font = 'bold 48px Arial';
+  var sc1 = String(m.team1.score);
+  var sc2 = String(m.team2.score);
+  var dash = '  —  ';
+  var scW = ctx.measureText(sc1 + dash + sc2).width;
+  var scX = (W - scW) / 2;
+  ctx.fillStyle = w1 ? '#f5c518' : '#e8eaf0';
+  ctx.fillText(sc1, scX, y);
+  ctx.fillStyle = '#6b7494';
+  ctx.fillText(dash, scX + ctx.measureText(sc1).width, y);
+  ctx.fillStyle = !w1 ? '#f5c518' : '#e8eaf0';
+  ctx.fillText(sc2, scX + ctx.measureText(sc1 + dash).width, y);
   y += 52;
 
   // Date + quarters
