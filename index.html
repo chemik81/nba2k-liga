@@ -7173,7 +7173,7 @@ async function generateRecap(id) {
   const zs2 = zeroShotsNote(m.team2);
   const zeroShotsText = [zs1 && `${m.team1.name}: ${zs1}`, zs2 && `${m.team2.name}: ${zs2}`].filter(Boolean).join('; ');
 
-  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz krótki, dynamiczny recap meczu po polsku (max 150 słów). Używaj sportowego języka. Wymień MVP meczu. Skomentuj kluczowe pojedynki defensywne — kto pozwolił rywalowi punktować, a kto skutecznie go zatrzymał. Nie używaj nagłówków ani list — sam ciągły tekst.
+  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Pisz BEZPOŚREDNIO po polsku — myśl i formułuj zdania od razu w języku polskim, nie tłumacz z angielskiego. Napisz dynamiczny recap meczu po polsku. WYMAGANA długość: MINIMUM 200 słów, optymalnie 220-250. Poniżej 200 słów jest niedopuszczalne. Zawsze kończ pełnym skończonym zdaniem. Używaj sportowego języka. Obowiązkowo: (1) wymień MVP z uzasadnieniem, (2) skomentuj 2 kluczowe pojedynki defensywne, (3) opisz przebieg meczu kwarta po kwarcie. Nie używaj nagłówków ani list — sam ciągły tekst.
 
 WAŻNE ZASADY:
 - Jeśli gracz miał FGA=0 i FTA=0: napisz że nie otrzymał ani jednej piłki od kolegów i zadaj refleksyjne pytanie czy gdyby go częściej szukali wynik mógłby być inny. NIE pisz "dramat" ani "słaby".
@@ -7190,7 +7190,7 @@ WAŻNE ZASADY:
 - Gracze z 0 FGA w tym meczu: \${zeroShotsText || 'brak'}.
 - SPECJALNE ZASADY DLA KONKRETNYCH GRACZY:
   * chemik81pl: gdy jego ocena to B lub wyższa (B, B+, A-, A, A+), zawsze napisz o nim z lekką pochwałą i uznaniem — podkreśl jego wkład, nawet jeśli statystyki nie są spektakularne. Traktuj go jak gracza który "cicho robi robotę". WYJĄTEK DEFENSYWNY: chemik81pl mimo że gra na pozycji SF, zawsze kryje C przeciwnej drużyny (nie PG jak wynikałoby ze standardowych zasad krycia). Stosuj tę regułę zawsze — oceniaj jego defensywę względem punktów i skuteczności rywala grającego na C.
-  * SniperKPL: możesz pisać o nim naprzemiennie jako "SniperKPL" lub "Saper" — używaj przydomka "Saper" mniej więcej co drugi raz gdy go wspominasz.
+  * SniperKPL: TYLKO gdy w tym meczu gra drużyna Polish Snickers — możesz pisać o nim naprzemiennie jako "SniperKPL" lub "Saper", używając przydomka "Saper" mniej więcej co drugi raz gdy go wspominasz. Jeśli Polish Snickers NIE gra w tym meczu, zawsze używaj tylko "SniperKPL".
 
 ZASADY KRYCIA W TEJ LIDZE: PG kryje PF rywala, SG kryje SG rywala, SF kryje PG rywala, PF kryje C rywala, C kryje SF rywala.
 W DANYCH PONIŻEJ: format "X KRYJE Y" oznacza że X jest obrońcą a Y atakującym. Np. "LeTbartko[SF] KRYJE RudiGay[PG]" = LeTbartko broni przed RudiGay'em. NIE odwracaj tej relacji.
