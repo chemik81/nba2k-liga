@@ -6754,7 +6754,7 @@ async function generateRecap(id) {
   const zs2 = zeroShotsNote(m.team2);
   const zeroShotsText = [zs1 && `${m.team1.name}: ${zs1}`, zs2 && `${m.team2.name}: ${zs2}`].filter(Boolean).join('; ');
 
-  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz dynamiczny recap meczu po polsku o długości DOKŁADNIE 180-220 słów — nie krócej, nie dłużej. Używaj sportowego języka. Obowiązkowo: (1) wymień MVP meczu z uzasadnieniem, (2) skomentuj co najmniej 2 kluczowe pojedynki defensywne — kto pozwolił rywalowi punktować, a kto skutecznie go zatrzymał, (3) opisz przebieg meczu kwarta po kwarcie jeśli było ciekawe momentum. Nie używaj nagłówków ani list — sam ciągły tekst.
+  const prompt = `Jesteś dziennikarzem sportowym komentującym mecz NBA 2K26 w lidze znajomych. Napisz dynamiczny recap meczu po polsku. WYMAGANA długość: MINIMUM 200 słów, optymalnie 220-250 słów. Poniżej 200 słów jest niedopuszczalne. Zawsze kończ pełnym, skończonym zdaniem. Używaj sportowego języka. Obowiązkowo: (1) wymień MVP meczu z uzasadnieniem, (2) skomentuj co najmniej 2 kluczowe pojedynki defensywne — kto pozwolił rywalowi punktować, a kto skutecznie go zatrzymał, (3) opisz przebieg meczu kwarta po kwarcie jeśli było ciekawe momentum. Nie używaj nagłówków ani list — sam ciągły tekst.
 
 WAŻNE ZASADY:
 - Jeśli gracz miał FGA=0 i FTA=0: napisz że nie otrzymał ani jednej piłki od kolegów i zadaj refleksyjne pytanie czy gdyby go częściej szukali wynik mógłby być inny. NIE pisz "dramat" ani "słaby".
