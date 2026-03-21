@@ -6791,7 +6791,7 @@ STATYSTYKI ${m.team2.name} [pozycja]:
 ${formatPlayers(m.team2)}${duelsText}`;
 
   try {
-    const data = await callAI(MODEL_CHEAP(), 1500, [{ role: 'user', content: prompt }]);
+    const data = await callAI(MODEL_CHEAP(), 3000, [{ role: 'user', content: prompt }]);
     if(data.error) throw new Error(data.error?.message || 'API error');
     const recap = data.content?.[0]?.text || '';
     // Save recap to match
