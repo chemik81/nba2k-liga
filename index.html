@@ -5921,13 +5921,50 @@ let _top10SeasonId = null, _top10SeasonName = null;
 function openTop10Modal(seasonId, seasonName) {
   _top10SeasonId = seasonId;
   _top10SeasonName = seasonName;
+  window._brickRoundIdx = null; // reset to active round on open
+  window._top10RoundIdx = null; // reset CS/PER round to active on open
   renderTop10Tab('composite');
   document.getElementById('top10-modal').classList.add('open');
 }
 
 function renderTop10Tab(tab) {
-  const agg = getAggregatedStats(_top10SeasonId);
   const medals = ['🥇','🥈','🥉'];
+  const sortedRounds = rounds.length ? [...rounds].sort((a,b)=>a.from.localeCompare(b.from)) : [];
+
+  // Round switcher for CS/PER tabs (null = all)
+  if(tab !== 'brick') {
+    if(window._top10RoundIdx == null) window._top10RoundIdx = sortedRounds.length > 0 ? sortedRounds.length - 1 : -1;
+    window._top10RoundIdx = Math.min(window._top10RoundIdx, sortedRounds.length - 1);
+  }
+
+  // Filter matches by round for CS/PER
+  const filteredMatches = (tab !== 'brick' && window._top10RoundIdx >= 0 && sortedRounds[window._top10RoundIdx])
+    ? matches.filter(m => {
+        const r = sortedRounds[window._top10RoundIdx];
+        const inSeason = !_top10SeasonId || m.seasonId === _top10SeasonId;
+        return inSeason && m.date >= r.from && m.date <= r.to;
+      })
+    : null; // null = use all (getAggregatedStats)
+
+  const agg = filteredMatches
+    ? (() => {
+        const pmap = {};
+        filteredMatches.forEach(m => {
+          [m.team1, m.team2].forEach(t => {
+            (t.players||[]).forEach(p => {
+              if(!pmap[p.name+'|||'+t.name]) pmap[p.name+'|||'+t.name] = {name:p.name,team:t.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+              const s = pmap[p.name+'|||'+t.name];
+              if(p.pos) s.pos=p.pos;
+              s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+              s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+              s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
+              s.ftm+=p.ftm||0; s.fta+=p.fta||0; s.gradeSum+=gradeToNum(p.grade||'B');
+            });
+          });
+        });
+        return Object.values(pmap);
+      })()
+    : getAggregatedStats(_top10SeasonId);
 
   const makeRows = (ranked, extraCol, extraVal) => ranked.map((p,i) => {
     const gr = numToGrade(p.gradeSum/p.gp);
@@ -5953,6 +5990,13 @@ function renderTop10Tab(tab) {
     ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
     : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
+  // Round switcher for CS/PER
+  const roundSwitcherCsPer = (!isBrick && sortedRounds.length > 0) ? `
+    <div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.75rem">
+      ${sortedRounds.map((r,i) => `<button onclick="window._top10RoundIdx=${i};renderTop10Tab('${tab}')"
+        style="padding:.25rem .6rem;border-radius:6px;border:1px solid ${i===window._top10RoundIdx?'var(--accent)':'var(--border)'};background:${i===window._top10RoundIdx?'rgba(245,197,24,.15)':'transparent'};color:${i===window._top10RoundIdx?'var(--accent)':'var(--muted)'};font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:${i===window._top10RoundIdx?'700':'400'}">${r.label}</button>`).join('')}
+    </div>` : '';
+
   const tabBtn = (isActive, lbl, tid) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${isActive?'var(--accent)':'transparent'};background:none;color:${isActive?'var(--accent)':'var(--muted)'};font-weight:${isActive?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tid}')">${lbl}</button>`;
   const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 — ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(tab==='composite','Composite Score','composite')}${tabBtn(tab==='per','PER (Hollinger)','per')}${tabBtn(tab==='brick','🧱 Brick of the Round','brick')}</div>`;
 
@@ -5962,7 +6006,7 @@ function renderTop10Tab(tab) {
       : [getDefaultRound()];
 
     // Brick round selector — persisted in window var
-    if(!window._brickRoundIdx) window._brickRoundIdx = activeRounds.length - 1;
+    if(window._brickRoundIdx == null) window._brickRoundIdx = activeRounds.length - 1;
     window._brickRoundIdx = Math.min(window._brickRoundIdx, activeRounds.length - 1);
     let brickRound = activeRounds[window._brickRoundIdx];
 
@@ -6051,14 +6095,14 @@ function renderTop10Tab(tab) {
   }
 
   if(isComposite) {
-    document.getElementById('top10-modal-content').innerHTML = header +
+    document.getElementById('top10-modal-content').innerHTML = header + roundSwitcherCsPer +
       `<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Composite: PTS (25%) + STL (20%) + BLK (18%) + REB (15%) + AST (12%) + ocena (10%)</div>
       <div class="stats-table-wrap"><table>
         <thead><tr><th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
         <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>Score</th><th>GP</th></tr></thead>
         <tbody>${makeRows(ranked, 'Score', p=>p._s.toFixed(1))}</tbody>
       </table></div>`;
-  } else {
+  } else if(!isBrick) {
     const perRows = ranked.map((p,i) => {
       const gr = numToGrade(p.gradeSum/p.gp);
       const avg = v => (v/p.gp).toFixed(1);
@@ -6082,7 +6126,7 @@ function renderTop10Tab(tab) {
         <td style="font-size:.8rem;color:var(--muted)">${p.gp}</td>
       </tr>`;
     }).join('');
-    document.getElementById('top10-modal-content').innerHTML = header +
+    document.getElementById('top10-modal-content').innerHTML = header + roundSwitcherCsPer +
       `<div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">PER = (PTS + REB + AST + STL + BLK &minus; pud&#322;a FG &minus; pud&#322;a FT &minus; TO) &divide; GP &mdash; im wy&#380;szy tym lepiej</div>
       <div class="stats-table-wrap"><table>
         <thead><tr><th>#</th><th style="text-align:left">Zawodnik</th><th>Poz</th><th style="text-align:left">Drużyna</th>
