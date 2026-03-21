@@ -3638,16 +3638,18 @@ function renderTeamForm(sorted) {
   if(!sorted.length) { wrap.innerHTML='<div style="color:var(--muted);font-size:.9rem">Brak danych</div>'; return; }
   const byDate = [...matches].sort((a,b)=>new Date(b.date)-new Date(a.date));
   wrap.innerHTML = sorted.map(([name,s]) => {
-    const last5 = byDate.filter(m=>m.team1.name===name||m.team2.name===name).slice(0,5);
-    const dots = Array.from({length:5},(_,i)=>{
-      if(i>=last5.length) return '<span class="fd-e" title="brak meczu"></span>';
-      const m=last5[i], my=m.team1.name===name?m.team1.score:m.team2.score, op=m.team1.name===name?m.team2.score:m.team1.score;
+    const teamMatches = byDate.filter(m=>m.team1.name===name||m.team2.name===name);
+    const last10 = teamMatches.slice(0,7);
+    const dots = Array.from({length:7},(_,i)=>{
+      if(i>=last10.length) return '<span class="fd-e" title="brak meczu"></span>';
+      const m=last10[i], my=m.team1.name===name?m.team1.score:m.team2.score, op=m.team1.name===name?m.team2.score:m.team1.score;
       const opp=m.team1.name===name?m.team2.name:m.team1.name;
       return my>op?`<span class="fd-w" title="W vs ${opp} ${my}-${op}"></span>`:`<span class="fd-l" title="L vs ${opp} ${my}-${op}"></span>`;
     }).join('');
-    const streak = last5.length>0 ? (() => {
-      let sc=0; for(const m of last5){ const my=m.team1.name===name?m.team1.score:m.team2.score,op=m.team1.name===name?m.team2.score:m.team1.score; if(my>op)sc++;else break; }
-      let sl=0; for(const m of last5){ const my=m.team1.name===name?m.team1.score:m.team2.score,op=m.team1.name===name?m.team2.score:m.team1.score; if(my<op)sl++;else break; }
+    // Streak from ALL matches, not just last 10
+    const streak = teamMatches.length>0 ? (() => {
+      let sc=0; for(const m of teamMatches){ const my=m.team1.name===name?m.team1.score:m.team2.score,op=m.team1.name===name?m.team2.score:m.team1.score; if(my>op)sc++;else break; }
+      let sl=0; for(const m of teamMatches){ const my=m.team1.name===name?m.team1.score:m.team2.score,op=m.team1.name===name?m.team2.score:m.team1.score; if(my<op)sl++;else break; }
       if(sc>=2) return `<span style="color:var(--win);font-size:.75rem;font-weight:700">${sc}W z rzędu</span>`;
       if(sl>=2) return `<span style="color:var(--loss);font-size:.75rem;font-weight:700">${sl}L z rzędu</span>`;
       return '';
@@ -4127,13 +4129,13 @@ function renderRoundComparison() {
       <div style="text-align:center;min-width:50px">
         <div style="font-size:.7rem;color:var(--muted)">${r1.label}</div>
         <span class="grade grade-${d.gr1.replace('+','p').replace('-','m')}">${d.gr1}</span>
-        <div style="font-size:.72rem;color:var(--muted)">${d.pts1} PPG</div>
+        <div style="font-size:.72rem;color:var(--muted)">${d.cs1.toFixed(1)} CS</div>
       </div>
       <div style="font-size:1.2rem;color:var(--muted)">→</div>
       <div style="text-align:center;min-width:50px">
         <div style="font-size:.7rem;color:var(--muted)">${r2.label}</div>
         <span class="grade grade-${d.gr2.replace('+','p').replace('-','m')}">${d.gr2}</span>
-        <div style="font-size:.72rem;color:var(--muted)">${d.pts2} PPG</div>
+        <div style="font-size:.72rem;color:var(--muted)">${d.cs2.toFixed(1)} CS</div>
       </div>
       <div style="min-width:52px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${color}">${arrow} ${sign}${d.delta.toFixed(1)}<div style="font-size:.65rem;font-weight:400;color:var(--muted)">CS</div></div>
     </div>`;
