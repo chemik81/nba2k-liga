@@ -783,7 +783,7 @@
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div id="milestone-banner" style="margin-bottom:1.5rem"></div>
     <div id="round-comparison-wrap" style="margin-bottom:1.5rem"></div>
-    <div class="section-title" data-i18n="standings">Tabela</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="standings">Tabela</div><button onclick="shareStandings()" title="Udostępnij tabelę" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;flex-shrink:0;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button></div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="stats-table-wrap">
         <table style="min-width:500px">
@@ -6074,7 +6074,7 @@ function renderTop10Tab(tab) {
     ).join('');
 
     document.getElementById('top10-modal-content').innerHTML = header +
-      `<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">${roundSwitcher}</div>
+      `<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">${roundSwitcher}<button onclick="shareBrickOfRound()" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;flex-shrink:0;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button></div>
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> &mdash; bez PG &mdash; ${roundMatches.length} meczów w kolejce</div>
       <div class="stats-table-wrap"><table>
         <thead><tr>
@@ -6181,7 +6181,7 @@ function openTeamModal(tn){
       +'<td>'+(p.fga>0?Math.round(p.fgm/p.fga*100):0)+'%</td><td>'+(p.tpa>0?Math.round(p.tpm/p.tpa*100):0)+'%</td><td>'+(p.fta>0?Math.round(p.ftm/p.fta*100):0)+'%</td></tr>';
   }).join('');
   document.getElementById('team-modal-content').innerHTML=
-    '<div style="margin-bottom:1.5rem"><div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem">'+teamLogo(tn,52,'1.2rem')+'<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">'+tn+'</div></div>'
+    '<div style="margin-bottom:1.5rem"><div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem">'+teamLogo(tn,52,'1.2rem')+'<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">'+tn+'</div>'+'<button onclick="shareTeamCard(\''+tn.replace(/\'/g,\"\\\'\")+'\')" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;flex-shrink:0;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>'+'</div>'
     +'<div style="display:flex;gap:1.5rem;margin-top:0.5rem;flex-wrap:wrap">'
     +'<span style="color:var(--win);font-weight:700">'+w+'W</span><span style="color:var(--loss);font-weight:700">'+l+'L</span>'
     +'<span style="color:var(--muted)">PPG: <strong style="color:var(--text)">'+(gp>0?(pf/gp).toFixed(1):'0.0')+'</strong></span>'
@@ -6949,6 +6949,256 @@ function sharePlayerCard(playerName, teamName) {
       var a=document.createElement('a'); a.href=url; a.download=filename; a.click();
       URL.revokeObjectURL(url);
       showToast('✅ Karta pobrana!','success');
+    }
+  },'image/png');
+}
+
+
+// ─── SHARE: STANDINGS ────────────────────────────────────────
+function shareStandings() {
+  var sorted = [];
+  var stats = {};
+  matches.forEach(function(m) {
+    [['team1','team2'],['team2','team1']].forEach(function(pair) {
+      var my = m[pair[0]], op = m[pair[1]];
+      if(!stats[my.name]) stats[my.name]={w:0,l:0,pf:0,pa:0};
+      var s=stats[my.name];
+      if(my.score>op.score){s.w++;}else{s.l++;}
+      s.pf+=my.score; s.pa+=op.score;
+    });
+  });
+  sorted = Object.keys(stats).map(function(n){
+    var s=stats[n],gp=s.w+s.l;
+    return {name:n,w:s.w,l:s.l,gp:gp,pts:s.w*2,ppg:gp>0?(s.pf/gp).toFixed(1):'0.0',opp:gp>0?(s.pa/gp).toFixed(1):'0.0'};
+  }).sort(function(a,b){return b.pts-a.pts||b.w-a.w;});
+
+  var W=660, ROW=36, PAD=24, HEAD=80;
+  var canvas=document.createElement('canvas');
+  canvas.width=W; canvas.height=HEAD+sorted.length*ROW+PAD;
+  var ctx=canvas.getContext('2d');
+  var bg=ctx.createLinearGradient(0,0,0,canvas.height);
+  bg.addColorStop(0,'#0d1117'); bg.addColorStop(1,'#161b28');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,canvas.height);
+  ctx.fillStyle='#f5c518'; ctx.fillRect(0,0,W,4);
+
+  var y=PAD+4;
+  ctx.font='bold 26px Arial'; ctx.fillStyle='#f5c518'; ctx.textBaseline='top';
+  ctx.fillText('TABELA LIGOWA', PAD, y); y+=34;
+  ctx.font='12px Arial'; ctx.fillStyle='#6b7494';
+  ctx.fillText('Sezon: '+(seasons.find(function(s){return s.id===currentSeasonId;})||{name:'Wszystkie'}).name, PAD, y);
+  y+=24;
+
+  var cols=[{l:'#',w:28},{l:'DRUŻYNA',w:220},{l:'M',w:36},{l:'W',w:36},{l:'L',w:36},{l:'PTS',w:44},{l:'PPG',w:52},{l:'OPP',w:52}];
+  var xs=[PAD]; cols.forEach(function(c,i){if(i>0)xs.push(xs[i-1]+cols[i-1].w);});
+
+  // header row
+  ctx.fillStyle='rgba(245,197,24,0.08)'; ctx.fillRect(0,y,W,28);
+  ctx.font='bold 11px Arial'; ctx.fillStyle='#6b7494'; ctx.textBaseline='middle';
+  cols.forEach(function(c,i){ctx.textAlign=i>1?'center':'left';ctx.fillText(c.l,i>1?xs[i]+cols[i].w/2:xs[i],y+14);});
+  y+=28;
+
+  var medals=['🥇','🥈','🥉'];
+  sorted.forEach(function(t,idx){
+    ctx.fillStyle=idx%2===0?'rgba(255,255,255,0.02)':'transparent';
+    ctx.fillRect(0,y,W,ROW);
+    ctx.textBaseline='middle';
+    // rank
+    ctx.font='bold 13px Arial'; ctx.textAlign='center'; ctx.fillStyle='#6b7494';
+    ctx.fillText(idx<3?medals[idx]:String(idx+1), xs[0]+cols[0].w/2, y+ROW/2);
+    // name
+    ctx.textAlign='left'; ctx.font='bold 14px Arial'; ctx.fillStyle='#e8eaf0';
+    ctx.fillText(t.name, xs[1], y+ROW/2);
+    // stats
+    var vals=[String(t.gp),String(t.w),String(t.l),String(t.pts),t.ppg,t.opp];
+    vals.forEach(function(v,i){
+      var ci=i+2;
+      ctx.textAlign='center';
+      ctx.font=ci===5?'bold 14px Arial':'13px Arial';
+      ctx.fillStyle=ci===5?'#f5c518':ci===3?'var(--win)':'#a0a8b8';
+      if(ci===3) ctx.fillStyle='#2ecc71';
+      if(ci===4) ctx.fillStyle='#e74c3c';
+      if(ci===5) ctx.fillStyle='#f5c518';
+      ctx.fillText(v, xs[ci]+cols[ci].w/2, y+ROW/2);
+    });
+    y+=ROW;
+  });
+  ctx.fillStyle='#f5c518'; ctx.fillRect(0,canvas.height-3,W,3);
+
+  canvas.toBlob(function(blob){
+    var file=new File([blob],'tabela_ligowa.png',{type:'image/png'});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:'Tabela ligowa'}).catch(function(e){if(e.name!=='AbortError')showToast('❌ Błąd udostępniania','error');});
+    } else {
+      var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='tabela_ligowa.png';a.click();URL.revokeObjectURL(url);
+      showToast('✅ Tabela pobrana!','success');
+    }
+  },'image/png');
+}
+
+// ─── SHARE: TEAM CARD ─────────────────────────────────────────
+function shareTeamCard(tn) {
+  var w=0,l=0,pf=0,pa=0;
+  matches.forEach(function(m){
+    if(m.team1.name===tn){w+=m.team1.score>m.team2.score?1:0;l+=m.team1.score<m.team2.score?1:0;pf+=m.team1.score;pa+=m.team2.score;}
+    if(m.team2.name===tn){w+=m.team2.score>m.team1.score?1:0;l+=m.team2.score<m.team1.score?1:0;pf+=m.team2.score;pa+=m.team1.score;}
+  });
+  var gp=w+l;
+  var pm={};
+  matches.forEach(function(m){[m.team1,m.team2].forEach(function(t){
+    if(t.name!==tn)return;
+    (t.players||[]).forEach(function(p){
+      if(!pm[p.name])pm[p.name]={name:p.name,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gs:0};
+      var s=pm[p.name];s.gp++;s.pts+=p.pts||0;s.reb+=p.reb||0;s.ast+=p.ast||0;s.stl+=p.stl||0;s.blk+=p.blk||0;s.to+=p.to||0;s.fgm+=p.fgm||0;s.fga+=p.fga||0;s.tpm+=p.tpm||0;s.tpa+=p.tpa||0;s.ftm+=p.ftm||0;s.fta+=p.fta||0;s.gs+=gradeToNum(p.grade||'B');
+    });
+  });});
+  var pl=Object.values(pm).map(function(p){
+    var pf2={name:p.name,team:tn,pos:p.pos||'',gp:p.gp,pts:p.pts,reb:p.reb,ast:p.ast,stl:p.stl,blk:p.blk,to:p.to,fgm:p.fgm,fga:p.fga,tpm:p.tpm,tpa:p.tpa,ftm:p.ftm,fta:p.fta,gradeSum:p.gs};
+    return Object.assign(p,{_cs:calcCompositeScore(pf2)});
+  }).sort(function(a,b){return b._cs-a._cs;});
+
+  var W=660,ROW=34,PAD=24,HEAD=120;
+  var canvas=document.createElement('canvas');
+  canvas.width=W; canvas.height=HEAD+pl.length*ROW+PAD;
+  var ctx=canvas.getContext('2d');
+  var bg=ctx.createLinearGradient(0,0,0,canvas.height);
+  bg.addColorStop(0,'#0d1117');bg.addColorStop(1,'#161b28');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,canvas.height);
+  ctx.fillStyle='#f5c518';ctx.fillRect(0,0,W,4);
+
+  var y=PAD+4;
+  // Logo
+  var LOGO=52;
+  var tObj=(typeof teams!=='undefined')?teams[tn]:null;
+  if(tObj&&tObj.logo){var img=new Image();img.src=tObj.logo;ctx.save();ctx.beginPath();ctx.arc(PAD+LOGO/2,y+LOGO/2,LOGO/2,0,Math.PI*2);ctx.clip();ctx.drawImage(img,PAD,y,LOGO,LOGO);ctx.restore();}
+  else{var hash=0;for(var ci=0;ci<tn.length;ci++)hash=tn.charCodeAt(ci)+((hash<<5)-hash);var cols2=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6'];ctx.save();ctx.beginPath();ctx.arc(PAD+LOGO/2,y+LOGO/2,LOGO/2,0,Math.PI*2);ctx.fillStyle=cols2[Math.abs(hash)%cols2.length];ctx.fill();ctx.font='bold 18px Arial';ctx.fillStyle='#fff';ctx.textBaseline='middle';ctx.textAlign='center';var ws2=tn.trim().split(/\s+/);ctx.fillText(ws2.length>=2?(ws2[0][0]+ws2[ws2.length-1][0]).toUpperCase():tn.slice(0,2).toUpperCase(),PAD+LOGO/2,y+LOGO/2);ctx.restore();}
+  ctx.textBaseline='top';ctx.textAlign='left';
+  ctx.font='bold 28px Arial';ctx.fillStyle='#f5c518';ctx.fillText(tn.toUpperCase(),PAD+LOGO+14,y+4);
+  ctx.font='14px Arial';ctx.fillStyle='#6b7494';
+  ctx.fillText(String(w)+'W  '+String(l)+'L    PPG: '+(gp>0?(pf/gp).toFixed(1):'0.0')+'  OPP: '+(gp>0?(pa/gp).toFixed(1):'0.0'),PAD+LOGO+14,y+38);
+  y+=LOGO+20;
+
+  // Table header
+  var cols=[{l:'ZAWODNIK',w:160},{l:'GP',w:36},{l:'GRD',w:50},{l:'CS',w:52},{l:'PTS',w:52},{l:'REB',w:44},{l:'AST',w:44},{l:'STL',w:44},{l:'BLK',w:44},{l:'FG%',w:52}];
+  var xs=[PAD];cols.forEach(function(c,i){if(i>0)xs.push(xs[i-1]+cols[i-1].w);});
+  ctx.fillStyle='rgba(245,197,24,0.08)';ctx.fillRect(0,y,W,26);
+  ctx.font='bold 10px Arial';ctx.fillStyle='#6b7494';ctx.textBaseline='middle';
+  cols.forEach(function(c,i){ctx.textAlign=i>0?'center':'left';ctx.fillText(c.l,i>0?xs[i]+cols[i].w/2:xs[i],y+13);});
+  y+=26;
+
+  pl.forEach(function(p,idx){
+    ctx.fillStyle=idx%2===0?'rgba(255,255,255,0.02)':'transparent';ctx.fillRect(0,y,W,ROW);
+    var a=function(v){return p.gp>0?(v/p.gp).toFixed(1):'0.0';};
+    var ag=numToGrade(p.gp>0?p.gs/p.gp:0);
+    var fgp=p.fga>0?Math.round(p.fgm/p.fga*100)+'%':'-';
+    var vals=[null,String(p.gp),ag,p._cs.toFixed(1),a(p.pts),a(p.reb),a(p.ast),a(p.stl),a(p.blk),fgp];
+    ctx.textBaseline='middle';
+    ctx.textAlign='left';ctx.font='bold 13px Arial';ctx.fillStyle='#e8eaf0';ctx.fillText(p.name,xs[0],y+ROW/2);
+    vals.forEach(function(v,i){
+      if(i===0)return;
+      ctx.textAlign='center';
+      if(i===2){var gc={'A+':'#f5c518','A':'#f5c518','A-':'#e0b800','B+':'#4fc3f7','B':'#4fc3f7','B-':'#29b6f6','C+':'#ff8a65','C':'#ff7043','C-':'#f4511e'};ctx.font='bold 12px Arial';ctx.fillStyle=gc[v]||'#f5c518';}
+      else if(i===3){ctx.font='bold 13px Arial';ctx.fillStyle='#f5c518';}
+      else if(i===4){ctx.font='bold 13px Arial';ctx.fillStyle='#f5c518';}
+      else{ctx.font='12px Arial';ctx.fillStyle='#a0a8b8';}
+      ctx.fillText(v,xs[i]+cols[i].w/2,y+ROW/2);
+    });
+    y+=ROW;
+  });
+  ctx.fillStyle='#f5c518';ctx.fillRect(0,canvas.height-3,W,3);
+
+  var fname=tn.replace(/\s+/g,'_')+'_team.png';
+  canvas.toBlob(function(blob){
+    var file=new File([blob],fname,{type:'image/png'});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:tn+' — karta drużyny'}).catch(function(e){if(e.name!=='AbortError')showToast('❌ Błąd','error');});
+    } else {
+      var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=fname;a.click();URL.revokeObjectURL(url);
+      showToast('✅ Karta drużyny pobrana!','success');
+    }
+  },'image/png');
+}
+
+// ─── SHARE: BRICK OF THE ROUND ────────────────────────────────
+function shareBrickOfRound() {
+  var sortedR=rounds.length?[...rounds].sort(function(a,b){return a.from.localeCompare(b.from);}):[];
+  var idx=window._brickRoundIdx!=null?window._brickRoundIdx:sortedR.length-1;
+  var round=sortedR[idx];
+  if(!round){showToast('❌ Brak danych kolejki','error');return;}
+
+  var roundMatches=matches.filter(function(m){return m.date>=round.from&&m.date<=round.to;});
+  if(!roundMatches.length){showToast('❌ Brak meczów w tej kolejce','error');return;}
+
+  // Reuse brick data from DOM if possible, else just do standings
+  var el=document.getElementById('top10-modal-content');
+  var rows=el?el.querySelectorAll('tbody tr'):[];
+
+  // Build canvas from brick table data
+  var W=660,ROW=36,PAD=24,HEAD=80;
+  var players=[];
+  rows.forEach(function(r){
+    var cells=r.querySelectorAll('td');
+    if(cells.length>=5) players.push({
+      rank:cells[0].textContent.trim(),
+      name:cells[1].textContent.trim(),
+      team:cells[2].textContent.trim(),
+      grade:cells[3].querySelector('span')?cells[3].querySelector('span').textContent.trim():cells[3].textContent.trim(),
+      fg:cells[4].textContent.trim(),
+      fgma:cells[5]?cells[5].textContent.trim():'',
+      misses:cells[6]?cells[6].textContent.trim():'',
+      tp:cells[7]?cells[7].textContent.trim():'',
+      ppg:cells[8]?cells[8].textContent.trim():'',
+      gp:cells[9]?cells[9].textContent.trim():''
+    });
+  });
+  if(!players.length){showToast('❌ Otwórz najpierw Brick of the Round w Top 10','error');return;}
+
+  var canvas=document.createElement('canvas');
+  canvas.width=W;canvas.height=HEAD+players.length*ROW+PAD;
+  var ctx=canvas.getContext('2d');
+  var bg=ctx.createLinearGradient(0,0,0,canvas.height);
+  bg.addColorStop(0,'#0d1117');bg.addColorStop(1,'#161b28');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,canvas.height);
+  ctx.fillStyle='#e74c3c';ctx.fillRect(0,0,W,4);
+
+  var y=PAD+4;
+  ctx.font='bold 22px Arial';ctx.fillStyle='#e74c3c';ctx.textBaseline='top';
+  ctx.fillText('🧱 BRICK OF THE ROUND',PAD,y);y+=30;
+  ctx.font='13px Arial';ctx.fillStyle='#6b7494';
+  ctx.fillText(round.label+' — najgorszy %FG',PAD,y);y+=26;
+
+  var cols=[{l:'#',w:32},{l:'ZAWODNIK',w:170},{l:'DRUŻYNA',w:150},{l:'GRD',w:50},{l:'FG%',w:50},{l:'FGM/A',w:64},{l:'PUDŁA',w:54},{l:'PPG',w:52}];
+  var xs=[PAD];cols.forEach(function(c,i){if(i>0)xs.push(xs[i-1]+cols[i-1].w);});
+  ctx.fillStyle='rgba(231,76,60,0.1)';ctx.fillRect(0,y,W,26);
+  ctx.font='bold 10px Arial';ctx.fillStyle='#6b7494';ctx.textBaseline='middle';
+  cols.forEach(function(c,i){ctx.textAlign=i>1?'center':'left';ctx.fillText(c.l,i>1?xs[i]+cols[i].w/2:xs[i],y+13);});
+  y+=26;
+
+  players.forEach(function(p,idx){
+    ctx.fillStyle=idx%2===0?'rgba(255,255,255,0.02)':'transparent';ctx.fillRect(0,y,W,ROW);
+    ctx.textBaseline='middle';
+    ctx.textAlign='center';ctx.font='13px Arial';ctx.fillStyle='#6b7494';ctx.fillText(p.rank,xs[0]+cols[0].w/2,y+ROW/2);
+    ctx.textAlign='left';ctx.font='bold 13px Arial';ctx.fillStyle='#e8eaf0';ctx.fillText(p.name,xs[1],y+ROW/2);
+    ctx.font='12px Arial';ctx.fillStyle='#6b7494';ctx.fillText(p.team,xs[2],y+ROW/2);
+    ctx.textAlign='center';
+    var gc={'A+':'#f5c518','A':'#f5c518','A-':'#e0b800','B+':'#4fc3f7','B':'#4fc3f7','B-':'#29b6f6','C+':'#ff8a65','C':'#ff7043','C-':'#f4511e'};
+    ctx.font='bold 12px Arial';ctx.fillStyle=gc[p.grade]||'#a0a8b8';ctx.fillText(p.grade,xs[3]+cols[3].w/2,y+ROW/2);
+    ctx.font='bold 13px Arial';ctx.fillStyle='#e74c3c';ctx.fillText(p.fg,xs[4]+cols[4].w/2,y+ROW/2);
+    ctx.font='12px Arial';ctx.fillStyle='#a0a8b8';
+    ctx.fillText(p.fgma,xs[5]+cols[5].w/2,y+ROW/2);
+    ctx.fillStyle='#e74c3c';ctx.fillText(p.misses,xs[6]+cols[6].w/2,y+ROW/2);
+    ctx.fillStyle='#f5c518';ctx.fillText(p.ppg,xs[7]+cols[7].w/2,y+ROW/2);
+    y+=ROW;
+  });
+  ctx.fillStyle='#e74c3c';ctx.fillRect(0,canvas.height-3,W,3);
+
+  var fname='brick_'+round.label.replace(/\s+/g,'_')+'.png';
+  canvas.toBlob(function(blob){
+    var file=new File([blob],fname,{type:'image/png'});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:'Brick of the Round — '+round.label}).catch(function(e){if(e.name!=='AbortError')showToast('❌ Błąd','error');});
+    } else {
+      var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=fname;a.click();URL.revokeObjectURL(url);
+      showToast('✅ Brick pobrany!','success');
     }
   },'image/png');
 }
