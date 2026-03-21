@@ -1638,6 +1638,7 @@ let workerUrl = localStorage.getItem('nba2k_worker_url') || 'https://kw5-elite-p
 const _storedModel = localStorage.getItem('nba2k_ai_model') || '';
 let aiModel = (_storedModel && _storedModel.includes('gemini') && _storedModel !== 'gemini-2.5-flash') ? 'gemini-2.5-flash' : (_storedModel || 'gemini-2.5-flash');
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
+let recapModel = localStorage.getItem('nba2k_recap_model') || '';
 const MODEL_SCREENSHOT = () => aiModel;
 const MODEL_CHEAP = () => aiModel.includes('gemini') ? 'gemini-2.5-flash' : (aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel);
 
@@ -2464,7 +2465,13 @@ function openMatch(id) {
         <div style="font-size:1.5rem;margin:0.5rem 0">🏀</div>
         <div style="font-size:0.8rem;color:var(--muted)">${formatDate(m.date)}</div>
         <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
-        ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="generateRecap(${id})">📝 Recap</button>` : ''}
+        ${_isLoggedInSync() ? `
+        <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="generateRecap(${id})">📝 Recap</button>
+          <button id="recap-model-gemini" onclick="setRecapModel('gemini-2.5-flash')" style="padding:.2rem .5rem;border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:4px">🆓 Gemini</button>
+          <button id="recap-model-sonnet" onclick="setRecapModel('claude-sonnet-4-20250514')" style="padding:.2rem .5rem;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:4px">✨ Sonnet</button>
+          <button id="recap-model-haiku" onclick="setRecapModel('claude-haiku-4-5-20251001')" style="padding:.2rem .5rem;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:4px">💨 Haiku</button>
+        </div>` : ''}
         ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="editMatch(${id})">&#x270f;&#xfe0f; Edytuj</button><button class="btn btn-danger" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button>` : ''}
       </div>
       </div>
@@ -6666,6 +6673,21 @@ function renderRecapBlock(text) {
   </div>`;
 }
 
+function setRecapModel(model) {
+  recapModel = model;
+  localStorage.setItem('nba2k_recap_model', model);
+  ['gemini','sonnet','haiku'].forEach(id => {
+    const btn = document.getElementById('recap-model-' + id);
+    if(!btn) return;
+    const active = (id === 'gemini' && model.includes('gemini')) ||
+                   (id === 'sonnet' && model.includes('sonnet')) ||
+                   (id === 'haiku'  && model.includes('haiku'));
+    btn.style.border = active ? '2px solid var(--accent)' : '1px solid var(--border)';
+    btn.style.background = active ? 'rgba(245,197,24,.12)' : 'transparent';
+    btn.style.color = active ? 'var(--accent)' : 'var(--muted)';
+  });
+}
+
 async function generateRecap(id) {
   if(!_isLoggedInSync()) { showToast('❌ Tylko admin może generować recapy', 'error'); return; }
   const m = matches.find(x => Number(x.id) === Number(id));
@@ -6791,7 +6813,7 @@ STATYSTYKI ${m.team2.name} [pozycja]:
 ${formatPlayers(m.team2)}${duelsText}`;
 
   try {
-    const data = await callAI(MODEL_CHEAP(), 3000, [{ role: 'user', content: prompt }]);
+    const data = await callAI(recapModel || MODEL_CHEAP(), 1024, [{ role: 'user', content: prompt }]);
     if(data.error) throw new Error(data.error?.message || 'API error');
     const recap = data.content?.[0]?.text || '';
     // Save recap to match
