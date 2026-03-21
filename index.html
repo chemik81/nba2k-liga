@@ -6711,8 +6711,12 @@ function buildDiscordPost(matchId) {
   return post;
 }
 
+function shareMatch(matchId) {
+  generateMatchCard(matchId, true);
+}
+
 function copyToDiscord(matchId) {
-  generateMatchCard(matchId);
+  generateMatchCard(matchId, false);
 }
 
 function fallbackCopy(text) {
@@ -6723,7 +6727,7 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
-function generateMatchCard(matchId) {
+function generateMatchCard(matchId, useShare) {
   var m = matches.find(function(x){ return Number(x.id) === Number(matchId); });
   if(!m) return;
 
@@ -6749,13 +6753,19 @@ function generateMatchCard(matchId) {
     // recap
     if(m.recap) {
       ctx.font = '15px Arial';
-      var words = m.recap.split(' ');
-      var lines = 1, line = '';
-      words.forEach(function(w) {
-        var test = line ? line + ' ' + w : w;
-        if(ctx.measureText(test).width > W - PAD*2 - 8) { lines++; line = w; } else { line = test; }
+      var paragraphs2 = m.recap.split(/\n\n+/);
+      var lines = 0;
+      paragraphs2.forEach(function(para) {
+        var words = para.replace(/\n/g,' ').split(' ');
+        var line = '';
+        words.forEach(function(w) {
+          if(!w) return;
+          var test = line ? line + ' ' + w : w;
+          if(ctx.measureText(test).width > W - PAD*2 - 8) { lines++; line = w; } else { line = test; }
+        });
+        lines++;
       });
-      y += 36 + lines * 22 + 20;
+      y += 36 + lines * 22 + (paragraphs2.length - 1) * 12 + 20;
     }
     y += PAD;
     return y;
@@ -6950,37 +6960,47 @@ function generateMatchCard(matchId) {
     ctx.font = 'bold 13px Arial'; ctx.fillStyle = '#f5c518'; ctx.textBaseline = 'top';
     ctx.fillText('📝 RECAP MECZU', PAD, y);
     y += 24;
-    // word wrap recap
+    // word wrap recap with paragraph support
     ctx.font = '14px Arial'; ctx.fillStyle = '#c8ccd8';
-    var words = m.recap.split(' ');
-    var line = '', lineH = 22;
-    words.forEach(function(w) {
-      var test = line ? line + ' ' + w : w;
-      if(ctx.measureText(test).width > W - PAD*2 - 8) {
-        ctx.fillText(line, PAD, y); y += lineH; line = w;
-      } else { line = test; }
+    var paragraphs = m.recap.split(/\n\n+/);
+    var lineH = 22, paraGap = 12;
+    paragraphs.forEach(function(para, pi) {
+      var words = para.replace(/\n/g, ' ').split(' ');
+      var line = '';
+      words.forEach(function(w) {
+        if(!w) return;
+        var test = line ? line + ' ' + w : w;
+        if(ctx.measureText(test).width > W - PAD*2 - 8) {
+          ctx.fillText(line, PAD, y); y += lineH; line = w;
+        } else { line = test; }
+      });
+      if(line) { ctx.fillText(line, PAD, y); y += lineH; }
+      if(pi < paragraphs.length - 1) y += paraGap;
     });
-    if(line) { ctx.fillText(line, PAD, y); y += lineH; }
   }
 
   // bottom accent
   ctx.fillStyle = '#f5c518';
   ctx.fillRect(0, canvas.height - 3, W, 3);
 
-  // download as PNG
+  var filename = (m.team1.name + '_vs_' + m.team2.name + '_' + (m.date||'') + '.png').replace(/\s+/g,'_');
   canvas.toBlob(function(blob) {
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = (m.team1.name + '_vs_' + m.team2.name + '_' + (m.date||'') + '.png').replace(/\s+/g,'_');
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('✅ Obrazek pobrany!', 'success');
+    var file = new File([blob], filename, {type: 'image/png'});
+    if(useShare && navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
+      navigator.share({ files: [file], title: m.team1.name + ' ' + m.team1.score + ' - ' + m.team2.score + ' ' + m.team2.name })
+        .catch(function(e){ if(e.name !== 'AbortError') showToast('❌ Nie udało się udostępnić', 'error'); });
+    } else {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      showToast('✅ Obrazek pobrany!', 'success');
+    }
   }, 'image/png');
 }
 
 function renderRecapBlock(text, matchId) {
-  var discordBtn = matchId ? '<button onclick="copyToDiscord(' + matchId + ')" style="display:inline-flex;align-items:center;gap:.35rem;background:rgba(88,101,242,.15);border:1px solid rgba(88,101,242,.4);color:#7289da;border-radius:6px;padding:.3rem .8rem;font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap" onmouseover="this.style.background=\'rgba(88,101,242,.3)\'" onmouseout="this.style.background=\'rgba(88,101,242,.15)\'"><svg width="13" height="10" viewBox="0 0 71 55" fill="none"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.4a.2.2 0 0 0-.2.1 40.7 40.7 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.5a.2.2 0 0 0-.2-.1A58.4 58.4 0 0 0 10.5 4.9a.2.2 0 0 0-.1.1C1.5 18.1-.9 31 .3 43.6a.2.2 0 0 0 .1.2 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 42 42 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4l1.1-.8a.2.2 0 0 1 .2 0c11.5 5.3 24 5.3 35.4 0a.2.2 0 0 1 .2 0l1.1.8a.2.2 0 0 1 0 .4 36.1 36.1 0 0 1-5.5 2.6.2.2 0 0 0-.1.3 47.1 47.1 0 0 0 3.6 5.9.2.2 0 0 0 .2.1 58.6 58.6 0 0 0 17.7-9 .2.2 0 0 0 .1-.2C73 29.2 69.4 16.4 60.2 5a.2.2 0 0 0-.1-.1z" fill="#7289da"/></svg>Kopiuj na Discord</button>' : '';
+  var discordBtn = matchId ? '<button onclick="shareMatch(' + matchId + ')" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:8px;width:34px;height:34px;cursor:pointer;flex-shrink:0;transition:all .2s" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>' : '';
   return '<div style="margin-top:1.25rem;padding:1rem 1.25rem;background:rgba(245,197,24,0.05);border:1px solid rgba(245,197,24,0.2);border-radius:10px">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.6rem;flex-wrap:wrap">' +
     '<div style="font-family:\'Barlow Condensed\',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📝 Recap meczu</div>' +
