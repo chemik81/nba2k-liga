@@ -6712,10 +6712,7 @@ function buildDiscordPost(matchId) {
 }
 
 function copyToDiscord(matchId) {
-  var text = buildDiscordPost(matchId);
-  if(navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(function(){ showToast('✅ Skopiowano!', 'success'); }).catch(function(){ fallbackCopy(text); });
-  } else { fallbackCopy(text); }
+  generateMatchCard(matchId);
 }
 
 function fallbackCopy(text) {
@@ -6724,6 +6721,262 @@ function fallbackCopy(text) {
   document.body.appendChild(ta); ta.focus(); ta.select();
   try { document.execCommand('copy'); showToast('✅ Skopiowano!', 'success'); } catch(e) { showToast('❌ Nie udało się skopiować', 'error'); }
   document.body.removeChild(ta);
+}
+
+function generateMatchCard(matchId) {
+  var m = matches.find(function(x){ return Number(x.id) === Number(matchId); });
+  if(!m) return;
+
+  var W = 860, PAD = 32;
+  var canvas = document.createElement('canvas');
+  canvas.width = W;
+
+  // --- measure height first ---
+  var ctx = canvas.getContext('2d');
+  function measureHeight() {
+    var y = PAD;
+    y += 52; // header team names
+    y += 36; // score
+    y += 24; // date + quarters
+    y += 20; // spacer
+    // table header
+    y += 28;
+    // rows
+    var players1 = (m.team1.players||[]).length;
+    var players2 = (m.team2.players||[]).length;
+    y += (players1 + players2 + 1) * 30; // +1 for team2 header row
+    y += 20; // spacer
+    // recap
+    if(m.recap) {
+      ctx.font = '15px Arial';
+      var words = m.recap.split(' ');
+      var lines = 1, line = '';
+      words.forEach(function(w) {
+        var test = line ? line + ' ' + w : w;
+        if(ctx.measureText(test).width > W - PAD*2 - 8) { lines++; line = w; } else { line = test; }
+      });
+      y += 36 + lines * 22 + 20;
+    }
+    y += PAD;
+    return y;
+  }
+  canvas.height = measureHeight();
+  ctx = canvas.getContext('2d');
+
+  // BG gradient
+  var bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  bg.addColorStop(0, '#0d1117');
+  bg.addColorStop(1, '#161b28');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, canvas.height);
+
+  // accent line top
+  ctx.fillStyle = '#f5c518';
+  ctx.fillRect(0, 0, W, 4);
+
+  var y = PAD + 4;
+
+  // HEADER: team names + score
+  var w1 = m.team1.score > m.team2.score;
+  ctx.textBaseline = 'top';
+
+  // Team 1
+  ctx.font = 'bold 28px Arial';
+  ctx.fillStyle = w1 ? '#f5c518' : '#e8eaf0';
+  ctx.fillText(m.team1.name.toUpperCase(), PAD, y);
+
+  // Score
+  ctx.font = 'bold 44px Arial';
+  ctx.fillStyle = '#f5c518';
+  var sc1 = String(m.team1.score);
+  var sc2 = String(m.team2.score);
+  var scW1 = ctx.measureText(sc1 + ' — ' + sc2).width;
+  var scX = (W - scW1) / 2;
+  ctx.fillStyle = w1 ? '#f5c518' : '#e8eaf0';
+  ctx.fillText(sc1, scX, y - 4);
+  ctx.fillStyle = '#6b7494';
+  ctx.fillText(' — ', scX + ctx.measureText(sc1).width, y - 4);
+  ctx.fillStyle = !w1 ? '#f5c518' : '#e8eaf0';
+  ctx.fillText(sc2, scX + ctx.measureText(sc1 + ' — ').width, y - 4);
+
+  // Team 2 (right aligned)
+  ctx.font = 'bold 28px Arial';
+  ctx.fillStyle = !w1 ? '#f5c518' : '#e8eaf0';
+  var t2w = ctx.measureText(m.team2.name.toUpperCase()).width;
+  ctx.fillText(m.team2.name.toUpperCase(), W - PAD - t2w, y);
+
+  y += 52;
+
+  // Date + quarters
+  ctx.font = '13px Arial';
+  ctx.fillStyle = '#6b7494';
+  var dateStr = m.date || '';
+  function qStr(team) { return (team.quarters||[]).map(function(s,i){ return 'Q'+(i+1)+':'+s; }).join('  '); }
+  ctx.fillText(qStr(m.team1), PAD, y);
+  var dw = ctx.measureText(dateStr).width;
+  ctx.fillText(dateStr, (W-dw)/2, y);
+  var q2 = qStr(m.team2);
+  ctx.fillText(q2, W - PAD - ctx.measureText(q2).width, y);
+  y += 28;
+
+  // divider
+  ctx.strokeStyle = '#252b3a';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W-PAD, y); ctx.stroke();
+  y += 16;
+
+  // STATS TABLE
+  var cols = [
+    {key:'name', label:'ZAWODNIK', w:150, align:'left'},
+    {key:'pos',  label:'POZ', w:40,  align:'center'},
+    {key:'grade',label:'GRD', w:44,  align:'center'},
+    {key:'pts',  label:'PTS', w:44,  align:'center'},
+    {key:'reb',  label:'REB', w:44,  align:'center'},
+    {key:'ast',  label:'AST', w:44,  align:'center'},
+    {key:'stl',  label:'STL', w:38,  align:'center'},
+    {key:'blk',  label:'BLK', w:38,  align:'center'},
+    {key:'to',   label:'TO',  w:38,  align:'center'},
+    {key:'fg',   label:'FG%', w:62,  align:'center'},
+    {key:'3p',   label:'3P%', w:62,  align:'center'},
+  ];
+
+  // col X positions
+  var colX = [PAD];
+  for(var ci = 1; ci < cols.length; ci++) {
+    colX.push(colX[ci-1] + cols[ci-1].w);
+  }
+
+  function drawRow(players, teamName, isHeader) {
+    if(isHeader) {
+      // team name row
+      ctx.fillStyle = '#1a1f2b';
+      ctx.fillRect(PAD, y, W - PAD*2, 26);
+      ctx.font = 'bold 13px Arial';
+      ctx.fillStyle = '#f5c518';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(teamName.toUpperCase(), PAD + 8, y + 13);
+      y += 26;
+    }
+    // col headers once
+    if(isHeader) {
+      ctx.font = 'bold 11px Arial';
+      ctx.fillStyle = '#6b7494';
+      ctx.textBaseline = 'middle';
+      cols.forEach(function(col, ci) {
+        if(col.align === 'left') ctx.fillText(col.label, colX[ci] + 2, y + 14);
+        else { var tw = ctx.measureText(col.label).width; ctx.fillText(col.label, colX[ci] + (col.w - tw)/2, y + 14); }
+      });
+      y += 28;
+    }
+    players.forEach(function(p, pi) {
+      // row bg
+      ctx.fillStyle = pi % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
+      ctx.fillRect(PAD, y, W - PAD*2, 28);
+
+      function fgpct(m,a){ return a>0 ? Math.round(m/a*100)+'%' : '-'; }
+      var vals = {
+        name: p.name, pos: p.pos||'?', grade: p.grade||'B',
+        pts: String(p.pts||0), reb: String(p.reb||0), ast: String(p.ast||0),
+        stl: String(p.stl||0), blk: String(p.blk||0), to: String(p.to||0),
+        fg: fgpct(p.fgm||0, p.fga||0),
+        '3p': fgpct(p.tpm||0, p.tpa||0)
+      };
+
+      ctx.textBaseline = 'middle';
+      cols.forEach(function(col, ci) {
+        var val = vals[col.key] || '-';
+        // color
+        if(col.key === 'grade') {
+          var gc = val.startsWith('A') ? '#f5c518' : val.startsWith('B') ? '#4fc3f7' : '#ff8a65';
+          ctx.font = 'bold 12px Arial';
+          ctx.fillStyle = gc;
+        } else if(col.key === 'name') {
+          ctx.font = 'bold 13px Arial';
+          ctx.fillStyle = '#e8eaf0';
+        } else if(col.key === 'pts') {
+          ctx.font = 'bold 13px Arial';
+          ctx.fillStyle = '#f5c518';
+        } else {
+          ctx.font = '12px Arial';
+          ctx.fillStyle = '#a0a8b8';
+        }
+        if(col.align === 'left') ctx.fillText(val, colX[ci] + 4, y + 14);
+        else { var tw = ctx.measureText(val).width; ctx.fillText(val, colX[ci] + (col.w - tw)/2, y + 14); }
+      });
+      y += 28;
+    });
+  }
+
+  drawRow(m.team1.players||[], m.team1.name, true);
+  y += 6;
+  // draw only player rows for team2 (no col headers again, just team header)
+  ctx.fillStyle = '#1a1f2b';
+  ctx.fillRect(PAD, y, W - PAD*2, 26);
+  ctx.font = 'bold 13px Arial';
+  ctx.fillStyle = '#f5c518';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(m.team2.name.toUpperCase(), PAD + 8, y + 13);
+  y += 26;
+  (m.team2.players||[]).forEach(function(p, pi) {
+    ctx.fillStyle = pi % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
+    ctx.fillRect(PAD, y, W - PAD*2, 28);
+    function fgpct(made,att){ return att>0 ? Math.round(made/att*100)+'%' : '-'; }
+    var vals = {
+      name: p.name, pos: p.pos||'?', grade: p.grade||'B',
+      pts: String(p.pts||0), reb: String(p.reb||0), ast: String(p.ast||0),
+      stl: String(p.stl||0), blk: String(p.blk||0), to: String(p.to||0),
+      fg: fgpct(p.fgm||0, p.fga||0), '3p': fgpct(p.tpm||0, p.tpa||0)
+    };
+    ctx.textBaseline = 'middle';
+    cols.forEach(function(col, ci) {
+      var val = vals[col.key] || '-';
+      if(col.key === 'grade') {
+        ctx.font = 'bold 12px Arial'; ctx.fillStyle = val.startsWith('A') ? '#f5c518' : val.startsWith('B') ? '#4fc3f7' : '#ff8a65';
+      } else if(col.key === 'name') { ctx.font = 'bold 13px Arial'; ctx.fillStyle = '#e8eaf0';
+      } else if(col.key === 'pts') { ctx.font = 'bold 13px Arial'; ctx.fillStyle = '#f5c518';
+      } else { ctx.font = '12px Arial'; ctx.fillStyle = '#a0a8b8'; }
+      if(col.align === 'left') ctx.fillText(val, colX[ci] + 4, y + 14);
+      else { var tw = ctx.measureText(val).width; ctx.fillText(val, colX[ci] + (col.w-tw)/2, y+14); }
+    });
+    y += 28;
+  });
+
+  // RECAP
+  if(m.recap) {
+    y += 16;
+    ctx.strokeStyle = '#252b3a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD,y); ctx.lineTo(W-PAD,y); ctx.stroke();
+    y += 16;
+    ctx.font = 'bold 13px Arial'; ctx.fillStyle = '#f5c518'; ctx.textBaseline = 'top';
+    ctx.fillText('📝 RECAP MECZU', PAD, y);
+    y += 24;
+    // word wrap recap
+    ctx.font = '14px Arial'; ctx.fillStyle = '#c8ccd8';
+    var words = m.recap.split(' ');
+    var line = '', lineH = 22;
+    words.forEach(function(w) {
+      var test = line ? line + ' ' + w : w;
+      if(ctx.measureText(test).width > W - PAD*2 - 8) {
+        ctx.fillText(line, PAD, y); y += lineH; line = w;
+      } else { line = test; }
+    });
+    if(line) { ctx.fillText(line, PAD, y); y += lineH; }
+  }
+
+  // bottom accent
+  ctx.fillStyle = '#f5c518';
+  ctx.fillRect(0, canvas.height - 3, W, 3);
+
+  // download as PNG
+  canvas.toBlob(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (m.team1.name + '_vs_' + m.team2.name + '_' + (m.date||'') + '.png').replace(/\s+/g,'_');
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Obrazek pobrany!', 'success');
+  }, 'image/png');
 }
 
 function renderRecapBlock(text, matchId) {
