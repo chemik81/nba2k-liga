@@ -4151,7 +4151,7 @@ function renderRoundComparisonRows() {
     return { name, team: p2.team, cs1, cs2, per1, per2, val1, val2, delta: val2-val1, gr1, gr2, p1, p2 };
   }).sort((a,b) => b.delta - a.delta);
 
-  const qualified = deltas.filter(d => d.p1.gp >= 5 && d.p2.gp >= 5);
+  const qualified = deltas.filter(d => d.p1.gp >= 3 && d.p2.gp >= 3);
   const improved = qualified.filter(d => d.delta > 0).slice(0,3);
   const declined = qualified.filter(d => d.delta < 0).sort((a,b)=>a.delta-b.delta).slice(0,3);
   const unit = mode === 'cs' ? 'CS' : 'PER';
