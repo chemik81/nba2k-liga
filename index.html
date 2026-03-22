@@ -6576,17 +6576,29 @@ function editMatch(id) {
       ${tableHtml(pendingMatch.team1, 1)}
       ${tableHtml(pendingMatch.team2, 2)}`;
 
-    // Score editing
+    // Score + team name editing
     editPanel.innerHTML += `
       <div style="display:flex;gap:1rem;margin-top:.75rem;flex-wrap:wrap">
         <div>
-          <label style="font-size:.75rem;color:var(--muted)">Wynik ${pendingMatch.team1.name}</label>
+          <label style="font-size:.75rem;color:var(--muted)">Drużyna 1</label>
+          <input type="text" value="${pendingMatch.team1.name}"
+            onchange="pendingMatch.team1.name=this.value;document.querySelectorAll('.edit-team1-name').forEach(el=>el.textContent=this.value)"
+            style="width:160px;background:var(--surface2);border:1px solid var(--accent);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.85rem;font-family:inherit;display:block;margin-top:.25rem">
+        </div>
+        <div>
+          <label style="font-size:.75rem;color:var(--muted)">Wynik D1</label>
           <input type="number" value="${pendingMatch.team1.score}" min="0" max="200"
             onchange="pendingMatch.team1.score=+this.value"
             style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.9rem;font-family:inherit;display:block;margin-top:.25rem">
         </div>
         <div>
-          <label style="font-size:.75rem;color:var(--muted)">Wynik ${pendingMatch.team2.name}</label>
+          <label style="font-size:.75rem;color:var(--muted)">Drużyna 2</label>
+          <input type="text" value="${pendingMatch.team2.name}"
+            onchange="pendingMatch.team2.name=this.value;document.querySelectorAll('.edit-team2-name').forEach(el=>el.textContent=this.value)"
+            style="width:160px;background:var(--surface2);border:1px solid var(--accent);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.85rem;font-family:inherit;display:block;margin-top:.25rem">
+        </div>
+        <div>
+          <label style="font-size:.75rem;color:var(--muted)">Wynik D2</label>
           <input type="number" value="${pendingMatch.team2.score}" min="0" max="200"
             onchange="pendingMatch.team2.score=+this.value"
             style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.9rem;font-family:inherit;display:block;margin-top:.25rem">
