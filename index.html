@@ -6701,8 +6701,7 @@ function renderRecapBlock(text, matchId) {
     + '</div>';
 }
 
-async 
-function shareMatch(matchId) { generateMatchCard(matchId, true); }
+async function shareMatch(matchId) { generateMatchCard(matchId, true); }
 
 function generateMatchCard(matchId, useShare) {
   var m = matches.find(function(x){ return Number(x.id) === Number(matchId); });
