@@ -2186,8 +2186,25 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
     if(firstBrace === -1 || lastBrace === -1) {
       throw new Error(t('api_no_json') + text.substring(0, 200));
     }
-    const jsonStr = text.slice(firstBrace, lastBrace + 1);
-    console.log('JSON to parse:', jsonStr);
+    let jsonStr = text.slice(firstBrace, lastBrace + 1);
+    // Fix unescaped control chars inside strings
+    let inStr=false,esc=false,out='';
+    for(let i=0;i<jsonStr.length;i++){
+      const c=jsonStr[i];
+      if(esc){out+=c;esc=false;continue;}
+      if(c==='\\'){esc=true;out+=c;continue;}
+      if(c=='"'){inStr=!inStr;out+=c;continue;}
+      if(inStr){
+        if(c=='
+'){out+='\\n';continue;}
+        if(c=='
+'){out+='\\r';continue;}
+        if(c=='	'){out+='\\t';continue;}
+        if(c.charCodeAt(0)<32)continue;
+      }
+      out+=c;
+    }
+    jsonStr=out.replace(/,(\s*[}\])/g,'');
     const parsed = JSON.parse(jsonStr);
 
     let rawMatch = {
