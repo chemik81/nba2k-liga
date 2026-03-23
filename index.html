@@ -4063,6 +4063,21 @@ function renderMilestoneBanner() {
 // ═══════════════════════════════════════════════════════════════
 // ROUND COMPARISON (kolejka do kolejki)
 // ═══════════════════════════════════════════════════════════════
+let _rcMode = 'cs';
+let _rcData = null;
+
+function setRcMode(mode) {
+  _rcMode = mode;
+  document.querySelectorAll('.rc-toggle-btn').forEach(function(b) {
+    var active = b.dataset.mode === mode;
+    var isCs = b.dataset.mode === 'cs';
+    b.style.background = active ? (isCs ? 'var(--accent)' : '#3498db') : 'transparent';
+    b.style.color = active ? (isCs ? '#000' : '#fff') : 'var(--muted)';
+    b.style.border = 'none';
+  });
+  renderRoundComparisonRows();
+}
+
 function renderRoundComparison() {
   const el = document.getElementById('round-comparison-wrap');
   if(!el) return;
@@ -4070,7 +4085,6 @@ function renderRoundComparison() {
   const sortedRounds = [...rounds].sort((a,b)=>a.from.localeCompare(b.from));
   if(sortedRounds.length < 2) { el.innerHTML=''; return; }
 
-  // Use last two rounds
   const r1 = sortedRounds[sortedRounds.length - 2];
   const r2 = sortedRounds[sortedRounds.length - 1];
 
@@ -4079,7 +4093,6 @@ function renderRoundComparison() {
 
   if(!m1.length && !m2.length) { el.innerHTML=''; return; }
 
-  // Aggregate per player per round
   function aggRound(ms) {
     const players = {};
     ms.forEach(m => {
@@ -4099,29 +4112,55 @@ function renderRoundComparison() {
 
   const agg1 = aggRound(m1);
   const agg2 = aggRound(m2);
-
-  // Players who appear in both rounds
   const both = Object.keys(agg2).filter(n => agg1[n]);
   if(!both.length) { el.innerHTML=''; return; }
 
-  // Calculate CS delta for each player
+  _rcData = { r1, r2, both, agg1, agg2, m2 };
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.6rem">
+      <div style="display:flex;gap:.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.2rem">
+        <button class="rc-toggle-btn" data-mode="cs" onclick="setRcMode('cs')"
+          style="padding:.3rem .8rem;border:none;border-radius:6px;background:var(--accent);color:#000;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.85rem;cursor:pointer;transition:all .2s">CS</button>
+        <button class="rc-toggle-btn" data-mode="per" onclick="setRcMode('per')"
+          style="padding:.3rem .8rem;border:none;border-radius:6px;background:transparent;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.85rem;cursor:pointer;transition:all .2s">PER</button>
+      </div>
+    </div>
+    <div id="rc-rows-wrap"></div>`;
+
+  renderRoundComparisonRows();
+}
+
+function renderRoundComparisonRows() {
+  const wrap = document.getElementById('rc-rows-wrap');
+  if(!wrap || !_rcData) return;
+  const { r1, r2, both, agg1, agg2, m2 } = _rcData;
+  const mode = _rcMode;
+
   const deltas = both.map(name => {
     const p1 = agg1[name], p2 = agg2[name];
     const cs1 = calcCompositeScore(p1), cs2 = calcCompositeScore(p2);
+    const per1 = p1.gp > 0 ? p1.pts / p1.gp : 0;
+    const per2 = p2.gp > 0 ? p2.pts / p2.gp : 0;
     const gr1 = p1.gp>0 ? numToGrade(p1.gradeSum/p1.gp) : 'B';
     const gr2 = p2.gp>0 ? numToGrade(p2.gradeSum/p2.gp) : 'B';
-    const pts1 = p1.gp>0?(p1.pts/p1.gp).toFixed(1):0;
-    const pts2 = p2.gp>0?(p2.pts/p2.gp).toFixed(1):0;
-    return { name, team: p2.team, cs1, cs2, delta: cs2-cs1, gr1, gr2, pts1, pts2, p1, p2 };
+    const val1 = mode === 'cs' ? cs1 : per1;
+    const val2 = mode === 'cs' ? cs2 : per2;
+    return { name, team: p2.team, cs1, cs2, per1, per2, val1, val2, delta: val2-val1, gr1, gr2, p1, p2 };
   }).sort((a,b) => b.delta - a.delta);
 
-  const improved = deltas.filter(d => d.delta > 0).slice(0,3);
-  const declined = deltas.filter(d => d.delta < 0).sort((a,b)=>a.delta-b.delta).slice(0,3);
+  const qualified = deltas.filter(d => d.p1.gp >= 3 && d.p2.gp >= 3);
+  const improved = qualified.filter(d => d.delta > 0).slice(0,3);
+  const declined = qualified.filter(d => d.delta < 0).sort((a,b)=>a.delta-b.delta).slice(0,3);
+  const unit = mode === 'cs' ? 'CS' : 'PER';
+  const hasR2 = m2.length > 0;
 
   function playerRow(d) {
     const arrow = d.delta > 0 ? '▲' : '▼';
     const color = d.delta > 0 ? 'var(--win)' : 'var(--loss)';
     const sign  = d.delta > 0 ? '+' : '';
+    const sub1  = mode === 'cs' ? d.cs1.toFixed(1) : d.per1.toFixed(1);
+    const sub2  = mode === 'cs' ? d.cs2.toFixed(1) : d.per2.toFixed(1);
     return `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openPlayerModal('${d.name}','${d.team}')" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${d.name}</div>
@@ -4130,20 +4169,19 @@ function renderRoundComparison() {
       <div style="text-align:center;min-width:50px">
         <div style="font-size:.7rem;color:var(--muted)">${r1.label}</div>
         <span class="grade grade-${d.gr1.replace('+','p').replace('-','m')}">${d.gr1}</span>
-        <div style="font-size:.72rem;color:var(--muted)">${d.pts1} PPG</div>
+        <div style="font-size:.72rem;color:var(--muted)">${sub1} ${unit}</div>
       </div>
       <div style="font-size:1.2rem;color:var(--muted)">→</div>
       <div style="text-align:center;min-width:50px">
         <div style="font-size:.7rem;color:var(--muted)">${r2.label}</div>
         <span class="grade grade-${d.gr2.replace('+','p').replace('-','m')}">${d.gr2}</span>
-        <div style="font-size:.72rem;color:var(--muted)">${d.pts2} PPG</div>
+        <div style="font-size:.72rem;color:var(--muted)">${sub2} ${unit}</div>
       </div>
-      <div style="min-width:52px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${color}">${arrow} ${sign}${d.delta.toFixed(1)}<div style="font-size:.65rem;font-weight:400;color:var(--muted)">CS</div></div>
+      <div style="min-width:52px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${color}">${arrow} ${sign}${d.delta.toFixed(1)}<div style="font-size:.65rem;font-weight:400;color:var(--muted)">${unit}</div></div>
     </div>`;
   }
 
-  const hasR2 = m2.length > 0;
-  el.innerHTML = `
+  wrap.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
       <div class="card" style="padding:1rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:1px;color:var(--win);margin-bottom:.75rem">📈 NAJWIĘKSZY PROGRES<div style="font-size:.72rem;font-weight:400;color:var(--muted)">${r1.label} → ${r2.label}</div></div>
