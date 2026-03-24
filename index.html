@@ -2133,7 +2133,7 @@ Porównaj każdą rozpoznaną nazwę z listą znanych graczy i wybierz najbliżs
 Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego dopasowania na liście.${knownPlayersHint}
 
 KOLUMNY W TABELI (kolejność): GRD | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
-KRYTYCZNE: Kolumna 7 = FOULS (faule osobiste) → zapisz jako "fouls". Kolumna 8 = TO (straty) → zapisz jako "to". NIE mylić tych dwóch kolumn!
+KRYTYCZNE: Kolumna 7 = FOULS (nagłówek na ekranie to "FOULS") → zapisz jako "fouls". Kolumna 8 = TO (straty) → zapisz jako "to". NIE mylić!
 
 NAZWY DRUŻYN: Dopasuj logotyp do poniższej listy (użyj DOKŁADNIE tej nazwy):
 ${Object.keys(teams||{}).length ? Object.keys(teams).join(', ') : 'Aliens Katowice, Katowice PL, Big Brain Basketball, Illegal Esports V2, Polish Boars, Polish Snickers, White Market, Sternritters, The Outlawz'}
@@ -2160,15 +2160,14 @@ Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, be
 POZYCJE: Zawodnicy są zawsze w tej samej kolejności od góry: 1=PG, 2=SG, 3=SF (Lock), 4=PF, 5=C. Dodaj pole "pos" do każdego zawodnika.
 
 KOLEJNOŚĆ KOLUMN na ekranie Game Stats (od lewej do prawej):
-GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA
+GRADE | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
 
-WAŻNE — rozróżnienie BLK / TO / PF (najczęstsze błędy OCR):
-- BLK (bloki) = 6. kolumna. Zazwyczaj 0-3, rzadko więcej niż 4.
-- TO (turnovers/straty) = 7. kolumna, zaraz PO BLK. Zazwyczaj 0-4.
-- PF (faule osobiste) = 8. kolumna, zaraz PO TO. Zazwyczaj 0-5, limit w NBA 2K to 6.
-- ZASADA: jeśli masz wątpliwość między dwiema kolejnymi kolumnami — lewa to BLK, środkowa to TO, prawa to PF.
-- NIE zamieniaj TO z BLK ani PF — są w ściśle określonej kolejności.
-- Liczby w tych kolumnach są małe (0-5). Jeśli widzisz dużą liczbę (np. 12) w miejscu BLK/TO/PF — to błąd odczytu, wstaw 0.
+WAŻNE — rozróżnienie BLK / FOULS / TO:
+- BLK (bloki) = 6. kolumna. Zazwyczaj 0-2.
+- FOULS (faule) = 7. kolumna, nagłówek na ekranie brzmi "FOULS". → zapisz jako "fouls". Zazwyczaj 0-5.
+- TO (straty) = 8. kolumna. → zapisz jako "to". Zazwyczaj 0-4.
+- NIE zamieniaj kolejności — FOULS jest PRZED TO na ekranie.
+- Liczby w tych kolumnach są małe (0-6). Jeśli widzisz dużą liczbę w miejscu BLK/FOULS/TO — to błąd, wstaw 0.
 
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 
@@ -2199,7 +2198,30 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
     let jsonStr = text.slice(firstBrace, lastBrace + 1);
     // Remove control chars that break JSON
     jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-    const parsed = JSON.parse(jsonStr);
+    // Fix common AI JSON mistakes:
+    // 1. Trailing commas before } or ]
+    jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+    // 2. Single quotes → double quotes (only outside existing strings)
+    // 3. Remove JS comments // and /* */
+    jsonStr = jsonStr.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    // 4. Python-style None/True/False
+    jsonStr = jsonStr.replace(/\bNone\b/g,'null').replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false');
+    // 5. Ellipsis or placeholder [...] inside arrays - remove player placeholders
+    jsonStr = jsonStr.replace(/\.\.\.\s*(?=[,\]])/g, '');
+    console.log('Cleaned JSON (first 600):', jsonStr.substring(0, 600));
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch(e) {
+      // Show context around error position
+      const pos = parseInt(e.message.match(/position (\d+)/)?.[1] || '0');
+      console.error('JSON error at pos', pos, ':', jsonStr.substring(Math.max(0,pos-40), pos+40));
+      // Try one more fix: escape unescaped quotes inside string values
+      const fixedJson = jsonStr.replace(/"([^"]*)"\s*:/g, function(m) { return m; })
+                               .replace(/([^\\])"/g, function(m,p1) { return p1 + '\"'; })
+      // That's too aggressive — just rethrow with context
+      throw new Error('JSON parse error near: ...' + jsonStr.substring(Math.max(0,pos-30), pos+30) + '...');
+    }
 
     let rawMatch = {
       id: Date.now(),
