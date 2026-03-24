@@ -6163,10 +6163,12 @@ function openTeamModal(tn){
       var seasonOpts='<option value="">— Wszystkie sezony —</option>'
         +seasonIds.map(function(sid){var sn=seasons.find(function(s){return s.id===sid;});return '<option value="'+sid+'">'+(sn?sn.name:sid)+'</option>';}).join('');
 
-      // Build round options (all rounds from filtered matches)
-      var roundIds=[...new Set(allTm.map(function(m){return m.roundId||'';}).filter(Boolean))];
+      // Build round options — use rounds that contain at least one match by date
+      var relevantRounds = rounds.filter(function(r){
+        return allTm.some(function(m){ return m.date >= r.from && m.date <= r.to; });
+      }).sort(function(a,b){ return a.from.localeCompare(b.from); });
       var roundOpts='<option value="">— Wszystkie kolejki —</option>'
-        +roundIds.map(function(rid){var rn=rounds.find(function(r){return r.id===rid;});return '<option value="'+rid+'">'+(rn?rn.label:rid)+'</option>';}).join('');
+        +relevantRounds.map(function(r){return '<option value="'+r.id+'">'+r.label+'</option>';}).join('');
 
       // Store team name for filter function
       window._teamModalName = tn;
@@ -6193,6 +6195,11 @@ function openTeamModal(tn){
   // Render match history table after DOM is ready
   setTimeout(renderTeamMatchHistory, 50);
 }
+function getRoundForMatch(m) {
+  // Find round by date range (same logic used elsewhere in app)
+  return rounds.find(function(r){ return m.date >= r.from && m.date <= r.to; }) || null;
+}
+
 function renderTeamMatchHistory() {
   var tn = window._teamModalName;
   var allTm = window._teamModalMatches || [];
@@ -6204,7 +6211,11 @@ function renderTeamMatchHistory() {
 
   var filtered = allTm.filter(function(m) {
     if (selSeason && m.seasonId !== selSeason) return false;
-    if (selRound  && m.roundId  !== selRound)  return false;
+    if (selRound) {
+      // Match round by date range, not roundId
+      var rn = getRoundForMatch(m);
+      if (!rn || rn.id !== selRound) return false;
+    }
     if (selResult) {
       var isT1 = m.team1.name === tn;
       var myS  = isT1 ? m.team1.score : m.team2.score;
@@ -6226,7 +6237,7 @@ function renderTeamMatchHistory() {
     var opp = isT1 ? m.team2.name : m.team1.name;
     var win = myScore > oppScore;
     var sn  = seasons.find(function(s){ return s.id === m.seasonId; });
-    var rn  = rounds.find(function(r){ return r.id === m.roundId; });
+    var rn  = getRoundForMatch(m);
     return '<tr style="cursor:pointer" onclick="closeTeamModal();setTimeout(function(){openMatch('+m.id+');},200)">'
       +'<td style="color:var(--muted);font-size:.8rem;white-space:nowrap">'+formatDate(m.date)+'</td>'
       +'<td><span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span></td>'
