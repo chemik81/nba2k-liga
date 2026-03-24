@@ -6196,8 +6196,8 @@ function openTeamModal(tn){
   setTimeout(renderTeamMatchHistory, 50);
 }
 function getRoundForMatch(m) {
-  // Find round by date range (same logic used elsewhere in app)
-  return rounds.find(function(r){ return m.date >= r.from && m.date <= r.to; }) || null;
+  if (!m.date) return null;
+  return rounds.find(function(r){ return r.from && r.to && m.date >= r.from && m.date <= r.to; }) || null;
 }
 
 function renderTeamMatchHistory() {
@@ -6212,9 +6212,10 @@ function renderTeamMatchHistory() {
   var filtered = allTm.filter(function(m) {
     if (selSeason && m.seasonId !== selSeason) return false;
     if (selRound) {
-      // Match round by date range, not roundId
-      var rn = getRoundForMatch(m);
-      if (!rn || rn.id !== selRound) return false;
+      // Find the selected round object, then check match date falls within its range
+      var selRoundObj = rounds.find(function(r){ return r.id == selRound; });
+      if (!selRoundObj) return false;
+      if (!(m.date >= selRoundObj.from && m.date <= selRoundObj.to)) return false;
     }
     if (selResult) {
       var isT1 = m.team1.name === tn;
