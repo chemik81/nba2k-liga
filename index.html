@@ -6143,32 +6143,102 @@ function openTeamModal(tn){
     +'<div class="stats-table-wrap"><table><thead><tr><th style="text-align:left">Zawodnik</th><th>GP</th><th>GRD</th><th title="Composite Score" style="color:var(--accent)">CS</th><th title="Player Efficiency Rating" style="color:#3498db">PER</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div>'
     +'<p style="color:var(--muted);font-size:0.8rem;margin-top:1rem">Kliknij zawodnika aby zobaczyc profil</p>'
-    // Historia meczów drużyny
+    // Historia meczów drużyny — pełna z filtrami
     +(function(){
-      var tm=[...matches].filter(function(m){return m.team1.name===tn||m.team2.name===tn;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,8);
-      if(!tm.length) return '';
-      var mrows=tm.map(function(m){
-        var isT1=m.team1.name===tn;
-        var myScore=isT1?m.team1.score:m.team2.score;
-        var oppScore=isT1?m.team2.score:m.team1.score;
-        var opp=isT1?m.team2.name:m.team1.name;
-        var win=myScore>oppScore;
-        var sn=seasons.find(function(s){return s.id===m.seasonId;});
-        return '<tr style="cursor:pointer" onclick="closeTeamModal();setTimeout(function(){openMatch('+m.id+');},200)">'
-          +'<td style="color:var(--muted);font-size:.8rem">'+formatDate(m.date)+'</td>'
-          +'<td><span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span></td>'
-          +'<td style="font-size:.85rem"><div style="display:flex;align-items:center;gap:.4rem">'+teamLogo(opp,20,'.55rem')+'<span>vs '+opp+'</span></div></td>'
-          +'<td style="font-weight:700"><span style="color:'+(win?'var(--win)':'var(--loss)')+'">'+myScore+'-'+oppScore+'</span></td>'
-          +'<td style="font-size:.75rem;color:var(--muted)">'+(sn?sn.name:'')+'</td>'
-          +'</tr>';
-      }).join('');
-      return '<div style="margin-top:1.5rem"><div style="font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">Ostatnie mecze</div>'
-        +'<div class="stats-table-wrap"><table><thead><tr><th style="text-align:left">Data</th><th>W/L</th><th style="text-align:left">Rywal</th><th>Wynik</th><th>Sezon</th></tr></thead><tbody>'+mrows+'</tbody></table></div></div>';
+      var allTm=[...matches].filter(function(m){return m.team1.name===tn||m.team2.name===tn;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+      if(!allTm.length) return '';
+
+      // Build season options
+      var seasonIds=[...new Set(allTm.map(function(m){return m.seasonId||'';}).filter(Boolean))];
+      var seasonOpts='<option value="">— Wszystkie sezony —</option>'
+        +seasonIds.map(function(sid){var sn=seasons.find(function(s){return s.id===sid;});return '<option value="'+sid+'">'+(sn?sn.name:sid)+'</option>';}).join('');
+
+      // Build round options (all rounds from filtered matches)
+      var roundIds=[...new Set(allTm.map(function(m){return m.roundId||'';}).filter(Boolean))];
+      var roundOpts='<option value="">— Wszystkie kolejki —</option>'
+        +roundIds.map(function(rid){var rn=rounds.find(function(r){return r.id===rid;});return '<option value="'+rid+'">'+(rn?rn.label:rid)+'</option>';}).join('');
+
+      // Store team name for filter function
+      window._teamModalName = tn;
+      window._teamModalMatches = allTm;
+
+      var filterBar='<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;align-items:center">'
+        +'<select id="tmf-season" onchange="renderTeamMatchHistory()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.8rem;font-family:inherit">'+seasonOpts+'</select>'
+        +'<select id="tmf-round" onchange="renderTeamMatchHistory()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.8rem;font-family:inherit">'+roundOpts+'</select>'
+        +'<select id="tmf-result" onchange="renderTeamMatchHistory()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.8rem;font-family:inherit">'
+          +'<option value="">W/L — wszystkie</option><option value="W">Tylko wygrane</option><option value="L">Tylko przegrane</option>'
+        +'</select>'
+        +'<span id="tmf-count" style="font-size:.8rem;color:var(--muted);margin-left:.25rem"></span>'
+        +'</div>';
+
+      return '<div style="margin-top:1.5rem">'
+        +'<div style="font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">Historia meczów ('+allTm.length+')</div>'
+        +filterBar
+        +'<div id="tmf-table-wrap"></div>'
+        +'</div>';
     })();
   document.getElementById('team-modal').classList.add('open');
   var _tsb = document.getElementById('team-share-btn');
   if(_tsb) { _tsb.onclick = function(){ shareTeamCard(tn); }; }
+  // Render match history table after DOM is ready
+  setTimeout(renderTeamMatchHistory, 50);
 }
+function renderTeamMatchHistory() {
+  var tn = window._teamModalName;
+  var allTm = window._teamModalMatches || [];
+  if (!tn || !allTm.length) return;
+
+  var selSeason = (document.getElementById('tmf-season')||{}).value || '';
+  var selRound  = (document.getElementById('tmf-round') ||{}).value || '';
+  var selResult = (document.getElementById('tmf-result')||{}).value || '';
+
+  var filtered = allTm.filter(function(m) {
+    if (selSeason && m.seasonId !== selSeason) return false;
+    if (selRound  && m.roundId  !== selRound)  return false;
+    if (selResult) {
+      var isT1 = m.team1.name === tn;
+      var myS  = isT1 ? m.team1.score : m.team2.score;
+      var oppS = isT1 ? m.team2.score : m.team1.score;
+      var win  = myS > oppS;
+      if (selResult === 'W' && !win) return false;
+      if (selResult === 'L' &&  win) return false;
+    }
+    return true;
+  });
+
+  var countEl = document.getElementById('tmf-count');
+  if (countEl) countEl.textContent = filtered.length + ' meczów';
+
+  var mrows = filtered.map(function(m) {
+    var isT1 = m.team1.name === tn;
+    var myScore  = isT1 ? m.team1.score : m.team2.score;
+    var oppScore = isT1 ? m.team2.score : m.team1.score;
+    var opp = isT1 ? m.team2.name : m.team1.name;
+    var win = myScore > oppScore;
+    var sn  = seasons.find(function(s){ return s.id === m.seasonId; });
+    var rn  = rounds.find(function(r){ return r.id === m.roundId; });
+    return '<tr style="cursor:pointer" onclick="closeTeamModal();setTimeout(function(){openMatch('+m.id+');},200)">'
+      +'<td style="color:var(--muted);font-size:.8rem;white-space:nowrap">'+formatDate(m.date)+'</td>'
+      +'<td><span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span></td>'
+      +'<td style="font-size:.85rem"><div style="display:flex;align-items:center;gap:.4rem">'+teamLogo(opp,20,'.55rem')+'<span>vs '+opp+'</span></div></td>'
+      +'<td style="font-weight:700"><span style="color:'+(win?'var(--win)':'var(--loss)')+'">'+myScore+'-'+oppScore+'</span></td>'
+      +'<td style="font-size:.75rem;color:var(--muted)">'+(sn?sn.name:'—')+'</td>'
+      +'<td style="font-size:.75rem;color:var(--muted)">'+(rn?rn.label:'—')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var wrap = document.getElementById('tmf-table-wrap');
+  if (!wrap) return;
+  if (!mrows) {
+    wrap.innerHTML = '<p style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak meczów dla wybranych filtrów.</p>';
+    return;
+  }
+  wrap.innerHTML = '<div class="stats-table-wrap"><table><thead><tr>'
+    +'<th style="text-align:left">Data</th><th>W/L</th><th style="text-align:left">Rywal</th>'
+    +'<th>Wynik</th><th>Sezon</th><th>Kolejka</th>'
+    +'</tr></thead><tbody>'+mrows+'</tbody></table></div>';
+}
+
 function closeTeamModal(){document.getElementById('team-modal').classList.remove('open');}
 openTeamModal._openPlayer=function(pn,tn){
   var games=[];
