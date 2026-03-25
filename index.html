@@ -7670,6 +7670,10 @@ function openRosterCalculator() {
     </div>`;
   }).join('');
 
+  // Team list for load button
+  const teamNames = [...new Set(matches.flatMap(m => [m.team1.name, m.team2.name]))].filter(Boolean).sort();
+  const teamOpts = teamNames.map(tn => `<option value="${tn}">${tn}</option>`).join('');
+
   document.getElementById('player-modal-content').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.25rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px">${t('rc_title')}</div>
@@ -7680,10 +7684,85 @@ function openRosterCalculator() {
           style="padding:.3rem .8rem;border:none;border-radius:6px;background:${metric==='per'?'#3498db':'transparent'};color:${metric==='per'?'#fff':'var(--muted)'};font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;transition:all .2s">PER</button>
       </div>
     </div>
-    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">${t('rc_subtitle')}</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">${t('rc_subtitle')}</div>
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+      <select id="rc-team-select" style="flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .6rem;font-family:inherit;font-size:.85rem">
+        <option value="">— wybierz drużynę —</option>
+        ${teamOpts}
+      </select>
+      <button onclick="rcLoadTeam()" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:.35rem 1rem;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.85rem;cursor:pointer;white-space:nowrap;transition:opacity .2s" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">⬇ Załaduj skład</button>
+      <button onclick="rcClearAll()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.35rem .8rem;font-family:inherit;font-size:.8rem;cursor:pointer" title="Wyczyść wszystkie sloty">✕ Wyczyść</button>
+    </div>
     <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.25rem">${slots}</div>
     <div id="rc-result"></div>`;
   document.getElementById('player-modal').classList.add('open');
+}
+
+function rcLoadTeam() {
+  const teamName = document.getElementById('rc-team-select')?.value;
+  if (!teamName) { showToast('Wybierz drużynę', 'info'); return; }
+
+  const metric = window._rcMetric || 'per';
+
+  // Build player map for this team
+  const playerMap = {};
+  matches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      if (team.name !== teamName) return;
+      (team.players||[]).forEach(p => {
+        const key = p.name + '|||' + team.name;
+        if (!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
+        const s = playerMap[key];
+        if (p.pos) s.pos = p.pos;
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
+        s.ftm+=p.ftm||0; s.fta+=p.fta||0; s.gradeSum+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+
+  const scoreOf = p => metric === 'per' ? calcPER(p) : calcRawScore(p);
+  const players = Object.values(playerMap).filter(p => p.gp > 0)
+    .map(p => ({...p, score: scoreOf(p)}))
+    .sort((a,b) => b.score - a.score);
+
+  if (!players.length) { showToast('Brak graczy dla tej drużyny', 'info'); return; }
+
+  const positions = ['PG','SG','SF','PF','C'];
+  const sfpf = players.filter(p => p.pos === 'SF' || p.pos === 'PF');
+  const used = new Set();
+
+  positions.forEach((pos, i) => {
+    const sel = document.getElementById('rc-slot-' + i);
+    if (!sel) return;
+
+    // Get candidates for this position
+    const candidates = (pos === 'SF' || pos === 'PF') ? sfpf : players.filter(p => p.pos === pos);
+    const fallback = players; // use any player if no position match
+
+    const pool = candidates.length ? candidates : fallback;
+    // Pick best unused player
+    const pick = pool.find(p => !used.has(p.name + '|||' + p.team));
+    if (pick) {
+      const val = pick.name + '|||' + pick.team;
+      // Find option in select
+      const opt = Array.from(sel.options).find(o => o.value === val);
+      if (opt) { sel.value = val; used.add(val); }
+    }
+  });
+
+  rcUpdateResult();
+  showToast('✅ Skład drużyny ' + teamName + ' załadowany!', 'success');
+}
+
+function rcClearAll() {
+  ['PG','SG','SF','PF','C'].forEach((_,i) => {
+    const sel = document.getElementById('rc-slot-' + i);
+    if (sel) sel.value = '';
+  });
+  const res = document.getElementById('rc-result');
+  if (res) res.innerHTML = '';
 }
 
 function rcValidateDupes(changedIdx) {
