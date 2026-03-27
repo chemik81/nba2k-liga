@@ -2890,6 +2890,12 @@ function openPlayerModal(playerName, teamName) {
   const primaryPos = Object.keys(posCounts).length
     ? Object.entries(posCounts).sort((a,b)=>b[1]-a[1])[0][0]
     : (games[0]?.pos || '—');
+  // Fill missing positions with primaryPos (for old imported matches)
+  if(primaryPos && primaryPos !== '—') {
+    games.forEach(g => { if(!g.pos) g.pos = primaryPos; });
+    // Recount including filled positions
+    games.forEach(g => { if(g.pos) posCounts[g.pos] = (posCounts[g.pos]||0); });
+  }
   const posBreakdown = Object.entries(posCounts).sort((a,b)=>b[1]-a[1])
     .map(([p,c])=>`${p} ${c}x`).join(' · ');
 
