@@ -6380,13 +6380,21 @@ function renderTeamMatchHistory() {
     var oppScore = isT1 ? m.team2.score : m.team1.score;
     var opp = isT1 ? m.team2.name : m.team1.name;
     var win = myScore > oppScore;
+    var isWO = m.walkover === true;
     var sn  = seasons.find(function(s){ return s.id === m.seasonId; });
     var rn  = getRoundForMatch(m);
+    // W/L label — add WO badge if walkover
+    var wlHtml = '<span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span>'
+      + (isWO ? ' <span style="font-size:.65rem;font-weight:700;background:rgba(156,163,175,.2);color:var(--muted);border-radius:3px;padding:.1rem .3rem;margin-left:.2rem">WO</span>' : '');
+    // Score — WO in muted style
+    var scoreHtml = isWO
+      ? '<span style="color:var(--muted);font-size:.8rem">'+myScore+'-'+oppScore+'</span> <span style="font-size:.65rem;color:var(--muted)">(walkover)</span>'
+      : '<span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+myScore+'-'+oppScore+'</span>';
     return '<tr style="cursor:pointer" onclick="closeTeamModal();setTimeout(function(){openMatch('+m.id+');},200)">'
       +'<td style="color:var(--muted);font-size:.8rem;white-space:nowrap">'+formatDate(m.date)+'</td>'
-      +'<td><span style="font-weight:700;color:'+(win?'var(--win)':'var(--loss)')+'">'+( win?'W':'L')+'</span></td>'
+      +'<td>'+wlHtml+'</td>'
       +'<td style="font-size:.85rem"><div style="display:flex;align-items:center;gap:.4rem">'+teamLogo(opp,20,'.55rem')+'<span>vs '+opp+'</span></div></td>'
-      +'<td style="font-weight:700"><span style="color:'+(win?'var(--win)':'var(--loss)')+'">'+myScore+'-'+oppScore+'</span></td>'
+      +'<td>'+scoreHtml+'</td>'
       +'<td style="font-size:.75rem;color:var(--muted)">'+(sn?sn.name:'—')+'</td>'
       +'<td style="font-size:.75rem;color:var(--muted)">'+(rn?rn.label:'—')+'</td>'
       +'</tr>';
