@@ -2642,7 +2642,7 @@ function getAggregatedStats(seasonFilter) {
     [m.team1, m.team2].forEach(team => {
       (team.players || []).forEach(p => {
         const key = p.name + '|' + team.name;
-        if(!playerMap[key]) playerMap[key] = { name: p.name, team: team.name, pos: p.pos||'', gp: 0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0 };
+        if(!playerMap[key]) playerMap[key] = { name: p.name, team: team.name, pos: p.pos||'', posCounts:{}, gp: 0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0 };
         const s = playerMap[key];
         s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0); s.stl+=(p.stl||0); s.blk+=(p.blk||0);
         s.to+=(p.to||0); s.fgm+=(p.fgm||0); s.fga+=(p.fga||0); s.tpm+=(p.tpm||0); s.tpa+=(p.tpa||0); s.ftm+=(p.ftm||0); s.fta+=(p.fta||0);
@@ -2714,7 +2714,7 @@ function renderStats() {
     [m.team1, m.team2].forEach(team => {
       (team.players||[]).forEach(p => {
         const key = p.name + '|' + team.name;
-        if(!playerMap[key]) playerMap[key] = { name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0 };
+        if(!playerMap[key]) playerMap[key] = { name:p.name, team:team.name, pos:p.pos||'', posCounts:{}, gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0 };
         const s = playerMap[key];
         s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0); s.stl+=(p.stl||0); s.blk+=(p.blk||0);
         s.to+=(p.to||0); s.fgm+=(p.fgm||0); s.fga+=(p.fga||0); s.tpm+=(p.tpm||0); s.tpa+=(p.tpa||0); s.ftm+=(p.ftm||0); s.fta+=(p.fta||0);
@@ -2803,6 +2803,35 @@ function renderStats() {
 // ═══════════════════════════════════════════════════════════════
 // PLAYER MODAL
 // ═══════════════════════════════════════════════════════════════
+
+function pmShowPos(pos) {
+  const posStats = window._pmPosStats || {};
+  const s = posStats[pos];
+  if (!s) return;
+
+  // Update button styles
+  document.querySelectorAll('[id^="pm-pos-btn-"]').forEach(btn => {
+    const isActive = btn.id === 'pm-pos-btn-' + pos;
+    btn.style.borderColor  = isActive ? 'var(--accent)' : 'var(--border)';
+    btn.style.background   = isActive ? 'rgba(245,197,24,.12)' : 'transparent';
+    btn.style.color        = isActive ? 'var(--accent)' : 'var(--muted)';
+  });
+
+  const wrap = document.getElementById('pm-pos-stats');
+  if (!wrap) return;
+
+  const gradeHtml = `<span class="grade grade-${s.grd.replace('+','p').replace('-','m')}">${s.grd}</span>`;
+  wrap.innerHTML = [
+    ['GRD', gradeHtml], ['PTS', s.pts], ['REB', s.reb], ['AST', s.ast],
+    ['STL', s.stl], ['BLK', s.blk], ['TO', s.to],
+    ['FG%', s.fg], ['3P%', s.tp], ['FT%', s.ft]
+  ].map(([l,v]) => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:.5rem;text-align:center">
+      <div style="font-size:.65rem;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:.2rem">${l}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${v}</div>
+    </div>`).join('');
+}
+
 function openPlayerModal(playerName, teamName) {
   // Gather all game appearances for this player
   const games = [];
@@ -2841,6 +2870,7 @@ function openPlayerModal(playerName, teamName) {
     <tr>
       <td>${formatDate(g.date)}</td>
       <td style="color:var(--muted)">${g.opp}</td>
+      <td><span style="font-size:.75rem;font-weight:700;color:var(--accent)">${g.pos||'—'}</span></td>
       <td><span class="grade grade-${(g.grade||'B').replace('+','p').replace('-','m')}">${g.grade||'B'}</span></td>
       <td>${g.pts||0}</td><td>${g.reb||0}</td><td>${g.ast||0}</td><td>${g.stl||0}</td><td>${g.blk||0}</td><td>${g.to||0}</td>
       <td>${g.fgm||0}/${g.fga||0}<span style="color:var(--muted);font-size:0.7rem"> ${g.fgpct||0}%</span></td>
@@ -2848,16 +2878,66 @@ function openPlayerModal(playerName, teamName) {
       <td>${g.ftm||0}/${g.fta||0}<span style="color:var(--muted);font-size:0.7rem"> ${g.ftpct||0}%</span></td>
     </tr>`).join('');
 
+  // Primary position = most frequent
+  const posCounts = {};
+  games.forEach(g => { if(g.pos) posCounts[g.pos] = (posCounts[g.pos]||0)+1; });
+  const primaryPos = Object.keys(posCounts).length
+    ? Object.entries(posCounts).sort((a,b)=>b[1]-a[1])[0][0]
+    : (games[0]?.pos || '—');
+  const posBreakdown = Object.entries(posCounts).sort((a,b)=>b[1]-a[1])
+    .map(([p,c])=>`${p} ${c}x`).join(' · ');
+
+  // Per-position stats
+  const positions = ['PG','SG','SF','PF','C'];
+  const posStats = {};
+  positions.forEach(pos => {
+    const pg = games.filter(g => g.pos === pos);
+    if (!pg.length) return;
+    const n = pg.length;
+    const sum = k => pg.reduce((s,g)=>s+(g[k]||0),0);
+    const fgm=sum('fgm'),fga=sum('fga'),tpm=sum('tpm'),tpa=sum('tpa'),ftm=sum('ftm'),fta=sum('fta');
+    const gradeAvg = numToGrade(pg.reduce((s,g)=>s+gradeToNum(g.grade||'B'),0)/n);
+    posStats[pos] = {
+      n, grd: gradeAvg,
+      pts:(sum('pts')/n).toFixed(1), reb:(sum('reb')/n).toFixed(1),
+      ast:(sum('ast')/n).toFixed(1), stl:(sum('stl')/n).toFixed(1),
+      blk:(sum('blk')/n).toFixed(1), to:(sum('to')/n).toFixed(1),
+      fg: fga>0?Math.round(fgm/fga*100)+'%':'—',
+      tp: tpa>0?Math.round(tpm/tpa*100)+'%':'—',
+      ft: fta>0?Math.round(ftm/fta*100)+'%':'—',
+    };
+  });
+  const posStatsHtml = Object.keys(posStats).length > 1 ? `
+    <div style="margin-bottom:1.5rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem">Statystyki per pozycja</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        ${Object.entries(posStats).map(([pos,s],i)=>`
+          <button onclick="pmShowPos('${pos}')" id="pm-pos-btn-${pos}"
+            style="padding:.25rem .7rem;border-radius:6px;border:1px solid ${i===0?'var(--accent)':'var(--border)'};
+            background:${i===0?'rgba(245,197,24,.12)':'transparent'};
+            color:${i===0?'var(--accent)':'var(--muted)'};font-family:inherit;font-size:.8rem;font-weight:700;cursor:pointer">
+            ${pos} <span style="font-weight:400;font-size:.75rem">(${s.n}g)</span>
+          </button>`).join('')}
+      </div>
+      <div id="pm-pos-stats" style="margin-top:.75rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:.5rem">
+        ${(()=>{const s=Object.values(posStats)[0];return [['GRD',`<span class="grade grade-${s.grd.replace('+','p').replace('-','m')}">${s.grd}</span>`],['PTS',s.pts],['REB',s.reb],['AST',s.ast],['STL',s.stl],['BLK',s.blk],['TO',s.to],['FG%',s.fg],['3P%',s.tp],['FT%',s.ft]].map(([l,v])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:.5rem;text-align:center"><div style="font-size:.65rem;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:.2rem">${l}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${v}</div></div>`).join('');})()}
+      </div>
+    </div>` : '';
+
+  // Store posStats globally for pmShowPos
+  window._pmPosStats = posStats;
+
   document.getElementById('player-modal-content').innerHTML = `
     <div style="margin-bottom:1.5rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;text-transform:uppercase">${playerName}</div>
       <div style="color:var(--muted);font-size:0.9rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
         ${teamLogo(teamName,24,'.65rem')}<span>${teamName}</span>
         <span style="color:var(--muted)">·</span>
-        <span class="pos-label" data-player="${playerName.replace(/"/g,'&quot;')}" style="color:var(--accent);font-weight:700;min-width:1.5rem">${games[0]?.pos||'—'}</span>
+        <span class="pos-label" data-player="${playerName.replace(/"/g,'&quot;')}" style="color:var(--accent);font-weight:700;min-width:1.5rem">${primaryPos}</span>
+        ${Object.keys(posCounts).length > 1 ? `<span style="color:var(--muted);font-size:.75rem">(${posBreakdown})</span>` : ''}
         ${_isLoggedInSync() ? `<select data-player="${playerName.replace(/"/g,'&quot;')}" data-team="${teamName.replace(/"/g,'&quot;')}" onchange="savePlayerPositionFromSelect(this)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .35rem;font-size:.75rem;font-family:inherit;cursor:pointer">
           <option value="">— brak —</option>
-          ${['PG','SG','SF','PF','C'].map(pos=>`<option value="${pos}" ${(games[0]?.pos||'')=== pos?'selected':''}>${pos}</option>`).join('')}
+          ${['PG','SG','SF','PF','C'].map(pos=>`<option value="${pos}" ${primaryPos === pos?'selected':''}>${pos}</option>`).join('')}
         </select>` : ''}
         <span style="color:var(--muted)">·</span>
         <span>${gp} meczy</span>
@@ -2867,6 +2947,7 @@ function openPlayerModal(playerName, teamName) {
       </div>
     </div>
 
+    ${posStatsHtml}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:0.75rem;margin-bottom:1.75rem">
       ${[
         ['GRD',`<span class="grade grade-${avgGrade.replace('+','p').replace('-','m')}">${avgGrade}</span>`],
@@ -2902,7 +2983,7 @@ function openPlayerModal(playerName, teamName) {
       <table>
         <thead><tr>
           <th style="text-align:left">Data</th><th style="text-align:left">vs</th>
-          <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>FT</th>
+          <th>POZ</th><th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>FT</th>
         </tr></thead>
         <tbody>${gameRows}</tbody>
       </table>
@@ -5827,8 +5908,13 @@ function buildRoundFive(roundMatches) {
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0; s.ftm+=p.ftm||0; s.fta+=p.fta||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
+        if(p.pos) s.posCounts[p.pos] = (s.posCounts[p.pos]||0)+1;
       });
     });
+  });
+  // Set primary position = most frequent
+  Object.values(playerMap).forEach(pl => {
+    if(Object.keys(pl.posCounts||{}).length) pl.pos = Object.entries(pl.posCounts).sort((a,b)=>b[1]-a[1])[0][0];
   });
   const players = Object.values(playerMap)
     .filter(p => p.gp >= minGP)
@@ -7319,8 +7405,13 @@ function buildDefFive(roundMatches) {
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
+        if(p.pos) s.posCounts[p.pos] = (s.posCounts[p.pos]||0)+1;
       });
     });
+  });
+  // Set primary position = most frequent
+  Object.values(playerMap).forEach(pl => {
+    if(Object.keys(pl.posCounts||{}).length) pl.pos = Object.entries(pl.posCounts).sort((a,b)=>b[1]-a[1])[0][0];
   });
   const players = Object.values(playerMap)
     .filter(p => p.gp >= minGP)
@@ -7377,8 +7468,13 @@ function renderSecondFive(roundMatches, minGP) {
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
+        if(p.pos) s.posCounts[p.pos] = (s.posCounts[p.pos]||0)+1;
       });
     });
+  });
+  // Set primary position = most frequent
+  Object.values(playerMap).forEach(pl => {
+    if(Object.keys(pl.posCounts||{}).length) pl.pos = Object.entries(pl.posCounts).sort((a,b)=>b[1]-a[1])[0][0];
   });
   const players = Object.values(playerMap)
     .filter(p => p.gp >= minGP)
