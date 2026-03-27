@@ -770,6 +770,22 @@
         <div style="font-size:.8rem;color:rgba(255,255,255,0.6);margin-top:.25rem;letter-spacing:1px;">OFICJALNA PLATFORMA LIGOWA</div>
       </div>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="standings">Tabela</div><button onclick="shareStandings()" title="Udostępnij tabelę" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">&#x1F4E4;</button></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="stats-table-wrap">
+        <table style="min-width:500px">
+          <thead><tr>
+            <th style="text-align:left; padding-left:1.5rem">#</th>
+            <th style="text-align:left">Drużyna</th>
+            <th>M</th><th>W</th><th>L</th><th>PTS</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th>
+          </tr></thead>
+          <tbody id="standings-body">
+            <tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
     <div class="leaders-grid" id="leaders-grid">
       <div class="empty" style="grid-column:1/-1;padding:2rem"><div class="icon">🏀</div><p>Dodaj mecze aby zobaczyć liderów</p></div>
@@ -793,21 +809,6 @@
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div id="milestone-banner" style="margin-bottom:1.5rem"></div>
     <div id="round-comparison-wrap" style="margin-bottom:1.5rem"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="standings">Tabela</div><button onclick="shareStandings()" title="Udostępnij tabelę" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">&#x1F4E4;</button></div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <div class="stats-table-wrap">
-        <table style="min-width:500px">
-          <thead><tr>
-            <th style="text-align:left; padding-left:1.5rem">#</th>
-            <th style="text-align:left">Drużyna</th>
-            <th>M</th><th>W</th><th>L</th><th>PTS</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th>
-          </tr></thead>
-          <tbody id="standings-body">
-            <tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
   <!-- EVENTS -->
