@@ -4974,13 +4974,17 @@ function renderEventStats(ev, sortCol, sortDir) {
         const POSITIONS = ['PG','SG','SF','PF','C'];
         const pos = p.pos || POSITIONS[idx] || 'PG';
         const key = p.name + '|' + team.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,posCounts:{},gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
         const s = playerMap[key];
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
         s.ftm+=p.ftm||0; s.fta+=p.fta||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
       });
     });
   });
@@ -5902,12 +5906,15 @@ function buildRoundFive(roundMatches) {
       (team.players||[]).forEach((p,idx) => {
         const pos = p.pos || POSITIONS[idx] || 'PG';
         const key = p.name + '|' + pos;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,posCounts:{},gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
         const s = playerMap[key];
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0; s.ftm+=p.ftm||0; s.fta+=p.fta||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
+       if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+       if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+       if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
         if(p.pos) s.posCounts[p.pos] = (s.posCounts[p.pos]||0)+1;
       });
     });
@@ -7399,12 +7406,13 @@ function buildDefFive(roundMatches) {
       (team.players||[]).forEach((p,idx) => {
         const pos = p.pos || POSITIONS[idx] || 'PG';
         const key = p.name + '|' + pos;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,posCounts:{},gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
         const s = playerMap[key];
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
+        if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
         if(p.pos) s.posCounts[p.pos] = (s.posCounts[p.pos]||0)+1;
       });
     });
@@ -7462,7 +7470,7 @@ function renderSecondFive(roundMatches, minGP) {
       (team.players||[]).forEach((p,idx) => {
         const pos = p.pos || POSITIONS[idx] || 'PG';
         const key = p.name + '|' + pos;
-        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name,team:team.name,pos,posCounts:{},gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
         const s = playerMap[key];
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
@@ -7735,7 +7743,7 @@ function openRosterCalculator() {
     [m.team1, m.team2].forEach(team => {
       (team.players||[]).forEach(p => {
         const key = p.name + '|||' + team.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', posCounts:{}, gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
         const s = playerMap[key];
         if(p.pos) s.pos = p.pos;
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
@@ -7822,7 +7830,7 @@ function rcLoadTeam() {
       if (team.name !== teamName) return;
       (team.players||[]).forEach(p => {
         const key = p.name + '|||' + team.name;
-        if (!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
+        if (!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', posCounts:{}, gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
         const s = playerMap[key];
         if (p.pos) s.pos = p.pos;
         s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
@@ -7916,7 +7924,7 @@ function calcRoster() {
       (team.players||[]).forEach(p => {
         // Key by name|||team — same as dropdown values
         const key = p.name + '|||' + team.name;
-        if(!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
+        if(!playerMap[key]) playerMap[key] = {name:p.name, team:team.name, pos:p.pos||'', posCounts:{}, gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, tpm:0, tpa:0, ftm:0, fta:0, gradeSum:0};
         const s = playerMap[key]; s.gp++;
         if(p.pos) s.pos = p.pos;
         s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
