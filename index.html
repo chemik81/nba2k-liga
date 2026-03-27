@@ -2157,7 +2157,21 @@ Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, be
     "players": [{"name": "NickGracza", "grade": "A+", "pts": 40, "reb": 0, "ast": 11, "stl": 0, "blk": 0, "fouls": 0, "to": 2, "fgm": 15, "fga": 20, "tpm": 10, "tpa": 15, "ftm": 0, "fta": 0}]
   }
 }
-POZYCJE: Zawodnicy są zawsze w tej samej kolejności od góry: 1=PG, 2=SG, 3=SF (Lock), 4=PF, 5=C. Dodaj pole "pos" do każdego zawodnika.
+KRYTYCZNE — JAK LICZYĆ GRACZY W KAŻDEJ DRUŻYNIE:
+Każda sekcja drużyny wygląda tak na ekranie:
+  [WIERSZ NAGŁÓWKA: nick_kapitana | GRD | PTS | REB | AST | ...]  ← IGNORUJ — to nie jest gracz!
+  [gracz 1 → PG]
+  [gracz 2 → SG]
+  [gracz 3 → SF]
+  [gracz 4 → PF]
+  [gracz 5 → C]
+  [WIERSZ TOTAL]  ← IGNORUJ
+
+Nick kapitana widoczny w wierszu nagłówka NIE jest graczem — nie wstawiaj go do tablicy players.
+Każda drużyna ma DOKŁADNIE 5 graczy — 5 wierszy nad TOTAL.
+Licz od dołu: wiersz tuż nad TOTAL = gracz 5 (C), następny = gracz 4 (PF), itd.
+
+POZYCJE: 1=PG, 2=SG, 3=SF, 4=PF, 5=C (licząc od góry, pomijając wiersz nagłówka z kapitanem).
 
 KOLEJNOŚĆ KOLUMN na ekranie Game Stats (od lewej do prawej):
 GRADE | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
@@ -2167,6 +2181,7 @@ WAŻNE — rozróżnienie BLK / FOULS / TO:
 - FOULS (faule) = 7. kolumna, nagłówek na ekranie brzmi "FOULS". → zapisz jako "fouls". Zazwyczaj 0-5.
 - TO (straty) = 8. kolumna. → zapisz jako "to". Zazwyczaj 0-4.
 - NIE zamieniaj kolejności — FOULS jest PRZED TO na ekranie.
+- Gdy TO=0 nie zamieniaj z FOULS — zapisz "to":0.
 - Liczby w tych kolumnach są małe (0-6). Jeśli widzisz dużą liczbę w miejscu BLK/FOULS/TO — to błąd, wstaw 0.
 
 Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
