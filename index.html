@@ -2719,8 +2719,14 @@ function renderStats() {
         s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0); s.stl+=(p.stl||0); s.blk+=(p.blk||0);
         s.to+=(p.to||0); s.fgm+=(p.fgm||0); s.fga+=(p.fga||0); s.tpm+=(p.tpm||0); s.tpa+=(p.tpa||0); s.ftm+=(p.ftm||0); s.fta+=(p.fta||0);
         s.gradeSum += gradeToNum(p.grade||'B');
+        if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
       });
     });
+  });
+  // Set primary position = most frequent
+  Object.values(playerMap).forEach(pl => {
+    if(pl.posCounts && Object.keys(pl.posCounts).length)
+      pl.pos = Object.entries(pl.posCounts).sort((a,b)=>b[1]-a[1])[0][0];
   });
   const allStats = Object.values(playerMap);
 
