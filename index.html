@@ -6113,7 +6113,16 @@ function renderTop10Tab(tab) {
     : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
   const tabBtn = (isActive, lbl, tid) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${isActive?'var(--accent)':'transparent'};background:none;color:${isActive?'var(--accent)':'var(--muted)'};font-weight:${isActive?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tid}')">${lbl}</button>`;
-  const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 — ${_top10SeasonName||'Wszystkie sezony'}</div><div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(tab==='composite','Composite Score','composite')}${tabBtn(tab==='per','PER (Hollinger)','per')}${tabBtn(tab==='brick','🧱 Brick of the Round','brick')}</div>`;
+  const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 — ${_top10SeasonName||'Wszystkie sezony'}</div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
+      <span style="font-size:.75rem;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase">Sezon:</span>
+      <select onchange="_top10SeasonId=this.value||null;_top10SeasonName=this.options[this.selectedIndex].text;renderTop10Tab('${tab}')"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .5rem;font-size:.8rem;font-family:inherit">
+        <option value="" ${!_top10SeasonId?'selected':''}>Wszystkie sezony</option>
+        ${seasons.map(s=>`<option value="${s.id}" ${_top10SeasonId===s.id?'selected':''}>${s.name}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(tab==='composite','Composite Score','composite')}${tabBtn(tab==='per','PER (Hollinger)','per')}${tabBtn(tab==='brick','🧱 Brick of the Round','brick')}</div>`;
 
   if(isBrick) {
     const activeRounds = rounds.length
@@ -6121,7 +6130,7 @@ function renderTop10Tab(tab) {
       : [getDefaultRound()];
 
     // Brick round selector — persisted in window var
-    if(!window._brickRoundIdx) window._brickRoundIdx = activeRounds.length - 1;
+    if(window._brickRoundIdx === undefined || window._brickRoundIdx === null) window._brickRoundIdx = activeRounds.length - 1;
     window._brickRoundIdx = Math.min(window._brickRoundIdx, activeRounds.length - 1);
     let brickRound = activeRounds[window._brickRoundIdx];
 
