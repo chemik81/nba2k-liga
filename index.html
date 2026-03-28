@@ -7207,15 +7207,17 @@ function sharePlayerCard(playerName, teamName) {
 function shareStandings() {
   var stats={};
   matches.forEach(function(m){
-    [[m.team1,m.team2],[m.team2,m.team1]].forEach(function(pair){
-      var my=pair[0],op=pair[1];
-      if(!stats[my.name])stats[my.name]={w:0,l:0,pf:0,pa:0};
+    var isWO=m.walkover===true;
+    var w1=m.team1.score>m.team2.score;
+    [[m.team1,m.team2,w1],[m.team2,m.team1,!w1]].forEach(function(pair){
+      var my=pair[0],op=pair[1],won=pair[2];
+      if(!stats[my.name])stats[my.name]={w:0,l:0,wo:0,pf:0,pa:0};
       var s=stats[my.name];
-      if(my.score>op.score)s.w++;else s.l++;
-      s.pf+=my.score;s.pa+=op.score;
+      if(won)s.w++;else{s.l++;if(isWO)s.wo++;}
+      if(!isWO){s.pf+=my.score;s.pa+=op.score;}
     });
   });
-  var sorted=Object.keys(stats).map(function(n){var s=stats[n],gp=s.w+s.l;return{name:n,w:s.w,l:s.l,gp:gp,pts:s.w*2,ppg:gp>0?(s.pf/gp).toFixed(1):'0.0',opp:gp>0?(s.pa/gp).toFixed(1):'0.0'};}).sort(function(a,b){return b.pts-a.pts||b.w-a.w;});
+  var sorted=Object.keys(stats).map(function(n){var s=stats[n],gp=s.w+s.l,pts=s.w*2+(s.l-s.wo)*1;return{name:n,w:s.w,l:s.l,gp:gp,pts:pts,ppg:gp>0?(s.pf/gp).toFixed(1):'0.0',opp:gp>0?(s.pa/gp).toFixed(1):'0.0'};}).sort(function(a,b){return b.pts-a.pts||b.w-a.w;});
   var W=660,ROW=36,PAD=24,HEAD=80,canvas=document.createElement('canvas');
   canvas.width=W;canvas.height=HEAD+sorted.length*ROW+PAD;
   var ctx=canvas.getContext('2d'),bg=ctx.createLinearGradient(0,0,0,canvas.height);
