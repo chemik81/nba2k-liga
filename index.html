@@ -6898,6 +6898,14 @@ function editMatch(id) {
             onchange="pendingMatch.team2.score=+this.value"
             style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.9rem;font-family:inherit;display:block;margin-top:.25rem">
         </div>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-top:1rem;padding:.5rem .75rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:6px">
+          <input type="checkbox" id="edit-walkover-chk" ${pendingMatch.walkover?'checked':''}
+            onchange="pendingMatch.walkover=this.checked"
+            style="width:16px;height:16px;cursor:pointer;accent-color:#ef4444">
+          <label for="edit-walkover-chk" style="font-size:.85rem;font-weight:700;color:#ef4444;cursor:pointer;user-select:none">
+            Walkover (W/O) &mdash; odznacz aby zmienic na normalny mecz
+          </label>
+        </div>
       </div>`;
 
     pr.insertBefore(editPanel, pr.firstChild);
