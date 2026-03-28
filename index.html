@@ -4024,6 +4024,8 @@ function updateAuthUI() {
     if(bazaBtn) bazaBtn.style.display = logged ? 'inline-flex' : 'none';
     const seasonBtn = document.getElementById('season-btn');
     if(seasonBtn) seasonBtn.style.display = logged ? 'inline-flex' : 'none';
+    const playoffBtn = document.getElementById('playoff-btn');
+    if(playoffBtn) playoffBtn.style.display = logged ? 'inline-flex' : 'none';
     // Re-render matches to show/hide delete buttons
     if(document.getElementById('view-matches')?.classList.contains('active')) renderMatches();
   });
