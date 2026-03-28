@@ -750,6 +750,7 @@
   <div style="display:flex;gap:0.5rem;align-items:center">
     <button id="logout-btn" class="btn btn-ghost" onclick="logout()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="logout">🔓 Wyloguj</button>
     <button id="baza-btn" class="btn btn-ghost" onclick="openSetupModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" title="Zmień konfigurację bazy danych">⚙ Baza</button>
+    <button id="playoff-btn" class="btn btn-ghost" onclick="openPlayoffModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Playoff</button>
     <button id="season-btn" class="btn btn-ghost" onclick="openSeasonModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="seasons_btn">🏆 Sezony</button>
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" title="Zmien motyw">&#9728;</button>
     <div id="discord-user-bar" style="display:flex;align-items:center;gap:.5rem;margin-right:.5rem"></div>
@@ -785,6 +786,8 @@
         </table>
       </div>
     </div>
+
+    <div id="playoff-dashboard-wrap"></div>
 
     <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
     <div class="leaders-grid" id="leaders-grid">
@@ -1636,6 +1639,7 @@ let aliases = JSON.parse(localStorage.getItem('nba2k_aliases') || '{}');
 let teamAliases = JSON.parse(localStorage.getItem('nba2k_team_aliases') || '{}');
 let rounds = []; // { id, label, from, to } // { "wrong": "correct" }
 let seasons = [];
+let playoffs = []; // array of playoff objects per season
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
 // Read-only key (safe to hardcode - only Read permission, no Create/Update/Delete)
@@ -1827,7 +1831,7 @@ async function saveData() {
     // Teams saved with logos to KV — available to all users
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
-      rounds, pendingScreenshots, events };
+      rounds, pendingScreenshots, events, playoffs };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
     console.log('Payload size:', sizeKB, 'KB');
@@ -1938,7 +1942,8 @@ async function loadData() {
     teams            = record.teams || {};
     rounds           = record.rounds || [];
     pendingScreenshots = record.pendingScreenshots || [];
-    events = record.events || [];
+    events = record.events || []
+    playoffs = record.playoffs || [];;
 
     // Logos now stored in KV with teams data
 
@@ -3868,6 +3873,7 @@ function renderStandings() {
   }).join('');
   renderTeamForm(sorted);
   renderTop3();
+  if(typeof renderPlayoffDashboard === 'function') renderPlayoffDashboard();
 }
 
 function renderLeaders() {
@@ -8828,5 +8834,377 @@ async function deleteTeam(teamName) {
     <div id="event-archive-content"></div>
   </div>
 </div>
+
+
+<!-- PLAYOFF MODAL -->
+<div class="modal-overlay" id="playoff-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('playoff-modal').classList.remove('open')">&#x2715;</button>
+    <div id="playoff-modal-content"></div>
+  </div>
+</div>
+
+
+<script>
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYOFF SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+function openPlayoffModal() {
+  const el = document.getElementById('playoff-modal');
+  if (!el) return;
+  renderPlayoffModal();
+  el.classList.add('open');
+}
+
+function getPlayoffForSeason(seasonId) {
+  return playoffs.find(p => p.seasonId === seasonId) || null;
+}
+
+function getCurrentSeasonStandings() {
+  // Build standings for current season or all
+  const ts = {};
+  const filteredMatches = currentSeasonId
+    ? matches.filter(m => m.seasonId === currentSeasonId)
+    : matches;
+  filteredMatches.forEach(m => {
+    [m.team1, m.team2].forEach(t => { if (!ts[t.name]) ts[t.name] = {w:0,l:0,wo:0}; });
+    const isWO = m.walkover === true;
+    const w1 = m.team1.score > m.team2.score;
+    ts[m.team1.name].w += w1?1:0; ts[m.team1.name].l += w1?0:1;
+    ts[m.team2.name].w += w1?0:1; ts[m.team2.name].l += w1?1:0;
+    if (isWO) { if(!w1) ts[m.team1.name].wo+=1; else ts[m.team2.name].wo+=1; }
+  });
+  return Object.entries(ts)
+    .map(([name,s]) => ({ name, w:s.w, l:s.l, pts: s.w*2+(s.l-s.wo)*1 }))
+    .sort((a,b) => b.pts-a.pts || b.w-a.w);
+}
+
+function renderPlayoffModal() {
+  const seasonId = currentSeasonId;
+  const season = seasons.find(s => s.id === seasonId);
+  const existing = getPlayoffForSeason(seasonId);
+  const standings = getCurrentSeasonStandings();
+
+  const el = document.getElementById('playoff-modal-content');
+
+  if (existing) {
+    // Show existing playoff manager
+    el.innerHTML = renderPlayoffManager(existing, standings);
+    return;
+  }
+
+  // Show setup form
+  const teamOpts = standings.map((t,i) =>
+    `<option value="${t.name}">${i+1}. ${t.name} (${t.pts} pkt)</option>`
+  ).join('');
+
+  el.innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:2px;margin-bottom:1.5rem">
+      🏆 USTAWIENIA PLAYOFF
+    </div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem">
+      Sezon: <strong style="color:var(--text)">${season ? season.name : 'Bieżący'}</strong>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+      <div>
+        <label style="font-size:.75rem;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:.4rem">Liczba drużyn w playoff</label>
+        <select id="po-teams-count" onchange="updatePlayoffTeamList()"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .75rem;font-family:inherit;font-size:.9rem">
+          ${[4,6,8].map(n => `<option value="${n}" ${n===8?'selected':''}>${n} drużyn</option>`).join('')}
+          <option value="custom">Własna liczba...</option>
+        </select>
+        <input type="number" id="po-teams-custom" min="2" max="16" value="8"
+          style="width:100%;margin-top:.4rem;display:none;background:var(--surface2);border:1px solid var(--accent);color:var(--text);border-radius:6px;padding:.5rem .75rem;font-family:inherit;font-size:.9rem"
+          placeholder="Wpisz liczbę drużyn" onchange="updatePlayoffTeamList()">
+      </div>
+      <div>
+        <label style="font-size:.75rem;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:.4rem">Format serii</label>
+        <select id="po-format"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .75rem;font-family:inherit;font-size:.9rem">
+          <option value="bo3">Best of 3 (2 wygrane)</option>
+          <option value="bo5" selected>Best of 5 (3 wygrane)</option>
+          <option value="bo7">Best of 7 (4 wygrane)</option>
+          <option value="bo1">Jeden mecz</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.25rem">
+      <label style="font-size:.75rem;color:var(--muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:.4rem">Kolejność drużyn (przeciągnij aby zmienić)</label>
+      <div id="po-team-list" style="display:flex;flex-direction:column;gap:.35rem"></div>
+    </div>
+
+    <button onclick="startPlayoff()"
+      style="width:100%;background:var(--accent);color:#000;border:none;border-radius:8px;padding:.75rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;transition:opacity .2s"
+      onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+      🚀 ROZPOCZNIJ PLAYOFF
+    </button>`;
+
+  // Init team list
+  window._poStandings = standings;
+  updatePlayoffTeamList();
+
+  // Handle custom select
+  document.getElementById('po-teams-count').addEventListener('change', function() {
+    document.getElementById('po-teams-custom').style.display = this.value === 'custom' ? 'block' : 'none';
+  });
+}
+
+function updatePlayoffTeamList() {
+  const sel = document.getElementById('po-teams-count');
+  const customEl = document.getElementById('po-teams-custom');
+  let n = sel.value === 'custom' ? parseInt(customEl.value) || 8 : parseInt(sel.value);
+  n = Math.min(n, (window._poStandings || []).length);
+  const teams = (window._poStandings || []).slice(0, n);
+  const list = document.getElementById('po-team-list');
+  if (!list) return;
+  list.innerHTML = teams.map((t,i) => `
+    <div style="display:flex;align-items:center;gap:.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:.5rem .75rem">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;color:var(--accent);font-size:1.1rem;min-width:1.5rem">${i+1}</span>
+      <span style="flex:1;font-weight:700">${t.name}</span>
+      <span style="font-size:.75rem;color:var(--muted)">${t.pts} pkt · ${t.w}W ${t.l}L</span>
+    </div>`).join('');
+}
+
+function startPlayoff() {
+  const sel = document.getElementById('po-teams-count');
+  const customEl = document.getElementById('po-teams-custom');
+  let n = sel.value === 'custom' ? parseInt(customEl.value) || 8 : parseInt(sel.value);
+  const format = document.getElementById('po-format').value;
+  const teams = (window._poStandings || []).slice(0, n).map(t => t.name);
+
+  if (teams.length < 2) { showToast('Za mało drużyn!', 'error'); return; }
+
+  // Build bracket — classic seeding: 1vs(n), 2vs(n-1), etc.
+  const pairs = [];
+  const half = Math.floor(teams.length / 2);
+  for (let i = 0; i < half; i++) {
+    pairs.push({ seed1: i, seed2: teams.length - 1 - i, team1: teams[i], team2: teams[teams.length - 1 - i], w1: 0, w2: 0 });
+  }
+
+  const po = {
+    id: Date.now(),
+    seasonId: currentSeasonId,
+    format,
+    teams,
+    createdAt: new Date().toISOString(),
+    rounds: [{ name: getRoundName(teams.length), pairs, done: false }],
+    champion: null,
+  };
+
+  playoffs.push(po);
+  saveData();
+  showToast('✅ Playoff rozpoczęty!', 'success');
+  renderPlayoffModal();
+  renderPlayoffDashboard();
+}
+
+function getRoundName(n) {
+  if (n >= 16) return 'Eliminacje';
+  if (n >= 8)  return 'Ćwierćfinały';
+  if (n >= 4)  return 'Półfinały';
+  return 'Finał';
+}
+
+function getWinsNeeded(format) {
+  return { bo1:1, bo3:2, bo5:3, bo7:4 }[format] || 3;
+}
+
+function renderPlayoffManager(po, standings) {
+  const winsNeeded = getWinsNeeded(po.format);
+  const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
+
+  let html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:2px">🏆 PLAYOFF</div>
+        <div style="color:var(--muted);font-size:.8rem">Format: ${formatLabel} · ${po.teams.length} drużyn</div>
+      </div>
+      ${po.champion ? `<div style="background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:8px;padding:.5rem 1.25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem">🥇 MISTRZ: ${po.champion}</div>` : ''}
+      ${_isLoggedInSync() && !po.champion ? `<button onclick="deletePlayoff('${po.id}')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń playoff</button>` : ''}
+    </div>`;
+
+  po.rounds.forEach((round, ri) => {
+    html += `<div style="margin-bottom:1.5rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem;border-bottom:1px solid var(--border);padding-bottom:.4rem">${round.name}</div>
+      <div style="display:flex;flex-direction:column;gap:.6rem">`;
+
+    round.pairs.forEach((pair, pi) => {
+      const done = pair.w1 >= winsNeeded || pair.w2 >= winsNeeded;
+      const winner = pair.w1 >= winsNeeded ? pair.team1 : pair.w2 >= winsNeeded ? pair.team2 : null;
+      const isAdmin = _isLoggedInSync();
+
+      html += `<div style="background:var(--surface2);border:1px solid ${done?'rgba(245,197,24,.3)':'var(--border)'};border-radius:8px;padding:.75rem 1rem">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <div style="display:flex;align-items:center;gap:.5rem">
+              ${teamLogo(pair.team1,20,'.55rem')}
+              <span style="font-weight:${pair.w1>pair.w2?'900':'600'};color:${winner===pair.team1?'var(--accent)':'var(--text)'}">${pair.team1}</span>
+              ${winner===pair.team1?'<span style="font-size:.7rem;background:var(--accent);color:#000;border-radius:3px;padding:.05rem .3rem;font-weight:900">WYGRYWA</span>':''}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
+            ${isAdmin && !done ? `
+              <button onclick="poAddWin('${po.id}',${ri},${pi},1)" style="background:rgba(245,197,24,.15);border:1px solid rgba(245,197,24,.4);color:var(--accent);border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">+</button>` : ''}
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:900;color:${pair.w1>pair.w2?'var(--win)':pair.w2>pair.w1?'var(--loss)':'var(--text)'}">${pair.w1}</span>
+            <span style="color:var(--muted);font-size:.9rem">—</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:900;color:${pair.w2>pair.w1?'var(--win)':pair.w1>pair.w2?'var(--loss)':'var(--text)'}">${pair.w2}</span>
+            ${isAdmin && !done ? `
+              <button onclick="poAddWin('${po.id}',${ri},${pi},2)" style="background:rgba(245,197,24,.15);border:1px solid rgba(245,197,24,.4);color:var(--accent);border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">+</button>` : ''}
+            ${isAdmin && (pair.w1>0||pair.w2>0) && !done ? `
+              <button onclick="poSubWin('${po.id}',${ri},${pi})" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#ef4444;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:.75rem">↩</button>` : ''}
+          </div>
+          <div style="flex:1;min-width:120px;text-align:right">
+            <div style="display:flex;align-items:center;gap:.5rem;justify-content:flex-end">
+              ${winner===pair.team2?'<span style="font-size:.7rem;background:var(--accent);color:#000;border-radius:3px;padding:.05rem .3rem;font-weight:900">WYGRYWA</span>':''}
+              <span style="font-weight:${pair.w2>pair.w1?'900':'600'};color:${winner===pair.team2?'var(--accent)':'var(--text)'}">${pair.team2}</span>
+              ${teamLogo(pair.team2,20,'.55rem')}
+            </div>
+          </div>
+        </div>
+        ${done ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.35rem;text-align:center">${pair.w1} — ${pair.w2} · ${winner} wygrywa serię</div>` : `<div style="font-size:.7rem;color:var(--muted);margin-top:.35rem;text-align:center">Do ${winsNeeded} wygranych</div>`}
+      </div>`;
+    });
+
+    html += '</div></div>';
+  });
+
+  // Button to advance to next round if current round is done
+  if (_isLoggedInSync() && !po.champion) {
+    const lastRound = po.rounds[po.rounds.length - 1];
+    const allDone = lastRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
+    if (allDone && lastRound.pairs.length > 1) {
+      html += `<button onclick="poAdvanceRound('${po.id}')" style="width:100%;background:var(--accent);color:#000;border:none;border-radius:8px;padding:.65rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:1px;cursor:pointer;margin-top:.5rem">
+        ➡ NASTĘPNA RUNDA
+      </button>`;
+    } else if (allDone && lastRound.pairs.length === 1) {
+      // Final done
+      const finPair = lastRound.pairs[0];
+      const champ = finPair.w1 >= winsNeeded ? finPair.team1 : finPair.team2;
+      html += `<button onclick="poSetChampion('${po.id}','${champ}')" style="width:100%;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border:none;border-radius:8px;padding:.65rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;margin-top:.5rem">
+        🥇 ZAKOŃCZ PLAYOFF — MISTRZ: ${champ}
+      </button>`;
+    }
+  }
+
+  return html;
+}
+
+function poAddWin(poId, roundIdx, pairIdx, team) {
+  const po = playoffs.find(p => String(p.id) === String(poId));
+  if (!po) return;
+  const pair = po.rounds[roundIdx].pairs[pairIdx];
+  const wn = getWinsNeeded(po.format);
+  if (pair.w1 >= wn || pair.w2 >= wn) return; // already decided
+  if (team === 1) pair.w1++; else pair.w2++;
+  saveData();
+  renderPlayoffModal();
+  renderPlayoffDashboard();
+}
+
+function poSubWin(poId, roundIdx, pairIdx) {
+  const po = playoffs.find(p => String(p.id) === String(poId));
+  if (!po) return;
+  const pair = po.rounds[roundIdx].pairs[pairIdx];
+  // Remove last win — figure out which team had more recent win
+  if (pair.w2 > 0 && pair.w2 >= pair.w1) pair.w2--;
+  else if (pair.w1 > 0) pair.w1--;
+  saveData();
+  renderPlayoffModal();
+  renderPlayoffDashboard();
+}
+
+function poAdvanceRound(poId) {
+  const po = playoffs.find(p => String(p.id) === String(poId));
+  if (!po) return;
+  const lastRound = po.rounds[po.rounds.length - 1];
+  const wn = getWinsNeeded(po.format);
+  const winners = lastRound.pairs.map(p => p.w1 >= wn ? p.team1 : p.team2);
+
+  // Build next round pairs
+  const newPairs = [];
+  for (let i = 0; i < winners.length / 2; i++) {
+    newPairs.push({ team1: winners[i], team2: winners[winners.length - 1 - i], w1: 0, w2: 0 });
+  }
+  const nextName = getRoundName(winners.length);
+  po.rounds.push({ name: nextName, pairs: newPairs, done: false });
+  saveData();
+  showToast('Następna runda rozpoczęta!', 'success');
+  renderPlayoffModal();
+  renderPlayoffDashboard();
+}
+
+function poSetChampion(poId, champ) {
+  const po = playoffs.find(p => String(p.id) === String(poId));
+  if (!po) return;
+  po.champion = champ;
+  saveData();
+  showToast('🥇 ' + champ + ' mistrzem sezonu!', 'success');
+  renderPlayoffModal();
+  renderPlayoffDashboard();
+}
+
+function deletePlayoff(poId) {
+  if (!confirm('Usuń playoff? Tej operacji nie można cofnąć.')) return;
+  playoffs = playoffs.filter(p => String(p.id) !== String(poId));
+  saveData();
+  showToast('Playoff usunięty', 'info');
+  renderPlayoffModal();
+  renderPlayoffDashboard();
+}
+
+function renderPlayoffDashboard() {
+  const wrap = document.getElementById('playoff-dashboard-wrap');
+  if (!wrap) return;
+
+  // Find playoff for current season
+  const po = playoffs.length ? playoffs[playoffs.length - 1] : null;
+  if (!po) { wrap.innerHTML = ''; return; }
+
+  const wn = getWinsNeeded(po.format);
+  const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
+
+  let html = `
+    <div style="margin-bottom:1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem">
+        <div class="section-title" style="margin-bottom:0">🏆 Playoff ${formatLabel}</div>
+        ${po.champion ? `<div style="background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:6px;padding:.3rem 1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem">🥇 MISTRZ: ${po.champion}</div>` : ''}
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem;overflow-x:auto">`;
+
+  // Render bracket rounds side by side
+  html += `<div style="display:flex;gap:1.5rem;min-width:max-content">`;
+
+  po.rounds.forEach(round => {
+    html += `<div style="display:flex;flex-direction:column;gap:.75rem;min-width:220px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:.25rem">${round.name}</div>`;
+
+    round.pairs.forEach(pair => {
+      const done = pair.w1 >= wn || pair.w2 >= wn;
+      const winner = pair.w1 >= wn ? pair.team1 : pair.w2 >= wn ? pair.team2 : null;
+      html += `<div style="background:var(--bg);border:1px solid ${done?'rgba(245,197,24,.35)':'var(--border)'};border-radius:6px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .65rem;border-bottom:1px solid var(--border);background:${winner===pair.team1?'rgba(245,197,24,.08)':'transparent'}">
+          <span style="font-size:.82rem;font-weight:${winner===pair.team1?'900':'600'};color:${winner===pair.team1?'var(--accent)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">${pair.team1}</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:${pair.w1>pair.w2?'var(--win)':pair.w2>pair.w1?'var(--loss)':'var(--text)'};min-width:1.2rem;text-align:center">${pair.w1}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .65rem;background:${winner===pair.team2?'rgba(245,197,24,.08)':'transparent'}">
+          <span style="font-size:.82rem;font-weight:${winner===pair.team2?'900':'600'};color:${winner===pair.team2?'var(--accent)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">${pair.team2}</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:${pair.w2>pair.w1?'var(--win)':pair.w1>pair.w2?'var(--loss)':'var(--text)'};min-width:1.2rem;text-align:center">${pair.w2}</span>
+        </div>
+      </div>`;
+    });
+
+    html += '</div>';
+  });
+
+  html += '</div></div></div>';
+  wrap.innerHTML = html;
+}
+
+
+</script>
 
 </html>
