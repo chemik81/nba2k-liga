@@ -6108,9 +6108,48 @@ function renderTop10Tab(tab) {
 
   const isComposite = tab === 'composite';
   const isBrick = tab === 'brick';
+
+  // Shared round switcher state (null = cały sezon)
+  const activeRounds = rounds.length
+    ? [...rounds].sort((a,b)=>a.from.localeCompare(b.from))
+    : [getDefaultRound()];
+  if(window._top10RoundIdx === undefined) window._top10RoundIdx = null; // null = cały sezon
+
+  // For CS/PER: filter by round if selected
+  let csperMatches = matches;
+  if(!isBrick && window._top10RoundIdx !== null) {
+    const r = activeRounds[Math.min(window._top10RoundIdx, activeRounds.length-1)];
+    csperMatches = matches.filter(m => {
+      const inSeason = !_top10SeasonId || m.seasonId === _top10SeasonId;
+      const inRound = m.date >= r.from && m.date <= r.to;
+      return inSeason && inRound;
+    });
+  }
+
+  // Build agg for CS/PER from filtered matches
+  const getFilteredAgg = () => {
+    if(window._top10RoundIdx === null) return agg; // use full season agg
+    const pm = {};
+    csperMatches.forEach(m => {
+      [m.team1,m.team2].forEach(t => {
+        (t.players||[]).forEach(p => {
+          const k = p.name+'|'+t.name;
+          if(!pm[k]) pm[k]={name:p.name,team:t.name,pos:p.pos||'',gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+          const s=pm[k];
+          s.gp++;s.pts+=p.pts||0;s.reb+=p.reb||0;s.ast+=p.ast||0;s.stl+=p.stl||0;s.blk+=p.blk||0;s.to+=p.to||0;
+          s.fgm+=p.fgm||0;s.fga+=p.fga||0;s.tpm+=p.tpm||0;s.tpa+=p.tpa||0;s.ftm+=p.ftm||0;s.fta+=p.fta||0;
+          s.gradeSum+=gradeToNum(p.grade||'B');
+        });
+      });
+    });
+    return Object.values(pm);
+  };
+
+  const filteredAgg = isBrick ? agg : getFilteredAgg();
+
   const ranked = isComposite
-    ? agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
-    : agg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
+    ? filteredAgg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcCompositeScore(p)})).sort((a,b)=>b._s-a._s).slice(0,10)
+    : filteredAgg.filter(p=>p.gp>=1).map(p=>({...p, _s: calcPER(p)})).sort((a,b)=>b._s-a._s).slice(0,10);
 
   const tabBtn = (isActive, lbl, tid) => `<button style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${isActive?'var(--accent)':'transparent'};background:none;color:${isActive?'var(--accent)':'var(--muted)'};font-weight:${isActive?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem" onclick="renderTop10Tab('${tid}')">${lbl}</button>`;
   const header = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.75rem">🏆 TOP 10 — ${_top10SeasonName||'Wszystkie sezony'}</div>
@@ -6124,11 +6163,25 @@ function renderTop10Tab(tab) {
     </div>
     <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1rem">${tabBtn(tab==='composite','Composite Score','composite')}${tabBtn(tab==='per','PER (Hollinger)','per')}${tabBtn(tab==='brick','🧱 Brick of the Round','brick')}</div>`;
 
-  if(isBrick) {
-    const activeRounds = rounds.length
-      ? [...rounds].sort((a,b)=>a.from.localeCompare(b.from))
-      : [getDefaultRound()];
+  // Round switcher for CS/PER tabs
+  if(!isBrick) {
+    const csperRoundSwitcher = [
+      `<button onclick="window._top10RoundIdx=null;renderTop10Tab('${tab}')" style="padding:.2rem .6rem;border-radius:6px;border:1px solid ${window._top10RoundIdx===null?'var(--accent)':'var(--border)'};background:${window._top10RoundIdx===null?'rgba(245,197,24,.15)':'transparent'};color:${window._top10RoundIdx===null?'var(--accent)':'var(--muted)'};font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:${window._top10RoundIdx===null?'700':'400'}">Cały sezon</button>`,
+      ...activeRounds.map((r,i) =>
+        `<button onclick="window._top10RoundIdx=${i};renderTop10Tab('${tab}')" style="padding:.2rem .6rem;border-radius:6px;border:1px solid ${i===window._top10RoundIdx?'var(--accent)':'var(--border)'};background:${i===window._top10RoundIdx?'rgba(245,197,24,.15)':'transparent'};color:${i===window._top10RoundIdx?'var(--accent)':'var(--muted)'};font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:${i===window._top10RoundIdx?'700':'400'}">${r.label}</button>`
+      )
+    ].join('');
+    const rLabel = window._top10RoundIdx === null ? 'Cały sezon' : activeRounds[Math.min(window._top10RoundIdx, activeRounds.length-1)]?.label || '';
+    document.getElementById('top10-modal-content').innerHTML = header
+      + `<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.75rem">${csperRoundSwitcher}</div>`
+      + `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">${isComposite?'Composite Score':'PER (Hollinger)'} w <strong>${rLabel}</strong>${window._top10RoundIdx!==null?' — min. 1 mecz w kolejce':''}</div>`
+      + `<div class="stats-table-wrap"><table><thead><tr><th></th><th style="text-align:left">Zawodnik</th><th>POZ</th><th>Drużyna</th><th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th style="color:var(--accent2);font-weight:700">${isComposite?'CS':'PER'}</th><th>GP</th></tr></thead><tbody>`
+      + makeRows(ranked, isComposite?'CS':'PER', p => isComposite ? calcCompositeScore(p).toFixed(1) : calcPER(p).toFixed(1))
+      + `</tbody></table></div>`;
+    return;
+  }
 
+  if(isBrick) {
     // Brick round selector — persisted in window var
     if(window._brickRoundIdx === undefined || window._brickRoundIdx === null) window._brickRoundIdx = activeRounds.length - 1;
     window._brickRoundIdx = Math.min(window._brickRoundIdx, activeRounds.length - 1);
