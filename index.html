@@ -832,7 +832,13 @@
   <!-- MATCHES -->
   <div id="view-matches" class="view">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem"><div class="section-title" style="margin-bottom:0" data-i18n="match_results">Wyniki Meczów</div><div style="display:flex;gap:.75rem;flex-wrap:wrap"><select id="mfs" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_seasons">Wszystkie sezony</option></select>
-        <select id="mft" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_teams">Wszystkie druzyny</option></select><select id="mfp" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_players">Wszyscy zawodnicy</option></select></div></div>
+        <select id="mft" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_teams">Wszystkie druzyny</option></select>
+        <select id="mfpo" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem">
+          <option value="">Wszystkie mecze</option>
+          <option value="playoff">🏆 Tylko playoff</option>
+          <option value="regular">📅 Tylko ligowe</option>
+        </select>
+        <select id="mfp" onchange="renderMatches()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_players">Wszyscy zawodnicy</option></select></div></div>
     <div class="matches-grid" id="matches-list">
       <div class="empty"><div class="icon">📋</div><h3>Brak meczów</h3><p>Dodaj pierwszy mecz klikając "+ Dodaj Mecz"</p></div>
     </div>
@@ -2467,8 +2473,18 @@ function updateMatchFilters() {
 function renderMatches() {
   updateMatchFilters();
   const container = document.getElementById('matches-list');
-  const ft=document.getElementById('mft')?.value||'',fp=document.getElementById('mfp')?.value||'',fs=document.getElementById('mfs')?.value||'';
-  const _raw=(ft||fp||fs)?matches.filter(m=>{if(fs&&m.seasonId!==fs)return false;if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;if(fp&&![...(m.team1.players||[]),...(m.team2.players||[])].some(p=>p.name===fp))return false;return true;}):matches;
+  const ft=document.getElementById('mft')?.value||'',fp=document.getElementById('mfp')?.value||'',fs=document.getElementById('mfs')?.value||'',fpo=document.getElementById('mfpo')?.value||'';
+  // Helper: is match a playoff match?
+  const po = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate;
+  const _raw=matches.filter(m=>{
+    if(fs&&m.seasonId!==fs)return false;
+    if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;
+    if(fp&&![...(m.team1.players||[]),...(m.team2.players||[])].some(p=>p.name===fp))return false;
+    if(fpo==='playoff'&&!isPlayoffMatch(m))return false;
+    if(fpo==='regular'&&isPlayoffMatch(m))return false;
+    return true;
+  });
   const list=[..._raw].sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!list.length) {
     container.innerHTML = '<div class="empty"><div class="icon">📋</div><h3>'+t('no_matches')+'</h3><p>'+(ft||fp?t('no_data'):t('add_match_hint'))+'</p></div>';
@@ -2487,6 +2503,7 @@ function renderMatches() {
           <div class="match-date">${formatDate(m.date)}</div>
           <button onclick="event.stopPropagation();shareMatch(${m.id})" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px;border-radius:4px;transition:color .2s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">&#x1F4E4;</button>
         </div>
+        ${isPlayoffMatch(m) ? '<div style="font-size:.6rem;font-weight:900;letter-spacing:1px;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:4px;padding:.1rem .4rem;margin-bottom:.2rem">🏆 PLAYOFF</div>' : ''}
         <div class="vs-badge">VS</div>
         ${m.note && !/^game\s*\d+$/i.test(m.note.trim()) ? `<div style="font-size:0.75rem;color:var(--muted);max-width:80px;text-align:center">${m.note}</div>` : ''}
         ${m.seasonId ? `<div style="font-size:0.65rem;color:var(--accent);font-weight:700;margin-top:2px">${(seasons.find(s=>s.id===m.seasonId)||{}).name||''}</div>` : ''}
