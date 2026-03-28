@@ -6183,12 +6183,14 @@ function renderTop10Tab(tab) {
 
   if(isBrick) {
     // Brick round selector — persisted in window var
-    if(window._brickRoundIdx === undefined || window._brickRoundIdx === null) window._brickRoundIdx = activeRounds.length - 1;
-    window._brickRoundIdx = Math.min(window._brickRoundIdx, activeRounds.length - 1);
-    let brickRound = activeRounds[window._brickRoundIdx];
+    if(window._brickRoundIdx === undefined) window._brickRoundIdx = activeRounds.length - 1;
+    const brickAllSeason = window._brickRoundIdx === null;
+    if(!brickAllSeason) window._brickRoundIdx = Math.min(window._brickRoundIdx, activeRounds.length - 1);
+    let brickRound = brickAllSeason ? null : activeRounds[window._brickRoundIdx];
 
     const roundMatches = matches.filter(m => {
       const inSeason = !_top10SeasonId || m.seasonId === _top10SeasonId;
+      if(brickAllSeason) return inSeason;
       const inRound  = m.date >= brickRound.from && m.date <= brickRound.to;
       return inSeason && inRound;
     });
@@ -6245,13 +6247,14 @@ function renderTop10Tab(tab) {
       </tr>`;
     }).join('');
 
-    const roundSwitcher = activeRounds.map((r,i) =>
+    const brickAllBtn = `<button onclick="window._brickRoundIdx=null;renderTop10Tab('brick')" style="padding:.25rem .6rem;border-radius:6px;border:1px solid ${brickAllSeason?'var(--accent)':'var(--border)'};background:${brickAllSeason?'rgba(245,197,24,.15)':'transparent'};color:${brickAllSeason?'var(--accent)':'var(--muted)'};font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:${brickAllSeason?'700':'400'}">Cały sezon</button>`;
+    const roundSwitcher = brickAllBtn + activeRounds.map((r,i) =>
       `<button onclick="window._brickRoundIdx=${i};renderTop10Tab('brick')" style="padding:.25rem .6rem;border-radius:6px;border:1px solid ${i===window._brickRoundIdx?'var(--accent)':'var(--border)'};background:${i===window._brickRoundIdx?'rgba(245,197,24,.15)':'transparent'};color:${i===window._brickRoundIdx?'var(--accent)':'var(--muted)'};font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:${i===window._brickRoundIdx?'700':'400'}">${r.label}</button>`
     ).join('');
 
     document.getElementById('top10-modal-content').innerHTML = header +
       `<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">${roundSwitcher}</div>
-      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG w <strong>${brickRound.label}</strong> &mdash; min. <strong>${minGP} mecze</strong> &mdash; bez PG &mdash; ${roundMatches.length} meczów w kolejce</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">🧱 Najgorszy %FG ${brickAllSeason ? 'w całym sezonie' : 'w <strong>' + brickRound.label + '</strong>'} &mdash; min. <strong>${minGP} mecze</strong> &mdash; ${roundMatches.length} meczów</div>
       <div class="stats-table-wrap"><table>
         <thead><tr>
           <th>#</th>
