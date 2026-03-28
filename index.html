@@ -6159,7 +6159,7 @@ function renderTop10Tab(tab) {
 
     // Filter min GP and sort by FG% ascending (worst first)
     const bricks = Object.values(players)
-      .filter(p => p.gp >= minGP && p.fga > 0 && p.pos !== 'PG')
+      .filter(p => p.gp >= minGP && p.fga > 0)
       .map(p => ({
         ...p,
         fgPct: Math.round(p.fgm / p.fga * 100),
