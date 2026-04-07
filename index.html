@@ -9458,11 +9458,19 @@ Wymagania:
 - Ton: dynamiczny, sportowy, jak komentarz przed meczem w TV
 - Zwróć TYLKO tekst zapowiedzi, bez tytułu i nagłówków`;
 
-      const resp = await callAI('gemini-2.5-flash', 1024, [{ role: 'user', content: prompt }]);
-      const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text
-        || resp?.content?.[0]?.text
-        || '';
-      if (!text) throw new Error('Pusta odpowiedź');
+      // Część 1: analiza i kluczowe fakty
+      const prompt1 = `Jesteś analitykiem sportowym polskiej ligi NBA 2K. Na podstawie danych napisz krótką analizę (80-100 słów) porównującą ${p.team1} vs ${p.team2} w serii ${formatLabel}.\n\n${statsBlock}\n\nWskaż: kto jest faworytem i dlaczego (bilans, forma, PPG, OPP PPG), jak wyglądała historia bezpośrednich spotkań. Tylko suche fakty i wnioski. Bez wstępu. POLSKI.`;
+      const resp1 = await callAI('gemini-2.5-flash', 512, [{ role: 'user', content: prompt1 }]);
+      const analiza = resp1?.candidates?.[0]?.content?.parts?.[0]?.text || resp1?.content?.[0]?.text || '';
+      if (!analiza) throw new Error('Pusta odpowiedź (część 1)');
+
+      // Część 2: emocjonalna zapowiedź
+      const prompt2 = `Jesteś komentatorem sportowym polskiej ligi NBA 2K. Napisz emocjonującą zapowiedź (120-140 słów) serii playoff ${formatLabel} (${round.name}) ${p.team1} vs ${p.team2} na podstawie tej analizy:\n\n${analiza}\n\nTon: dynamiczny, sportowy, jak zapowiedź przed dużym meczem w TV. Zakończ prognozą. Bez tytułu. POLSKI.`;
+      const resp2 = await callAI('gemini-2.5-flash', 512, [{ role: 'user', content: prompt2 }]);
+      const narracja = resp2?.candidates?.[0]?.content?.parts?.[0]?.text || resp2?.content?.[0]?.text || '';
+      if (!narracja) throw new Error('Pusta odpowiedź (część 2)');
+
+      const text = analiza.trim() + '\n\n' + narracja.trim();
       textEl.style.fontStyle = 'normal';
       textEl.style.color = 'var(--text)';
       textEl.innerHTML = text.replace(/\n/g, '<br>');
