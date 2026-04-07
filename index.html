@@ -9191,8 +9191,7 @@ function renderPlayoffManager(po, standings) {
         <div style="color:var(--muted);font-size:.8rem">Format: ${formatLabel} · ${po.teams.length} drużyn${po.startDate?' · start: '+po.startDate:''}</div>
       </div>
       ${po.champion ? `<div style="background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:8px;padding:.5rem 1.25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem">🥇 MISTRZ: ${po.champion}</div>` : ''}
-      <button onclick="generatePlayoffPreviews()" style="background:rgba(245,197,36,.12);border:1px solid rgba(245,197,36,.35);color:var(--accent);border-radius:6px;padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">📣 Zapowiedzi AI</button>
-      ${_isLoggedInSync() && !po.champion ? `<button onclick="deletePlayoff('${po.id}')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń playoff</button>` : ''}
+${_isLoggedInSync() && !po.champion ? `<button onclick="deletePlayoff('${po.id}')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń playoff</button>` : ''}
     </div>`;
 
   po.rounds.forEach((round, ri) => {
@@ -9234,6 +9233,13 @@ function renderPlayoffManager(po, standings) {
           </div>
         </div>
         ${done ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.35rem;text-align:center">${pair.w1} — ${pair.w2} · ${winner} wygrywa serię</div>` : `<div style="font-size:.7rem;color:var(--muted);margin-top:.35rem;text-align:center">Do ${winsNeeded} wygranych</div>`}
+        <div id="po-preview-${ri}-${pi}" style="margin-top:.6rem;border-top:1px solid var(--border);padding-top:.6rem">
+          ${pair.preview
+            ? `<div style="font-size:.82rem;line-height:1.7;color:var(--text)">${pair.preview.replace(/\n/g,'<br>')}</div>
+               <button onclick="generatePairPreview('${po.id}',${ri},${pi})" style="margin-top:.5rem;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.2rem .6rem;font-size:.72rem;cursor:pointer;font-family:inherit">🔄 Odśwież zapowiedź</button>`
+            : `<button onclick="generatePairPreview('${po.id}',${ri},${pi})" style="background:rgba(245,197,36,.1);border:1px solid rgba(245,197,36,.3);color:var(--accent);border-radius:5px;padding:.3rem .8rem;font-size:.8rem;font-weight:700;cursor:pointer;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px">📣 Generuj zapowiedź</button>`
+          }
+        </div>
       </div>`;
     });
 
@@ -9319,7 +9325,7 @@ function getTeamStatsForPreview(teamName) {
   const filteredMatches = currentSeasonId
     ? matches.filter(m => m.seasonId === currentSeasonId)
     : matches;
-  let w = 0, l = 0, pf = 0, pa = 0, streak = 0, streakType = null;
+  let w = 0, l = 0, pf = 0, pa = 0;
   const teamMatches = filteredMatches.filter(m =>
     m.team1.name === teamName || m.team2.name === teamName
   ).sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -9334,27 +9340,23 @@ function getTeamStatsForPreview(teamName) {
     pa += oppScore;
   });
 
-  // Last 5 form
   const last5 = teamMatches.slice(-5).map(m => {
     const isT1 = m.team1.name === teamName;
-    const myScore = isT1 ? m.team1.score : m.team2.score;
-    const oppScore = isT1 ? m.team2.score : m.team1.score;
-    return myScore > oppScore ? 'W' : 'L';
+    return (isT1 ? m.team1.score : m.team2.score) > (isT1 ? m.team2.score : m.team1.score) ? 'W' : 'L';
   });
 
-  // Streak
   const allResults = teamMatches.map(m => {
     const isT1 = m.team1.name === teamName;
     return (isT1 ? m.team1.score : m.team2.score) > (isT1 ? m.team2.score : m.team1.score);
   });
-  let streakCount = 0;
+  let streakCount = 0, streakType = '-';
   if (allResults.length) {
     const lastResult = allResults[allResults.length - 1];
     for (let i = allResults.length - 1; i >= 0; i--) {
       if (allResults[i] === lastResult) streakCount++;
       else break;
     }
-    streakType = lastResult ? 'W' : 'L';
+    streakType = (lastResult ? 'W' : 'L') + streakCount;
   }
 
   const gp = w + l;
@@ -9364,7 +9366,7 @@ function getTeamStatsForPreview(teamName) {
     opp: gp > 0 ? (pa / gp).toFixed(1) : '0.0',
     winPct: gp > 0 ? (w / gp * 100).toFixed(1) : '0.0',
     last5: last5.join(''),
-    streak: streakCount > 0 ? streakType + streakCount : '-'
+    streak: streakType
   };
 }
 
@@ -9378,7 +9380,7 @@ function getH2HForPreview(team1, team2) {
   ).sort((a, b) => new Date(b.date) - new Date(a.date));
 
   let w1 = 0, w2 = 0;
-  const games = h2h.slice(0, 10).map(m => {
+  const games = h2h.slice(0, 5).map(m => {
     const isT1 = m.team1.name === team1;
     const s1 = isT1 ? m.team1.score : m.team2.score;
     const s2 = isT1 ? m.team2.score : m.team1.score;
@@ -9389,95 +9391,69 @@ function getH2HForPreview(team1, team2) {
   return { w1, w2, games, total: h2h.length };
 }
 
-async function generatePlayoffPreviews() {
-  const po = playoffs.length ? playoffs[playoffs.length - 1] : null;
-  if (!po) { showToast('Brak aktywnego playoff!', 'error'); return; }
-
+async function generatePairPreview(poId, roundIdx, pairIdx) {
+  const po = playoffs.find(p => String(p.id) === String(poId));
+  if (!po) return;
+  const round = po.rounds[roundIdx];
+  const pair = round.pairs[pairIdx];
   const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
-  const round = po.rounds[po.rounds.length - 1];
-  const pairs = round.pairs;
 
+  // Find the button and show loading state
+  const btnId = `po-gen-btn-${roundIdx}-${pairIdx}`;
+  const previewId = `po-preview-${roundIdx}-${pairIdx}`;
+
+  // Re-render modal to show spinner in place of button
+  pair.preview = null; // clear so it shows spinner
   const el = document.getElementById('playoff-modal-content');
-  let wrap = document.getElementById('po-previews-wrap');
-  if (wrap) wrap.remove();
-
-  const div = document.createElement('div');
-  div.id = 'po-previews-wrap';
-  div.style.cssText = 'margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1.25rem';
-  el.appendChild(div);
-  wrap = div;
-
-  wrap.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">
-        📣 Zapowiedzi — ${round.name}
-      </div>
-      <div style="font-size:.75rem;color:var(--muted)">Analizuje statystyki sezonu…</div>
-    </div>
-    ${pairs.map((p, i) => `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.75rem;overflow:hidden">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;background:rgba(245,197,36,.04);border-bottom:1px solid var(--border)">
-          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:var(--accent)">${p.team1}</span>
-          <span style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;background:rgba(245,197,36,.12);color:var(--accent);border-radius:4px;padding:.1rem .5rem">${formatLabel}</span>
-          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem">${p.team2}</span>
-        </div>
-        <div id="po-preview-text-${i}" style="padding:.85rem 1rem;font-size:.88rem;line-height:1.75;color:var(--muted);font-style:italic">
-          ⏳ Zbieram dane i generuję zapowiedź…
-        </div>
-      </div>
-    `).join('')}
-  `;
-
-  for (let i = 0; i < pairs.length; i++) {
-    const p = pairs[i];
-    const textEl = document.getElementById(`po-preview-text-${i}`);
-    try {
-      const s1 = getTeamStatsForPreview(p.team1);
-      const s2 = getTeamStatsForPreview(p.team2);
-      const h2h = getH2HForPreview(p.team1, p.team2);
-
-      const statsBlock = `=== STATYSTYKI SEZONU ===
-${p.team1}: ${s1.w}W-${s1.l}L | Win%: ${s1.winPct}% | PPG: ${s1.ppg} | OPP PPG: ${s1.opp} | Forma (ost.5): ${s1.last5 || 'brak'} | Passa: ${s1.streak}
-${p.team2}: ${s2.w}W-${s2.l}L | Win%: ${s2.winPct}% | PPG: ${s2.ppg} | OPP PPG: ${s2.opp} | Forma (ost.5): ${s2.last5 || 'brak'} | Passa: ${s2.streak}
-
-=== HISTORIA BEZPOŚDNICH SPOTKAŃ (sezon) ===
-Razem meczy: ${h2h.total} | ${p.team1} wygrał: ${h2h.w1} | ${p.team2} wygrał: ${h2h.w2}
-${h2h.games.length > 0 ? 'Ostatnie mecze:\n' + h2h.games.slice(0,5).join('\n') : 'Brak bezpośrednich spotkań w tym sezonie.'}`;
-
-      const prompt = `Jesteś komentatorem sportowym polskiej ligi NBA 2K (gry wideo). Na podstawie poniższych danych statystycznych napisz emocjonującą, rzetelna zapowiedź serii playoff ${formatLabel} (runda: ${round.name}) między ${p.team1} a ${p.team2}.
-
-${statsBlock}
-
-Wymagania:
-- Długość: 200-250 słów
-- Język: POLSKI
-- Odnieś się konkretnie do statystyk (bilans, skuteczność, PPG, forma)
-- Przeanalizuj historię bezpośrednich spotkań jeśli istnieje
-- Wskaż kluczowe przewagi i słabości każdej drużyny
-- Postaw prognozę i wyjaśnij dlaczego
-- Ton: dynamiczny, sportowy, jak komentarz przed meczem w TV
-- Zwróć TYLKO tekst zapowiedzi, bez tytułu i nagłówków`;
-
-      // Część 1: analiza i kluczowe fakty
-      const prompt1 = `Jesteś analitykiem sportowym polskiej ligi NBA 2K. Na podstawie danych napisz krótką analizę (80-100 słów) porównującą ${p.team1} vs ${p.team2} w serii ${formatLabel}.\n\n${statsBlock}\n\nWskaż: kto jest faworytem i dlaczego (bilans, forma, PPG, OPP PPG), jak wyglądała historia bezpośrednich spotkań. Tylko suche fakty i wnioski. Bez wstępu. POLSKI.`;
-      const resp1 = await callAI('gemini-2.5-flash', 512, [{ role: 'user', content: prompt1 }]);
-      const analiza = resp1?.candidates?.[0]?.content?.parts?.[0]?.text || resp1?.content?.[0]?.text || '';
-      if (!analiza) throw new Error('Pusta odpowiedź (część 1)');
-
-      // Część 2: emocjonalna zapowiedź
-      const prompt2 = `Jesteś komentatorem sportowym polskiej ligi NBA 2K. Napisz emocjonującą zapowiedź (120-140 słów) serii playoff ${formatLabel} (${round.name}) ${p.team1} vs ${p.team2} na podstawie tej analizy:\n\n${analiza}\n\nTon: dynamiczny, sportowy, jak zapowiedź przed dużym meczem w TV. Zakończ prognozą. Bez tytułu. POLSKI.`;
-      const resp2 = await callAI('gemini-2.5-flash', 512, [{ role: 'user', content: prompt2 }]);
-      const narracja = resp2?.candidates?.[0]?.content?.parts?.[0]?.text || resp2?.content?.[0]?.text || '';
-      if (!narracja) throw new Error('Pusta odpowiedź (część 2)');
-
-      const text = analiza.trim() + '\n\n' + narracja.trim();
-      textEl.style.fontStyle = 'normal';
-      textEl.style.color = 'var(--text)';
-      textEl.innerHTML = text.replace(/\n/g, '<br>');
-    } catch (e) {
-      textEl.innerHTML = `<span style="color:#ef4444">Błąd: ${e.message}</span>`;
-    }
+  // Find the pair's preview container via a unique id set inline
+  const container = document.getElementById(previewId);
+  if (container) {
+    container.innerHTML = '<span style="color:var(--muted);font-size:.8rem;font-style:italic">⏳ Generuję zapowiedź…</span>';
   }
+
+  try {
+    const s1 = getTeamStatsForPreview(pair.team1);
+    const s2 = getTeamStatsForPreview(pair.team2);
+    const h2h = getH2HForPreview(pair.team1, pair.team2);
+
+    const statsBlock = `STATYSTYKI SEZONU:
+${pair.team1}: ${s1.w}W-${s1.l}L | Win%: ${s1.winPct}% | PPG: ${s1.ppg} | OPP PPG: ${s1.opp} | Forma (ost.5): ${s1.last5 || 'brak'} | Passa: ${s1.streak}
+${pair.team2}: ${s2.w}W-${s2.l}L | Win%: ${s2.winPct}% | PPG: ${s2.ppg} | OPP PPG: ${s2.opp} | Forma (ost.5): ${s2.last5 || 'brak'} | Passa: ${s2.streak}
+H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie: ' + h2h.games.join(' | ') : ''}`;
+
+    // Call 1: analiza
+    const resp1 = await callAI('gemini-2.5-flash', 512, [{
+      role: 'user',
+      content: `Jesteś analitykiem NBA 2K. Na podstawie danych napisz krótką analizę (70-90 słów): kto jest faworytem i dlaczego, historia H2H. Tylko fakty i wnioski. Bez wstępu. POLSKI.\n\n${statsBlock}`
+    }]);
+    const analiza = resp1?.candidates?.[0]?.content?.parts?.[0]?.text || resp1?.content?.[0]?.text || '';
+    if (!analiza) throw new Error('Brak odpowiedzi (analiza)');
+
+    // Call 2: narracja
+    const resp2 = await callAI('gemini-2.5-flash', 512, [{
+      role: 'user',
+      content: `Jesteś komentatorem NBA 2K. Napisz emocjonującą zapowiedź (120-140 słów) serii playoff ${formatLabel} (${round.name}) ${pair.team1} vs ${pair.team2} bazując na tej analizie:\n\n${analiza}\n\nTon: dynamiczny, sportowy, TV. Zakończ prognozą. Bez tytułu. POLSKI.`
+    }]);
+    const narracja = resp2?.candidates?.[0]?.content?.parts?.[0]?.text || resp2?.content?.[0]?.text || '';
+    if (!narracja) throw new Error('Brak odpowiedzi (narracja)');
+
+    // Save to pair object and persist
+    pair.preview = analiza.trim() + '\n\n' + narracja.trim();
+    await saveData();
+    showToast('✅ Zapowiedź zapisana!', 'success');
+
+  } catch(e) {
+    pair.preview = '❌ Błąd generowania: ' + e.message;
+    showToast('Błąd: ' + e.message, 'error');
+  }
+
+  // Re-render modal to show result
+  renderPlayoffModal();
+}
+
+// Legacy bulk function - kept for compatibility but no longer called
+async function generatePlayoffPreviews() {
+  showToast('Użyj przycisków przy każdej parze!', 'info');
 }
 
 
