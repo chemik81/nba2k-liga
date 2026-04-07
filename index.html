@@ -9369,7 +9369,7 @@ function getH2HPlayerStatsForPreview(team1, team2) {
     (m.team1.name === team2 && m.team2.name === team1)
   );
 
-  // per player in H2H matches
+  // Accumulate per-player stats across all H2H matches
   const map1 = {}, map2 = {};
   h2hMatches.forEach(m => {
     const s1 = m.team1.name === team1 ? m.team1 : m.team2;
@@ -9378,23 +9378,94 @@ function getH2HPlayerStatsForPreview(team1, team2) {
       if (!side.players) return;
       side.players.forEach(p => {
         if (!p.name) return;
-        if (!map[p.name]) map[p.name] = { gp:0, pts:0, reb:0, ast:0 };
-        map[p.name].gp++;
-        map[p.name].pts += (p.pts || 0);
-        map[p.name].reb += (p.reb || 0);
-        map[p.name].ast += (p.ast || 0);
+        if (!map[p.name]) map[p.name] = { gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, fgm:0, fga:0, pos:'', grade:'B' };
+        const s = map[p.name];
+        s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0);
+        s.stl+=(p.stl||0); s.blk+=(p.blk||0); s.fgm+=(p.fgm||0); s.fga+=(p.fga||0);
+        if (p.pos)   s.pos   = p.pos;
+        if (p.grade) s.grade = p.grade;
       });
     });
   });
 
-  const fmt = (map, n) => Object.entries(map)
-    .map(([name, s]) => ({ name, ppg: s.gp ? s.pts/s.gp : 0, rpg: s.gp ? s.reb/s.gp : 0, apg: s.gp ? s.ast/s.gp : 0 }))
-    .sort((a, b) => b.ppg - a.ppg)
-    .slice(0, n)
-    .map(p => `${p.name}: ${p.ppg.toFixed(1)}pts/${p.rpg.toFixed(1)}reb/${p.apg.toFixed(1)}ast`)
+  const toArr = (map) => Object.entries(map)
+    .map(([name, s]) => ({
+      name, pos: s.pos, grade: s.grade, gp: s.gp,
+      ppg:  s.gp ? s.pts/s.gp  : 0,
+      rpg:  s.gp ? s.reb/s.gp  : 0,
+      apg:  s.gp ? s.ast/s.gp  : 0,
+      spg:  s.gp ? s.stl/s.gp  : 0,
+      bpg:  s.gp ? s.blk/s.gp  : 0,
+      fgPct: s.fga > 0 ? Math.round(s.fgm/s.fga*100) : null
+    }))
+    .sort((a, b) => b.ppg - a.ppg);
+
+  const arr1 = toArr(map1);
+  const arr2 = toArr(map2);
+
+  // Use the same GUARD_MAP as the recap system
+  // PG jest kryty przez SF, SG przez SG, SF przez PG, PF przez C, C przez PF
+  const GUARD_MAP = { PF:'PG', SG:'SG', PG:'SF', C:'PF', SF:'C' };
+  const PLAYER_EXCEPTIONS = {
+    'chemik81pl': { guardPos: 'C', overridesPos: 'SF' }
+  };
+
+  const getByPos = (arr, pos) => arr.find(p => p.pos === pos);
+
+  const duelLines = [];
+  const handledDef1 = new Set(), handledDef2 = new Set();
+  const handledAtk1 = new Set(), handledAtk2 = new Set();
+
+  // Apply player exceptions first
+  for (const [playerName, exc] of Object.entries(PLAYER_EXCEPTIONS)) {
+    const defInArr1 = arr1.find(p => p.name === playerName && p.pos === exc.overridesPos);
+    if (defInArr1) {
+      const atk = getByPos(arr2, exc.guardPos);
+      if (atk) {
+        duelLines.push(`[${exc.overridesPos}*→${exc.guardPos}] ${defInArr1.name} (${defInArr1.grade}) KRYJE ${atk.name} (${atk.grade}) — ${atk.name}: śr. ${atk.ppg.toFixed(1)}pkt/${atk.rpg.toFixed(1)}zb/${atk.apg.toFixed(1)}as | ${defInArr1.name}: śr. ${defInArr1.ppg.toFixed(1)}pkt`);
+        handledDef1.add(exc.overridesPos); handledAtk2.add(exc.guardPos);
+      }
+    }
+    const defInArr2 = arr2.find(p => p.name === playerName && p.pos === exc.overridesPos);
+    if (defInArr2) {
+      const atk = getByPos(arr1, exc.guardPos);
+      if (atk) {
+        duelLines.push(`[${exc.overridesPos}*→${exc.guardPos}] ${defInArr2.name} (${defInArr2.grade}) KRYJE ${atk.name} (${atk.grade}) — ${atk.name}: śr. ${atk.ppg.toFixed(1)}pkt/${atk.rpg.toFixed(1)}zb/${atk.apg.toFixed(1)}as | ${defInArr2.name}: śr. ${defInArr2.ppg.toFixed(1)}pkt`);
+        handledDef2.add(exc.overridesPos); handledAtk1.add(exc.guardPos);
+      }
+    }
+  }
+
+  // Standard matchups
+  for (const [atkPos, defPos] of Object.entries(GUARD_MAP)) {
+    if (!handledAtk1.has(atkPos) && !handledDef2.has(defPos)) {
+      const atk = getByPos(arr1, atkPos);
+      const def = getByPos(arr2, defPos);
+      if (atk && def) {
+        const fgStr = atk.fgPct !== null ? ` FG:${atk.fgPct}%` : '';
+        duelLines.push(`[${defPos}→${atkPos}] ${def.name} (${def.grade}) KRYJE ${atk.name} (${atk.grade}) — ${atk.name}: śr. ${atk.ppg.toFixed(1)}pkt${fgStr} | ${def.name}: śr. ${def.spg.toFixed(1)}prz ${def.bpg.toFixed(1)}blk`);
+      }
+    }
+    if (!handledAtk2.has(atkPos) && !handledDef1.has(defPos)) {
+      const atk = getByPos(arr2, atkPos);
+      const def = getByPos(arr1, defPos);
+      if (atk && def) {
+        const fgStr = atk.fgPct !== null ? ` FG:${atk.fgPct}%` : '';
+        duelLines.push(`[${defPos}→${atkPos}] ${def.name} (${def.grade}) KRYJE ${atk.name} (${atk.grade}) — ${atk.name}: śr. ${atk.ppg.toFixed(1)}pkt${fgStr} | ${def.name}: śr. ${def.spg.toFixed(1)}prz ${def.bpg.toFixed(1)}blk`);
+      }
+    }
+  }
+
+  const fmtTop = (arr, n) => arr.slice(0, n)
+    .map(p => `${p.name}${p.pos ? ' ('+p.pos+')' : ''} ${p.grade}: śr. ${p.ppg.toFixed(1)}pkt/${p.rpg.toFixed(1)}zb/${p.apg.toFixed(1)}as`)
     .join(', ');
 
-  return { team1Players: fmt(map1, 3), team2Players: fmt(map2, 3), games: h2hMatches.length };
+  return {
+    games: h2hMatches.length,
+    team1Players: fmtTop(arr1, 3),
+    team2Players: fmtTop(arr2, 3),
+    duels: duelLines
+  };
 }
 
 
@@ -9504,7 +9575,7 @@ ${p1players.length ? fmtPlayers(p1players) : 'brak danych'}
 TOP ZAWODNICY ${pair.team2}:
 ${p2players.length ? fmtPlayers(p2players) : 'brak danych'}
 
-H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie wyniki: ' + h2h.games.join(' | ') : ''}${h2hPlayers.games > 0 ? `\nTop scorerzy H2H — ${pair.team1}: ${h2hPlayers.team1Players || 'brak'}; ${pair.team2}: ${h2hPlayers.team2Players || 'brak'}` : ''}`;
+H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie wyniki: ' + h2h.games.join(' | ') : ''}${h2hPlayers.games > 0 ? `\nTop scorerzy H2H — ${pair.team1}: ${h2hPlayers.team1Players || 'brak'}; ${pair.team2}: ${h2hPlayers.team2Players || 'brak'}` : ''}${h2hPlayers.duels && h2hPlayers.duels.length ? `\nPOJEDYNKI NA POZYCJACH (H2H):\n${h2hPlayers.duels.join('\n')}` : ''}`;
 
     // Call 1 (Haiku): szczegółowa analiza statystyczna
     const resp1 = await callAI('claude-haiku-4-5-20251001', 900, [{
