@@ -9422,17 +9422,17 @@ ${pair.team2}: ${s2.w}W-${s2.l}L | Win%: ${s2.winPct}% | PPG: ${s2.ppg} | OPP PP
 H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie: ' + h2h.games.join(' | ') : ''}`;
 
     // Call 1: analiza
-    const resp1 = await callAI('gemini-2.5-flash', 512, [{
+    const resp1 = await callAI('gemini-2.5-flash', 800, [{
       role: 'user',
-      content: `Jesteś analitykiem NBA 2K. Na podstawie danych napisz krótką analizę (70-90 słów): kto jest faworytem i dlaczego, historia H2H. Tylko fakty i wnioski. Bez wstępu. POLSKI.\n\n${statsBlock}`
+      content: `Jesteś analitykiem NBA 2K. Na podstawie danych napisz szczegółową analizę (130-160 słów): kto jest faworytem i dlaczego (powołaj się na konkretne liczby: bilans, Win%, PPG, OPP PPG, forma, passa), jak wyglądała historia bezpośrednich spotkań, jakie są kluczowe mocne i słabe strony każdej drużyny. Bez wstępu, tylko fakty i wnioski. POLSKI.\n\n${statsBlock}`
     }]);
     const analiza = resp1?.candidates?.[0]?.content?.parts?.[0]?.text || resp1?.content?.[0]?.text || '';
     if (!analiza) throw new Error('Brak odpowiedzi (analiza)');
 
     // Call 2: narracja
-    const resp2 = await callAI('gemini-2.5-flash', 512, [{
+    const resp2 = await callAI('gemini-2.5-flash', 900, [{
       role: 'user',
-      content: `Jesteś komentatorem NBA 2K. Napisz emocjonującą zapowiedź (120-140 słów) serii playoff ${formatLabel} (${round.name}) ${pair.team1} vs ${pair.team2} bazując na tej analizie:\n\n${analiza}\n\nTon: dynamiczny, sportowy, TV. Zakończ prognozą. Bez tytułu. POLSKI.`
+      content: `Jesteś komentatorem sportowym polskiej ligi NBA 2K w telewizji. Napisz pełną, emocjonującą zapowiedź (180-220 słów) serii playoff ${formatLabel} (${round.name}) ${pair.team1} vs ${pair.team2} na podstawie tej analizy:\n\n${analiza}\n\nStruktura: 1) Wstęp budujący napięcie, 2) Charakterystyka faworyta z konkretnymi danymi, 3) Zagrożenie ze strony outsidera, 4) Kluczowy czynnik decydujący o serii, 5) Wyraźna prognoza z uzasadnieniem. Ton: dynamiczny, profesjonalny, jak komentarz przed wielkim meczem. Bez tytułu. POLSKI.`
     }]);
     const narracja = resp2?.candidates?.[0]?.content?.parts?.[0]?.text || resp2?.content?.[0]?.text || '';
     if (!narracja) throw new Error('Brak odpowiedzi (narracja)');
@@ -9528,7 +9528,27 @@ function renderPlayoffDashboard() {
     html += '</div>';
   });
 
-  html += '</div></div></div>';
+  html += '</div></div>';
+
+  // Previews section — visible to all
+  const lastRound = po.rounds[po.rounds.length - 1];
+  const pairsWithPreview = lastRound.pairs.filter(p => p.preview);
+  if (pairsWithPreview.length > 0) {
+    html += `<div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:.75rem">📣 Zapowiedzi — ${lastRound.name}</div>
+      ${lastRound.pairs.map(pair => pair.preview ? `
+        <div style="margin-bottom:.85rem;padding:.85rem 1rem;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;margin-bottom:.5rem">
+            <span style="color:var(--accent)">${pair.team1}</span>
+            <span style="color:var(--muted);padding:0 .3rem">vs</span>
+            ${pair.team2}
+          </div>
+          <div style="font-size:.82rem;line-height:1.75;color:var(--text)">${pair.preview.replace(/\n/g,'<br>')}</div>
+        </div>` : '').join('')}
+    </div>`;
+  }
+
+  html += '</div>';
   wrap.innerHTML = html;
 }
 
