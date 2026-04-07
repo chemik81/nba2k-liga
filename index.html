@@ -9321,6 +9321,83 @@ function poSetChampion(poId, champ) {
   renderPlayoffDashboard();
 }
 
+function getPlayerStatsForPreview(teamName, topN = 5) {
+  const filteredMatches = currentSeasonId
+    ? matches.filter(m => m.seasonId === currentSeasonId)
+    : matches;
+
+  const playerMap = {}; // name -> accumulated stats
+
+  filteredMatches.forEach(m => {
+    const side = m.team1.name === teamName ? m.team1 : m.team2.name === teamName ? m.team2 : null;
+    if (!side || !side.players) return;
+    side.players.forEach(p => {
+      if (!p.name) return;
+      if (!playerMap[p.name]) playerMap[p.name] = { gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, grade:'B' };
+      const s = playerMap[p.name];
+      s.gp++;
+      s.pts  += (p.pts  || 0);
+      s.reb  += (p.reb  || 0);
+      s.ast  += (p.ast  || 0);
+      s.stl  += (p.stl  || 0);
+      s.blk  += (p.blk  || 0);
+      s.grade = p.grade || s.grade;
+    });
+  });
+
+  return Object.entries(playerMap)
+    .map(([name, s]) => ({
+      name,
+      gp: s.gp,
+      ppg: s.gp ? (s.pts / s.gp).toFixed(1) : '0.0',
+      rpg: s.gp ? (s.reb / s.gp).toFixed(1) : '0.0',
+      apg: s.gp ? (s.ast / s.gp).toFixed(1) : '0.0',
+      spg: s.gp ? (s.stl / s.gp).toFixed(1) : '0.0',
+      grade: s.grade
+    }))
+    .sort((a, b) => parseFloat(b.ppg) - parseFloat(a.ppg))
+    .slice(0, topN);
+}
+
+function getH2HPlayerStatsForPreview(team1, team2) {
+  const filteredMatches = currentSeasonId
+    ? matches.filter(m => m.seasonId === currentSeasonId)
+    : matches;
+
+  const h2hMatches = filteredMatches.filter(m =>
+    (m.team1.name === team1 && m.team2.name === team2) ||
+    (m.team1.name === team2 && m.team2.name === team1)
+  );
+
+  // per player in H2H matches
+  const map1 = {}, map2 = {};
+  h2hMatches.forEach(m => {
+    const s1 = m.team1.name === team1 ? m.team1 : m.team2;
+    const s2 = m.team1.name === team2 ? m.team1 : m.team2;
+    [{ side: s1, map: map1 }, { side: s2, map: map2 }].forEach(({ side, map }) => {
+      if (!side.players) return;
+      side.players.forEach(p => {
+        if (!p.name) return;
+        if (!map[p.name]) map[p.name] = { gp:0, pts:0, reb:0, ast:0 };
+        map[p.name].gp++;
+        map[p.name].pts += (p.pts || 0);
+        map[p.name].reb += (p.reb || 0);
+        map[p.name].ast += (p.ast || 0);
+      });
+    });
+  });
+
+  const fmt = (map, n) => Object.entries(map)
+    .map(([name, s]) => ({ name, ppg: s.gp ? s.pts/s.gp : 0, rpg: s.gp ? s.reb/s.gp : 0, apg: s.gp ? s.ast/s.gp : 0 }))
+    .sort((a, b) => b.ppg - a.ppg)
+    .slice(0, n)
+    .map(p => `${p.name}: ${p.ppg.toFixed(1)}pts/${p.rpg.toFixed(1)}reb/${p.apg.toFixed(1)}ast`)
+    .join(', ');
+
+  return { team1Players: fmt(map1, 3), team2Players: fmt(map2, 3), games: h2hMatches.length };
+}
+
+
 function getTeamStatsForPreview(teamName) {
   const filteredMatches = currentSeasonId
     ? matches.filter(m => m.seasonId === currentSeasonId)
@@ -9409,24 +9486,40 @@ async function generatePairPreview(poId, roundIdx, pairIdx) {
     const s2 = getTeamStatsForPreview(pair.team2);
     const h2h = getH2HForPreview(pair.team1, pair.team2);
 
-    const statsBlock = `STATYSTYKI SEZONU:
+    const p1players = getPlayerStatsForPreview(pair.team1);
+    const p2players = getPlayerStatsForPreview(pair.team2);
+    const h2hPlayers = getH2HPlayerStatsForPreview(pair.team1, pair.team2);
+
+    const fmtPlayers = (arr) => arr.map(p =>
+      `${p.name} (${p.grade}): ${p.ppg}pts/${p.rpg}reb/${p.apg}ast w ${p.gp}G`
+    ).join(', ');
+
+    const statsBlock = `STATYSTYKI DRUŻYNOWE:
 ${pair.team1}: ${s1.w}W-${s1.l}L | Win%: ${s1.winPct}% | PPG: ${s1.ppg} | OPP PPG: ${s1.opp} | Forma (ost.5): ${s1.last5 || 'brak'} | Passa: ${s1.streak}
 ${pair.team2}: ${s2.w}W-${s2.l}L | Win%: ${s2.winPct}% | PPG: ${s2.ppg} | OPP PPG: ${s2.opp} | Forma (ost.5): ${s2.last5 || 'brak'} | Passa: ${s2.streak}
-H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie: ' + h2h.games.join(' | ') : ''}`;
+
+TOP ZAWODNICY ${pair.team1}:
+${p1players.length ? fmtPlayers(p1players) : 'brak danych'}
+
+TOP ZAWODNICY ${pair.team2}:
+${p2players.length ? fmtPlayers(p2players) : 'brak danych'}
+
+H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie wyniki: ' + h2h.games.join(' | ') : ''}${h2hPlayers.games > 0 ? `\nTop scorerzy H2H — ${pair.team1}: ${h2hPlayers.team1Players || 'brak'}; ${pair.team2}: ${h2hPlayers.team2Players || 'brak'}` : ''}`;
 
     // Call 1 (Haiku): szczegółowa analiza statystyczna
     const resp1 = await callAI('claude-haiku-4-5-20251001', 900, [{
       role: 'user',
-      content: `Jesteś ekspertem analitycznym polskiej ligi NBA 2K. Na podstawie danych statystycznych napisz rzetelny raport analityczny (150-180 słów) porównujący ${pair.team1} i ${pair.team2} przed serią playoff ${formatLabel} (${round.name}).
+      content: `Jesteś ekspertem analitycznym polskiej ligi NBA 2K. Na podstawie danych napisz rzetelny raport analityczny (160-200 słów) przed serią playoff ${formatLabel} (${round.name}): ${pair.team1} vs ${pair.team2}.
 
-Uwzględnij:
-- porównanie bilansów W-L i Win%
-- porównanie skuteczności ofensywnej (PPG) i defensywnej (OPP PPG)
-- formę ostatnich 5 meczów i aktualną passę
-- historię bezpośrednich spotkań w sezonie
+Uwzględnij OBOWIĄZKOWO:
+- porównanie bilansów W-L, Win%, PPG i OPP PPG
+- formę ostatnich 5 meczów i aktualną passę obu drużyn
+- historię bezpośrednich spotkań H2H z wynikami
+- kluczowych zawodników (liderzy punktowi ze średnio punkty/zbiórki/asysty)
+- bezpośrednie pojedynki zawodników w H2H jeśli dostępne
 - wskazanie faworyta z konkretnym uzasadnieniem
 
-Pisz w stylu analitycznym, używaj liczb. Bez wstępu. POLSKI.
+Pisz analitycznie, posługuj się konkretnymi liczbami i nazwiskami. Bez wstępu. POLSKI.
 
 ${statsBlock}`
     }]);
@@ -9436,16 +9529,16 @@ ${statsBlock}`
     // Call 2 (Haiku): emocjonalna zapowiedź TV
     const resp2 = await callAI('claude-haiku-4-5-20251001', 900, [{
       role: 'user',
-      content: `Jesteś komentatorem sportowym polskiej ligi NBA 2K w telewizji. Na podstawie poniższej analizy napisz pełną, emocjonującą zapowiedź (180-220 słów) serii playoff ${formatLabel} (${round.name}) między ${pair.team1} a ${pair.team2}.
+      content: `Jesteś komentatorem sportowym polskiej ligi NBA 2K w telewizji. Na podstawie analizy napisz pełną, emocjonującą zapowiedź (200-240 słów) serii playoff ${formatLabel} (${round.name}): ${pair.team1} vs ${pair.team2}.
 
 Struktura:
-1. Wstęp budujący napięcie (2-3 zdania)
-2. Charakterystyka faworyta z konkretnymi danymi (3-4 zdania)
-3. Zagrożenie i szanse outsidera (2-3 zdania)
-4. Kluczowy czynnik który zadecyduje o serii (2 zdania)
+1. Wstęp budujący napięcie — poczucie wielkiego wydarzenia (2-3 zdania)
+2. Charakterystyka faworyta — wymień z imienia lidera i jego liczby (3-4 zdania)
+3. Zagrożenie ze strony outsidera — kto może zaskoczyć, wymień kluczowego gracza (2-3 zdania)
+4. Zapowiedź kluczowego pojedynku zawodników jeśli dane pozwalają (2 zdania)
 5. Wyraźna prognoza z uzasadnieniem (2 zdania)
 
-Ton: dynamiczny, profesjonalny, jak komentarz przed wielkim meczem NBA. Bez tytułu. POLSKI.
+Wymień konkretnych zawodników z ich statystykami. Ton: dynamiczny, TV prime time. Bez tytułu. POLSKI.
 
 Analiza eksperta:
 ${analiza}`
