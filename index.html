@@ -9321,6 +9321,16 @@ function poSetChampion(poId, champ) {
   renderPlayoffDashboard();
 }
 
+// Zawodnicy wykluczeni z zapowiedzi (np. nie grają już w teamie)
+const PREVIEW_EXCLUDED_PLAYERS = {
+  'Katowice PL': ['CICHY_x'],
+};
+
+function isExcludedFromPreview(teamName, playerName) {
+  const excluded = PREVIEW_EXCLUDED_PLAYERS[teamName] || [];
+  return excluded.includes(playerName);
+}
+
 function getPlayerStatsForPreview(teamName, topN = 5) {
   const filteredMatches = currentSeasonId
     ? matches.filter(m => m.seasonId === currentSeasonId)
@@ -9333,6 +9343,7 @@ function getPlayerStatsForPreview(teamName, topN = 5) {
     if (!side || !side.players) return;
     side.players.forEach(p => {
       if (!p.name) return;
+      if (isExcludedFromPreview(teamName, p.name)) return;
       if (!playerMap[p.name]) playerMap[p.name] = { gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, grade:'B' };
       const s = playerMap[p.name];
       s.gp++;
@@ -9374,10 +9385,11 @@ function getH2HPlayerStatsForPreview(team1, team2) {
   h2hMatches.forEach(m => {
     const s1 = m.team1.name === team1 ? m.team1 : m.team2;
     const s2 = m.team1.name === team2 ? m.team1 : m.team2;
-    [{ side: s1, map: map1 }, { side: s2, map: map2 }].forEach(({ side, map }) => {
+    [{ side: s1, map: map1, team: team1 }, { side: s2, map: map2, team: team2 }].forEach(({ side, map, team }) => {
       if (!side.players) return;
       side.players.forEach(p => {
         if (!p.name) return;
+        if (isExcludedFromPreview(team, p.name)) return;
         if (!map[p.name]) map[p.name] = { gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, fgm:0, fga:0, pos:'', grade:'B' };
         const s = map[p.name];
         s.gp++; s.pts+=(p.pts||0); s.reb+=(p.reb||0); s.ast+=(p.ast||0);
