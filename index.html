@@ -9315,6 +9315,80 @@ function poSetChampion(poId, champ) {
   renderPlayoffDashboard();
 }
 
+function getTeamStatsForPreview(teamName) {
+  const filteredMatches = currentSeasonId
+    ? matches.filter(m => m.seasonId === currentSeasonId)
+    : matches;
+  let w = 0, l = 0, pf = 0, pa = 0, streak = 0, streakType = null;
+  const teamMatches = filteredMatches.filter(m =>
+    m.team1.name === teamName || m.team2.name === teamName
+  ).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  teamMatches.forEach(m => {
+    const isT1 = m.team1.name === teamName;
+    const myScore = isT1 ? m.team1.score : m.team2.score;
+    const oppScore = isT1 ? m.team2.score : m.team1.score;
+    const won = myScore > oppScore;
+    if (won) w++; else l++;
+    pf += myScore;
+    pa += oppScore;
+  });
+
+  // Last 5 form
+  const last5 = teamMatches.slice(-5).map(m => {
+    const isT1 = m.team1.name === teamName;
+    const myScore = isT1 ? m.team1.score : m.team2.score;
+    const oppScore = isT1 ? m.team2.score : m.team1.score;
+    return myScore > oppScore ? 'W' : 'L';
+  });
+
+  // Streak
+  const allResults = teamMatches.map(m => {
+    const isT1 = m.team1.name === teamName;
+    return (isT1 ? m.team1.score : m.team2.score) > (isT1 ? m.team2.score : m.team1.score);
+  });
+  let streakCount = 0;
+  if (allResults.length) {
+    const lastResult = allResults[allResults.length - 1];
+    for (let i = allResults.length - 1; i >= 0; i--) {
+      if (allResults[i] === lastResult) streakCount++;
+      else break;
+    }
+    streakType = lastResult ? 'W' : 'L';
+  }
+
+  const gp = w + l;
+  return {
+    w, l, gp,
+    ppg: gp > 0 ? (pf / gp).toFixed(1) : '0.0',
+    opp: gp > 0 ? (pa / gp).toFixed(1) : '0.0',
+    winPct: gp > 0 ? (w / gp * 100).toFixed(1) : '0.0',
+    last5: last5.join(''),
+    streak: streakCount > 0 ? streakType + streakCount : '-'
+  };
+}
+
+function getH2HForPreview(team1, team2) {
+  const filteredMatches = currentSeasonId
+    ? matches.filter(m => m.seasonId === currentSeasonId)
+    : matches;
+  const h2h = filteredMatches.filter(m =>
+    (m.team1.name === team1 && m.team2.name === team2) ||
+    (m.team1.name === team2 && m.team2.name === team1)
+  ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  let w1 = 0, w2 = 0;
+  const games = h2h.slice(0, 10).map(m => {
+    const isT1 = m.team1.name === team1;
+    const s1 = isT1 ? m.team1.score : m.team2.score;
+    const s2 = isT1 ? m.team2.score : m.team1.score;
+    if (s1 > s2) w1++; else w2++;
+    return `${m.date || ''}: ${team1} ${s1}-${s2} ${team2} (${s1 > s2 ? team1 : team2} wygrywa)`;
+  });
+
+  return { w1, w2, games, total: h2h.length };
+}
+
 async function generatePlayoffPreviews() {
   const po = playoffs.length ? playoffs[playoffs.length - 1] : null;
   if (!po) { showToast('Brak aktywnego playoff!', 'error'); return; }
@@ -9334,18 +9408,22 @@ async function generatePlayoffPreviews() {
   wrap = div;
 
   wrap.innerHTML = `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:1rem;color:var(--accent)">
-      📣 Zapowiedzi — ${round.name}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">
+        📣 Zapowiedzi — ${round.name}
+      </div>
+      <div style="font-size:.75rem;color:var(--muted)">Analizuje statystyki sezonu…</div>
     </div>
     ${pairs.map((p, i) => `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;margin-bottom:.75rem">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;margin-bottom:.5rem">
-          <span style="color:var(--accent)">${p.team1}</span>
-          <span style="color:var(--muted);padding:0 .4rem">vs</span>
-          ${p.team2}
-          <span style="font-size:.7rem;background:rgba(245,197,36,.12);color:var(--accent);border-radius:4px;padding:.1rem .4rem;margin-left:.4rem">${formatLabel}</span>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.75rem;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;background:rgba(245,197,36,.04);border-bottom:1px solid var(--border)">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:var(--accent)">${p.team1}</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;background:rgba(245,197,36,.12);color:var(--accent);border-radius:4px;padding:.1rem .5rem">${formatLabel}</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem">${p.team2}</span>
         </div>
-        <div id="po-preview-text-${i}" style="font-size:.88rem;line-height:1.7;color:var(--muted);font-style:italic">⏳ Generuję...</div>
+        <div id="po-preview-text-${i}" style="padding:.85rem 1rem;font-size:.88rem;line-height:1.75;color:var(--muted);font-style:italic">
+          ⏳ Zbieram dane i generuję zapowiedź…
+        </div>
       </div>
     `).join('')}
   `;
@@ -9354,8 +9432,33 @@ async function generatePlayoffPreviews() {
     const p = pairs[i];
     const textEl = document.getElementById(`po-preview-text-${i}`);
     try {
-      const prompt = `Jesteś komentatorem sportowym polskiej ligi NBA 2K (gry wideo). Napisz emocjonującą zapowiedź serii playoff między drużynami "${p.team1}" i "${p.team2}" w formacie ${formatLabel} (runda: ${round.name}).\n\nDługość: 150-200 słów. Język: POLSKI. Ton: dynamiczny, sportowy, jak zapowiedź przed wielkim meczem w TV. Buduj napięcie, wskaż co jest stawką. Zwróć TYLKO tekst zapowiedzi bez tytułu i nagłówków.`;
-      const resp = await callAI('gemini-2.5-flash', 512, [{ role: 'user', content: prompt }]);
+      const s1 = getTeamStatsForPreview(p.team1);
+      const s2 = getTeamStatsForPreview(p.team2);
+      const h2h = getH2HForPreview(p.team1, p.team2);
+
+      const statsBlock = `=== STATYSTYKI SEZONU ===
+${p.team1}: ${s1.w}W-${s1.l}L | Win%: ${s1.winPct}% | PPG: ${s1.ppg} | OPP PPG: ${s1.opp} | Forma (ost.5): ${s1.last5 || 'brak'} | Passa: ${s1.streak}
+${p.team2}: ${s2.w}W-${s2.l}L | Win%: ${s2.winPct}% | PPG: ${s2.ppg} | OPP PPG: ${s2.opp} | Forma (ost.5): ${s2.last5 || 'brak'} | Passa: ${s2.streak}
+
+=== HISTORIA BEZPOŚDNICH SPOTKAŃ (sezon) ===
+Razem meczy: ${h2h.total} | ${p.team1} wygrał: ${h2h.w1} | ${p.team2} wygrał: ${h2h.w2}
+${h2h.games.length > 0 ? 'Ostatnie mecze:\n' + h2h.games.slice(0,5).join('\n') : 'Brak bezpośrednich spotkań w tym sezonie.'}`;
+
+      const prompt = `Jesteś komentatorem sportowym polskiej ligi NBA 2K (gry wideo). Na podstawie poniższych danych statystycznych napisz emocjonującą, rzetelna zapowiedź serii playoff ${formatLabel} (runda: ${round.name}) między ${p.team1} a ${p.team2}.
+
+${statsBlock}
+
+Wymagania:
+- Długość: 200-250 słów
+- Język: POLSKI
+- Odnieś się konkretnie do statystyk (bilans, skuteczność, PPG, forma)
+- Przeanalizuj historię bezpośrednich spotkań jeśli istnieje
+- Wskaż kluczowe przewagi i słabości każdej drużyny
+- Postaw prognozę i wyjaśnij dlaczego
+- Ton: dynamiczny, sportowy, jak komentarz przed meczem w TV
+- Zwróć TYLKO tekst zapowiedzi, bez tytułu i nagłówków`;
+
+      const resp = await callAI('gemini-2.5-flash', 1024, [{ role: 'user', content: prompt }]);
       const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text
         || resp?.content?.[0]?.text
         || '';
@@ -9368,6 +9471,7 @@ async function generatePlayoffPreviews() {
     }
   }
 }
+
 
 function deletePlayoff(poId) {
   if (!confirm('Usuń playoff? Tej operacji nie można cofnąć.')) return;
