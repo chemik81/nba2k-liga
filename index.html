@@ -9398,14 +9398,7 @@ async function generatePairPreview(poId, roundIdx, pairIdx) {
   const pair = round.pairs[pairIdx];
   const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
 
-  // Find the button and show loading state
-  const btnId = `po-gen-btn-${roundIdx}-${pairIdx}`;
   const previewId = `po-preview-${roundIdx}-${pairIdx}`;
-
-  // Re-render modal to show spinner in place of button
-  pair.preview = null; // clear so it shows spinner
-  const el = document.getElementById('playoff-modal-content');
-  // Find the pair's preview container via a unique id set inline
   const container = document.getElementById(previewId);
   if (container) {
     container.innerHTML = '<span style="color:var(--muted);font-size:.8rem;font-style:italic">⏳ Generuję zapowiedź…</span>';
@@ -9421,33 +9414,54 @@ ${pair.team1}: ${s1.w}W-${s1.l}L | Win%: ${s1.winPct}% | PPG: ${s1.ppg} | OPP PP
 ${pair.team2}: ${s2.w}W-${s2.l}L | Win%: ${s2.winPct}% | PPG: ${s2.ppg} | OPP PPG: ${s2.opp} | Forma (ost.5): ${s2.last5 || 'brak'} | Passa: ${s2.streak}
 H2H (sezon): ${h2h.total} meczy | ${pair.team1}: ${h2h.w1} | ${pair.team2}: ${h2h.w2}${h2h.games.length ? '\nOstatnie: ' + h2h.games.join(' | ') : ''}`;
 
-    // Call 1: analiza
-    const resp1 = await callAI('gemini-2.5-flash', 800, [{
+    // Call 1 (Haiku): szczegółowa analiza statystyczna
+    const resp1 = await callAI('claude-haiku-4-5-20251001', 900, [{
       role: 'user',
-      content: `Jesteś analitykiem NBA 2K. Na podstawie danych napisz szczegółową analizę (130-160 słów): kto jest faworytem i dlaczego (powołaj się na konkretne liczby: bilans, Win%, PPG, OPP PPG, forma, passa), jak wyglądała historia bezpośrednich spotkań, jakie są kluczowe mocne i słabe strony każdej drużyny. Bez wstępu, tylko fakty i wnioski. POLSKI.\n\n${statsBlock}`
+      content: `Jesteś ekspertem analitycznym polskiej ligi NBA 2K. Na podstawie danych statystycznych napisz rzetelny raport analityczny (150-180 słów) porównujący ${pair.team1} i ${pair.team2} przed serią playoff ${formatLabel} (${round.name}).
+
+Uwzględnij:
+- porównanie bilansów W-L i Win%
+- porównanie skuteczności ofensywnej (PPG) i defensywnej (OPP PPG)
+- formę ostatnich 5 meczów i aktualną passę
+- historię bezpośrednich spotkań w sezonie
+- wskazanie faworyta z konkretnym uzasadnieniem
+
+Pisz w stylu analitycznym, używaj liczb. Bez wstępu. POLSKI.
+
+${statsBlock}`
     }]);
-    const analiza = resp1?.candidates?.[0]?.content?.parts?.[0]?.text || resp1?.content?.[0]?.text || '';
+    const analiza = resp1?.content?.[0]?.text || resp1?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!analiza) throw new Error('Brak odpowiedzi (analiza)');
 
-    // Call 2: narracja
-    const resp2 = await callAI('gemini-2.5-flash', 900, [{
+    // Call 2 (Haiku): emocjonalna zapowiedź TV
+    const resp2 = await callAI('claude-haiku-4-5-20251001', 900, [{
       role: 'user',
-      content: `Jesteś komentatorem sportowym polskiej ligi NBA 2K w telewizji. Napisz pełną, emocjonującą zapowiedź (180-220 słów) serii playoff ${formatLabel} (${round.name}) ${pair.team1} vs ${pair.team2} na podstawie tej analizy:\n\n${analiza}\n\nStruktura: 1) Wstęp budujący napięcie, 2) Charakterystyka faworyta z konkretnymi danymi, 3) Zagrożenie ze strony outsidera, 4) Kluczowy czynnik decydujący o serii, 5) Wyraźna prognoza z uzasadnieniem. Ton: dynamiczny, profesjonalny, jak komentarz przed wielkim meczem. Bez tytułu. POLSKI.`
+      content: `Jesteś komentatorem sportowym polskiej ligi NBA 2K w telewizji. Na podstawie poniższej analizy napisz pełną, emocjonującą zapowiedź (180-220 słów) serii playoff ${formatLabel} (${round.name}) między ${pair.team1} a ${pair.team2}.
+
+Struktura:
+1. Wstęp budujący napięcie (2-3 zdania)
+2. Charakterystyka faworyta z konkretnymi danymi (3-4 zdania)
+3. Zagrożenie i szanse outsidera (2-3 zdania)
+4. Kluczowy czynnik który zadecyduje o serii (2 zdania)
+5. Wyraźna prognoza z uzasadnieniem (2 zdania)
+
+Ton: dynamiczny, profesjonalny, jak komentarz przed wielkim meczem NBA. Bez tytułu. POLSKI.
+
+Analiza eksperta:
+${analiza}`
     }]);
-    const narracja = resp2?.candidates?.[0]?.content?.parts?.[0]?.text || resp2?.content?.[0]?.text || '';
+    const narracja = resp2?.content?.[0]?.text || resp2?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!narracja) throw new Error('Brak odpowiedzi (narracja)');
 
-    // Save to pair object and persist
-    pair.preview = analiza.trim() + '\n\n' + narracja.trim();
+    pair.preview = analiza.trim() + '\n\n—\n\n' + narracja.trim();
     await saveData();
     showToast('✅ Zapowiedź zapisana!', 'success');
 
   } catch(e) {
-    pair.preview = '❌ Błąd generowania: ' + e.message;
+    pair.preview = '❌ Błąd: ' + e.message;
     showToast('Błąd: ' + e.message, 'error');
   }
 
-  // Re-render modal to show result
   renderPlayoffModal();
 }
 
