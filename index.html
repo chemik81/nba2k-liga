@@ -2477,7 +2477,12 @@ function renderMatches() {
   const ft=document.getElementById('mft')?.value||'',fp=document.getElementById('mfp')?.value||'',fs=document.getElementById('mfs')?.value||'',fpo=document.getElementById('mfpo')?.value||'';
   // Helper: is match a playoff match?
   const po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate;
+  const _poM = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const _poMPairs = new Set(
+    (_poM ? _poM.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
+  );
+  const isPlayoffMatch = m => _poMPairs.has([m.team1.name, m.team2.name].sort().join('|'));
+  console.log('[playoff debug] pairs:', [..._poMPairs], 'total matches:', matches.length, 'playoff matches:', matches.filter(isPlayoffMatch).length);
   const _raw=matches.filter(m=>{
     if(fs&&m.seasonId!==fs)return false;
     if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;
@@ -2662,7 +2667,11 @@ function numToGrade(n) {
 
 function getAggregatedStats(seasonFilter, includePlayoff = false) {
   const po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate;
+  const _poAgg = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const _poAggPairs = new Set(
+    (_poAgg ? _poAgg.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
+  );
+  const isPlayoffMatch = m => _poAggPairs.has([m.team1.name, m.team2.name].sort().join('|'));
   const playerMap = {};
   matches.filter(m => {
     if (seasonFilter && m.seasonId !== seasonFilter) return false;
@@ -2731,9 +2740,12 @@ function renderStats() {
 
   // Get matches filtered by round if selected
   const _po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  // Playoff match = played on or after playoff startDate
-  // We intentionally ignore seasonId mismatch — startDate is the source of truth
-  const _isPlayoff = m => _po && _po.startDate && m.date >= _po.startDate;
+  // Playoff match = the two teams are a pair in any playoff round
+  // This works regardless of match date or seasonId
+  const _playoffPairSet = new Set(
+    (_po ? _po.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
+  );
+  const _isPlayoff = m => _playoffPairSet.has([m.team1.name, m.team2.name].sort().join('|'));
   const playoffFilter = document.getElementById('filter-playoff-stats')?.value || '';
 
   let statsMatches = matches;
@@ -3861,7 +3873,11 @@ function renderTop3() {
 function renderStandings() {
   // Exclude playoff matches from standings
   const po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate;
+  const _poSt = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const _poStPairs = new Set(
+    (_poSt ? _poSt.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
+  );
+  const isPlayoffMatch = m => _poStPairs.has([m.team1.name, m.team2.name].sort().join('|'));
   const regularMatches = matches.filter(m => !isPlayoffMatch(m));
 
   const ts={};
@@ -9774,7 +9790,14 @@ function renderPlayoffDashboard() {
 // Get all matches that belong to a playoff (after startDate)
 function getPlayoffMatches(po) {
   if (!po || !po.startDate) return [];
-  return matches.filter(m => m.date >= po.startDate && (!po.seasonId || m.seasonId === po.seasonId || !m.seasonId));
+  // Match is playoff if teams are a known playoff pair OR date >= startDate (fallback)
+  const poPairs = new Set(
+    po.rounds.flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
+  );
+  return matches.filter(m =>
+    poPairs.has([m.team1.name, m.team2.name].sort().join('|')) ||
+    (m.date >= po.startDate && (!po.seasonId || m.seasonId === po.seasonId || !m.seasonId))
+  );
 }
 
 // Get series results between two teams in a playoff
