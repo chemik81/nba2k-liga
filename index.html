@@ -1951,6 +1951,12 @@ async function loadData() {
     pendingScreenshots = record.pendingScreenshots || [];
     events = record.events || []
     playoffs = record.playoffs || [];;
+    // Fix playoffs with missing startDate — use createdAt date as fallback
+    playoffs.forEach(po => {
+      if (!po.startDate && po.createdAt) {
+        po.startDate = po.createdAt.slice(0, 10);
+      }
+    });
 
     // Logos now stored in KV with teams data
 
@@ -2481,10 +2487,8 @@ function renderMatches() {
   const _poMPairs = new Set(
     (_poM ? _poM.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
   );
-  const _poMCutoff = _poM && (_poM.startDate || (_poM.createdAt ? _poM.createdAt.slice(0,10) : '0'));
-  const isPlayoffMatch = m => _poM && _poMCutoff &&
-    _poMPairs.has([m.team1.name, m.team2.name].sort().join('|')) &&
-    m.date >= _poMCutoff;
+  const _poMCutoff = _poM ? (_poM.startDate || (_poM.createdAt || '').slice(0,10) || '0000-00-00') : null;
+  const isPlayoffMatch = m => !!(_poMCutoff && _poMPairs.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= _poMCutoff);
   const _raw=matches.filter(m=>{
     if(fs&&m.seasonId!==fs)return false;
     if(ft&&m.team1.name!==ft&&m.team2.name!==ft)return false;
@@ -2673,10 +2677,8 @@ function getAggregatedStats(seasonFilter, includePlayoff = false) {
   const _poAggPairs = new Set(
     (_poAgg ? _poAgg.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
   );
-  const _poAggCutoff = _poAgg && (_poAgg.startDate || (_poAgg.createdAt ? _poAgg.createdAt.slice(0,10) : '0'));
-  const isPlayoffMatch = m => _poAgg && _poAggCutoff &&
-    _poAggPairs.has([m.team1.name, m.team2.name].sort().join('|')) &&
-    m.date >= _poAggCutoff;
+  const _poAggCutoff = _poAgg ? (_poAgg.startDate || (_poAgg.createdAt || '').slice(0,10) || '0000-00-00') : null;
+  const isPlayoffMatch = m => !!(_poAggCutoff && _poAggPairs.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= _poAggCutoff);
   const playerMap = {};
   matches.filter(m => {
     if (seasonFilter && m.seasonId !== seasonFilter) return false;
@@ -2748,10 +2750,8 @@ function renderStats() {
   const _playoffPairSet = new Set(
     (_po ? _po.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
   );
-  const _poCutoff = _po && (_po.startDate || (_po.createdAt ? _po.createdAt.slice(0,10) : '0'));
-  const _isPlayoff = m => _po && _poCutoff &&
-    _playoffPairSet.has([m.team1.name, m.team2.name].sort().join('|')) &&
-    m.date >= _poCutoff;
+  const _poCutoff = _po ? (_po.startDate || (_po.createdAt || '').slice(0,10) || '0000-00-00') : null;
+  const _isPlayoff = m => !!(_poCutoff && _playoffPairSet.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= _poCutoff);
   const playoffFilter = document.getElementById('filter-playoff-stats')?.value || '';
 
   let statsMatches = matches;
@@ -3883,10 +3883,8 @@ function renderStandings() {
   const _poStPairs = new Set(
     (_poSt ? _poSt.rounds : []).flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
   );
-  const _poStCutoff = _poSt && (_poSt.startDate || (_poSt.createdAt ? _poSt.createdAt.slice(0,10) : '0'));
-  const isPlayoffMatch = m => _poSt && _poStCutoff &&
-    _poStPairs.has([m.team1.name, m.team2.name].sort().join('|')) &&
-    m.date >= _poStCutoff;
+  const _poStCutoff = _poSt ? (_poSt.startDate || (_poSt.createdAt || '').slice(0,10) || '0000-00-00') : null;
+  const isPlayoffMatch = m => !!(_poStCutoff && _poStPairs.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= _poStCutoff);
   const regularMatches = matches.filter(m => !isPlayoffMatch(m));
 
   const ts={};
@@ -9803,12 +9801,10 @@ function getPlayoffMatches(po) {
     po.rounds.flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
   );
   // startDate fallback: use createdAt date portion, or accept all pair matches if neither exists
-  const cutoff = po.startDate || (po.createdAt ? po.createdAt.slice(0,10) : null);
-  return matches.filter(m => {
-    if (!poPairs.has([m.team1.name, m.team2.name].sort().join('|'))) return false;
-    if (cutoff && m.date < cutoff) return false;
-    return true;
-  });
+  const cutoff = po.startDate || (po.createdAt || '').slice(0,10) || '0000-00-00';
+  return matches.filter(m =>
+    poPairs.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= cutoff
+  );
 }
 
 // Get series results between two teams in a playoff
