@@ -2662,7 +2662,7 @@ function numToGrade(n) {
 
 function getAggregatedStats(seasonFilter, includePlayoff = false) {
   const po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate && (!po.seasonId || m.seasonId === po.seasonId || !m.seasonId);
+  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate;
   const playerMap = {};
   matches.filter(m => {
     if (seasonFilter && m.seasonId !== seasonFilter) return false;
@@ -2731,7 +2731,9 @@ function renderStats() {
 
   // Get matches filtered by round if selected
   const _po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  const _isPlayoff = m => _po && _po.startDate && m.date >= _po.startDate && (!_po.seasonId || m.seasonId === _po.seasonId || !m.seasonId);
+  // Playoff match = played on or after playoff startDate
+  // We intentionally ignore seasonId mismatch — startDate is the source of truth
+  const _isPlayoff = m => _po && _po.startDate && m.date >= _po.startDate;
   const playoffFilter = document.getElementById('filter-playoff-stats')?.value || '';
 
   let statsMatches = matches;
@@ -3859,7 +3861,7 @@ function renderTop3() {
 function renderStandings() {
   // Exclude playoff matches from standings
   const po = playoffs.length ? playoffs[playoffs.length-1] : null;
-  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate && (!po.seasonId || m.seasonId === po.seasonId || !m.seasonId);
+  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate;
   const regularMatches = matches.filter(m => !isPlayoffMatch(m));
 
   const ts={};
