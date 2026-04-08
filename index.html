@@ -854,6 +854,7 @@
       <div><label data-i18n="team_lbl">Drużyna</label><select id="filter-team" onchange="renderStats()"><option value="">Wszystkie</option></select></div>
       <div><label data-i18n="position_lbl">Pozycja</label><select id="filter-pos-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="" data-i18n="all_pos">Wszystkie</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></div>
       <div><label data-i18n="round_lbl">Kolejka</label><select id="filter-round-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="">Wszystkie</option></select></div>
+      <div><label>Mecze</label><select id="filter-playoff-stats" onchange="renderStats()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.4rem .75rem;border-radius:6px;font-family:inherit;font-size:.85rem"><option value="regular">📅 Ligowe</option><option value="playoff">🏆 Playoff</option><option value="all">Wszystkie</option></select></div>
     </div>
     <div class="card" style="padding:0">
       <div class="stats-table-wrap">
@@ -2659,9 +2660,15 @@ function numToGrade(n) {
   return 'F';
 }
 
-function getAggregatedStats(seasonFilter) {
+function getAggregatedStats(seasonFilter, includePlayoff = false) {
+  const po = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate && (!po.seasonId || m.seasonId === po.seasonId || !m.seasonId);
   const playerMap = {};
-  matches.filter(m => !seasonFilter || m.seasonId === seasonFilter).forEach(m => {
+  matches.filter(m => {
+    if (seasonFilter && m.seasonId !== seasonFilter) return false;
+    if (!includePlayoff && isPlayoffMatch(m)) return false;
+    return true;
+  }).forEach(m => {
     [m.team1, m.team2].forEach(team => {
       (team.players || []).forEach(p => {
         const key = p.name + '|' + team.name;
@@ -2723,6 +2730,10 @@ function renderStats() {
   const posFilter = document.getElementById('filter-pos-stats')?.value || '';
 
   // Get matches filtered by round if selected
+  const _po = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const _isPlayoff = m => _po && _po.startDate && m.date >= _po.startDate && (!_po.seasonId || m.seasonId === _po.seasonId || !m.seasonId);
+  const playoffFilter = document.getElementById('filter-playoff-stats')?.value || '';
+
   let statsMatches = matches;
   if(roundFilterId) {
     const allRounds = rounds.length ? rounds : [getDefaultRound()];
@@ -2730,6 +2741,11 @@ function renderStats() {
     if(selRound) statsMatches = matches.filter(m => m.date >= selRound.from && m.date <= selRound.to);
   }
   if(seasonFilter) statsMatches = statsMatches.filter(m => m.seasonId === seasonFilter);
+  // Filter by playoff status
+  if(playoffFilter === 'playoff') statsMatches = statsMatches.filter(m => _isPlayoff(m));
+  else if(playoffFilter === 'regular') statsMatches = statsMatches.filter(m => !_isPlayoff(m));
+  else if(!playoffFilter) statsMatches = statsMatches.filter(m => !_isPlayoff(m));
+  // playoffFilter === 'all' -> no additional filter
 
   // Build aggregated stats from filtered matches
   const playerMap = {};
@@ -3841,8 +3857,13 @@ function renderTop3() {
   }).join('');
 }
 function renderStandings() {
+  // Exclude playoff matches from standings
+  const po = playoffs.length ? playoffs[playoffs.length-1] : null;
+  const isPlayoffMatch = m => po && po.startDate && m.date >= po.startDate && (!po.seasonId || m.seasonId === po.seasonId || !m.seasonId);
+  const regularMatches = matches.filter(m => !isPlayoffMatch(m));
+
   const ts={};
-  matches.forEach(m=>{
+  regularMatches.forEach(m=>{
     [m.team1,m.team2].forEach(t=>{if(!ts[t.name])ts[t.name]={w:0,l:0,wo:0,pf:0,pa:0};});
     const isWalkover = m.walkover === true;
     const w1=m.team1.score>m.team2.score;
@@ -3866,7 +3887,7 @@ function renderStandings() {
   });
   const tbody=document.getElementById('standings-body');
   if(!sorted.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>';renderTeamForm([]);renderTop3();return;}
-  const byD=[...matches].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const byD=[...regularMatches].sort((a,b)=>new Date(b.date)-new Date(a.date));
   const tl5={},streaks={};
   Object.keys(ts).forEach(n=>{
     const tm=byD.filter(m=>m.team1.name===n||m.team2.name===n);
