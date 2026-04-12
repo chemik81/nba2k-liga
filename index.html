@@ -6566,6 +6566,39 @@ function getWinsNeeded(format) {
   return { bo1:1, bo3:2, bo5:3, bo7:4 }[format] || 3;
 }
 
+function getPlayoffMatches(po) {
+  if (!po) return [];
+  const poPairs = new Set(
+    po.rounds.flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
+  );
+  // startDate fallback: use createdAt date portion, or accept all pair matches if neither exists
+  const cutoff = po.startDate || (po.createdAt || '').slice(0,10) || '0000-00-00';
+  return matches.filter(m =>
+    poPairs.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= cutoff
+  );
+}
+
+// Get series results between two teams in a playoff
+function getSeriesResults(po, team1, team2) {
+  const poMatches = getPlayoffMatches(po);
+  const series = poMatches.filter(m => {
+    const names = [m.team1?.name, m.team2?.name];
+    return names.includes(team1) && names.includes(team2);
+  }).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  let w1 = 0, w2 = 0;
+  const games = series.map((m, gi) => {
+    const isT1 = m.team1.name === team1;
+    const s1 = isT1 ? m.team1.score : m.team2.score;
+    const s2 = isT1 ? m.team2.score : m.team1.score;
+    const win1 = s1 > s2;
+    if (win1) w1++; else w2++;
+    return { matchId: m.id, date: m.date, s1, s2, win1, gameNum: gi + 1 };
+  });
+
+  return { w1, w2, games };
+}
+
 function syncPlayoffBracket() {
   const po = getActivePlayoff();
   if (!po || !po.startDate) return;
@@ -9817,38 +9850,7 @@ function renderPlayoffDashboard() {
 // ═══════════════════════════════════════════════════════════════
 
 // Get all matches that belong to a playoff (after startDate)
-function getPlayoffMatches(po) {
-  if (!po) return [];
-  const poPairs = new Set(
-    po.rounds.flatMap(r => r.pairs.map(p => [p.team1, p.team2].sort().join('|')))
-  );
-  // startDate fallback: use createdAt date portion, or accept all pair matches if neither exists
-  const cutoff = po.startDate || (po.createdAt || '').slice(0,10) || '0000-00-00';
-  return matches.filter(m =>
-    poPairs.has([m.team1.name, m.team2.name].sort().join('|')) && m.date >= cutoff
-  );
-}
 
-// Get series results between two teams in a playoff
-function getSeriesResults(po, team1, team2) {
-  const poMatches = getPlayoffMatches(po);
-  const series = poMatches.filter(m => {
-    const names = [m.team1?.name, m.team2?.name];
-    return names.includes(team1) && names.includes(team2);
-  }).sort((a,b) => new Date(a.date) - new Date(b.date));
-
-  let w1 = 0, w2 = 0;
-  const games = series.map((m, gi) => {
-    const isT1 = m.team1.name === team1;
-    const s1 = isT1 ? m.team1.score : m.team2.score;
-    const s2 = isT1 ? m.team2.score : m.team1.score;
-    const win1 = s1 > s2;
-    if (win1) w1++; else w2++;
-    return { matchId: m.id, date: m.date, s1, s2, win1, gameNum: gi + 1 };
-  });
-
-  return { w1, w2, games };
-}
 
 // Open the playoff stats modal
 function openPlayoffStats() {
@@ -9986,21 +9988,24 @@ function renderPlayoffStatsContent(po) {
   const tabBtn = (id, lbl) => `<button onclick="window._poStatsTab='${id}';document.getElementById('playoff-modal-content').innerHTML=renderPlayoffStatsContent(playoffs[playoffs.length-1])"
     style="padding:.5rem 1.25rem;border:none;border-bottom:2px solid ${activeTab===id?'var(--accent)':'transparent'};background:none;color:${activeTab===id?'var(--accent)':'var(--muted)'};font-weight:${activeTab===id?'700':'400'};cursor:pointer;font-family:inherit;font-size:.9rem">${lbl}</button>`;
 
+  const _poSortCols = [['name','Zawodnik',1,'text-align:left'],['pos','POZ',-1,''],['team','Drużyna',1,'text-align:left'],['grd','GRD',-1,''],['pts','PTS',-1,''],['reb','REB',-1,''],['ast','AST',-1,''],['stl','STL',-1,''],['blk','BLK',-1,''],['to','TO',1,''],['fg','FG%',-1,''],['cs','CS',-1,'color:var(--accent2)'],['per','PER',-1,'color:#3498db'],['gp','GP',-1,'']];
+  const _poSortHeaders = _poSortCols.map(function(c) {
+    var col=c[0],lbl=c[1],defDir=c[2],style=c[3];
+    var active=(window._poStatsSortCol||'pts')===col;
+    var dir=active?(window._poStatsSortDir||defDir):defDir;
+    var arrow=active?(dir===-1?' ▼':' ▲'):'';
+    var thStyle='cursor:pointer;user-select:none;white-space:nowrap;'+(style?style+';':'')+(active?'color:var(--accent)':'');
+    var onclick="window._poStatsSortCol='"+col+"';window._poStatsSortDir="+(active?(-dir):dir)+";document.getElementById('playoff-modal-content').innerHTML=renderPlayoffStatsContent(playoffs[playoffs.length-1])";
+    return '<th style="'+thStyle+'" onclick="'+onclick+'">'+lbl+arrow+'</th>';
+  }).join('');
+
   const content = activeTab === 'series'
-    ? `<div style="margin-top:1rem">${seriesHtml || '<p style="color:var(--muted)">Brak meczów playoff</p>'}</div>`
-    : `<div style="margin-top:1rem;font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Kliknij na gracza aby zobaczyć pełną kartę. ${poMatches.length} meczów playoff.</div>
-       <div class="stats-table-wrap"><table>
-         <thead><tr>
-           <th></th>
-           ${[['name','Zawodnik',1,'left'],['pos','POZ',-1,''],['team','Drużyna',1,'left'],['grd','GRD',-1,''],['pts','PTS',-1,''],['reb','REB',-1,''],['ast','AST',-1,''],['stl','STL',-1,''],['blk','BLK',-1,''],['to','TO',1,''],['fg','FG%',-1,''],['cs','CS',-1,'color:var(--accent2)'],['per','PER',-1,'color:#3498db'],['gp','GP',-1,'']].map(([col,lbl,defDir,style]) => {
-             const active = (window._poStatsSortCol||'pts') === col;
-             const dir = active ? (window._poStatsSortDir||defDir) : defDir;
-             const arrow = active ? (dir === -1 ? ' ▼' : ' ▲') : '';
-             return \`<th style="cursor:pointer;user-select:none;white-space:nowrap;\${style?style+';':''}\${active?'color:var(--accent)':''}" onclick="window._poStatsSortCol='\${col}';window._poStatsSortDir=\${active?-dir:dir};document.getElementById('playoff-modal-content').innerHTML=renderPlayoffStatsContent(playoffs[playoffs.length-1])">\${lbl}\${arrow}</th>\`;
-           }).join('')}
-         </tr></thead>
-         <tbody>${statRows || '<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:2rem">Brak danych</td></tr>'}</tbody>
-       </table></div>`;
+    ? '<div style="margin-top:1rem">'+(seriesHtml || '<p style="color:var(--muted)">Brak meczów playoff</p>')+'</div>'
+    : '<div style="margin-top:1rem;font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Kliknij na gracza aby zobaczyć pełną kartę. '+poMatches.length+' meczów playoff.</div>'
+      +'<div class="stats-table-wrap"><table>'
+      +'<thead><tr><th></th>'+_poSortHeaders+'</tr></thead>'
+      +'<tbody>'+(statRows || '<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:2rem">Brak danych</td></tr>')+'</tbody>'
+      +'</table></div>';
 
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
