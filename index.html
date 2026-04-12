@@ -9901,7 +9901,24 @@ function renderPlayoffStatsContent(po) {
       per: calcPER(p),
       fgpct: p.fga > 0 ? Math.round(p.fgm/p.fga*100) : 0,
     }))
-    .sort((a,b) => b.pts/b.gp - a.pts/a.gp);
+    .sort((a,b) => {
+      const col = window._poStatsSortCol || 'pts';
+      const dir = window._poStatsSortDir || -1;
+      const av = k => a[k] / (a.gp||1);
+      const bv = k => b[k] / (b.gp||1);
+      let va, vb;
+      if (col === 'name')     { va = a.name; vb = b.name; }
+      else if (col === 'team'){ va = a.team; vb = b.team; }
+      else if (col === 'pos') { va = a.pos;  vb = b.pos;  }
+      else if (col === 'grd') { va = a.avgGrade; vb = b.avgGrade; }
+      else if (col === 'cs')  { va = a.cs;   vb = b.cs;   }
+      else if (col === 'per') { va = a.per;  vb = b.per;  }
+      else if (col === 'fg')  { va = a.fgpct; vb = b.fgpct; }
+      else if (col === 'gp')  { va = a.gp;  vb = b.gp;   }
+      else { va = av(col); vb = bv(col); }
+      if (typeof va === 'string') return dir * va.localeCompare(vb);
+      return dir * ((va||0) - (vb||0));
+    });
 
   // ── Series results ───────────────────────────────────────────
   const allPairs = po.rounds.flatMap(r => r.pairs.map(pair => ({...pair, roundName: r.name})));
@@ -9973,9 +9990,13 @@ function renderPlayoffStatsContent(po) {
     : `<div style="margin-top:1rem;font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Kliknij na gracza aby zobaczyć pełną kartę. ${poMatches.length} meczów playoff.</div>
        <div class="stats-table-wrap"><table>
          <thead><tr>
-           <th></th><th style="text-align:left">Zawodnik</th><th>POZ</th><th style="text-align:left">Drużyna</th>
-           <th>GRD</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th>
-           <th style="color:var(--accent2)">CS</th><th style="color:#3498db">PER</th><th>GP</th>
+           <th></th>
+           ${[['name','Zawodnik',1,'left'],['pos','POZ',-1,''],['team','Drużyna',1,'left'],['grd','GRD',-1,''],['pts','PTS',-1,''],['reb','REB',-1,''],['ast','AST',-1,''],['stl','STL',-1,''],['blk','BLK',-1,''],['to','TO',1,''],['fg','FG%',-1,''],['cs','CS',-1,'color:var(--accent2)'],['per','PER',-1,'color:#3498db'],['gp','GP',-1,'']].map(([col,lbl,defDir,style]) => {
+             const active = (window._poStatsSortCol||'pts') === col;
+             const dir = active ? (window._poStatsSortDir||defDir) : defDir;
+             const arrow = active ? (dir === -1 ? ' ▼' : ' ▲') : '';
+             return \`<th style="cursor:pointer;user-select:none;white-space:nowrap;\${style?style+';':''}\${active?'color:var(--accent)':''}" onclick="window._poStatsSortCol='\${col}';window._poStatsSortDir=\${active?-dir:dir};document.getElementById('playoff-modal-content').innerHTML=renderPlayoffStatsContent(playoffs[playoffs.length-1])">\${lbl}\${arrow}</th>\`;
+           }).join('')}
          </tr></thead>
          <tbody>${statRows || '<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:2rem">Brak danych</td></tr>'}</tbody>
        </table></div>`;
