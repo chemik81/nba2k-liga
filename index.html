@@ -6562,6 +6562,10 @@ function getActivePlayoff() {
 // Get all matches that belong to playoffs (after startDate)
 
 
+function getWinsNeeded(format) {
+  return { bo1:1, bo3:2, bo5:3, bo7:4 }[format] || 3;
+}
+
 function syncPlayoffBracket() {
   const po = getActivePlayoff();
   if (!po || !po.startDate) return;
@@ -9222,9 +9226,6 @@ function getRoundName(n) {
   return 'Finał';
 }
 
-function getWinsNeeded(format) {
-  return { bo1:1, bo3:2, bo5:3, bo7:4 }[format] || 3;
-}
 
 function renderPlayoffManager(po, standings) {
   const winsNeeded = getWinsNeeded(po.format);
