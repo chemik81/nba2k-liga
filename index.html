@@ -4808,6 +4808,8 @@ function renderEvents() {
         ${ev.status === 'open' ? `<button onclick="event.stopPropagation();closeEventSignups('${ev.id}')"
           style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🔒 Zamknij zapisy</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'draft' && !(ev.teams||[]).length ? `<button onclick="event.stopPropagation();assignCaptains('${ev.id}')" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj kapitanów</button>` : ''}
+        ${ev.status === 'draft' ? `<button onclick="event.stopPropagation();openDraftView('${ev.id}')"
+          style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Wróć do Draft</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'draft' && (ev.teams||[]).length ? `<button onclick="event.stopPropagation();startDraft('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Start Draft</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'pickup' ? `<button onclick="event.stopPropagation();randomizeTeams('${ev.id}')"
@@ -5124,11 +5126,14 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
           </div>
         </div>` : ''}
 
-      ${isAdmin && ev.type === 'draft' && ev.status === 'closed' ? `
+      ${isAdmin && ev.type === 'draft' && (ev.status === 'closed' || ev.status === 'draft') ? `
         <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">👑 AKCJE ADMINA</div>
           <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-            ${!(ev.teams||[]).length ? `
+            ${ev.status === 'draft' ? `
+              <button onclick="document.getElementById('event-detail-modal').classList.remove('open');openDraftView('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">🎯 Wróć do Draft</button>
+              <button onclick="finishDraft('${id}')" class="btn btn-ghost">✅ Zakończ draft</button>
+            ` : !(ev.teams||[]).length ? `
               <button onclick="assignCaptains('${id}')" class="btn btn-primary">🎲 Losuj kapitanów</button>
               <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">🎯 Wybierz ręcznie</button>
             ` : `
