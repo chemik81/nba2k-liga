@@ -6046,7 +6046,8 @@ async function confirmStartDraft() {
 
   // Recalculate draftPool/Order with chosen method (captains already set)
   const captainIds = new Set((ev.teams||[]).map(t => t.captain?.id).filter(Boolean));
-  const n = numTeams;
+  // n = actual number of teams (may differ from numTeams selector if captains were assigned differently)
+  const n = ev.teams.length || numTeams;
 
   if(method === 'random') {
     const maxPicks = n * (perTeam - 1);
@@ -6231,7 +6232,9 @@ function renderDraftView(eventId) {
   const turn = ev.draftTurn || 0;
   const isDone = turn >= order.length;
   const currentTeamIdx = isDone ? -1 : order[turn];
-  const currentTeam = isDone ? null : ev.teams[currentTeamIdx];
+  const currentTeam = isDone ? null : (ev.teams[currentTeamIdx] || null);
+  // Safety: if currentTeam is undefined (numTeams mismatch), treat as done
+  if(!isDone && !currentTeam) { console.warn('[Draft] currentTeamIdx', currentTeamIdx, 'out of range, teams:', ev.teams.length); }
   const isMyTurn = currentTeam && discordUser && currentTeam.captain?.id === discordUser.id;
   const isAdmin = _isEventsAdminSync();
 
