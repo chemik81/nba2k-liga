@@ -6115,11 +6115,11 @@ function startDraftTimer(endsAt, eventId) {
   const el = document.getElementById('draft-timer-display');
   if(!endsAt) return;
 
-  // Don't start if already expired (prevents instant autopick on page reload)
   const initialLeft = Math.round((new Date(endsAt) - Date.now()) / 1000);
+  // If already expired on load, just show 00:00, don't autopick
   if(initialLeft <= 0) {
     if(el) { el.textContent = '00:00'; el.style.color = 'var(--loss)'; }
-    return;
+    return;  // _draftTimerFired stays false — no autopick on reload
   }
 
   _draftTimerInterval = setInterval(() => {
@@ -6136,7 +6136,7 @@ function startDraftTimer(endsAt, eventId) {
       _draftTimerFired = true;
       clearInterval(_draftTimerInterval);
       // Only admin triggers autopick to avoid race condition
-      if(_draftTimerEventId && _isLoggedInSync()) {
+      if(_draftTimerEventId && _isEventsAdminSync()) {
         const ev = events.find(e => e.id === _draftTimerEventId);
         if(ev && ev.status === 'draft' && ev.draftPool?.length) {
           console.log('[Timer] Auto-pick triggered for', ev.draftPool[0].name);
@@ -6325,6 +6325,12 @@ async function draftPickPlayer(eventId, playerId) {
   await saveData();
   renderDraftView(eventId);
   renderEvents();
+  // Start timer for next pick
+  if(ev.timerEnd) {
+    startDraftTimer(ev.timerEnd, eventId);
+  } else if(_draftTimerInterval) {
+    clearInterval(_draftTimerInterval);
+  }
 }
 
 async function adminPickFor(eventId) {
