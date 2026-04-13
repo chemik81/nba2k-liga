@@ -5192,7 +5192,6 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
       ${ev.date ? `<span style="font-size:.85rem;color:var(--muted)">📅 ${formatDate(ev.date)}</span>` : ''}
       <span style="font-weight:700;color:${status.color};font-size:.85rem">${status.label}</span>
     </div>
-    ${ev.description ? `<p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">${ev.description}</p>` : ''}
     <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.25rem;overflow-x:auto">${tabBar}</div>
     ${tabContent}`;
 }
