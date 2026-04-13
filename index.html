@@ -5930,7 +5930,58 @@ function startDraft(eventId) {
   if(sel && ev.draftMethod) sel.value = ev.draftMethod;
   const numSel = document.getElementById('start-draft-numteams');
   if(numSel && ev.numTeams) numSel.value = ev.numTeams;
+  // Refresh dynamic content (GM status + captains)
+  refreshStartDraftModal(eventId);
   document.getElementById('start-draft-modal').classList.add('open');
+}
+
+function refreshStartDraftModal(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  const gmOnline = ev.gmOnline || [];
+  const teams = ev.teams || [];
+  const onlineCount = teams.filter(t => gmOnline.includes(t.captain?.id)).length;
+  const allOnline = teams.length > 0 && onlineCount >= teams.length;
+
+  // GM status block
+  const gmBlock = document.getElementById('start-draft-gm-status');
+  if(gmBlock) {
+    gmBlock.innerHTML = teams.length ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+        <span style="font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Status GM</span>
+        <span style="font-weight:700;font-size:.85rem;color:${allOnline ? '#4ade80' : 'var(--accent)'}">
+          ${onlineCount}/${teams.length} online
+        </span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.25rem">
+        ${teams.map(t => {
+          const isOnline = gmOnline.includes(t.captain?.id);
+          return '<div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem">'
+            + '<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + (isOnline ? '#4ade80' : '#374151') + ';border:1.5px solid ' + (isOnline ? '#4ade80' : '#6b7280') + ';box-shadow:' + (isOnline ? '0 0 6px #4ade80' : 'none') + '"></span>'
+            + '<span style="flex:1">' + t.name + '</span>'
+            + '<span style="color:' + (isOnline ? '#4ade80' : '#6b7280') + '">' + (isOnline ? '● online' : '○ offline') + '</span>'
+            + '</div>';
+        }).join('')}
+      </div>` : '<div style="color:var(--muted);font-size:.82rem">Brak drużyn</div>';
+  }
+
+  // Captains block
+  const captBlock = document.getElementById('start-draft-captains');
+  if(captBlock) {
+    captBlock.innerHTML = teams.length ? `
+      <div style="margin-bottom:.4rem;font-size:.82rem;color:var(--muted)">Aktualni kapitanowie:</div>
+      ${teams.map(t => '<div style="font-size:.82rem;padding:.15rem 0">★ <b>' + (t.captain?.name || '—') + '</b> → ' + t.name + '</div>').join('')}
+      <div style="display:flex;gap:.5rem;margin-top:.6rem">
+        <button onclick="document.getElementById('start-draft-modal').classList.remove('open');assignCaptains('${eventId}')" 
+          style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem;cursor:pointer;font-family:inherit;font-size:.78rem">
+          🎲 Losuj ponownie
+        </button>
+        <button onclick="document.getElementById('start-draft-modal').classList.remove('open');openManualCaptainsModal('${eventId}')"
+          style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem;cursor:pointer;font-family:inherit;font-size:.78rem">
+          ✏️ Zmień ręcznie
+        </button>
+      </div>` : '';
+  }
 }
 
 async function confirmStartDraft() {
@@ -9571,7 +9622,14 @@ async function deleteTeam(teamName) {
     <button class="modal-close" onclick="document.getElementById('start-draft-modal').classList.remove('open')">&#x2715;</button>
     <input type="hidden" id="start-draft-eventid">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">&#x1F3AF; START DRAFTU</div>
-    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Wybierz metod&#x0119; draftu przed rozpocz&#x0119;ciem.</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Wybierz metod&#x0119; draftu przed rozpocz&#x0119;ciem.</div>
+
+    <!-- GM STATUS (dynamic) -->
+    <div id="start-draft-gm-status" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
+
+    <!-- CAPTAINS (dynamic) -->
+    <div id="start-draft-captains" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
+
     <label style="margin-top:0">Liczba drużyn</label>
     <select id="start-draft-numteams" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:1rem">
       <option value="2">2 drużyny</option>
