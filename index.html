@@ -6186,21 +6186,33 @@ function checkDraftWatchParam() {
   const params = new URLSearchParams(window.location.search);
   const watchId = params.get('watch_draft');
   if(!watchId) return;
-  // Remove param from URL cleanly
-  const url = new URL(window.location.href);
-  url.searchParams.delete('watch_draft');
-  window.history.replaceState({}, '', url.toString());
+  // Keep param in URL so polling can re-check after refresh
   // Wait for data to load, then open draft
   const tryOpen = (attempts) => {
     const ev = events.find(e => e.id === watchId);
-    if(ev && ev.status === 'draft') {
+    if(ev && (ev.status === 'draft' || ev.status === 'active')) {
+      // Remove param from URL only when successfully opened
+      const url = new URL(window.location.href);
+      url.searchParams.delete('watch_draft');
+      window.history.replaceState({}, '', url.toString());
       openDraftView(watchId);
       startDraftPolling(watchId);
     } else if(attempts > 0) {
-      setTimeout(() => tryOpen(attempts - 1), 500);
+      setTimeout(() => tryOpen(attempts - 1), 600);
+    } else {
+      // Draft not found or not started yet — show info on events page
+      showView('events');
+      const ev2 = events.find(e => e.id === watchId);
+      if(!ev2) {
+        showToast('❌ Nie znaleziono draftu. Może jeszcze nie wystartował?', 'error');
+      } else {
+        showToast('ℹ️ Draft "' + (ev2.title||'') + '" jeszcze nie wystartował. Odśwież stronę gdy admin uruchomi draft.', 'info');
+      }
     }
   };
-  setTimeout(() => tryOpen(10), 800);
+  // Show events view while waiting
+  showView('events');
+  setTimeout(() => tryOpen(15), 1000);
 }
 
 function getDefaultRound() {
