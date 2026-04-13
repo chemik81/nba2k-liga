@@ -728,6 +728,11 @@
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:1rem">Klucz Gemini przechowywany bezpiecznie w Cloudflare Worker jako secret GEMINI_API_KEY.</div>
     <div id="setup-error" style="color:var(--loss);font-size:0.85rem;margin-top:0.75rem;min-height:1.2rem"></div>
 
+    <div style="border-top:1px solid var(--border);margin:1.25rem 0"></div>
+    <label>Hasło managera eventów <span style="color:var(--muted);font-weight:400">(osobna osoba do zarządzania eventami)</span></label>
+    <input type="password" id="setup-events-pw" placeholder="Ustaw hasło dla managera eventów" style="font-size:.85rem">
+    <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">Zostaw puste aby nie zmieniać. Hasło jest przechowywane lokalnie jako hash.</div>
+
     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1rem" onclick="saveSetup()">
       <span id="setup-btn-text">✅ Zapisz i połącz</span>
     </button>
@@ -752,6 +757,7 @@
     <button id="baza-btn" class="btn btn-ghost" onclick="openSetupModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" title="Zmień konfigurację bazy danych">⚙ Baza</button>
     <button id="playoff-btn" class="btn btn-ghost" onclick="openPlayoffModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Playoff</button>
     <button id="season-btn" class="btn btn-ghost" onclick="openSeasonModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="seasons_btn">🏆 Sezony</button>
+    <button id="events-login-btn" class="btn btn-ghost" onclick="document.getElementById('events-auth-modal').classList.add('open')" style="font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Eventy admin</button>
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" title="Zmien motyw">&#9728;</button>
     <div id="discord-user-bar" style="display:flex;align-items:center;gap:.5rem;margin-right:.5rem"></div>
     <div style="display:flex;gap:.25rem;align-items:center" id="lang-switcher"><button onclick="setLang('pl')" id="lang-pl" style="padding:.2rem .45rem;border-radius:4px;border:1px solid var(--accent);background:var(--accent);color:#000;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">PL</button><button onclick="setLang('en')" id="lang-en" style="padding:.2rem .45rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">EN</button><button onclick="setLang('nl')" id="lang-nl" style="padding:.2rem .45rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">NL</button></div>
@@ -1082,6 +1088,19 @@
     <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" style="width:100%" onclick="checkLogin()" data-i18n="login_btn">Zaloguj się</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="document.getElementById('auth-modal').classList.remove('open')">Anuluj</button>
+  </div>
+</div>
+
+<!-- EVENTS ADMIN LOGIN MODAL -->
+<div class="modal-overlay" id="events-auth-modal">
+  <div class="login-box">
+    <div class="login-logo">🏆 Eventy — Logowanie</div>
+    <div class="login-sub">Hasło managera eventów</div>
+    <label style="text-align:left">Hasło</label>
+    <input type="password" id="events-login-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkEventsLogin()">
+    <div id="events-login-error" class="login-error"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="checkEventsLogin()">Zaloguj się</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="document.getElementById('events-auth-modal').classList.remove('open')">Anuluj</button>
   </div>
 </div>
 
@@ -4000,6 +4019,89 @@ async function isLoggedIn() {
   return _isLoggedInSync();
 }
 
+// Events admin — separate role, can manage events without full admin access
+function _isEventsAdminSync() {
+  return _isLoggedInSync() || localStorage.getItem('nba2k_events_auth') === 'ok';
+}
+
+async function checkEventsLogin() {
+  const input = document.getElementById('events-login-input');
+  const errorEl = document.getElementById('events-login-error');
+  const val = input?.value?.trim();
+  if (!val) { if(errorEl) errorEl.textContent = '❌ Podaj hasło'; return; }
+  if (errorEl) errorEl.textContent = '';
+
+  const _SALT = 'nba2k26liga2025events';
+  const hash = await sha256(_SALT + val);
+
+  // Store events password hash in baza settings, fallback to hardcoded
+  const storedHash = localStorage.getItem('nba2k_events_pw_hash') || '';
+
+  const doLogin = () => {
+    localStorage.setItem('nba2k_events_auth', 'ok');
+    localStorage.setItem('nba2k_events_token_hash', hash);
+    document.getElementById('events-auth-modal').classList.remove('open');
+    updateEventsAuthUI();
+    renderEvents();
+    showToast('✅ Zalogowano jako manager eventów', 'success');
+  };
+
+  const doFail = () => {
+    if (errorEl) errorEl.textContent = '❌ Nieprawidłowe hasło';
+    input.value = '';
+  };
+
+  // Try Worker first (site='events') — works for everyone regardless of browser
+  if (workerUrl) {
+    try {
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: hash, site: 'events' })
+      });
+      const data = await res.json();
+      if (data.ok) { doLogin(); return; }
+      else { doFail(); return; }
+    } catch(e) {
+      if (errorEl) errorEl.textContent = '❌ Błąd połączenia z Workerem: ' + e.message;
+      return;
+    }
+  }
+
+  // Fallback: local hash (only works if admin set it on same browser — not recommended)
+  if (storedHash && hash === storedHash) {
+    doLogin();
+  } else {
+    doFail();
+  }
+}
+
+function logoutEvents() {
+  localStorage.removeItem('nba2k_events_auth');
+  localStorage.removeItem('nba2k_events_token_hash');
+  updateEventsAuthUI();
+  renderEvents();
+  showToast('Wylogowano z managera eventów', 'info');
+}
+
+function updateEventsAuthUI() {
+  const btn = document.getElementById('events-login-btn');
+  if (!btn) return;
+  const isEvAdmin = _isEventsAdminSync();
+  const isFullAdmin = _isLoggedInSync();
+  if (isFullAdmin) {
+    btn.style.display = 'none'; // full admin already has access
+  } else if (isEvAdmin) {
+    btn.textContent = '🏆 Wyloguj eventy';
+    btn.onclick = logoutEvents;
+    btn.style.display = 'inline-flex';
+  } else {
+    btn.textContent = '🏆 Eventy admin';
+    btn.onclick = () => document.getElementById('events-auth-modal').classList.add('open');
+    btn.style.display = 'inline-flex';
+  }
+}
+
 async function checkLogin() {
   const val = document.getElementById('login-input').value.trim();
   if(!val) return;
@@ -4092,6 +4194,8 @@ function updateAuthUI() {
     if(playoffBtn) playoffBtn.style.display = logged ? 'inline-flex' : 'none';
     // Re-render matches to show/hide delete buttons
     if(document.getElementById('view-matches')?.classList.contains('active')) renderMatches();
+    // Update events admin button
+    updateEventsAuthUI();
   });
 }
 
@@ -4182,6 +4286,16 @@ async function saveSetup() {
     document.getElementById('setup-modal').classList.remove('open');
     // Update URL hash with bin ID so visitors can read data too
     window.location.hash = 'bin=' + bin;
+    // Save events password hash if provided
+    const eventsPw = document.getElementById('setup-events-pw')?.value?.trim();
+    if (eventsPw) {
+      const _EVENTS_SALT = 'nba2k26liga2025events';
+      sha256(_EVENTS_SALT + eventsPw).then(hash => {
+        localStorage.setItem('nba2k_events_pw_hash', hash);
+        showToast('🏆 Hasło managera eventów zapisane', 'success');
+      });
+      document.getElementById('setup-events-pw').value = '';
+    }
     renderDashboard();
     updateAuthUI();
     showToast('✅ Połączono! Udostępnij link z paska adresu innym.', 'success');
@@ -4620,9 +4734,9 @@ function renderEvents() {
   const el = document.getElementById('events-list');
   if(!el) return;
   const btnNew = document.getElementById('events-admin-btns');
-  if(btnNew) btnNew.style.display = _isLoggedInSync() ? 'flex' : 'none';
+  if(btnNew) btnNew.style.display = _isEventsAdminSync() ? 'flex' : 'none';
   if(!events.length) {
-    el.innerHTML = _isLoggedInSync()
+    el.innerHTML = _isEventsAdminSync()
       ? '<div class="empty"><div class="icon">🏆</div><p>Brak eventów — kliknij &quot;+ Nowy Event&quot; aby stworzyć pierwszy.</p></div>'
       : '<div class="empty"><div class="icon">🏆</div><p>Brak eventów.</p></div>';
     return;
@@ -4735,7 +4849,7 @@ async function deleteEvent(id) {
 }
 
 async function loadTestEvents() {
-  if(!_isLoggedInSync()) return;
+  if(!_isEventsAdminSync()) return;
   const players20 = [
     {id:'tp_01',name:'SwatSZTP',discordTag:'swat123',avatar:''},
     {id:'tp_02',name:'MosthatedTrojan',discordTag:'trojan',avatar:''},
@@ -4885,7 +4999,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
   if(!ev) return;
   const type = EVENT_TYPES[ev.type] || { label: ev.type };
   const status = EVENT_STATUS[ev.status] || { label: ev.status, color: 'var(--muted)' };
-  const isAdmin = _isLoggedInSync();
+  const isAdmin = _isEventsAdminSync();
   const evMatches = ev.matches || [];
 
   const tabs = [
