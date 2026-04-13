@@ -5100,11 +5100,11 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
       ${['open','closed','draft'].includes(ev.status) ? `
         <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
           ${discordUser ? `
-            ${(ev.players||[]).find(p => p.id === discordUser.id) ? `
+            ${['closed','draft'].includes(ev.status) && (ev.teams||[]).some(t => t.captain?.id === discordUser?.id) ? `
+              <button onclick="openGMPanel('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center;background:var(--accent);color:#000;font-size:1rem;padding:.8rem">🎮 Panel GM — Jesteś kapitanem</button>
+            ` : ev.status === 'open' && (ev.players||[]).find(p => p.id === discordUser.id) ? `
               <div style="color:var(--win);font-weight:700;text-align:center;padding:.75rem">✅ Jesteś zapisany na ten event!</div>
               <button onclick="cancelSignup('${ev.id}')" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.5rem">Wypisz się</button>
-            ` : ['closed','draft'].includes(ev.status) && (ev.teams||[]).some(t => t.captain?.id === discordUser?.id) ? `
-              <button onclick="openGMPanel('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center;background:var(--accent);color:#000;font-size:1rem;padding:.8rem">🎮 Panel GM — Jesteś kapitanem</button>
             ` : ev.status === 'open' ? `
               <button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">🎮 Zapisz się</button>
             ` : ''}
