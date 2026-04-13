@@ -1865,7 +1865,7 @@ function renderAliases() {
   </table>`;
 }
 
-async function saveData() {
+async function saveData(silent = false) {
   if(!jbKey && !workerUrl) { showToast(t('err_no_master_key'), 'error'); return; }
   try {
     // ── Compact player data ───────────────────────────────────────────────
@@ -1916,7 +1916,7 @@ async function saveData() {
       });
       if(!res.ok) {
         const err = await res.json().catch(()=>({}));
-        showToast('❌ Błąd zapisu (Worker): ' + (err.error||res.status), 'error');
+        if(!silent) showToast('❌ Błąd zapisu (Worker): ' + (err.error||res.status), 'error');
         return false;
       }
       return true;
@@ -6403,7 +6403,7 @@ async function openGMPanel(eventId) {
   if(!ev.gmOnline.includes(discordUser.id)) {
     ev.gmOnline.push(discordUser.id);
     // Try to save silently — only works if events admin or full admin is logged in
-    try { await saveData(); } catch(e) {}
+    try { await saveData(true); } catch(e) {}
   }
   window._gmPanelEventId = eventId;
   renderGMPanel(eventId);
@@ -6419,7 +6419,7 @@ async function closeGMPanel(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
   ev.gmOnline = (ev.gmOnline||[]).filter(id => id !== discordUser.id);
-  try { await saveData(); } catch(e) {}
+  try { await saveData(true); } catch(e) {}
 }
 
 function renderGMPanel(eventId) {
