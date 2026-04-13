@@ -4785,7 +4785,7 @@ function renderEvents() {
         <div style="flex:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:1px">${ev.title}</div>
           <div style="font-size:.85rem;color:var(--muted);margin-top:.25rem">${type.label} · ${ev.date||'Data TBD'}${ev.time ? ' · <b style="color:var(--text)">' + ev.time + '</b>' : ''}</div>
-          ${ev.description ? `<div style="font-size:.85rem;color:var(--muted);margin-top:.35rem">${ev.description}</div>` : ''}
+
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-weight:700;font-size:.85rem;color:${status.color}">${status.label}</div>
@@ -5922,7 +5922,8 @@ function startDraft(eventId) {
 async function confirmStartDraft() {
   const eventId  = document.getElementById('start-draft-eventid').value;
   const method   = document.getElementById('start-draft-method').value || 'snake';
-  const numTeams = +(document.getElementById('start-draft-numteams')?.value || 4);
+  const numTeams  = +(document.getElementById('start-draft-numteams')?.value || 4);
+  const timerSecs = +(document.getElementById('start-draft-timer')?.value || 120);
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
 
@@ -5980,6 +5981,8 @@ async function confirmStartDraft() {
   ev.draftTurn = 0;
   ev.draftOrder = buildDraftOrder(method, n, ev.draftPool.length);
   ev.draftMethod = method;
+  ev.timerSecs = timerSecs;
+  ev.timerEnd = new Date(Date.now() + timerSecs * 1000).toISOString();
   ev.status = 'draft';
   await saveData();
   document.getElementById('start-draft-modal').classList.remove('open');
@@ -6005,6 +6008,22 @@ function stopDraftPolling() {
   if(_draftPollInterval) { clearInterval(_draftPollInterval); _draftPollInterval = null; }
 }
 
+// Timer for draft picks
+let _draftTimerInterval = null;
+function startDraftTimer(endsAt) {
+  if(_draftTimerInterval) clearInterval(_draftTimerInterval);
+  const el = document.getElementById('draft-timer-display');
+  if(!el || !endsAt) return;
+  _draftTimerInterval = setInterval(() => {
+    const left = Math.max(0, Math.round((new Date(endsAt) - Date.now()) / 1000));
+    const mm = String(Math.floor(left/60)).padStart(2,'0');
+    const ss = String(left%60).padStart(2,'0');
+    el.textContent = mm + ':' + ss;
+    el.style.color = left <= 15 ? 'var(--loss)' : left <= 30 ? '#f59e0b' : 'var(--accent)';
+    if(left === 0) clearInterval(_draftTimerInterval);
+  }, 500);
+}
+
 function startDraftPolling(eventId) {
   stopDraftPolling();
   if(!workerUrl) return;
@@ -6024,7 +6043,8 @@ function startDraftPolling(eventId) {
         const idx = events.findIndex(e => e.id === eventId);
         if(idx !== -1) events[idx] = freshEv;
         renderDraftView(eventId);
-        if(freshEv.status !== 'draft') stopDraftPolling();
+        if(freshEv.timerEnd) startDraftTimer(freshEv.timerEnd);
+        if(freshEv.status !== 'draft') { stopDraftPolling(); clearInterval(_draftTimerInterval); }
       }
     } catch(e) { /* ignore network errors */ }
   }, 4000);
@@ -6046,6 +6066,8 @@ function openDraftView(eventId) {
   overlay.style.display = 'block';
   renderDraftView(eventId);
   startDraftPolling(eventId);
+  const _ev = events.find(e=>e.id===eventId);
+  if(_ev?.timerEnd) startDraftTimer(_ev.timerEnd);
 }
 
 function renderDraftView(eventId) {
@@ -6073,6 +6095,7 @@ function renderDraftView(eventId) {
               <span style="width:7px;height:7px;border-radius:50%;background:var(--win);display:inline-block;animation:hpulse 1.5s infinite"></span>
               LIVE
             </span>
+            ${ev.timerSecs ? '<span id="draft-timer-display" style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:1.6rem;color:var(--accent);min-width:60px">—</span>' : ''}
           </div>
         </div>
         <div style="display:flex;gap:.5rem;align-items:center">
@@ -6154,6 +6177,13 @@ async function draftPickPlayer(eventId, playerId) {
   ev.teams[teamIdx].players.push(player);
   ev.draftPool.splice(playerIdx, 1);
   ev.draftTurn = turn + 1;
+  ev.lastPick = { playerName: player.name, teamName: ev.teams[teamIdx].name, pickNum: turn + 1, ts: new Date().toISOString() };
+  // Reset timer for next pick
+  if(ev.timerSecs && ev.draftTurn < (ev.draftOrder||[]).length) {
+    ev.timerEnd = new Date(Date.now() + ev.timerSecs * 1000).toISOString();
+  } else {
+    ev.timerEnd = null;
+  }
 
   await saveData();
   renderDraftView(eventId);
@@ -6184,7 +6214,9 @@ async function finishDraft(eventId) {
 
 function copyDraftWatchLink(eventId) {
   const base = window.location.href.split('?')[0].split('#')[0];
-  const link = base + '?watch_draft=' + eventId;
+  const baseDir = base.substring(0, base.lastIndexOf('/') + 1);
+  // Link do dedykowanej strony widoku draftu
+  const link = baseDir + 'draft-watch.html?w=' + encodeURIComponent(workerUrl.replace(/\/$/, '')) + '&event=' + eventId;
   navigator.clipboard.writeText(link).then(() => {
     showToast('🔗 Link skopiowany do schowka!', 'success');
   }).catch(() => {
@@ -9345,6 +9377,16 @@ async function deleteTeam(teamName) {
       <option value="7">7 drużyn</option>
       <option value="8">8 drużyn</option>
     </select>
+    <label style="margin-top:0">Czas na pick (sekundy)</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">
+      <input id="start-draft-timer" type="number" min="15" max="600" value="120"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem">
+      <div style="display:flex;gap:.25rem">
+        <button onclick="document.getElementById('start-draft-timer').value=60" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">60s</button>
+        <button onclick="document.getElementById('start-draft-timer').value=90" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">90s</button>
+        <button onclick="document.getElementById('start-draft-timer').value=120" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem">120s</button>
+      </div>
+    </div>
     <label style="margin-top:0">Metoda draftu</label>
     <select id="start-draft-method" onchange="updateDraftMethodDesc()" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:.5rem">
       <option value="snake">&#x1F40D; Snake &#x2014; A&#x2192;B&#x2192;C&#x2192;D&#x2192;D&#x2192;C&#x2192;B&#x2192;A (zalecane)</option>
