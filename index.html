@@ -6025,26 +6025,39 @@ function stopDraftPolling() {
 // Timer for draft picks
 let _draftTimerInterval = null;
 let _draftTimerEventId = null;
+let _draftTimerFired = false;
 function startDraftTimer(endsAt, eventId) {
   if(_draftTimerInterval) clearInterval(_draftTimerInterval);
   _draftTimerEventId = eventId || _draftTimerEventId;
+  _draftTimerFired = false;
   const el = document.getElementById('draft-timer-display');
   if(!endsAt) return;
+
+  // Don't start if already expired (prevents instant autopick on page reload)
+  const initialLeft = Math.round((new Date(endsAt) - Date.now()) / 1000);
+  if(initialLeft <= 0) {
+    if(el) { el.textContent = '00:00'; el.style.color = 'var(--loss)'; }
+    return;
+  }
+
   _draftTimerInterval = setInterval(() => {
-    const left = Math.max(0, Math.round((new Date(endsAt) - Date.now()) / 1000));
+    const rawLeft = (new Date(endsAt) - Date.now()) / 1000;
+    const left = Math.max(0, Math.round(rawLeft));
     const mm = String(Math.floor(left/60)).padStart(2,'0');
     const ss = String(left%60).padStart(2,'0');
     if(el) {
       el.textContent = mm + ':' + ss;
       el.style.color = left <= 10 ? 'var(--loss)' : left <= 30 ? '#f59e0b' : 'var(--accent)';
     }
-    if(left === 0) {
+    // Trigger autopick exactly once when timer hits 0
+    if(rawLeft <= 0 && !_draftTimerFired) {
+      _draftTimerFired = true;
       clearInterval(_draftTimerInterval);
-      // Autopick — only admin triggers it (one person, avoids race condition)
+      // Only admin triggers autopick to avoid race condition
       if(_draftTimerEventId && _isLoggedInSync()) {
         const ev = events.find(e => e.id === _draftTimerEventId);
         if(ev && ev.status === 'draft' && ev.draftPool?.length) {
-          console.log('[Timer] Auto-pick triggered');
+          console.log('[Timer] Auto-pick triggered for', ev.draftPool[0].name);
           draftPickPlayer(_draftTimerEventId, ev.draftPool[0].id);
         }
       }
