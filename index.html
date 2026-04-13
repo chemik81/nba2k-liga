@@ -4031,15 +4031,12 @@ async function checkEventsLogin() {
   if (!val) { if(errorEl) errorEl.textContent = '❌ Podaj hasło'; return; }
   if (errorEl) errorEl.textContent = '';
 
-  const _SALT = 'nba2k26liga2025events';
-  const hash = await sha256(_SALT + val);
-
-  // Store events password hash in baza settings, fallback to hardcoded
-  const storedHash = localStorage.getItem('nba2k_events_pw_hash') || '';
+  // Send plain password to Worker (Worker compares directly with ADMIN_TOKEN_EVENTS secret)
+  const hash = val;
 
   const doLogin = () => {
     localStorage.setItem('nba2k_events_auth', 'ok');
-    localStorage.setItem('nba2k_events_token_hash', hash);
+    localStorage.setItem('nba2k_events_token_hash', val);
     document.getElementById('events-auth-modal').classList.remove('open');
     updateEventsAuthUI();
     renderEvents();
