@@ -5942,6 +5942,8 @@ function startDraft(eventId) {
   if(sel && ev.draftMethod) sel.value = ev.draftMethod;
   const numSel = document.getElementById('start-draft-numteams');
   if(numSel && ev.numTeams) numSel.value = ev.numTeams;
+  const perSel = document.getElementById('start-draft-perteam');
+  if(perSel && ev.perTeam) perSel.value = ev.perTeam;
   // Refresh dynamic content (GM status + captains)
   refreshStartDraftModal(eventId);
   document.getElementById('start-draft-modal').classList.add('open');
@@ -5975,6 +5977,18 @@ function refreshStartDraftModal(eventId) {
   const allOnline = teams.length > 0 && onlineCount >= teams.length;
 
   // GM status block
+  // Pool info
+  const numTeamsVal = +(document.getElementById('start-draft-numteams')?.value || 4);
+  const perTeamVal  = +(document.getElementById('start-draft-perteam')?.value || 5);
+  const evPlayers = ev.players?.length || 0;
+  const needed  = numTeamsVal * perTeamVal;
+  const maxPicks = numTeamsVal * (perTeamVal - 1);
+  const excluded = Math.max(0, evPlayers - needed);
+  const poolInfo = document.getElementById('start-draft-pool-info');
+  if(poolInfo) {
+    poolInfo.innerHTML = `Zapisanych: <b style="color:var(--text)">${evPlayers}</b> · Potrzeba: <b style="color:var(--text)">${needed}</b> · Nie wybierze się: <b style="color:${excluded > 0 ? 'var(--loss)' : 'var(--win)'}">${excluded}</b>`;
+  }
+
   const gmBlock = document.getElementById('start-draft-gm-status');
   if(gmBlock) {
     gmBlock.innerHTML = teams.length ? `
@@ -6019,6 +6033,7 @@ async function confirmStartDraft() {
   const eventId  = document.getElementById('start-draft-eventid').value;
   const method   = document.getElementById('start-draft-method').value || 'snake';
   const numTeams  = +(document.getElementById('start-draft-numteams')?.value || 4);
+  const perTeam   = +(document.getElementById('start-draft-perteam')?.value || 5);
   const timerSecs = +(document.getElementById('start-draft-timer')?.value || 120);
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
@@ -6030,7 +6045,9 @@ async function confirmStartDraft() {
   const n = numTeams;
 
   if(method === 'random') {
-    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5);
+    const maxPicks = n * (perTeam - 1);
+    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5).slice(0, maxPicks);
+    ev.perTeam = perTeam;
     remaining.forEach((p, i) => ev.teams[i % n].players.push(p));
     ev.draftPool = [];
     ev.draftMethod = method;
@@ -6056,10 +6073,13 @@ async function confirmStartDraft() {
       const gp = stats.gp||1;
       return { p, score: (stats.pts/gp)*.4+(stats.reb/gp)*.2+(stats.ast/gp)*.2+(stats.stl/gp)*.1+(stats.blk/gp)*.1 };
     }).sort((a,b) => b.score-a.score);
-    const assignOrder = buildDraftOrder('snake', n, scored.length);
+    const maxPicks = n * (perTeam - 1);
+    const limitedScored = scored.slice(0, maxPicks);
+    const assignOrder = buildDraftOrder('snake', n, limitedScored.length);
+    ev.perTeam = perTeam;
     // Reset teams to only captains first
     ev.teams.forEach(t => { t.players = [t.captain]; });
-    scored.forEach(({p}, i) => ev.teams[assignOrder[i]].players.push(p));
+    limitedScored.forEach(({p}, i) => ev.teams[assignOrder[i]].players.push(p));
     ev.draftPool = [];
     ev.draftMethod = method;
     ev.status = 'active';
@@ -6073,7 +6093,11 @@ async function confirmStartDraft() {
 
   // Snake or Linear — start interactive draft
   ev.teams.forEach(t => { t.players = [t.captain]; }); // reset to captains only
-  ev.draftPool = (ev.players||[]).filter(p => !captainIds.has(p.id));
+  ev.perTeam = perTeam;
+  const maxPicks = n * (perTeam - 1); // captains already in teams, so perTeam-1 picks per team
+  const allPool = (ev.players||[]).filter(p => !captainIds.has(p.id));
+  ev.draftPool = allPool.slice(0, maxPicks); // limit pool to exactly what's needed
+  ev.draftPoolExcluded = allPool.slice(maxPicks); // track who didn't make the draft
   ev.draftTurn = 0;
   ev.draftOrder = buildDraftOrder(method, n, ev.draftPool.length);
   ev.draftMethod = method;
@@ -9661,16 +9685,36 @@ async function deleteTeam(teamName) {
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">&#x1F3AF; START DRAFTU</div>
     <div style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Wybierz metod&#x0119; draftu przed rozpocz&#x0119;ciem.</div>
 
-    <label style="margin-top:0">Liczba drużyn</label>
-    <select id="start-draft-numteams" onchange="refreshStartDraftModal(document.getElementById('start-draft-eventid').value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:1rem">
-      <option value="2">2 drużyny</option>
-      <option value="3">3 drużyny</option>
-      <option value="4" selected>4 drużyny</option>
-      <option value="5">5 drużyn</option>
-      <option value="6">6 drużyn</option>
-      <option value="7">7 drużyn</option>
-      <option value="8">8 drużyn</option>
-    </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.25rem">
+      <label style="margin:0;font-size:.75rem">Liczba drużyn</label>
+      <label style="margin:0;font-size:.75rem">Rozmiar drużyny</label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">
+      <div>
+        <select id="start-draft-numteams" onchange="refreshStartDraftModal(document.getElementById('start-draft-eventid').value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem">
+          <option value="2">2 drużyny</option>
+          <option value="3">3 drużyny</option>
+          <option value="4" selected>4 drużyny</option>
+          <option value="5">5 drużyn</option>
+          <option value="6">6 drużyn</option>
+          <option value="7">7 drużyn</option>
+          <option value="8">8 drużyn</option>
+        </select>
+      </div>
+      <div>
+        <select id="start-draft-perteam" onchange="refreshStartDraftModal(document.getElementById('start-draft-eventid').value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem">
+          <option value="3">3 zawodników</option>
+          <option value="4">4 zawodników</option>
+          <option value="5" selected>5 zawodników</option>
+          <option value="6">6 zawodników</option>
+          <option value="7">7 zawodników</option>
+          <option value="8">8 zawodników</option>
+          <option value="9">9 zawodników</option>
+          <option value="10">10 zawodników</option>
+        </select>
+      </div>
+    </div>
+    <div id="start-draft-pool-info" style="font-size:.78rem;color:var(--muted);margin-top:-.5rem;margin-bottom:1rem;text-align:center"></div>
 
     <!-- GM STATUS (dynamic) -->
     <div id="start-draft-gm-status" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
