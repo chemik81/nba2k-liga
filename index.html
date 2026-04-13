@@ -4364,6 +4364,7 @@ async function saveSetup() {
   applyLangOnLoad();
   if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
   checkEventUrlParam();
+  checkPendingSignupEvent();
 })();
 
 
@@ -4783,7 +4784,7 @@ function renderEvents() {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
         <div style="flex:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:1px">${ev.title}</div>
-          <div style="font-size:.85rem;color:var(--muted);margin-top:.25rem">${type.label} · ${ev.date||'Data TBD'}</div>
+          <div style="font-size:.85rem;color:var(--muted);margin-top:.25rem">${type.label} · ${ev.date||'Data TBD'}${ev.time ? ' · <b style="color:var(--text)">' + ev.time + '</b>' : ''}</div>
           ${ev.description ? `<div style="font-size:.85rem;color:var(--muted);margin-top:.35rem">${ev.description}</div>` : ''}
         </div>
         <div style="text-align:right;flex-shrink:0">
@@ -4823,9 +4824,13 @@ function openCreateEventModal(editId) {
       ${Object.entries(EVENT_TYPES).map(([k,v]) => `<option value="${k}"${(ev?.type||'draft')===k?' selected':''}>${v.label}</option>`).join('')}
     </select>
 
-    <label style="margin-top:.75rem">Data eventu</label>
-    <input id="ev-date" type="date" value="${ev?.date||''}"
-      style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
+    <label style="margin-top:.75rem">Data i godzina eventu</label>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:.5rem">
+      <input id="ev-date" type="date" value="${ev?.date||''}"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit;width:100%;box-sizing:border-box">
+      <input id="ev-time" type="time" value="${ev?.time||''}"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit;width:120px">
+    </div>
 
     <label style="margin-top:.75rem">Maks. graczy (opcjonalne)</label>
     <input id="ev-max" type="number" min="2" max="100" value="${ev?.maxPlayers||''}" placeholder="bez limitu"
@@ -4850,15 +4855,16 @@ async function saveEvent(editId) {
   const title = document.getElementById('ev-title').value.trim();
   const type  = document.getElementById('ev-type').value;
   const date  = document.getElementById('ev-date').value;
+  const time  = document.getElementById('ev-time')?.value || '';
   const max      = +document.getElementById('ev-max').value || null;
   const desc = document.getElementById('ev-desc').value.trim();
   if(!title) { showToast('❌ Wpisz nazwę eventu', 'error'); return; }
 
   if(editId) {
     const idx = events.findIndex(e => e.id === editId);
-    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, description: desc };
+    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, time, maxPlayers: max, description: desc };
   } else {
-    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max,
+    events.push({ id: 'ev_' + Date.now(), title, type, date, time, maxPlayers: max,
       description: desc, status: 'open', players: [], teams: [],
       createdAt: new Date().toISOString() });
   }
@@ -5065,12 +5071,19 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
       </div>`).join('');
 
     tabContent = `
+      <div style="margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+          ${ev.date ? '<span style="font-size:.9rem;color:var(--muted)">📅 ' + ev.date + (ev.time ? ' <b style="color:var(--text)">' + ev.time + '</b>' : '') + '</span>' : ''}
+          <span style="font-size:.85rem;color:${status.color};font-weight:700">${status.label}</span>
+          ${ev.maxPlayers ? '<span style="font-size:.8rem;color:var(--muted)">👥 maks. ' + ev.maxPlayers + ' graczy</span>' : ''}
+        </div>
+        ${ev.description ? `<div style="background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:.85rem 1rem;font-size:.9rem;line-height:1.6;white-space:pre-wrap;margin-bottom:.25rem">${ev.description}</div>` : ''}
+      </div>
       ${ev.teams?.length ? `<div style="margin-bottom:1.25rem"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">🏀 DRUŻYNY</div>${teamsHtml}</div>` : ''}
       <div style="margin-bottom:1.25rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">
           👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
-        </div>
-        ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
+        </div>anych graczy</div>'}
       </div>
 
       ${ev.status === 'open' ? `
@@ -5588,7 +5601,7 @@ async function removePlayerFromEvent(eventId, playerId) {
 }
 
 async function signupToEvent(eventId) {
-  if(!discordUser) { loginWithDiscord(); return; }
+  if(!discordUser) { loginWithDiscord(eventId); return; }
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
   if(ev.maxPlayers && (ev.players||[]).length >= ev.maxPlayers) {
@@ -5672,9 +5685,12 @@ function logoutDiscord() {
   showToast('👋 Wylogowano z Discorda', 'info');
 }
 
-function loginWithDiscord() {
+function loginWithDiscord(returnEventId) {
   if(!workerUrl) { showToast('❌ Brak Worker URL w konfiguracji', 'error'); return; }
-  window.location.href = workerUrl.replace(/\/$/, '') + '/discord-login';
+  // Save the event we want to return to after login
+  if(returnEventId) localStorage.setItem('nba2k_pending_signup_event', returnEventId);
+  const returnUrl = window.location.href.split('?')[0].split('#')[0];
+  window.location.href = workerUrl.replace(/\/$/, '') + '/discord-login?return=' + encodeURIComponent(returnUrl);
 }
 
 
@@ -8604,6 +8620,34 @@ function copyEventLink(eventId) {
   }).catch(() => {
     prompt('Skopiuj link:', url);
   });
+}
+
+// After Discord OAuth return — open pending event signup
+function checkPendingSignupEvent() {
+  if(!discordUser) return; // only if just logged in
+  const pendingId = localStorage.getItem('nba2k_pending_signup_event');
+  if(!pendingId) return;
+  localStorage.removeItem('nba2k_pending_signup_event');
+  // Wait for events to load then open the event + trigger signup flow
+  const tryOpen = (attempts) => {
+    const ev = events.find(e => e.id === pendingId);
+    if(ev) {
+      showView('events');
+      setTimeout(() => {
+        openEventDetail(pendingId);
+        // Auto-trigger signup (position picker for draft, direct for others)
+        setTimeout(() => {
+          if(ev.type === 'draft' && ev.status === 'open') {
+            openPositionPickerModal(pendingId);
+          }
+          // For non-draft events user can click button themselves — event detail is already open
+        }, 400);
+      }, 300);
+    } else if(attempts > 0) {
+      setTimeout(() => tryOpen(attempts - 1), 400);
+    }
+  };
+  setTimeout(() => tryOpen(10), 600);
 }
 
 // Check on load if URL has ?event= param and open it
