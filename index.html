@@ -6205,7 +6205,7 @@ function renderDraftView(eventId) {
   const currentTeamIdx = isDone ? -1 : order[turn];
   const currentTeam = isDone ? null : ev.teams[currentTeamIdx];
   const isMyTurn = currentTeam && discordUser && currentTeam.captain?.id === discordUser.id;
-  const isAdmin = _isLoggedInSync();
+  const isAdmin = _isEventsAdminSync();
 
   overlay.innerHTML = `
     <div style="max-width:900px;margin:0 auto">
