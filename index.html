@@ -5083,7 +5083,8 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
       <div style="margin-bottom:1.25rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">
           👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
-        </div>anych graczy</div>'}
+        </div>
+        ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
       </div>
 
       ${ev.status === 'open' ? `
