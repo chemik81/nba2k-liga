@@ -5635,12 +5635,20 @@ async function signupToEvent(eventId) {
     return;
   }
   if(!ev.players) ev.players = [];
-  ev.players.push({ id: discordUser.id, name: discordUser.name,
-    discordTag: discordUser.discordTag, avatar: discordUser.avatar });
-  await saveData();
-  openEventDetail(eventId);
-  renderEvents();
-  showToast('✅ Zapisano na event!', 'success');
+  const playerObj = { id: discordUser.id, name: discordUser.name,
+    discordTag: discordUser.discordTag, avatar: discordUser.avatar };
+  try {
+    const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, player: playerObj })
+    });
+    const data = await res.json();
+    if(!res.ok) { showToast('❌ Błąd zapisu: ' + (data.error||res.status), 'error'); return; }
+    ev.players.push(playerObj);
+    openEventDetail(eventId);
+    renderEvents();
+    showToast('✅ Zapisano na event!', 'success');
+  } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
 }
 
 function openPositionPickerModal(eventId) {
@@ -5664,14 +5672,21 @@ async function confirmSignupWithPositions() {
   });
   if(!positions.length) { showToast('❌ Zaznacz przynajmniej jedną pozycję', 'error'); return; }
   if(!ev.players) ev.players = [];
-  ev.players.push({ id: discordUser.id, name: discordUser.name,
-    discordTag: discordUser.discordTag, avatar: discordUser.avatar,
-    positions });
-  await saveData();
-  document.getElementById('position-picker-modal').classList.remove('open');
-  openEventDetail(eventId);
-  renderEvents();
-  showToast('✅ Zapisano na draft!', 'success');
+  const playerObj = { id: discordUser.id, name: discordUser.name,
+    discordTag: discordUser.discordTag, avatar: discordUser.avatar, positions };
+  try {
+    const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, player: playerObj })
+    });
+    const data = await res.json();
+    if(!res.ok) { showToast('❌ Błąd zapisu: ' + (data.error||res.status), 'error'); return; }
+    ev.players.push(playerObj);
+    document.getElementById('position-picker-modal').classList.remove('open');
+    openEventDetail(eventId);
+    renderEvents();
+    showToast('✅ Zapisano na draft!', 'success');
+  } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
 }
 
 function togglePosLabel(pos) {
@@ -5689,11 +5704,17 @@ async function cancelSignup(eventId) {
   if(!discordUser) return;
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
-  ev.players = (ev.players||[]).filter(p => p.id !== discordUser.id);
-  await saveData();
-  openEventDetail(eventId);
-  renderEvents();
-  showToast('👋 Wypisano z eventu', 'info');
+  try {
+    const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, playerId: discordUser.id })
+    });
+    if(!res.ok) { const d = await res.json(); showToast('❌ Błąd: ' + (d.error||res.status), 'error'); return; }
+    ev.players = (ev.players||[]).filter(p => p.id !== discordUser.id);
+    openEventDetail(eventId);
+    renderEvents();
+    showToast('👋 Wypisano z eventu', 'info');
+  } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
 }
 
 function logoutDiscord() {
