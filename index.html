@@ -1104,6 +1104,14 @@
   </div>
 </div>
 
+<!-- GM PANEL MODAL -->
+<div class="modal-overlay" id="gm-panel-modal" style="z-index:10000">
+  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" id="gm-panel-close-btn" onclick="closeGMPanel(window._gmPanelEventId)">&#x2715;</button>
+    <div id="gm-panel-content"></div>
+  </div>
+</div>
+
 <!-- POSITION PICKER MODAL -->
 <div class="modal-overlay" id="position-picker-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1300">
   <div class="modal" style="max-width:400px">
@@ -5094,7 +5102,9 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
               <div style="color:var(--win);font-weight:700;text-align:center;padding:.75rem">✅ Jesteś zapisany na ten event!</div>
               <button onclick="cancelSignup('${ev.id}')" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.5rem">Wypisz się</button>
             ` : `
-              <button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">🎮 Zapisz się</button>
+              ${ev.status === 'draft' && discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ?
+                `<button onclick="openGMPanel('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center;background:var(--accent);color:#000">🎮 Otwórz Panel GM</button>`
+                : `<button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">🎮 Zapisz się</button>`}
             `}
           ` : `
             <button onclick="loginWithDiscord()" style="width:100%;background:#5865F2;color:#fff;border:none;border-radius:8px;padding:.8rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
@@ -6009,17 +6019,31 @@ function stopDraftPolling() {
 
 // Timer for draft picks
 let _draftTimerInterval = null;
-function startDraftTimer(endsAt) {
+let _draftTimerEventId = null;
+function startDraftTimer(endsAt, eventId) {
   if(_draftTimerInterval) clearInterval(_draftTimerInterval);
+  _draftTimerEventId = eventId || _draftTimerEventId;
   const el = document.getElementById('draft-timer-display');
-  if(!el || !endsAt) return;
+  if(!endsAt) return;
   _draftTimerInterval = setInterval(() => {
     const left = Math.max(0, Math.round((new Date(endsAt) - Date.now()) / 1000));
     const mm = String(Math.floor(left/60)).padStart(2,'0');
     const ss = String(left%60).padStart(2,'0');
-    el.textContent = mm + ':' + ss;
-    el.style.color = left <= 15 ? 'var(--loss)' : left <= 30 ? '#f59e0b' : 'var(--accent)';
-    if(left === 0) clearInterval(_draftTimerInterval);
+    if(el) {
+      el.textContent = mm + ':' + ss;
+      el.style.color = left <= 10 ? 'var(--loss)' : left <= 30 ? '#f59e0b' : 'var(--accent)';
+    }
+    if(left === 0) {
+      clearInterval(_draftTimerInterval);
+      // Autopick — only admin triggers it (one person, avoids race condition)
+      if(_draftTimerEventId && _isLoggedInSync()) {
+        const ev = events.find(e => e.id === _draftTimerEventId);
+        if(ev && ev.status === 'draft' && ev.draftPool?.length) {
+          console.log('[Timer] Auto-pick triggered');
+          draftPickPlayer(_draftTimerEventId, ev.draftPool[0].id);
+        }
+      }
+    }
   }, 500);
 }
 
@@ -6042,7 +6066,7 @@ function startDraftPolling(eventId) {
         const idx = events.findIndex(e => e.id === eventId);
         if(idx !== -1) events[idx] = freshEv;
         renderDraftView(eventId);
-        if(freshEv.timerEnd) startDraftTimer(freshEv.timerEnd);
+        if(freshEv.timerEnd) startDraftTimer(freshEv.timerEnd, eventId);
         if(freshEv.status !== 'draft') { stopDraftPolling(); clearInterval(_draftTimerInterval); }
       }
     } catch(e) { /* ignore network errors */ }
@@ -6066,7 +6090,7 @@ function openDraftView(eventId) {
   renderDraftView(eventId);
   startDraftPolling(eventId);
   const _ev = events.find(e=>e.id===eventId);
-  if(_ev?.timerEnd) startDraftTimer(_ev.timerEnd);
+  if(_ev?.timerEnd) startDraftTimer(_ev.timerEnd, eventId);
 }
 
 function renderDraftView(eventId) {
@@ -6094,6 +6118,7 @@ function renderDraftView(eventId) {
               <span style="width:7px;height:7px;border-radius:50%;background:var(--win);display:inline-block;animation:hpulse 1.5s infinite"></span>
               LIVE
             </span>
+            ${(ev.teams||[]).length ? `<span style="font-size:.75rem;color:var(--muted)">GM: <b style="color:${(ev.gmOnline||[]).length>=(ev.teams||[]).length?'var(--win)':'var(--accent)'}">${(ev.gmOnline||[]).length}/${(ev.teams||[]).length}</b> online</span>` : ''}
             ${ev.timerSecs ? '<span id="draft-timer-display" style="font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:1.6rem;color:var(--accent);min-width:60px">—</span>' : ''}
           </div>
         </div>
@@ -6101,7 +6126,12 @@ function renderDraftView(eventId) {
           <button onclick="copyDraftWatchLink('${eventId}')"
             style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">
             🔗 Link do oglądania
-          </button><button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
+          </button>
+          ${discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `
+          <button onclick="openGMPanel('${eventId}')"
+            style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">
+            🎮 Panel GM
+          </button>` : ''}<button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">
           ✕ Zamknij
         </button>
@@ -6153,7 +6183,10 @@ function renderDraftView(eventId) {
           ${ev.teams.map((t, ti) => `
             <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;
               ${ti === currentTeamIdx && !isDone ? 'border:2px solid var(--accent)' : 'border:1px solid var(--border)'}">
-              <div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem">${t.name} <span style="font-size:.75rem;color:var(--muted)">(kpt: ${t.captain?.name})</span></div>
+              <div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem;display:flex;align-items:center;gap:.4rem">
+                <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${(ev.gmOnline||[]).includes(t.captain?.id)?'#4ade80':'var(--muted)'};box-shadow:${(ev.gmOnline||[]).includes(t.captain?.id)?'0 0 6px #4ade80':'none'}"></span>
+                ${t.name} <span style="font-size:.75rem;color:var(--muted)">(kpt: ${t.captain?.name})</span>
+              </div>
               ${(t.players||[]).map(p => `<div style="font-size:.8rem;padding:.1rem 0;display:flex;align-items:center;gap:.3rem"><span style="color:${p.id === t.captain?.id ? 'var(--accent)' : 'var(--text)'}">${p.id === t.captain?.id ? '★ ' : ''}${p.name}</span>${p.positions?.length ? `<span style="font-size:.65rem;color:var(--muted)">${p.positions.join('·')}</span>` : ''}</div>`).join('')}
             </div>`).join('')}
         </div>
@@ -6194,6 +6227,156 @@ async function adminPickFor(eventId) {
   if(!ev || !ev.draftPool?.length) return;
   // Auto-pick first available player
   await draftPickPlayer(eventId, ev.draftPool[0].id);
+}
+
+async function openGMPanel(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !discordUser) return;
+  const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
+  if(!myTeam) { showToast('❌ Nie jesteś kapitanem w tym drafcie', 'error'); return; }
+  // Mark GM as online
+  if(!ev.gmOnline) ev.gmOnline = [];
+  if(!ev.gmOnline.includes(discordUser.id)) {
+    ev.gmOnline.push(discordUser.id);
+    await saveData();
+  }
+  window._gmPanelEventId = eventId;
+  renderGMPanel(eventId);
+  document.getElementById('gm-panel-modal').classList.add('open');
+  startGMPolling(eventId);
+}
+
+async function closeGMPanel(eventId) {
+  document.getElementById('gm-panel-modal').classList.remove('open');
+  clearInterval(_gmPollInterval);
+  // Mark GM as offline
+  if(!discordUser) return;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  ev.gmOnline = (ev.gmOnline||[]).filter(id => id !== discordUser.id);
+  await saveData();
+}
+
+function renderGMPanel(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !discordUser) return;
+  const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
+  if(!myTeam) return;
+
+  const pool = ev.draftPool || [];
+  const order = ev.draftOrder || [];
+  const turn = ev.draftTurn || 0;
+  const isDone = turn >= order.length;
+  const currentTeamIdx = isDone ? -1 : order[turn];
+  const isMyTurn = !isDone && ev.teams[currentTeamIdx]?.captain?.id === discordUser.id;
+  const timerLeft = ev.timerEnd ? Math.max(0, Math.round((new Date(ev.timerEnd) - Date.now()) / 1000)) : null;
+
+  const myPicks = (myTeam.players || []).filter(p => p.id !== myTeam.captain?.id);
+  const perTeam = Math.round(order.length / ev.teams.length);
+
+  document.getElementById('gm-panel-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.25rem">
+      🎮 PANEL GM — ${myTeam.name}
+    </div>
+    <div style="font-size:.85rem;color:var(--muted);margin-bottom:1.25rem">Kapitan: ${myTeam.captain?.name}</div>
+
+    ${isMyTurn ? `
+    <div style="background:rgba(245,197,24,.12);border:2px solid var(--accent);border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;color:var(--accent)">
+        ⏰ TWOJA KOLEJ! Pick ${turn + 1} z ${order.length}
+      </div>
+      ${timerLeft !== null ? `<div id="gm-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:2.5rem;font-weight:900;color:${timerLeft <= 15 ? 'var(--loss)' : timerLeft <= 30 ? '#f59e0b' : 'var(--accent)'}">${String(Math.floor(timerLeft/60)).padStart(2,'0')}:${String(timerLeft%60).padStart(2,'0')}</div>` : ''}
+    </div>` : `
+    <div style="background:var(--surface2);border-radius:10px;padding:.75rem;margin-bottom:1.25rem;text-align:center;color:var(--muted)">
+      ${isDone ? '🏆 Draft zakończony' : `Teraz wybiera: <b style="color:var(--text)">${ev.teams[currentTeamIdx]?.name || '—'}</b>`}
+    </div>`}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem;color:var(--muted)">
+          👥 PULA GRACZY (${pool.length})
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.3rem;max-height:400px;overflow-y:auto">
+          ${pool.map(p => `
+            <div style="display:flex;align-items:center;gap:.5rem;background:var(--surface2);border-radius:8px;padding:.5rem .75rem;
+              ${isMyTurn ? 'cursor:pointer;border:1px solid var(--border);transition:border-color .15s' : 'border:1px solid transparent;opacity:.6'}"
+              ${isMyTurn ? `onclick="draftPickPlayer('${eventId}','${p.id}');document.getElementById('gm-panel-modal').classList.remove('open')"
+                onmouseover="this.style.borderColor='var(--accent)'"
+                onmouseout="this.style.borderColor='var(--border)'"` : ''}>
+              ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center">👤</div>'}
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:.9rem">${p.name}</div>
+                ${p.positions?.length ? `<div style="font-size:.7rem;color:var(--accent);font-weight:700">${p.positions.join(' · ')}</div>` : ''}
+              </div>
+              ${isMyTurn ? '<span style="color:var(--accent);font-size:.8rem;flex-shrink:0">+ Pick</span>' : ''}
+            </div>`).join('')}
+          ${pool.length === 0 ? '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Wszyscy wybrani</div>' : ''}
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem;color:var(--muted)">
+          🏀 MÓJ SKŁAD (${myPicks.length}/${perTeam})
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem">
+          <div style="font-size:.85rem;color:var(--accent);font-weight:700">★ ${myTeam.captain?.name} (kpt)</div>
+        </div>
+        ${myPicks.map((p, i) => `
+          <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem">
+            <span style="font-size:.75rem;color:var(--muted)">#${i+1}</span>
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:600">${p.name}</div>
+              ${p.positions?.length ? `<div style="font-size:.7rem;color:var(--accent)">${p.positions.join(' · ')}</div>` : ''}
+            </div>
+          </div>`).join('')}
+        ${Array.from({length: Math.max(0, perTeam - myPicks.length)}, (_, i) => `
+          <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;opacity:.35;border:1px dashed var(--border)">
+            <div style="font-size:.8rem;color:var(--muted)">— wolny slot</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  // Start GM timer
+  if(isMyTurn && ev.timerEnd) startGMTimer(ev.timerEnd, eventId);
+}
+
+let _gmTimerInterval = null;
+function startGMTimer(endsAt, eventId) {
+  clearInterval(_gmTimerInterval);
+  _gmTimerInterval = setInterval(() => {
+    const el = document.getElementById('gm-timer-display');
+    if(!el) { clearInterval(_gmTimerInterval); return; }
+    const left = Math.max(0, Math.round((new Date(endsAt) - Date.now()) / 1000));
+    const mm = String(Math.floor(left/60)).padStart(2,'0');
+    const ss = String(left%60).padStart(2,'0');
+    el.textContent = mm + ':' + ss;
+    el.style.color = left <= 10 ? 'var(--loss)' : left <= 30 ? '#f59e0b' : 'var(--accent)';
+    if(left === 0) clearInterval(_gmTimerInterval);
+  }, 500);
+}
+
+// Poll for GM panel updates
+let _gmPollInterval = null;
+function startGMPolling(eventId) {
+  clearInterval(_gmPollInterval);
+  if(!workerUrl) return;
+  _gmPollInterval = setInterval(async () => {
+    const modal = document.getElementById('gm-panel-modal');
+    if(!modal?.classList.contains('open')) { clearInterval(_gmPollInterval); return; }
+    try {
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
+      if(!res.ok) return;
+      const fresh = await res.json();
+      const freshEvents = fresh.record?.events || fresh.events || [];
+      const freshEv = freshEvents.find(e => e.id === eventId);
+      if(!freshEv) return;
+      const idx = events.findIndex(e => e.id === eventId);
+      if(idx !== -1) {
+        const changed = freshEv.draftTurn !== events[idx].draftTurn;
+        events[idx] = freshEv;
+        if(changed) renderGMPanel(eventId);
+      }
+    } catch(e) {}
+  }, 2500);
 }
 
 async function finishDraft(eventId) {
