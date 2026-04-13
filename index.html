@@ -6188,9 +6188,14 @@ function renderDraftView(eventId) {
           ${ev.teams.map((t, ti) => `
             <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;
               ${ti === currentTeamIdx && !isDone ? 'border:2px solid var(--accent)' : 'border:1px solid var(--border)'}">
-              <div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem;display:flex;align-items:center;gap:.4rem">
-                <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${(ev.gmOnline||[]).includes(t.captain?.id)?'#4ade80':'var(--muted)'};box-shadow:${(ev.gmOnline||[]).includes(t.captain?.id)?'0 0 6px #4ade80':'none'}"></span>
+              <div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem;display:flex;align-items:center;gap:.5rem">
+                <span title="${(ev.gmOnline||[]).includes(t.captain?.id)?'GM online':'GM offline'}" style="width:10px;height:10px;border-radius:50%;flex-shrink:0;
+                  background:${(ev.gmOnline||[]).includes(t.captain?.id)?'#4ade80':'#374151'};
+                  border:1.5px solid ${(ev.gmOnline||[]).includes(t.captain?.id)?'#4ade80':'#6b7280'};
+                  box-shadow:${(ev.gmOnline||[]).includes(t.captain?.id)?'0 0 8px #4ade80':'none'};
+                  display:inline-block"></span>
                 ${t.name} <span style="font-size:.75rem;color:var(--muted)">(kpt: ${t.captain?.name})</span>
+                <span style="font-size:.68rem;color:${(ev.gmOnline||[]).includes(t.captain?.id)?'#4ade80':'#6b7280'};margin-left:auto">${(ev.gmOnline||[]).includes(t.captain?.id)?'● online':'○ offline'}</span>
               </div>
               ${(t.players||[]).map(p => `<div style="font-size:.8rem;padding:.1rem 0;display:flex;align-items:center;gap:.3rem"><span style="color:${p.id === t.captain?.id ? 'var(--accent)' : 'var(--text)'}">${p.id === t.captain?.id ? '★ ' : ''}${p.name}</span>${p.positions?.length ? `<span style="font-size:.65rem;color:var(--muted)">${p.positions.join('·')}</span>` : ''}</div>`).join('')}
             </div>`).join('')}
