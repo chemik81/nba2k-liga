@@ -5820,8 +5820,15 @@ async function confirmManualCaptains(eventId, n) {
   await saveData();
   document.getElementById('manual-captains-modal').classList.remove('open');
   renderEvents();
-  openEventDetail(eventId);
   showToast('✅ Kapitanowie przypisani!', 'success');
+  // If opened from start-draft-modal, reopen it
+  if(window._returnToStartDraftAfterCaptains) {
+    const _eid = window._returnToStartDraftAfterCaptains;
+    window._returnToStartDraftAfterCaptains = null;
+    setTimeout(() => startDraft(_eid), 200);
+  } else {
+    openEventDetail(eventId);
+  }
 }
 
 async function assignCaptains(eventId) {
@@ -5893,8 +5900,13 @@ async function assignCaptains(eventId) {
   ev.status = 'closed';
   await saveData();
   renderEvents();
-  openEventDetail(eventId);
   showToast('🎲 Kapitanowie wylosowani!', 'success');
+  // If called inline from refreshStartDraftModal, just refresh — don't close
+  // (reassignCaptainsFromModal calls this then refreshes the modal itself)
+  if(!window._suppressEventDetailAfterAssign) {
+    openEventDetail(eventId);
+  }
+  window._suppressEventDetailAfterAssign = false;
 }
 
 function buildDraftOrder(method, numTeams, totalPicks) {
@@ -5935,6 +5947,25 @@ function startDraft(eventId) {
   document.getElementById('start-draft-modal').classList.add('open');
 }
 
+async function reassignCaptainsFromModal(eventId, manual) {
+  // Save numTeams from modal FIRST so assignCaptains uses the right number
+  const numTeams = +(document.getElementById('start-draft-numteams')?.value || 4);
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  ev.numTeams = numTeams;
+  if(manual) {
+    // Close draft modal, open manual modal, then reopen draft modal after
+    document.getElementById('start-draft-modal').classList.remove('open');
+    window._returnToStartDraftAfterCaptains = eventId;
+    openManualCaptainsModal(eventId);
+  } else {
+    window._suppressEventDetailAfterAssign = true;
+    await assignCaptains(eventId);
+    // Refresh the modal content without closing it
+    refreshStartDraftModal(eventId);
+  }
+}
+
 function refreshStartDraftModal(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
@@ -5972,11 +6003,11 @@ function refreshStartDraftModal(eventId) {
       <div style="margin-bottom:.4rem;font-size:.82rem;color:var(--muted)">Aktualni kapitanowie:</div>
       ${teams.map(t => '<div style="font-size:.82rem;padding:.15rem 0">★ <b>' + (t.captain?.name || '—') + '</b> → ' + t.name + '</div>').join('')}
       <div style="display:flex;gap:.5rem;margin-top:.6rem">
-        <button onclick="document.getElementById('start-draft-modal').classList.remove('open');assignCaptains('${eventId}')" 
+        <button onclick="reassignCaptainsFromModal('${eventId}', false)" 
           style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem;cursor:pointer;font-family:inherit;font-size:.78rem">
           🎲 Losuj ponownie
         </button>
-        <button onclick="document.getElementById('start-draft-modal').classList.remove('open');openManualCaptainsModal('${eventId}')"
+        <button onclick="reassignCaptainsFromModal('${eventId}', true)"
           style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem;cursor:pointer;font-family:inherit;font-size:.78rem">
           ✏️ Zmień ręcznie
         </button>
@@ -9624,14 +9655,8 @@ async function deleteTeam(teamName) {
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">&#x1F3AF; START DRAFTU</div>
     <div style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Wybierz metod&#x0119; draftu przed rozpocz&#x0119;ciem.</div>
 
-    <!-- GM STATUS (dynamic) -->
-    <div id="start-draft-gm-status" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
-
-    <!-- CAPTAINS (dynamic) -->
-    <div id="start-draft-captains" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
-
     <label style="margin-top:0">Liczba drużyn</label>
-    <select id="start-draft-numteams" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:1rem">
+    <select id="start-draft-numteams" onchange="refreshStartDraftModal(document.getElementById('start-draft-eventid').value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:1rem">
       <option value="2">2 drużyny</option>
       <option value="3">3 drużyny</option>
       <option value="4" selected>4 drużyny</option>
@@ -9640,6 +9665,12 @@ async function deleteTeam(teamName) {
       <option value="7">7 drużyn</option>
       <option value="8">8 drużyn</option>
     </select>
+
+    <!-- GM STATUS (dynamic) -->
+    <div id="start-draft-gm-status" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
+
+    <!-- CAPTAINS (dynamic) -->
+    <div id="start-draft-captains" style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:1rem;border:1px solid var(--border)"></div>
     <label style="margin-top:0">Czas na pick (sekundy)</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">
       <input id="start-draft-timer" type="number" min="15" max="600" value="120"
