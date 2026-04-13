@@ -1104,6 +1104,42 @@
   </div>
 </div>
 
+<!-- POSITION PICKER MODAL -->
+<div class="modal-overlay" id="position-picker-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1300">
+  <div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="document.getElementById('position-picker-modal').classList.remove('open')">&#x2715;</button>
+    <input type="hidden" id="position-picker-eventid">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.5rem">🎮 WYBIERZ POZYCJE</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Na których pozycjach chcesz grać? Możesz wybrać więcej niż jedną.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1.25rem">
+      <label id="pos-lbl-PG" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('PG')">
+        <input type="checkbox" id="pos-cb-PG" style="accent-color:var(--accent);width:16px;height:16px">
+        <div><div style="font-weight:700;font-size:.95rem">PG</div><div style="font-size:.72rem;color:var(--muted)">Point Guard</div></div>
+      </label>
+      <label id="pos-lbl-SG" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('SG')">
+        <input type="checkbox" id="pos-cb-SG" style="accent-color:var(--accent);width:16px;height:16px">
+        <div><div style="font-weight:700;font-size:.95rem">SG</div><div style="font-size:.72rem;color:var(--muted)">Shooting Guard</div></div>
+      </label>
+      <label id="pos-lbl-SF" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('SF')">
+        <input type="checkbox" id="pos-cb-SF" style="accent-color:var(--accent);width:16px;height:16px">
+        <div><div style="font-weight:700;font-size:.95rem">SF</div><div style="font-size:.72rem;color:var(--muted)">Small Forward</div></div>
+      </label>
+      <label id="pos-lbl-PF" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('PF')">
+        <input type="checkbox" id="pos-cb-PF" style="accent-color:var(--accent);width:16px;height:16px">
+        <div><div style="font-weight:700;font-size:.95rem">PF</div><div style="font-size:.72rem;color:var(--muted)">Power Forward</div></div>
+      </label>
+      <label id="pos-lbl-C" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;grid-column:span 2" onclick="togglePosLabel('C')">
+        <input type="checkbox" id="pos-cb-C" style="accent-color:var(--accent);width:16px;height:16px">
+        <div><div style="font-weight:700;font-size:.95rem">C</div><div style="font-size:.72rem;color:var(--muted)">Center</div></div>
+      </label>
+    </div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmSignupWithPositions()">✅ Zapisz się</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('position-picker-modal').classList.remove('open')">Anuluj</button>
+    </div>
+  </div>
+</div>
+
 <!-- DELETE CONFIRM MODAL -->
 <div class="modal-overlay" id="delete-modal">
   <div class="modal" style="max-width:400px;text-align:center">
@@ -1992,6 +2028,7 @@ async function loadData() {
     updateAuthUI();
     updateMatchFilters();
     populateTeamFilter();
+    checkDraftWatchParam();
 
   } catch(e) {
     console.error('Load error:', e);
@@ -4754,7 +4791,7 @@ function renderEvents() {
           <div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">👥 ${playerCount}${ev.maxPlayers?'/'+ev.maxPlayers:''} graczy</div>
         </div>
       </div>
-      ${_isLoggedInSync() ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+      ${_isEventsAdminSync() ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
         <button onclick="event.stopPropagation();openEditEventModal('${ev.id}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">✏️ Edytuj</button>
         <button onclick="event.stopPropagation();deleteEvent('${ev.id}')"
@@ -4790,11 +4827,6 @@ function openCreateEventModal(editId) {
     <input id="ev-date" type="date" value="${ev?.date||''}"
       style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
 
-    <label style="margin-top:.75rem">Liczba drużyn (tylko dla Draftu)</label>
-    <select id="ev-numteams" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
-      ${[2,3,4,5,6,7,8].map(n => `<option value="${n}"${(ev?.numTeams||2)==n?' selected':''}>${n} drużyny/drużyn</option>`).join('')}
-    </select>
-
     <label style="margin-top:.75rem">Maks. graczy (opcjonalne)</label>
     <input id="ev-max" type="number" min="2" max="100" value="${ev?.maxPlayers||''}" placeholder="bez limitu"
       style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
@@ -4819,15 +4851,14 @@ async function saveEvent(editId) {
   const type  = document.getElementById('ev-type').value;
   const date  = document.getElementById('ev-date').value;
   const max      = +document.getElementById('ev-max').value || null;
-  const numTeams    = +document.getElementById('ev-numteams').value || 2;
   const desc = document.getElementById('ev-desc').value.trim();
   if(!title) { showToast('❌ Wpisz nazwę eventu', 'error'); return; }
 
   if(editId) {
     const idx = events.findIndex(e => e.id === editId);
-    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, numTeams, description: desc };
+    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, maxPlayers: max, description: desc };
   } else {
-    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max, numTeams,
+    events.push({ id: 'ev_' + Date.now(), title, type, date, maxPlayers: max,
       description: desc, status: 'open', players: [], teams: [],
       createdAt: new Date().toISOString() });
   }
@@ -5022,6 +5053,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem">👤</div>'}
         <span style="font-weight:600;font-size:.9rem">${p.name}</span>
         ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
+        ${p.positions?.length ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.1);border-radius:4px;padding:.1rem .35rem;font-weight:700">${p.positions.join(' · ')}</span>` : ''}
         ${isAdmin ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')" style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
       </div>`).join('');
 
@@ -5565,6 +5597,11 @@ async function signupToEvent(eventId) {
   if((ev.players||[]).find(p => p.id === discordUser.id)) {
     showToast('ℹ️ Jesteś już zapisany', 'info'); return;
   }
+  // For draft events — show position picker first
+  if(ev.type === 'draft') {
+    openPositionPickerModal(eventId);
+    return;
+  }
   if(!ev.players) ev.players = [];
   ev.players.push({ id: discordUser.id, name: discordUser.name,
     discordTag: discordUser.discordTag, avatar: discordUser.avatar });
@@ -5572,6 +5609,48 @@ async function signupToEvent(eventId) {
   openEventDetail(eventId);
   renderEvents();
   showToast('✅ Zapisano na event!', 'success');
+}
+
+function openPositionPickerModal(eventId) {
+  const modal = document.getElementById('position-picker-modal');
+  document.getElementById('position-picker-eventid').value = eventId;
+  // Reset checkboxes
+  ['PG','SG','SF','PF','C'].forEach(pos => {
+    const cb = document.getElementById('pos-cb-' + pos);
+    if(cb) cb.checked = false;
+  });
+  modal.classList.add('open');
+}
+
+async function confirmSignupWithPositions() {
+  const eventId = document.getElementById('position-picker-eventid').value;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !discordUser) return;
+  const positions = ['PG','SG','SF','PF','C'].filter(pos => {
+    const cb = document.getElementById('pos-cb-' + pos);
+    return cb && cb.checked;
+  });
+  if(!positions.length) { showToast('❌ Zaznacz przynajmniej jedną pozycję', 'error'); return; }
+  if(!ev.players) ev.players = [];
+  ev.players.push({ id: discordUser.id, name: discordUser.name,
+    discordTag: discordUser.discordTag, avatar: discordUser.avatar,
+    positions });
+  await saveData();
+  document.getElementById('position-picker-modal').classList.remove('open');
+  openEventDetail(eventId);
+  renderEvents();
+  showToast('✅ Zapisano na draft!', 'success');
+}
+
+function togglePosLabel(pos) {
+  const cb = document.getElementById('pos-cb-' + pos);
+  const lbl = document.getElementById('pos-lbl-' + pos);
+  if(!cb || !lbl) return;
+  // checkbox is toggled by browser — just update visual
+  setTimeout(() => {
+    lbl.style.borderColor = cb.checked ? 'var(--accent)' : 'var(--border)';
+    lbl.style.background  = cb.checked ? 'rgba(245,197,24,.1)' : 'var(--surface2)';
+  }, 0);
 }
 
 async function cancelSignup(eventId) {
@@ -5815,21 +5894,26 @@ function startDraft(eventId) {
 
   // Show method selection modal
   document.getElementById('start-draft-eventid').value = eventId;
-  // Pre-select existing method if set
+  // Pre-select existing values if set
   const sel = document.getElementById('start-draft-method');
   if(sel && ev.draftMethod) sel.value = ev.draftMethod;
+  const numSel = document.getElementById('start-draft-numteams');
+  if(numSel && ev.numTeams) numSel.value = ev.numTeams;
   document.getElementById('start-draft-modal').classList.add('open');
 }
 
 async function confirmStartDraft() {
-  const eventId = document.getElementById('start-draft-eventid').value;
-  const method  = document.getElementById('start-draft-method').value || 'snake';
+  const eventId  = document.getElementById('start-draft-eventid').value;
+  const method   = document.getElementById('start-draft-method').value || 'snake';
+  const numTeams = +(document.getElementById('start-draft-numteams')?.value || 4);
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
 
+  ev.numTeams = numTeams;
+
   // Recalculate draftPool/Order with chosen method (captains already set)
   const captainIds = new Set((ev.teams||[]).map(t => t.captain?.id).filter(Boolean));
-  const n = ev.teams.length;
+  const n = numTeams;
 
   if(method === 'random') {
     const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5);
@@ -5974,10 +6058,15 @@ function renderDraftView(eventId) {
             </span>
           </div>
         </div>
-        <button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button onclick="copyDraftWatchLink('${eventId}')"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">
+            🔗 Link do oglądania
+          </button><button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">
           ✕ Zamknij
         </button>
+        </div>
       </div>
 
       ${isDone ? `
@@ -6009,8 +6098,11 @@ function renderDraftView(eventId) {
                 ${(isMyTurn || (isAdmin && !isDone)) ? 'cursor:pointer;border:1px solid var(--border)' : 'border:1px solid transparent'}"
                 ${(isMyTurn || (isAdmin && !isDone)) ? `onclick="draftPickPlayer('${eventId}','${p.id}')" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"` : ''}>
                 ${p.avatar ? `<img src="${p.avatar}" style="width:26px;height:26px;border-radius:50%">` : '<div style="width:26px;height:26px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center">👤</div>'}
-                <span style="font-weight:600;font-size:.9rem">${p.name}</span>
-                ${(isMyTurn || (isAdmin && !isDone)) ? '<span style="margin-left:auto;color:var(--accent);font-size:.8rem">+ Pick</span>' : ''}
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600;font-size:.9rem">${p.name}</div>
+                  ${p.positions?.length ? `<div style="font-size:.7rem;color:var(--accent);font-weight:700">${p.positions.join(' · ')}</div>` : ''}
+                </div>
+                ${(isMyTurn || (isAdmin && !isDone)) ? '<span style="color:var(--accent);font-size:.8rem;flex-shrink:0">+ Pick</span>' : ''}
               </div>`).join('')}
             ${pool.length === 0 && !isDone ? '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Wszyscy gracze wybrani</div>' : ''}
           </div>
@@ -6023,7 +6115,7 @@ function renderDraftView(eventId) {
             <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;
               ${ti === currentTeamIdx && !isDone ? 'border:2px solid var(--accent)' : 'border:1px solid var(--border)'}">
               <div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem">${t.name} <span style="font-size:.75rem;color:var(--muted)">(kpt: ${t.captain?.name})</span></div>
-              ${(t.players||[]).map(p => `<div style="font-size:.8rem;padding:.1rem 0;color:${p.id === t.captain?.id ? 'var(--accent)' : 'var(--text)'}">${p.id === t.captain?.id ? '★ ' : ''}${p.name}</div>`).join('')}
+              ${(t.players||[]).map(p => `<div style="font-size:.8rem;padding:.1rem 0;display:flex;align-items:center;gap:.3rem"><span style="color:${p.id === t.captain?.id ? 'var(--accent)' : 'var(--text)'}">${p.id === t.captain?.id ? '★ ' : ''}${p.name}</span>${p.positions?.length ? `<span style="font-size:.65rem;color:var(--muted)">${p.positions.join('·')}</span>` : ''}</div>`).join('')}
             </div>`).join('')}
         </div>
       </div>
@@ -6072,6 +6164,44 @@ async function finishDraft(eventId) {
   showToast('🏆 Draft zakończony! Drużyny gotowe.', 'success');
 }
 
+
+function copyDraftWatchLink(eventId) {
+  const base = window.location.href.split('?')[0].split('#')[0];
+  const link = base + '?watch_draft=' + eventId;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('🔗 Link skopiowany do schowka!', 'success');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = link;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('🔗 Link skopiowany!', 'success');
+  });
+}
+
+function checkDraftWatchParam() {
+  const params = new URLSearchParams(window.location.search);
+  const watchId = params.get('watch_draft');
+  if(!watchId) return;
+  // Remove param from URL cleanly
+  const url = new URL(window.location.href);
+  url.searchParams.delete('watch_draft');
+  window.history.replaceState({}, '', url.toString());
+  // Wait for data to load, then open draft
+  const tryOpen = (attempts) => {
+    const ev = events.find(e => e.id === watchId);
+    if(ev && ev.status === 'draft') {
+      openDraftView(watchId);
+      startDraftPolling(watchId);
+    } else if(attempts > 0) {
+      setTimeout(() => tryOpen(attempts - 1), 500);
+    }
+  };
+  setTimeout(() => tryOpen(10), 800);
+}
 
 function getDefaultRound() {
   // When no rounds defined, treat all matches as round 1
@@ -9148,6 +9278,16 @@ async function deleteTeam(teamName) {
     <input type="hidden" id="start-draft-eventid">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">&#x1F3AF; START DRAFTU</div>
     <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Wybierz metod&#x0119; draftu przed rozpocz&#x0119;ciem.</div>
+    <label style="margin-top:0">Liczba drużyn</label>
+    <select id="start-draft-numteams" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:1rem">
+      <option value="2">2 drużyny</option>
+      <option value="3">3 drużyny</option>
+      <option value="4" selected>4 drużyny</option>
+      <option value="5">5 drużyn</option>
+      <option value="6">6 drużyn</option>
+      <option value="7">7 drużyn</option>
+      <option value="8">8 drużyn</option>
+    </select>
     <label style="margin-top:0">Metoda draftu</label>
     <select id="start-draft-method" onchange="updateDraftMethodDesc()" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.7rem;font-family:inherit;font-size:.95rem;margin-bottom:.5rem">
       <option value="snake">&#x1F40D; Snake &#x2014; A&#x2192;B&#x2192;C&#x2192;D&#x2192;D&#x2192;C&#x2192;B&#x2192;A (zalecane)</option>
