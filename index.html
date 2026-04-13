@@ -4798,6 +4798,11 @@ function renderEvents() {
         <div style="text-align:right;flex-shrink:0">
           <div style="font-weight:700;font-size:.85rem;color:${status.color}">${status.label}</div>
           <div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">👥 ${playerCount}${ev.maxPlayers?'/'+ev.maxPlayers:''} graczy</div>
+          ${discordUser && ['closed','draft'].includes(ev.status) && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `
+          <button onclick="event.stopPropagation();openGMPanel('${ev.id}')"
+            style="margin-top:.4rem;background:var(--accent);border:none;color:#000;border-radius:6px;padding:.3rem .75rem;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:700;display:block;width:100%">
+            🎮 Panel GM
+          </button>` : ''}
         </div>
       </div>
       ${_isEventsAdminSync() ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
@@ -6369,11 +6374,12 @@ async function openGMPanel(eventId) {
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
   if(!myTeam) { showToast('❌ Nie jesteś kapitanem w tym drafcie', 'error'); return; }
   if(!['closed','draft','active'].includes(ev.status)) { showToast('❌ Draft jeszcze nie jest gotowy', 'error'); return; }
-  // Mark GM as online
+  // Mark GM as online locally (no saveData — captain doesn't have write token)
   if(!ev.gmOnline) ev.gmOnline = [];
   if(!ev.gmOnline.includes(discordUser.id)) {
     ev.gmOnline.push(discordUser.id);
-    await saveData();
+    // Try to save silently — only works if events admin or full admin is logged in
+    try { await saveData(); } catch(e) {}
   }
   window._gmPanelEventId = eventId;
   renderGMPanel(eventId);
@@ -6389,7 +6395,7 @@ async function closeGMPanel(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
   ev.gmOnline = (ev.gmOnline||[]).filter(id => id !== discordUser.id);
-  await saveData();
+  try { await saveData(); } catch(e) {}
 }
 
 function renderGMPanel(eventId) {
@@ -6474,7 +6480,25 @@ function renderGMPanel(eventId) {
             <div style="font-size:.8rem;color:var(--muted)">— wolny slot</div>
           </div>`).join('')}
       </div>
-    </div>`;
+    </div>
+
+    ${ev.status === 'draft' || ev.status === 'closed' ? `
+    <div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem;color:var(--muted)">🏀 WSZYSTKIE DRUŻYNY</div>
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(ev.teams.length,2)},1fr);gap:.5rem">
+        ${(ev.teams||[]).map(t => {
+          const isMe = t.captain?.id === discordUser?.id;
+          const tPicks = (t.players||[]).filter(p => p.id !== t.captain?.id);
+          return '<div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;border:1px solid ' + (isMe ? 'var(--accent)' : 'var(--border)') + '">'
+            + '<div style="font-family:\'Barlow Condensed\',sans-serif;font-weight:700;font-size:.85rem;margin-bottom:.3rem;color:' + (isMe ? 'var(--accent)' : 'var(--text)') + '">' + t.name + (isMe ? ' ★' : '') + '</div>'
+            + '<div style="font-size:.75rem;color:var(--accent)">★ ' + (t.captain?.name||'—') + '</div>'
+            + tPicks.map(p => '<div style="font-size:.75rem;padding:.1rem 0;color:var(--text)">' + p.name + (p.positions?.length ? ' <span style=\"color:var(--muted)\">' + p.positions.join('·') + '</span>' : '') + '</div>').join('')
+            + (ev.draftPool ? Array.from({length: Math.max(0, perTeam - tPicks.length)}, () => '<div style="font-size:.72rem;color:var(--muted);opacity:.4">— slot</div>').join('') : '')
+            + '</div>';
+        }).join('')}
+      </div>
+    </div>` : ''}
+    `;
 
   // Start GM timer
   if(isMyTurn && ev.timerEnd) startGMTimer(ev.timerEnd, eventId);
@@ -6512,9 +6536,14 @@ function startGMPolling(eventId) {
       if(!freshEv) return;
       const idx = events.findIndex(e => e.id === eventId);
       if(idx !== -1) {
-        const changed = freshEv.draftTurn !== events[idx].draftTurn;
+        const changed = freshEv.draftTurn !== events[idx].draftTurn
+                     || freshEv.status    !== events[idx].status
+                     || freshEv.timerEnd  !== events[idx].timerEnd;
         events[idx] = freshEv;
-        if(changed) renderGMPanel(eventId);
+        if(changed) {
+          renderGMPanel(eventId);
+          if(freshEv.timerEnd && freshEv.status === 'draft') startGMTimer(freshEv.timerEnd, eventId);
+        }
       }
     } catch(e) {}
   }, 2500);
