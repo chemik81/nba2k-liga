@@ -6434,8 +6434,9 @@ function renderGMPanel(eventId) {
       </div>
       ${timerLeft !== null ? `<div id="gm-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:2.5rem;font-weight:900;color:${timerLeft <= 15 ? 'var(--loss)' : timerLeft <= 30 ? '#f59e0b' : 'var(--accent)'}">${String(Math.floor(timerLeft/60)).padStart(2,'0')}:${String(timerLeft%60).padStart(2,'0')}</div>` : ''}
     </div>` : `
-    <div style="background:var(--surface2);border-radius:10px;padding:.75rem;margin-bottom:1.25rem;text-align:center;color:var(--muted)">
-      ${isDone ? '🏆 Draft zakończony' : `Teraz wybiera: <b style="color:var(--text)">${ev.teams[currentTeamIdx]?.name || '—'}</b>`}
+    <div style="background:var(--surface2);border-radius:10px;padding:.75rem 1rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem">
+      <div style="color:var(--muted);font-size:.9rem">${isDone ? '🏆 Draft zakończony' : `Teraz wybiera: <b style="color:var(--text)">${ev.teams[currentTeamIdx]?.name || '—'}</b> · Pick ${turn + 1}/${order.length}`}</div>
+      ${timerLeft !== null && !isDone ? `<div id="gm-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;color:${timerLeft <= 10 ? 'var(--loss)' : timerLeft <= 30 ? '#f59e0b' : 'var(--text)'}">${String(Math.floor(timerLeft/60)).padStart(2,'0')}:${String(timerLeft%60).padStart(2,'0')}</div>` : ''}
     </div>`}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
@@ -6501,7 +6502,7 @@ function renderGMPanel(eventId) {
     `;
 
   // Start GM timer
-  if(isMyTurn && ev.timerEnd) startGMTimer(ev.timerEnd, eventId);
+  if(ev.timerEnd && isDraftActive && !isDone) startGMTimer(ev.timerEnd, eventId);
 }
 
 let _gmTimerInterval = null;
