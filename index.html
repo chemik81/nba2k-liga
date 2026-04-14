@@ -1122,63 +1122,58 @@
     <!-- PRIMARY POSITION -->
     <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin:.9rem 0 .4rem" id="pp-primary-label">Główna pozycja</div>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-bottom:1rem" id="pp-primary-grid">
-      <label id="pp-main-PG" onclick="selectPrimaryPos('PG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="radio" name="primary-pos" value="PG" id="pp-rb-PG" style="display:none">
+      <div id="pp-main-PG" onclick="selectPrimaryPos('PG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:900;font-size:.95rem">PG</div><div style="font-size:.65rem;color:var(--muted)">Point Guard</div>
-      </label>
-      <label id="pp-main-SG" onclick="selectPrimaryPos('SG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="radio" name="primary-pos" value="SG" id="pp-rb-SG" style="display:none">
+      </div>
+      <div id="pp-main-SG" onclick="selectPrimaryPos('SG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:900;font-size:.95rem">SG</div><div style="font-size:.65rem;color:var(--muted)">Shooting Guard</div>
-      </label>
-      <label id="pp-main-SF" onclick="selectPrimaryPos('SF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="radio" name="primary-pos" value="SF" id="pp-rb-SF" style="display:none">
+      </div>
+      <div id="pp-main-SF" onclick="selectPrimaryPos('SF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:900;font-size:.95rem">SF</div><div style="font-size:.65rem;color:var(--muted)">Small Forward</div>
-      </label>
-      <label id="pp-main-PF" onclick="selectPrimaryPos('PF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="radio" name="primary-pos" value="PF" id="pp-rb-PF" style="display:none">
+      </div>
+      <div id="pp-main-PF" onclick="selectPrimaryPos('PF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:900;font-size:.95rem">PF</div><div style="font-size:.65rem;color:var(--muted)">Power Forward</div>
-      </label>
-      <label id="pp-main-C" onclick="selectPrimaryPos('C')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="radio" name="primary-pos" value="C" id="pp-rb-C" style="display:none">
+      </div>
+      <div id="pp-main-C" onclick="selectPrimaryPos('C')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:900;font-size:.95rem">C</div><div style="font-size:.65rem;color:var(--muted)">Center</div>
-      </label>
+      </div>
     </div>
 
     <!-- SECONDARY POSITIONS -->
     <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.4rem" id="pp-secondary-label">Dodatkowe pozycje (opcjonalnie)</div>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-bottom:1rem">
-      <label id="pos-lbl-PG" onclick="toggleSecondaryPos('PG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="checkbox" id="pos-cb-PG" style="display:none">
+      <div id="pos-lbl-PG" onclick="toggleSecondaryPos('PG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:700;font-size:.9rem">PG</div>
-      </label>
-      <label id="pos-lbl-SG" onclick="toggleSecondaryPos('SG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="checkbox" id="pos-cb-SG" style="display:none">
+      </div>
+      <div id="pos-lbl-SG" onclick="toggleSecondaryPos('SG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:700;font-size:.9rem">SG</div>
-      </label>
-      <label id="pos-lbl-SF" onclick="toggleSecondaryPos('SF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="checkbox" id="pos-cb-SF" style="display:none">
+      </div>
+      <div id="pos-lbl-SF" onclick="toggleSecondaryPos('SF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:700;font-size:.9rem">SF</div>
-      </label>
-      <label id="pos-lbl-PF" onclick="toggleSecondaryPos('PF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="checkbox" id="pos-cb-PF" style="display:none">
+      </div>
+      <div id="pos-lbl-PF" onclick="toggleSecondaryPos('PF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:700;font-size:.9rem">PF</div>
-      </label>
-      <label id="pos-lbl-C" onclick="toggleSecondaryPos('C')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
-        <input type="checkbox" id="pos-cb-C" style="display:none">
+      </div>
+      <div id="pos-lbl-C" onclick="toggleSecondaryPos('C')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;user-select:none">
         <div style="font-weight:700;font-size:.9rem">C</div>
-      </label>
+      </div>
     </div>
 
     <!-- ENGLISH CHECKBOX -->
-    <label id="pp-eng-label" onclick="toggleEnglish()" style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;margin-bottom:1.25rem">
-      <input type="checkbox" id="pp-eng-cb" style="display:none">
-      <span style="font-size:1.4rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+    <div id="pp-eng-label" onclick="toggleEnglish()" style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;margin-bottom:1.25rem;user-select:none">
+      <svg width="32" height="22" viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg" style="border-radius:3px;flex-shrink:0">
+        <rect width="60" height="40" fill="#012169"/>
+        <path d="M0,0 L60,40 M60,0 L0,40" stroke="#fff" stroke-width="8"/>
+        <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" stroke-width="4"/>
+        <path d="M30,0 V40 M0,20 H60" stroke="#fff" stroke-width="12"/>
+        <path d="M30,0 V40 M0,20 H60" stroke="#C8102E" stroke-width="7"/>
+      </svg>
       <div style="flex:1">
         <div style="font-weight:700;font-size:.9rem" id="pp-eng-title">Komunikuję się po angielsku</div>
         <div style="font-size:.72rem;color:var(--muted)" id="pp-eng-sub">I communicate in English</div>
       </div>
       <div id="pp-eng-check" style="width:20px;height:20px;border-radius:4px;border:2px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s"></div>
-    </label>
+    </div>
 
     <div style="display:flex;gap:.75rem">
       <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmSignupWithPositions()" id="pp-confirm-btn">✅ Zapisz się</button>
