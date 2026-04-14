@@ -4404,9 +4404,46 @@ async function saveSetup() {
   // Check if returning from Discord OAuth
   const _urlParams = new URLSearchParams(window.location.search);
   const _discordParam = _urlParams.get('discord_user');
+  const _oauthError   = _urlParams.get('oauth_error');
+
+  if(_oauthError) {
+    window.history.replaceState({}, '', window.location.pathname);
+    // Show friendly modal with instructions
+    setTimeout(() => {
+      const msg = decodeURIComponent(_oauthError);
+      const isInAppBrowser = msg.includes('Chrome') || msg.includes('Safari') || msg.includes('access token') || msg.includes('invalid_grant');
+      const html = `<div style="text-align:center;padding:.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.75rem">⚠️</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:1px;margin-bottom:.75rem">BŁĄD LOGOWANIA DISCORD</div>
+        <div style="background:var(--surface2);border-radius:8px;padding:.75rem;font-size:.85rem;color:var(--muted);margin-bottom:1rem;text-align:left">${msg}</div>
+        <div style="font-size:.9rem;margin-bottom:1rem;line-height:1.6">
+          Jeśli logujesz się z <b>telefonu przez Discord</b>, link otwiera się w wbudowanej przeglądarce która blokuje logowanie.<br><br>
+          <b>Rozwiązanie:</b> Skopiuj link poniżej i otwórz go w <b>Chrome</b> lub <b>Safari</b>.
+        </div>
+        <div style="background:var(--surface2);border-radius:6px;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);word-break:break-all;margin-bottom:.75rem">${window.location.origin + window.location.pathname}</div>
+        <div style="display:flex;gap:.5rem">
+          <button onclick="navigator.clipboard?.writeText(window.location.origin + window.location.pathname).then(()=>showToast('✅ Link skopiowany!','success'))" class="btn btn-primary" style="flex:1;justify-content:center">📋 Kopiuj link</button>
+          <button onclick="document.getElementById('oauth-error-modal').classList.remove('open')" class="btn btn-ghost">OK</button>
+        </div>
+      </div>`;
+      let modal = document.getElementById('oauth-error-modal');
+      if(!modal) {
+        modal = document.createElement('div');
+        modal.id = 'oauth-error-modal';
+        modal.className = 'modal-overlay open';
+        modal.style.zIndex = '99999';
+        modal.innerHTML = `<div class="modal" style="max-width:420px">${html}</div>`;
+        document.body.appendChild(modal);
+      } else {
+        modal.querySelector('.modal').innerHTML = html;
+        modal.classList.add('open');
+      }
+    }, 500);
+  }
+
   if(_discordParam) {
     try {
-      discordUser = JSON.parse(atob(_discordParam));
+      discordUser = JSON.parse(decodeURIComponent(escape(atob(_discordParam))));
       localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
       window.history.replaceState({}, '', window.location.pathname);
     } catch(e) { console.error('Discord user parse error', e); }
