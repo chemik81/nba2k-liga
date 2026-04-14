@@ -1901,7 +1901,8 @@ async function saveData(silent = false) {
     // Teams saved with logos to KV — available to all users
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
-      rounds, pendingScreenshots, events, playoffs };
+      rounds, pendingScreenshots, events, playoffs,
+      _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
     console.log('Payload size:', sizeKB, 'KB');
@@ -1909,6 +1910,22 @@ async function saveData(silent = false) {
     // ── Save to Cloudflare KV via Worker (primary) ────────────────────────
     if(workerUrl) {
       const adminToken = localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash') || '';
+      // Stale write protection — check if KV has newer data than what we loaded
+      if(window._dataLoadedAt && adminToken) {
+        try {
+          const checkRes = await fetch(workerUrl.replace(/\/$/, '') + '/data');
+          if(checkRes.ok) {
+            const checkData = await checkRes.json();
+            const kvSavedAt = checkData.record?._savedAt || 0;
+            if(kvSavedAt > window._dataLoadedAt + 2000) {
+              // KV is newer — reload local data first, then retry
+              if(!silent) showToast('⚠️ Dane zostały zmienione przez kogoś innego — odświeżam...', 'error');
+              await loadData();
+              return false;
+            }
+          }
+        } catch(e) { /* ignore check errors, proceed with save */ }
+      }
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
@@ -1957,6 +1974,7 @@ async function loadData() {
         const data = await res.json();
         if(data.record) {
           record = data.record;
+          window._dataLoadedAt = data.record._savedAt || Date.now();
         }
       }
     }
