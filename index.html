@@ -4445,12 +4445,22 @@ async function saveSetup() {
     try {
       discordUser = JSON.parse(decodeURIComponent(escape(atob(_discordParam))));
       localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
+      localStorage.removeItem('nba2k_discord_pending');
       window.history.replaceState({}, '', window.location.pathname);
     } catch(e) { console.error('Discord user parse error', e); }
   } else {
     try {
-      const _stored = localStorage.getItem('nba2k_discord_user');
-      if(_stored) discordUser = JSON.parse(_stored);
+      // iOS Safari fallback — Worker bridge page saved user to localStorage directly
+      const _pending = localStorage.getItem('nba2k_discord_pending');
+      const _stored  = localStorage.getItem('nba2k_discord_user');
+      if(_stored) {
+        discordUser = JSON.parse(_stored);
+        if(_pending) {
+          localStorage.removeItem('nba2k_discord_pending');
+          // Show welcome toast so user knows login worked
+          setTimeout(() => showToast('✅ Zalogowano jako ' + discordUser.name, 'success'), 800);
+        }
+      }
     } catch(e) {}
   }
 
