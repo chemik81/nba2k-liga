@@ -4854,13 +4854,18 @@ const EVENT_TYPES = {
   pickup:   { label: '🎲 Pickup Game', desc: 'Losowe przydzielenie do drużyn' },
 };
 
-const EVENT_STATUS = {
-  open:      { label: '✅ Zapisy otwarte', color: 'var(--win)' },
-  closed:    { label: '🔒 Zapisy zamknięte', color: 'var(--muted)' },
-  draft:     { label: '🎯 Trwa draft', color: '#f39c12' },
-  active:    { label: '🏀 W toku', color: '#3498db' },
-  finished:  { label: '🏆 Zakończony', color: 'var(--accent)' },
-};
+function getEventStatus() {
+  const en = currentLang === 'en';
+  return {
+    open:     { label: en ? '✅ Sign-ups open'   : '✅ Zapisy otwarte',    color: 'var(--win)' },
+    closed:   { label: en ? '🔒 Sign-ups closed' : '🔒 Zapisy zamknięte', color: 'var(--muted)' },
+    draft:    { label: en ? '🎯 Draft in progress': '🎯 Trwa draft',       color: '#f39c12' },
+    active:   { label: en ? '🏀 In progress'      : '🏀 W toku',          color: '#3498db' },
+    finished: { label: en ? '🏆 Finished'         : '🏆 Zakończony',      color: 'var(--accent)' },
+  };
+}
+// Keep backward compat
+const EVENT_STATUS = new Proxy({}, { get: (_, k) => getEventStatus()[k] });
 
 function renderEvents() {
   const el = document.getElementById('events-list');
@@ -4900,7 +4905,7 @@ function renderEvents() {
         <button onclick="event.stopPropagation();deleteEvent('${ev.id}')"
           style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń</button>
         ${ev.status === 'open' ? `<button onclick="event.stopPropagation();closeEventSignups('${ev.id}')"
-          style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🔒 Zamknij zapisy</button>` : ''}
+          style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">${currentLang==='en'?'🔒 Close sign-ups':'🔒 Zamknij zapisy'}</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'draft' && !(ev.teams||[]).length ? `<button onclick="event.stopPropagation();assignCaptains('${ev.id}')" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj kapitanów</button>` : ''}
         ${ev.status === 'draft' ? `<button onclick="event.stopPropagation();openDraftView('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Wróć do Draft</button>` : ''}
@@ -5118,7 +5123,7 @@ async function closeEventSignups(id) {
   ev.status = 'closed';
   await saveData();
   renderEvents();
-  showToast('🔒 Zapisy zamknięte', 'info');
+  showToast(currentLang === 'en' ? '🔒 Sign-ups closed' : '🔒 Zapisy zamknięte', 'info');
 }
 
 async function randomizeTeams(id) {
@@ -5177,8 +5182,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         <span style="font-weight:600;font-size:.9rem">${p.name}</span>
         ${p.speaksEnglish ? '<span title="Speaks English" style="font-size:.9rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>' : ''}
         ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
-        ${p.primaryPos ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.12);border-radius:4px;padding:.1rem .35rem;font-weight:700">${p.primaryPos}</span>` : ''}
-        ${p.positions?.filter(x=>x!==p.primaryPos).length ? `<span style="font-size:.7rem;color:var(--muted);background:var(--surface2);border-radius:4px;padding:.1rem .3rem">${p.positions.filter(x=>x!==p.primaryPos).join('·')}</span>` : ''}
+        ${(() => { const pri = p.primaryPos || (p.positions?.[0]); const sec = (p.positions||[]).filter(x=>x!==pri); return (pri ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.12);border-radius:4px;padding:.1rem .35rem;font-weight:700">${pri}</span>` : '') + (sec.length ? `<span style="font-size:.7rem;color:var(--muted);background:var(--surface2);border-radius:4px;padding:.1rem .3rem">${sec.join('·')}</span>` : ''); })()}
         ${isAdmin ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')" style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
       </div>`).join('');
 
@@ -5215,7 +5219,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
               <div style="color:var(--win);font-weight:700;text-align:center;padding:.75rem">✅ Jesteś zapisany na ten event!</div>
               <button onclick="cancelSignup('${ev.id}')" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.5rem">Wypisz się</button>
             ` : ev.status === 'open' ? `
-              <button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">🎮 Zapisz się</button>
+              <button onclick="signupToEvent('${ev.id}')" class="btn btn-primary" style="width:100%;justify-content:center">${currentLang==='en'?'🎮 Sign up':'🎮 Zapisz się'}</button>
             ` : ''}
           ` : `
             <button onclick="loginWithDiscord('${ev.id}')" style="width:100%;background:#5865F2;color:#fff;border:none;border-radius:8px;padding:.8rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
