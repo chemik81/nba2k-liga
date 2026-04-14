@@ -5001,7 +5001,20 @@ async function loadTestEvents() {
     },
   ];
 
-  // Remove existing test events and add fresh ones
+  // First reload fresh data from KV to avoid overwriting real events
+  if(workerUrl) {
+    try {
+      const res = await fetch(workerUrl.replace(/\/+$/, '') + '/data');
+      if(res.ok) {
+        const d = await res.json();
+        const fresh = d.record?.events || d.events || [];
+        // Merge: keep non-test real events from KV
+        const realEvents = fresh.filter(e => !e.id.startsWith('test_ev_'));
+        events = [...realEvents];
+      }
+    } catch(e) {}
+  }
+  // Remove old test events and add fresh ones
   events = events.filter(e => !e.id.startsWith('test_ev_'));
   events.push(...testEvs);
   await saveData();
