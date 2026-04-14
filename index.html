@@ -1114,36 +1114,75 @@
 
 <!-- POSITION PICKER MODAL -->
 <div class="modal-overlay" id="position-picker-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1300">
-  <div class="modal" style="max-width:400px">
+  <div class="modal" style="max-width:420px">
     <button class="modal-close" onclick="document.getElementById('position-picker-modal').classList.remove('open')">&#x2715;</button>
     <input type="hidden" id="position-picker-eventid">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.5rem">🎮 WYBIERZ POZYCJE</div>
-    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Na których pozycjach chcesz grać? Możesz wybrać więcej niż jedną.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1.25rem">
-      <label id="pos-lbl-PG" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('PG')">
-        <input type="checkbox" id="pos-cb-PG" style="accent-color:var(--accent);width:16px;height:16px">
-        <div><div style="font-weight:700;font-size:.95rem">PG</div><div style="font-size:.72rem;color:var(--muted)">Point Guard</div></div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.25rem" id="pp-title">🎮 ZAPISZ SIĘ NA DRAFT</div>
+
+    <!-- PRIMARY POSITION -->
+    <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin:.9rem 0 .4rem" id="pp-primary-label">Główna pozycja</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-bottom:1rem" id="pp-primary-grid">
+      <label id="pp-main-PG" onclick="selectPrimaryPos('PG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="radio" name="primary-pos" value="PG" id="pp-rb-PG" style="display:none">
+        <div style="font-weight:900;font-size:.95rem">PG</div><div style="font-size:.65rem;color:var(--muted)">Point Guard</div>
       </label>
-      <label id="pos-lbl-SG" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('SG')">
-        <input type="checkbox" id="pos-cb-SG" style="accent-color:var(--accent);width:16px;height:16px">
-        <div><div style="font-weight:700;font-size:.95rem">SG</div><div style="font-size:.72rem;color:var(--muted)">Shooting Guard</div></div>
+      <label id="pp-main-SG" onclick="selectPrimaryPos('SG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="radio" name="primary-pos" value="SG" id="pp-rb-SG" style="display:none">
+        <div style="font-weight:900;font-size:.95rem">SG</div><div style="font-size:.65rem;color:var(--muted)">Shooting Guard</div>
       </label>
-      <label id="pos-lbl-SF" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('SF')">
-        <input type="checkbox" id="pos-cb-SF" style="accent-color:var(--accent);width:16px;height:16px">
-        <div><div style="font-weight:700;font-size:.95rem">SF</div><div style="font-size:.72rem;color:var(--muted)">Small Forward</div></div>
+      <label id="pp-main-SF" onclick="selectPrimaryPos('SF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="radio" name="primary-pos" value="SF" id="pp-rb-SF" style="display:none">
+        <div style="font-weight:900;font-size:.95rem">SF</div><div style="font-size:.65rem;color:var(--muted)">Small Forward</div>
       </label>
-      <label id="pos-lbl-PF" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s" onclick="togglePosLabel('PF')">
-        <input type="checkbox" id="pos-cb-PF" style="accent-color:var(--accent);width:16px;height:16px">
-        <div><div style="font-weight:700;font-size:.95rem">PF</div><div style="font-size:.72rem;color:var(--muted)">Power Forward</div></div>
+      <label id="pp-main-PF" onclick="selectPrimaryPos('PF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="radio" name="primary-pos" value="PF" id="pp-rb-PF" style="display:none">
+        <div style="font-weight:900;font-size:.95rem">PF</div><div style="font-size:.65rem;color:var(--muted)">Power Forward</div>
       </label>
-      <label id="pos-lbl-C" style="display:flex;align-items:center;gap:.6rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;grid-column:span 2" onclick="togglePosLabel('C')">
-        <input type="checkbox" id="pos-cb-C" style="accent-color:var(--accent);width:16px;height:16px">
-        <div><div style="font-weight:700;font-size:.95rem">C</div><div style="font-size:.72rem;color:var(--muted)">Center</div></div>
+      <label id="pp-main-C" onclick="selectPrimaryPos('C')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="radio" name="primary-pos" value="C" id="pp-rb-C" style="display:none">
+        <div style="font-weight:900;font-size:.95rem">C</div><div style="font-size:.65rem;color:var(--muted)">Center</div>
       </label>
     </div>
+
+    <!-- SECONDARY POSITIONS -->
+    <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.4rem" id="pp-secondary-label">Dodatkowe pozycje (opcjonalnie)</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-bottom:1rem">
+      <label id="pos-lbl-PG" onclick="toggleSecondaryPos('PG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="checkbox" id="pos-cb-PG" style="display:none">
+        <div style="font-weight:700;font-size:.9rem">PG</div>
+      </label>
+      <label id="pos-lbl-SG" onclick="toggleSecondaryPos('SG')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="checkbox" id="pos-cb-SG" style="display:none">
+        <div style="font-weight:700;font-size:.9rem">SG</div>
+      </label>
+      <label id="pos-lbl-SF" onclick="toggleSecondaryPos('SF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="checkbox" id="pos-cb-SF" style="display:none">
+        <div style="font-weight:700;font-size:.9rem">SF</div>
+      </label>
+      <label id="pos-lbl-PF" onclick="toggleSecondaryPos('PF')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="checkbox" id="pos-cb-PF" style="display:none">
+        <div style="font-weight:700;font-size:.9rem">PF</div>
+      </label>
+      <label id="pos-lbl-C" onclick="toggleSecondaryPos('C')" style="display:flex;flex-direction:column;align-items:center;padding:.6rem .4rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:center">
+        <input type="checkbox" id="pos-cb-C" style="display:none">
+        <div style="font-weight:700;font-size:.9rem">C</div>
+      </label>
+    </div>
+
+    <!-- ENGLISH CHECKBOX -->
+    <label id="pp-eng-label" onclick="toggleEnglish()" style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;margin-bottom:1.25rem">
+      <input type="checkbox" id="pp-eng-cb" style="display:none">
+      <span style="font-size:1.4rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.9rem" id="pp-eng-title">Komunikuję się po angielsku</div>
+        <div style="font-size:.72rem;color:var(--muted)" id="pp-eng-sub">I communicate in English</div>
+      </div>
+      <div id="pp-eng-check" style="width:20px;height:20px;border-radius:4px;border:2px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s"></div>
+    </label>
+
     <div style="display:flex;gap:.75rem">
-      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmSignupWithPositions()">✅ Zapisz się</button>
-      <button class="btn btn-ghost" onclick="document.getElementById('position-picker-modal').classList.remove('open')">Anuluj</button>
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmSignupWithPositions()" id="pp-confirm-btn">✅ Zapisz się</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('position-picker-modal').classList.remove('open')" id="pp-cancel-btn">Anuluj</button>
     </div>
   </div>
 </div>
@@ -5104,8 +5143,10 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
       <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)">
         ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem">👤</div>'}
         <span style="font-weight:600;font-size:.9rem">${p.name}</span>
+        ${p.speaksEnglish ? '<span title="Speaks English" style="font-size:.9rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>' : ''}
         ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
-        ${p.positions?.length ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.1);border-radius:4px;padding:.1rem .35rem;font-weight:700">${p.positions.join(' · ')}</span>` : ''}
+        ${p.primaryPos ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.12);border-radius:4px;padding:.1rem .35rem;font-weight:700">${p.primaryPos}</span>` : ''}
+        ${p.positions?.filter(x=>x!==p.primaryPos).length ? `<span style="font-size:.7rem;color:var(--muted);background:var(--surface2);border-radius:4px;padding:.1rem .3rem">${p.positions.filter(x=>x!==p.primaryPos).join('·')}</span>` : ''}
         ${isAdmin ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')" style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
       </div>`).join('');
 
@@ -5685,11 +5726,24 @@ async function signupToEvent(eventId) {
 function openPositionPickerModal(eventId) {
   const modal = document.getElementById('position-picker-modal');
   document.getElementById('position-picker-eventid').value = eventId;
-  // Reset checkboxes
+  // Reset all state
+  _primaryPos = null;
+  _secondaryPos = new Set();
+  _speaksEnglish = false;
   ['PG','SG','SF','PF','C'].forEach(pos => {
     const cb = document.getElementById('pos-cb-' + pos);
     if(cb) cb.checked = false;
+    const lbl = document.getElementById('pos-lbl-' + pos);
+    if(lbl) { lbl.style.borderColor = 'var(--border)'; lbl.style.background = 'var(--surface2)'; lbl.style.opacity = '1'; }
+    const mainLbl = document.getElementById('pp-main-' + pos);
+    if(mainLbl) { mainLbl.style.borderColor = 'var(--border)'; mainLbl.style.background = 'var(--surface2)'; mainLbl.style.color = 'var(--text)'; }
   });
+  // Reset english
+  const engLbl = document.getElementById('pp-eng-label');
+  const engChk = document.getElementById('pp-eng-check');
+  if(engLbl) { engLbl.style.borderColor = 'var(--border)'; engLbl.style.background = 'var(--surface2)'; }
+  if(engChk) { engChk.style.background = 'transparent'; engChk.style.borderColor = 'var(--border)'; engChk.innerHTML = ''; }
+  openPositionPickerWithLang();
   modal.classList.add('open');
 }
 
@@ -5697,14 +5751,15 @@ async function confirmSignupWithPositions() {
   const eventId = document.getElementById('position-picker-eventid').value;
   const ev = events.find(e => e.id === eventId);
   if(!ev || !discordUser) return;
-  const positions = ['PG','SG','SF','PF','C'].filter(pos => {
-    const cb = document.getElementById('pos-cb-' + pos);
-    return cb && cb.checked;
-  });
-  if(!positions.length) { showToast('❌ Zaznacz przynajmniej jedną pozycję', 'error'); return; }
+  if(!_primaryPos) {
+    showToast(currentLang === 'en' ? '❌ Select your primary position' : '❌ Wybierz główną pozycję', 'error');
+    return;
+  }
+  const positions = [_primaryPos, ..._secondaryPos].filter((v, i, a) => a.indexOf(v) === i);
   if(!ev.players) ev.players = [];
   const playerObj = { id: discordUser.id, name: discordUser.name,
-    discordTag: discordUser.discordTag, avatar: discordUser.avatar, positions };
+    discordTag: discordUser.discordTag, avatar: discordUser.avatar,
+    positions, primaryPos: _primaryPos, speaksEnglish: _speaksEnglish };
   try {
     const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5720,16 +5775,67 @@ async function confirmSignupWithPositions() {
   } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
 }
 
-function togglePosLabel(pos) {
-  const cb = document.getElementById('pos-cb-' + pos);
-  const lbl = document.getElementById('pos-lbl-' + pos);
-  if(!cb || !lbl) return;
-  // checkbox is toggled by browser — just update visual
-  setTimeout(() => {
-    lbl.style.borderColor = cb.checked ? 'var(--accent)' : 'var(--border)';
-    lbl.style.background  = cb.checked ? 'rgba(245,197,24,.1)' : 'var(--surface2)';
-  }, 0);
+let _primaryPos = null;
+let _secondaryPos = new Set();
+let _speaksEnglish = false;
+
+function selectPrimaryPos(pos) {
+  _primaryPos = pos;
+  ['PG','SG','SF','PF','C'].forEach(p => {
+    const lbl = document.getElementById('pp-main-' + p);
+    if(!lbl) return;
+    const active = p === pos;
+    lbl.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    lbl.style.background  = active ? 'rgba(245,197,24,.15)' : 'var(--surface2)';
+    lbl.style.color = active ? 'var(--accent)' : 'var(--text)';
+  });
+  // Auto-uncheck from secondary if selected as primary
+  _secondaryPos.delete(pos);
+  updateSecondaryVisuals();
 }
+
+function toggleSecondaryPos(pos) {
+  if(pos === _primaryPos) return; // can't secondary = primary
+  if(_secondaryPos.has(pos)) _secondaryPos.delete(pos);
+  else _secondaryPos.add(pos);
+  updateSecondaryVisuals();
+}
+
+function updateSecondaryVisuals() {
+  ['PG','SG','SF','PF','C'].forEach(p => {
+    const lbl = document.getElementById('pos-lbl-' + p);
+    if(!lbl) return;
+    const active = _secondaryPos.has(p);
+    const isPrimary = p === _primaryPos;
+    lbl.style.borderColor = active ? '#60a5fa' : 'var(--border)';
+    lbl.style.background  = active ? 'rgba(96,165,250,.12)' : 'var(--surface2)';
+    lbl.style.opacity = isPrimary ? '0.35' : '1';
+  });
+}
+
+function toggleEnglish() {
+  _speaksEnglish = !_speaksEnglish;
+  const lbl = document.getElementById('pp-eng-label');
+  const chk = document.getElementById('pp-eng-check');
+  if(lbl) { lbl.style.borderColor = _speaksEnglish ? '#4ade80' : 'var(--border)'; lbl.style.background = _speaksEnglish ? 'rgba(74,222,128,.08)' : 'var(--surface2)'; }
+  if(chk) { chk.style.background = _speaksEnglish ? '#4ade80' : 'transparent'; chk.style.borderColor = _speaksEnglish ? '#4ade80' : 'var(--border)'; chk.innerHTML = _speaksEnglish ? '<svg width="12" height="12" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#000" stroke-width="2" fill="none" stroke-linecap="round"/></svg>' : ''; }
+}
+
+function openPositionPickerWithLang() {
+  // Update modal labels based on currentLang
+  const isEn = currentLang === 'en';
+  const el = id => document.getElementById(id);
+  if(el('pp-title'))          el('pp-title').textContent        = isEn ? '🎮 SIGN UP FOR DRAFT' : '🎮 ZAPISZ SIĘ NA DRAFT';
+  if(el('pp-primary-label'))  el('pp-primary-label').textContent = isEn ? 'Primary position' : 'Główna pozycja';
+  if(el('pp-secondary-label'))el('pp-secondary-label').textContent = isEn ? 'Secondary positions (optional)' : 'Dodatkowe pozycje (opcjonalnie)';
+  if(el('pp-eng-title'))      el('pp-eng-title').textContent    = isEn ? 'I communicate in English' : 'Komunikuję się po angielsku';
+  if(el('pp-eng-sub'))        el('pp-eng-sub').textContent      = isEn ? 'English is my primary language' : 'I communicate in English';
+  if(el('pp-confirm-btn'))    el('pp-confirm-btn').textContent  = isEn ? '✅ Sign up' : '✅ Zapisz się';
+  if(el('pp-cancel-btn'))     el('pp-cancel-btn').textContent   = isEn ? 'Cancel' : 'Anuluj';
+}
+
+// Keep old function name for compatibility
+function togglePosLabel(pos) { toggleSecondaryPos(pos); }
 
 async function cancelSignup(eventId) {
   if(!discordUser) return;
@@ -6352,7 +6458,12 @@ function renderDraftView(eventId) {
                 ${p.avatar ? `<img src="${p.avatar}" style="width:26px;height:26px;border-radius:50%">` : '<div style="width:26px;height:26px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center">👤</div>'}
                 <div style="flex:1;min-width:0">
                   <div style="font-weight:600;font-size:.9rem">${p.name}</div>
-                  ${p.positions?.length ? `<div style="font-size:.7rem;color:var(--accent);font-weight:700">${p.positions.join(' · ')}</div>` : ''}
+                  <div style="font-size:.7rem;margin-top:.1rem;display:flex;align-items:center;gap:.25rem">
+                    ${p.primaryPos
+                      ? `<span style="font-weight:900;color:var(--accent);background:rgba(245,197,24,.15);border-radius:4px;padding:.1rem .35rem">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:var(--muted);font-size:.68rem">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}`
+                      : p.positions?.length ? `<span style="color:var(--accent)">${p.positions.join(' · ')}</span>` : ''}
+                    ${p.speaksEnglish ? '<span title="Speaks English" style="font-size:.8rem;margin-left:.1rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>' : ''}
+                  </div>
                 </div>
                 ${(isMyTurn || (isAdmin && !isDone)) ? '<span style="color:var(--accent);font-size:.8rem;flex-shrink:0">+ Pick</span>' : ''}
               </div>`).join('')}
@@ -6508,10 +6619,14 @@ function renderGMPanel(eventId) {
                 onmouseout="this.style.borderColor='var(--border)'"` : ''}>
               ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center">👤</div>'}
               <div style="flex:1;min-width:0">
-                <div style="font-weight:600;font-size:.9rem">${p.name}</div>
-                ${p.positions?.length ? `<div style="font-size:.7rem;color:var(--accent);font-weight:700">${p.positions.join(' · ')}</div>` : ''}
+                <div style="font-weight:600;font-size:.9rem;display:flex;align-items:center;gap:.3rem">${p.name}${p.speaksEnglish ? '<span style="font-size:.8rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>' : ''}</div>
+                <div style="font-size:.7rem;margin-top:.15rem;display:flex;align-items:center;gap:.25rem">
+                  ${p.primaryPos
+                    ? `<span style="font-weight:900;color:var(--accent);background:rgba(245,197,24,.15);border-radius:4px;padding:.1rem .3rem">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:var(--muted)">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}`
+                    : p.positions?.length ? `<span style="color:var(--accent)">${p.positions.join(' · ')}</span>` : ''}
+                </div>
               </div>
-              ${isMyTurn ? '<span style="color:var(--accent);font-size:.8rem;flex-shrink:0">+ Pick</span>' : ''}
+              ${isMyTurn ? '<span style="color:var(--accent);font-size:.8rem;flex-shrink:0;font-weight:700">+ Pick</span>' : ''}
             </div>`).join('')}
           ${pool.length === 0 ? '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Wszyscy wybrani</div>' : ''}
         </div>
@@ -6526,9 +6641,11 @@ function renderGMPanel(eventId) {
         ${myPicks.map((p, i) => `
           <div style="background:var(--surface2);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem">
             <span style="font-size:.75rem;color:var(--muted)">#${i+1}</span>
-            <div style="flex:1">
-              <div style="font-size:.85rem;font-weight:600">${p.name}</div>
-              ${p.positions?.length ? `<div style="font-size:.7rem;color:var(--accent)">${p.positions.join(' · ')}</div>` : ''}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.25rem">${p.name}${p.speaksEnglish ? '<span style="font-size:.75rem">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>' : ''}</div>
+              <div style="font-size:.7rem;display:flex;align-items:center;gap:.2rem;margin-top:.1rem">
+                ${p.primaryPos ? `<span style="font-weight:900;color:var(--accent)">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:var(--muted)">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}` : p.positions?.length ? `<span style="color:var(--accent)">${p.positions.join('·')}</span>` : ''}
+              </div>
             </div>
           </div>`).join('')}
         ${Array.from({length: Math.max(0, perTeam - myPicks.length)}, (_, i) => `
