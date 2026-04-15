@@ -4489,6 +4489,15 @@ const _notifiedCaptainEvents = new Set();
 
 function startCaptainWatch() {
   if(!workerUrl) return;
+  // Pre-fill already-captain events so we don't spam on page return
+  if(discordUser) {
+    events.forEach(ev => {
+      if(['closed','draft'].includes(ev.status) &&
+         (ev.teams||[]).some(t => t.captain?.id === discordUser.id)) {
+        _notifiedCaptainEvents.add(ev.id);
+      }
+    });
+  }
   setInterval(async () => {
     if(!discordUser) return;
     try {
