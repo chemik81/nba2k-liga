@@ -1777,7 +1777,9 @@ async function callAnthropic(model, max_tokens, messages) {
   if(workerUrl) {
     // Via Cloudflare Worker — API key never touches browser
     // Get stored token hash — computed during login
-    let adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+    let adminToken = localStorage.getItem('nba2k_admin_token_hash')
+                  || localStorage.getItem('nba2k_events_token_hash')
+                  || '';
     // Fallback: if no hash stored yet, compute from known salt+password combo
     // This handles case where user was logged in before Worker was configured
     if(!adminToken && localStorage.getItem('nba2k_auth') === 'ok') {
@@ -1795,7 +1797,8 @@ async function callAnthropic(model, max_tokens, messages) {
     });
     if(!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error('Worker error ' + res.status + ': ' + (err.error || 'Unknown'));
+      const errMsg = typeof err.error === 'string' ? err.error : JSON.stringify(err.error || err);
+      throw new Error('Worker error ' + res.status + ': ' + errMsg);
     }
     return await res.json();
   } else if(anthropicKey) {
@@ -5706,7 +5709,7 @@ POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
 KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
 
   try {
-    const data = await callAnthropic(MODEL_SCREENSHOT(), 4000, [{
+    const data = await callAI(MODEL_SCREENSHOT(), 4000, [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: _evParseMime, data: _evParseBase64 } },
