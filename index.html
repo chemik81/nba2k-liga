@@ -2406,6 +2406,54 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 // ═══════════════════════════════════════════════════════════════
 // RENDER PARSED PREVIEW
 // ═══════════════════════════════════════════════════════════════
+function renderParsedPreviewHtml(match) {
+  if(!match) return '';
+  const teamHtml = (team) => {
+    if(!team) return '';
+    const q = team.quarters || [];
+    const rows = (team.players||[]).map(p => `
+      <tr>
+        <td style="padding:.25rem .5rem;font-weight:600;font-size:.82rem">${p.name||'—'}</td>
+        <td style="padding:.25rem .3rem;color:var(--muted);font-size:.78rem">${p.pos||'—'}</td>
+        <td style="padding:.25rem .3rem"><span class="grade grade-${(p.grade||'').replace('+','p').replace('-','m')}">${p.grade||'—'}</span></td>
+        ${['pts','reb','ast','stl','blk','to'].map(k=>`<td style="padding:.25rem .3rem;text-align:right;font-size:.82rem">${p[k]??0}</td>`).join('')}
+        <td style="padding:.25rem .3rem;text-align:right;font-size:.78rem;color:var(--muted)">${p.fgm??0}/${p.fga??0}</td>
+        <td style="padding:.25rem .3rem;text-align:right;font-size:.78rem;color:var(--muted)">${p.tpm??0}/${p.tpa??0}</td>
+        <td style="padding:.25rem .3rem;text-align:right;font-size:.78rem;color:var(--muted)">${p.ftm??0}/${p.fta??0}</td>
+      </tr>`).join('');
+    return `
+      <div style="margin-bottom:1rem">
+        <div style="display:flex;align-items:baseline;gap:.6rem;margin-bottom:.4rem">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1rem;letter-spacing:1px;text-transform:uppercase">${team.name}</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${team.score}</span>
+          ${q.length ? `<span style="font-size:.72rem;color:var(--muted)">${q.map((s,i)=>`Q${i+1}:${s}`).join(' ')}</span>` : ''}
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+            <thead><tr style="background:var(--surface);border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:.2rem .5rem;font-size:.7rem;color:var(--muted)">Gracz</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted)">Poz</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted)">GRD</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">PTS</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">REB</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">AST</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">STL</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">BLK</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">TO</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">FG</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">3P</th>
+              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">FT</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  };
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:.75rem">
+    ${teamHtml(match.team1)}${teamHtml(match.team2)}
+  </div>`;
+}
+
 function renderParsedPreview(match) {
   const container = document.getElementById('parsed-match-preview');
   container.innerHTML = `
@@ -5705,15 +5753,76 @@ async function evParseScreenshot(eventId) {
   statusEl.textContent = '🤖 Analizuję screenshot...';
   if(previewEl) previewEl.style.display = 'none';
 
-  // Build known players hint from event players
-  const knownPlayers = (ev.players||[]).map(p => p.name).filter(Boolean);
-  const knownHint = knownPlayers.length ? `\n\nGRACZE W TYM EVENCIE (użyj tych nazw):\n${knownPlayers.join(', ')}` : '';
+  // Build known players hint — from event players + global matches (same as main tab)
+  const evPlayers = (ev.players||[]).map(p => p.name).filter(Boolean);
+  const globalPlayers = [...new Set(
+    matches.flatMap(m => [...(m.team1.players||[]), ...(m.team2.players||[])].map(p => p.name))
+  )].filter(Boolean).sort();
+  const aliasValues = Object.values(aliases||{}).filter(Boolean);
+  const allKnown = [...new Set([...evPlayers, ...globalPlayers, ...aliasValues])].sort();
+  const knownPlayersHint = allKnown.length
+    ? `\n\nZNANI GRACZE W LIDZE (użyj tych nazw gdy pasują fonetycznie/wizualnie do tego co widzisz na screenie):\n${allKnown.join(', ')}`
+    : '';
 
-  const prompt = `Analizuj screenshot z gry NBA 2K — ekran Game Stats.
-Wyodrębnij dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown):
-{"team1":{"name":"NAZWA","score":67,"quarters":[18,17,16,16],"players":[{"name":"Nick","pos":"PG","grade":"B+","pts":24,"reb":5,"ast":9,"stl":1,"blk":0,"to":3,"fgm":7,"fga":20,"tpm":2,"tpa":6,"ftm":4,"fta":4}]},"team2":{"name":"NAZWA","score":87,"quarters":[27,16,20,24],"players":[...]}}
-POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
-KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
+  const prompt = `Analizuj ten screenshot z gry NBA 2K z ekranu "Game Stats".
+
+BARDZO WAŻNE - NAZWY GRACZY: Nicki graczy na screenie mogą być zniekształcone przez OCR (podobne litery: 0/O, 1/I/l, rn/m, vv/w, ci/d). 
+Porównaj każdą rozpoznaną nazwę z listą znanych graczy i wybierz najbliższe dopasowanie jeśli różnica to 1-2 znaki.
+Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego dopasowania na liście.${knownPlayersHint}
+
+KOLUMNY W TABELI (kolejność): GRD | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
+KRYTYCZNE: Kolumna 7 = FOULS (nagłówek na ekranie to "FOULS") → zapisz jako "fouls". Kolumna 8 = TO (straty) → zapisz jako "to". NIE mylić!
+
+NAZWY DRUŻYN: Dopasuj logotyp do poniższej listy (użyj DOKŁADNIE tej nazwy):
+${Object.keys(teams||{}).length ? Object.keys(teams).join(', ') : 'Aliens Katowice, Katowice PL, Big Brain Basketball, Illegal Esports V2, Polish Boars, Polish Snickers, White Market, Sternritters, The Outlawz'}
+UWAGA na podobne logotypy: "Aliens Katowice" ma ZIELONY kolor i zielonego aliena. "Katowice PL" ma CZERWONY kolor i czerwonego/białego aliena. To dwie RÓŻNE drużyny — rozróżniaj po kolorze!
+Jeśli w nagłówku tabeli widzisz nick gracza zamiast nazwy (np. "xXxxxxxZZZZ") — ZIGNORUJ, użyj nazwy z logotypu lub "Drużyna 1"/"Drużyna 2".
+
+Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, bez komentarzy):
+{
+  "team1": {
+    "name": "PEŁNA NAZWA DRUŻYNY (nie nick gracza)",
+    "score": 67,
+    "quarters": [18, 17, 16, 16],
+    "players": [
+      {"name": "NickGracza", "pos": "PG", "grade": "B+", "pts": 24, "reb": 0, "ast": 9, "stl": 0, "blk": 0, "fouls": 0, "to": 3, "fgm": 7, "fga": 20, "tpm": 6, "tpa": 16, "ftm": 4, "fta": 4}
+    ]
+  },
+  "team2": {
+    "name": "PEŁNA NAZWA DRUŻYNY (nie nick gracza)",
+    "score": 87,
+    "quarters": [27, 16, 20, 24],
+    "players": [{"name": "NickGracza", "grade": "A+", "pts": 40, "reb": 0, "ast": 11, "stl": 0, "blk": 0, "fouls": 0, "to": 2, "fgm": 15, "fga": 20, "tpm": 10, "tpa": 15, "ftm": 0, "fta": 0}]
+  }
+}
+KRYTYCZNE — JAK LICZYĆ GRACZY W KAŻDEJ DRUŻYNIE:
+Każda sekcja drużyny wygląda tak na ekranie:
+  [WIERSZ NAGŁÓWKA: nick_kapitana | GRD | PTS | REB | AST | ...]  ← IGNORUJ — to nie jest gracz!
+  [gracz 1 → PG]
+  [gracz 2 → SG]
+  [gracz 3 → SF]
+  [gracz 4 → PF]
+  [gracz 5 → C]
+  [WIERSZ TOTAL]  ← IGNORUJ
+
+Nick kapitana widoczny w wierszu nagłówka NIE jest graczem — nie wstawiaj go do tablicy players.
+Każda drużyna ma DOKŁADNIE 5 graczy — 5 wierszy nad TOTAL.
+Licz od dołu: wiersz tuż nad TOTAL = gracz 5 (C), następny = gracz 4 (PF), itd.
+
+POZYCJE: 1=PG, 2=SG, 3=SF, 4=PF, 5=C (licząc od góry, pomijając wiersz nagłówka z kapitanem).
+
+KOLEJNOŚĆ KOLUMN na ekranie Game Stats (od lewej do prawej):
+GRADE | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
+
+WAŻNE — rozróżnienie BLK / FOULS / TO:
+- BLK (bloki) = 6. kolumna. Zazwyczaj 0-2.
+- FOULS (faule) = 7. kolumna, nagłówek na ekranie brzmi "FOULS". → zapisz jako "fouls". Zazwyczaj 0-5.
+- TO (straty) = 8. kolumna. → zapisz jako "to". Zazwyczaj 0-4.
+- NIE zamieniaj kolejności — FOULS jest PRZED TO na ekranie.
+- Gdy TO=0 nie zamieniaj z FOULS — zapisz "to":0.
+- Liczby w tych kolumnach są małe (0-6). Jeśli widzisz dużą liczbę w miejscu BLK/FOULS/TO — to błąd, wstaw 0.
+
+Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
 
   try {
     const data = await callAI(MODEL_SCREENSHOT(), 8192, [{
@@ -5724,10 +5833,22 @@ KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM
       ]
     }]);
     if(data.error) throw new Error(data.error.message);
+    if(!data.content || !data.content.length) throw new Error('Pusta odpowiedź API');
+
     const text = data.content.map(c => c.text||'').join('');
-    const j = text.slice(text.indexOf('{'), text.lastIndexOf('}')+1);
-    const parsed = robustJsonParse(j);
-    _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if(firstBrace === -1 || lastBrace === -1) throw new Error('Brak JSON w odpowiedzi');
+    let jsonStr = text.slice(firstBrace, lastBrace + 1);
+    jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+    jsonStr = jsonStr.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    jsonStr = jsonStr.replace(/\bNone\b/g,'null').replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false');
+    jsonStr = jsonStr.replace(/\.\.\.\s*(?=[,\]])/g, '');
+
+    const parsed = JSON.parse(jsonStr);
+    const rawMatch = { id: Date.now(), date: new Date().toISOString().split('T')[0], ...parsed };
+    _evParsePending = applyAliasesToMatch(rawMatch);
 
     statusEl.style.background = 'rgba(46,204,113,.1)';
     statusEl.style.border = '1px solid rgba(46,204,113,.3)';
@@ -5737,16 +5858,19 @@ KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM
     if(previewEl) {
       previewEl.style.display = 'block';
       previewEl.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:8px;padding:.75rem 1rem;gap:1rem;flex-wrap:wrap">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:800">
-            ${parsed.team1.name} <span style="color:var(--accent)">${parsed.team1.score}</span>
-            <span style="color:var(--muted);font-size:.9rem;margin:0 .5rem">—</span>
-            <span style="color:var(--accent)">${parsed.team2.score}</span> ${parsed.team2.name}
+        <div style="background:var(--surface2);border-radius:8px;padding:.75rem 1rem;margin-top:.5rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:.75rem">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:800">
+              ${parsed.team1.name} <span style="color:var(--accent)">${parsed.team1.score}</span>
+              <span style="color:var(--muted);font-size:.9rem;margin:0 .5rem">—</span>
+              <span style="color:var(--accent)">${parsed.team2.score}</span> ${parsed.team2.name}
+            </div>
+            <div style="display:flex;gap:.5rem">
+              <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz mecz</button>
+              <button onclick="document.getElementById('ev-parse-preview-${eventId}').style.display='none';_evParsePending=null" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
+            </div>
           </div>
-          <div style="display:flex;gap:.5rem">
-            <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz mecz</button>
-            <button onclick="document.getElementById('ev-parse-preview-${eventId}').style.display='none';_evParsePending=null" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
-          </div>
+          ${renderParsedPreviewHtml(_evParsePending)}
         </div>`;
     }
   } catch(err) {
