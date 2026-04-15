@@ -11000,8 +11000,53 @@ function renderPlayoffDashboard() {
         <div class="section-title" style="margin-bottom:0">🏆 Playoff ${formatLabel}</div>
         <button onclick="openPlayoffStats()" style="background:var(--surface2);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:.3rem .9rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;letter-spacing:.5px">📊 Statystyki</button>
         ${po.champion ? `<div style="background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:6px;padding:.3rem 1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem">🥇 MISTRZ: ${po.champion}</div>` : ''}
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem;overflow-x:auto">`;
+      </div>`;
+
+  // Champion banner
+  if (po.champion) {
+    const poMatches = getPlayoffMatches(po);
+    // Compute MVP — best PTS avg among champion's players
+    const playerStats = {};
+    poMatches.forEach(m => {
+      [m.team1, m.team2].forEach(team => {
+        (team.players||[]).forEach(p => {
+          if(!p.name) return;
+          if(!playerStats[p.name]) playerStats[p.name] = { pts:0, reb:0, ast:0, games:0, team: team.name };
+          playerStats[p.name].pts  += p.pts||0;
+          playerStats[p.name].reb  += p.reb||0;
+          playerStats[p.name].ast  += p.ast||0;
+          playerStats[p.name].games++;
+        });
+      });
+    });
+    // MVP = highest avg PTS from champion's team
+    const mvpEntry = Object.entries(playerStats)
+      .filter(([,s]) => s.team === po.champion)
+      .sort(([,a],[,b]) => (b.pts/b.games) - (a.pts/a.games))[0];
+    const mvp = mvpEntry ? { name: mvpEntry[0], ...mvpEntry[1] } : null;
+    const third = po.thirdPlace || null;
+
+    html += `
+      <div style="background:linear-gradient(135deg,rgba(245,197,24,.18),rgba(245,197,24,.06));border:2px solid rgba(245,197,24,.5);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1rem;text-align:center;position:relative;overflow:hidden">
+        <div style="position:absolute;inset:0;opacity:.04;font-size:8rem;display:flex;align-items:center;justify-content:center;pointer-events:none">🏆</div>
+        <div style="font-size:2.5rem;margin-bottom:.25rem">🏆</div>
+        <div style="font-size:.75rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:.25rem">MISTRZ SEZONU</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:.5rem">${po.champion}</div>
+        <div style="font-size:.85rem;color:var(--muted);margin-bottom:${mvp?'1rem':'0'}">Gratulacje dla całego teamu! Zasłużone mistrzostwo 🎉</div>
+        ${mvp ? `
+          <div style="display:inline-flex;align-items:center;gap:.75rem;background:rgba(0,0,0,.25);border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:.6rem 1.25rem">
+            <div style="font-size:1.4rem">⭐</div>
+            <div style="text-align:left">
+              <div style="font-size:.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">MVP PLAYOFF</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.15rem;color:var(--accent)">${mvp.name}</div>
+              <div style="font-size:.75rem;color:var(--muted)">${(mvp.pts/mvp.games).toFixed(1)} PTS · ${(mvp.reb/mvp.games).toFixed(1)} REB · ${(mvp.ast/mvp.games).toFixed(1)} AST · ${mvp.games} meczów</div>
+            </div>
+          </div>` : ''}
+        ${third ? `<div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)">🥉 3. miejsce: <strong style="color:var(--text)">${third}</strong></div>` : ''}
+      </div>`;
+  }
+
+  html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem;overflow-x:auto">`;
 
   // Render bracket rounds side by side
   html += `<div style="display:flex;gap:1.5rem;min-width:max-content">`;
