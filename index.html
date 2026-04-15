@@ -9787,10 +9787,12 @@ function renderEventBracket(ev) {
 
   return `
     <div style="overflow-x:auto;padding-bottom:.5rem">
-      <div style="display:flex;align-items:flex-start;gap:.25rem;min-width:max-content;padding:.5rem 0">${roundsHtml}</div>
+      <div style="display:flex;align-items:flex-start;gap:1rem;min-width:max-content;padding:.5rem 0">${roundsHtml}</div>
     </div>
     ${champion}
-    ${isAdmin ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)"><button onclick="initEventBracket('${ev.id}')" class="btn btn-ghost" style="font-size:.82rem">🔄 Resetuj drabinkę</button></div>` : ''}`;
+    ${isAdmin ? `<div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem">
+      <button type="button" onclick="if(confirm('Zresetować drabinkę? Wszystkie wyniki zostaną usunięte.'))initEventBracket('${ev.id}')" class="btn btn-ghost" style="font-size:.82rem">🔄 Resetuj drabinkę</button>
+    </div>` : ''}`;
 }
 
 async function saveBracketMatch(eventId, roundIdx, matchIdx) {
@@ -9856,7 +9858,11 @@ function renderEventPhases(ev) {
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.1rem;letter-spacing:1px">${phase.name}</div>
             <div style="font-size:.78rem;color:var(--muted)">${phaseMatches.length} meczów</div>
           </div>
-          ${isAdmin ? `<button onclick="setCurrentPhase('${ev.id}',${pi})" style="background:${ev.currentPhase===pi?'var(--accent)':'var(--surface)'};color:${ev.currentPhase===pi?'#000':'var(--muted)'};border:1px solid ${ev.currentPhase===pi?'var(--accent)':'var(--border)'};border-radius:6px;padding:.25rem .75rem;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:${ev.currentPhase===pi?'700':'400'}">${ev.currentPhase===pi?'✅ Aktywna':'Ustaw aktywną'}</button>` : ''}
+          ${isAdmin ? `
+            <div style="display:flex;gap:.4rem;align-items:center">
+              <button type="button" onclick="setCurrentPhase('${ev.id}',${pi})" style="background:${ev.currentPhase===pi?'var(--accent)':'var(--surface)'};color:${ev.currentPhase===pi?'#000':'var(--muted)'};border:1px solid ${ev.currentPhase===pi?'var(--accent)':'var(--border)'};border-radius:6px;padding:.25rem .75rem;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:${ev.currentPhase===pi?'700':'400'}">${ev.currentPhase===pi?'✅ Aktywna':'Ustaw aktywną'}</button>
+              <button type="button" onclick="deleteEventPhase('${ev.id}',${pi})" style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;font-family:inherit" title="Usuń fazę">🗑</button>
+            </div>` : ''}
         </div>
         ${standings.length ? `
           <div style="display:flex;gap:1rem;flex-wrap:wrap">
@@ -9867,17 +9873,33 @@ function renderEventPhases(ev) {
 
   const addPhaseHtml = isAdmin ? `
     <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:.5rem">
-      <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:.5rem">Dodaj fazę</div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:.75rem">Dodaj fazę</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
         ${['Faza grupowa','Półfinały','Finał','Runda eliminacyjna'].map(name =>
-          `<button onclick="addEventPhase('${ev.id}','${name}')" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .7rem;font-size:.8rem;cursor:pointer;font-family:inherit;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${name}</button>`
+          `<button type="button" onclick="addEventPhase('${ev.id}','${name}');return false;" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .85rem;font-size:.82rem;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'">${name}</button>`
         ).join('')}
-        <input id="custom-phase-name" type="text" placeholder="Własna nazwa..." style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .6rem;font-size:.8rem;font-family:inherit">
-        <button onclick="addEventPhase('${ev.id}',document.getElementById('custom-phase-name').value)" class="btn btn-primary" style="font-size:.8rem;padding:.3rem .7rem">+ Dodaj</button>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <input id="custom-phase-name-${ev.id}" type="text" placeholder="Własna nazwa fazy..." style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .7rem;font-size:.82rem;font-family:inherit" onkeydown="if(event.key==='Enter'){addEventPhase('${ev.id}',this.value);this.value=''}">
+        <button type="button" onclick="addEventPhase('${ev.id}',document.getElementById('custom-phase-name-${ev.id}').value);document.getElementById('custom-phase-name-${ev.id}').value=''" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .9rem">+ Dodaj</button>
       </div>
     </div>` : '';
 
   return phaseCards + addPhaseHtml;
+}
+
+async function deleteEventPhase(eventId, phaseIdx) {
+  if(!confirm('Usunąć tę fazę? Mecze przypisane do niej stracą przypisanie.')) return;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  ev.phases.splice(phaseIdx, 1);
+  // Fix currentPhase index
+  if(ev.currentPhase >= ev.phases.length) ev.currentPhase = Math.max(0, ev.phases.length - 1);
+  // Clear phase tags from matches that referenced this phase
+  (ev.matches||[]).forEach(m => { if(m.phase === phaseIdx) delete m.phase; else if(m.phase > phaseIdx) m.phase--; });
+  await saveData();
+  renderEventDetailTab(eventId, 'phases');
+  showToast('🗑 Faza usunięta', 'info');
 }
 
 async function addEventPhase(eventId, name) {
