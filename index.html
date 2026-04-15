@@ -587,6 +587,7 @@
 
   .hot{display:inline-block;font-size:.65rem;background:#ff6b35;color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;font-weight:700;vertical-align:middle;animation:hpulse 1.5s infinite}
   @keyframes hpulse{0%,100%{opacity:1}50%{opacity:.65}}
+  @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   .l5{display:flex;gap:3px;justify-content:center}
   .l5w,.l5l,.l5e{width:14px;height:14px;border-radius:3px;display:inline-block}
   .l5w{background:var(--win)} .l5l{background:var(--loss)} .l5e{background:var(--border)}
@@ -1959,10 +1960,9 @@ async function saveData(silent = false) {
             const checkData = await checkRes.json();
             const kvSavedAt = checkData.record?._savedAt || 0;
             if(kvSavedAt > window._dataLoadedAt + 2000) {
-              // KV is newer — reload local data first, then retry
-              if(!silent) showToast('⚠️ Dane zostały zmienione przez kogoś innego — odświeżam...', 'error');
+              // KV is newer — reload local data silently and retry save once
               await loadData();
-              return false;
+              // Don't abort — fall through to the actual save below
             }
           }
         } catch(e) { /* ignore check errors, proceed with save */ }
@@ -4479,7 +4479,88 @@ async function saveSetup() {
   if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
   checkEventUrlParam();
   checkPendingSignupEvent();
+
+  // Global captain watch — notify user when they become captain
+  startCaptainWatch();
 })();
+
+// Track which events we've already notified the user about (captain)
+const _notifiedCaptainEvents = new Set();
+
+function startCaptainWatch() {
+  if(!workerUrl) return;
+  setInterval(async () => {
+    if(!discordUser) return;
+    try {
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
+      if(!res.ok) return;
+      const fresh = await res.json();
+      const freshEvents = fresh.record?.events || fresh.events || [];
+
+      freshEvents.forEach(ev => {
+        if(!['closed','draft'].includes(ev.status)) return;
+        const isCaptain = (ev.teams||[]).some(t => t.captain?.id === discordUser.id);
+        if(!isCaptain) return;
+        if(_notifiedCaptainEvents.has(ev.id)) {
+          // Already notified — just silently update local events so button appears
+          const idx = events.findIndex(e => e.id === ev.id);
+          if(idx !== -1) {
+            const wasUpdated = events[idx].draftTurn !== ev.draftTurn || events[idx].status !== ev.status;
+            events[idx] = ev;
+            if(wasUpdated) { renderEvents(); window._dataLoadedAt = ev._savedAt || Date.now(); }
+          }
+          return;
+        }
+
+        // First time noticing — show toast + update data + re-render
+        _notifiedCaptainEvents.add(ev.id);
+        const idx = events.findIndex(e => e.id === ev.id);
+        if(idx !== -1) { events[idx] = ev; window._dataLoadedAt = ev._savedAt || Date.now(); }
+        renderEvents();
+
+        // Show persistent captain notification
+        showCaptainNotification(ev);
+      });
+    } catch(e) {}
+  }, 8000);
+}
+
+function showCaptainNotification(ev) {
+  // Remove existing notification if any
+  document.getElementById('captain-notif')?.remove();
+
+  const div = document.createElement('div');
+  div.id = 'captain-notif';
+  div.style.cssText = `
+    position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+    background:#1a1a2e;border:2px solid var(--accent);border-radius:14px;
+    padding:1rem 1.25rem;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,.6);
+    font-family:'Barlow Condensed',sans-serif;max-width:340px;width:90%;
+    animation:slideUp .35s ease;
+  `;
+  div.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:.75rem">
+      <div style="font-size:2rem;flex-shrink:0">🎮</div>
+      <div style="flex:1">
+        <div style="font-weight:900;font-size:1.1rem;letter-spacing:1px;color:var(--accent)">JESTEŚ KAPITANEM!</div>
+        <div style="font-size:.9rem;color:var(--text);margin:.2rem 0 .6rem">
+          Zostałeś wylosowany jako kapitan w evencie <b>${ev.title}</b>.
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button onclick="openGMPanel('${ev.id}');document.getElementById('captain-notif')?.remove()"
+            style="flex:1;background:var(--accent);border:none;color:#000;border-radius:8px;padding:.5rem;font-family:inherit;font-weight:900;font-size:.9rem;cursor:pointer">
+            Otwórz Panel GM
+          </button>
+          <button onclick="document.getElementById('captain-notif')?.remove()"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.5rem .75rem;font-family:inherit;cursor:pointer;font-size:.85rem">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+}
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -6569,9 +6650,16 @@ async function draftPickPlayer(eventId, playerId) {
     ev.timerEnd = null;
   }
 
-  await saveData();
+  const saved = await saveData();
+  // Update _dataLoadedAt so next stale check doesn't false-positive
+  if(saved !== false) window._dataLoadedAt = Date.now();
   renderDraftView(eventId);
   renderEvents();
+  // Re-render GM panel if it's open (captain just made a pick)
+  const gmModal = document.getElementById('gm-panel-modal');
+  if(gmModal?.classList.contains('open') && window._gmPanelEventId === eventId) {
+    renderGMPanel(eventId);
+  }
   // Start timer for next pick
   if(ev.timerEnd) {
     startDraftTimer(ev.timerEnd, eventId);
@@ -6667,7 +6755,7 @@ function renderGMPanel(eventId) {
           ${pool.map(p => `
             <div style="display:flex;align-items:center;gap:.5rem;background:var(--surface2);border-radius:8px;padding:.5rem .75rem;
               ${isMyTurn ? 'cursor:pointer;border:1px solid var(--border);transition:border-color .15s' : 'border:1px solid transparent;opacity:.6'}"
-              ${isMyTurn ? `onclick="draftPickPlayer('${eventId}','${p.id}');document.getElementById('gm-panel-modal').classList.remove('open')"
+              ${isMyTurn ? `onclick="draftPickPlayer('${eventId}','${p.id}')"
                 onmouseover="this.style.borderColor='var(--accent)'"
                 onmouseout="this.style.borderColor='var(--border)'"` : ''}>
               ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center">👤</div>'}
@@ -6752,6 +6840,7 @@ function startGMPolling(eventId) {
   if(!workerUrl) return;
   _gmPollInterval = setInterval(async () => {
     const modal = document.getElementById('gm-panel-modal');
+    // Stop polling only if modal was explicitly closed by user (X button)
     if(!modal?.classList.contains('open')) { clearInterval(_gmPollInterval); return; }
     try {
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
@@ -6762,10 +6851,15 @@ function startGMPolling(eventId) {
       if(!freshEv) return;
       const idx = events.findIndex(e => e.id === eventId);
       if(idx !== -1) {
-        const changed = freshEv.draftTurn !== events[idx].draftTurn
-                     || freshEv.status    !== events[idx].status
-                     || freshEv.timerEnd  !== events[idx].timerEnd;
+        const prevTurn   = events[idx].draftTurn;
+        const prevStatus = events[idx].status;
+        const prevTimer  = events[idx].timerEnd;
         events[idx] = freshEv;
+        // Update _dataLoadedAt so stale check doesn't false-positive after polling
+        window._dataLoadedAt = freshEv._savedAt || Date.now();
+        const changed = freshEv.draftTurn !== prevTurn
+                     || freshEv.status    !== prevStatus
+                     || freshEv.timerEnd  !== prevTimer;
         if(changed) {
           renderGMPanel(eventId);
           if(freshEv.timerEnd && freshEv.status === 'draft') startGMTimer(freshEv.timerEnd, eventId);
