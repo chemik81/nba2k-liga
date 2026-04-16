@@ -10345,7 +10345,13 @@ function openPlayoffModal() {
 }
 
 function getPlayoffForSeason(seasonId) {
-  return playoffs.find(p => p.seasonId === seasonId) || null;
+  if(!playoffs.length) return null;
+  // Try exact match first
+  const exact = playoffs.find(p => p.seasonId === seasonId);
+  if(exact) return exact;
+  // If no exact match, return the most recent playoff (last one added)
+  // This handles cases where playoff was created with null/different seasonId
+  return playoffs[playoffs.length - 1];
 }
 
 function getCurrentSeasonStandings() {
