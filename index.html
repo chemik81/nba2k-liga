@@ -4523,14 +4523,11 @@ function startCaptainWatch() {
           return;
         }
 
-        // First time noticing — show toast + update data + re-render
+        // First time noticing — update data + re-render (NO automatic popup — admin sends manually)
         _notifiedCaptainEvents.add(ev.id);
         const idx = events.findIndex(e => e.id === ev.id);
         if(idx !== -1) { events[idx] = ev; window._dataLoadedAt = ev._savedAt || Date.now(); }
         renderEvents();
-
-        // Show persistent captain notification
-        showCaptainNotification(ev);
       });
     } catch(e) {}
   }, 8000);
@@ -6409,7 +6406,12 @@ function refreshStartDraftModal(eventId) {
           style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem;cursor:pointer;font-family:inherit;font-size:.78rem">
           ✏️ Zmień ręcznie
         </button>
-      </div>` : '';
+      </div>
+      <button onclick="openCaptainNotifModal('${eventId}')"
+        style="width:100%;margin-top:.5rem;background:rgba(114,137,218,.12);border:1px solid #7289da;color:#7289da;border-radius:6px;padding:.45rem;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;display:flex;align-items:center;justify-content:center;gap:.4rem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.032.053a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+        Powiadom kapitanów na Discord
+      </button>` : '';
   }
 }
 
@@ -8966,6 +8968,102 @@ async function sendEventWebhook(title, description, color) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CAPTAIN NOTIFICATION MODAL
+// ═══════════════════════════════════════════════════════════════
+function openCaptainNotifModal(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !(ev.teams||[]).length) { showToast('❌ Brak przypisanych kapitanów', 'error'); return; }
+
+  const hasWebhook = !!discordWebhookUrl;
+
+  const defaultMsg = `📣 **${ev.title}** — przydzielono kapitanów!\n\n` +
+    ev.teams.map(team => {
+      const c = team.captain;
+      if(!c) return '';
+      const mention = c.id ? `<@${c.id}>` : c.name;
+      return `🏀 **${team.name}** → kapitan: ${mention}`;
+    }).filter(Boolean).join('\n') +
+    `\n\nKapitanowie — zaloguj się na platformę i otwórz Panel GM aby zarządzać swoją drużyną podczas draftu! 🎮`;
+
+  document.getElementById('captain-notif-modal-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">📣 POWIADOM KAPITANÓW</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">Wyślij powiadomienie do kapitanów przez Discord Webhook.</div>
+
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.75rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.5rem">Kapitanowie</div>
+      <div style="display:flex;flex-direction:column;gap:.4rem">
+        ${ev.teams.map(team => {
+          const c = team.captain;
+          if(!c) return '';
+          const discordTag = c.discordTag && c.discordTag !== c.name ? c.discordTag : null;
+          const gmOnline = ev.gmOnline || [];
+          const isOnline = gmOnline.includes(c.id);
+          return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.5rem .75rem">
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${isOnline?'#4ade80':'#374151'};border:1.5px solid ${isOnline?'#4ade80':'#6b7280'};box-shadow:${isOnline?'0 0 6px #4ade80':'none'}"></span>
+              <span style="font-weight:700">${c.name}</span>
+              ${discordTag ? `<span style="color:var(--muted);font-size:.8rem">${discordTag}</span>` : ''}
+            </div>
+            <div style="font-size:.8rem;color:var(--muted)">${team.name}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+        <div style="font-size:.75rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase">Treść wiadomości</div>
+        <button onclick="document.getElementById('cn-msg').value=${JSON.stringify(defaultMsg)}" style="font-size:.75rem;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.2rem .6rem;cursor:pointer;font-family:inherit">↺ Reset</button>
+      </div>
+      <textarea id="cn-msg" rows="8" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.7rem;font-family:monospace;font-size:.82rem;resize:vertical;box-sizing:border-box;line-height:1.5">${defaultMsg}</textarea>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">💡 Mentiony <code>&lt;@ID&gt;</code> automatycznie pingują graczy na Discordzie.</div>
+    </div>
+
+    ${!hasWebhook ? `<div style="background:rgba(255,165,0,.1);border:1px solid rgba(255,165,0,.3);border-radius:8px;padding:.75rem;margin-bottom:1rem;font-size:.85rem;color:#f39c12">
+      ⚠️ Brak skonfigurowanego Discord Webhook URL. Skonfiguruj go w ustawieniach ligi.
+    </div>` : ''}
+
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <button id="cn-send-btn" class="btn btn-primary" style="background:#7289da;border-color:#7289da;flex:1;justify-content:center;${!hasWebhook?'opacity:.5;pointer-events:none':''}"
+        onclick="sendCaptainNotifWebhook('${eventId}')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:.4rem"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.032.053a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+        Wyślij na Discord
+      </button>
+      <button class="btn btn-ghost" onclick="copyCaptainNotifText()">📋 Kopiuj tekst</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('captain-notif-modal').classList.remove('open')">Anuluj</button>
+    </div>`;
+
+  document.getElementById('captain-notif-modal').classList.add('open');
+}
+
+async function sendCaptainNotifWebhook(eventId) {
+  const msg = document.getElementById('cn-msg')?.value?.trim();
+  if(!msg) { showToast('❌ Wiadomość jest pusta', 'error'); return; }
+  if(!discordWebhookUrl) { showToast('❌ Brak Discord Webhook URL w konfiguracji', 'error'); return; }
+  const btn = document.getElementById('cn-send-btn');
+  if(btn) { btn.disabled = true; btn.textContent = '⏳ Wysyłanie...'; }
+  try {
+    const res = await fetch(discordWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: msg })
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    document.getElementById('captain-notif-modal').classList.remove('open');
+    showToast('✅ Powiadomienie wysłane na Discord!', 'success');
+  } catch(e) {
+    showToast('❌ Błąd wysyłania: ' + e.message, 'error');
+    if(btn) { btn.disabled = false; btn.textContent = '🎮 Wyślij na Discord'; }
+  }
+}
+
+function copyCaptainNotifText() {
+  const msg = document.getElementById('cn-msg')?.value || '';
+  if(!msg) return;
+  navigator.clipboard.writeText(msg)
+    .then(() => showToast('📋 Skopiowano do schowka!', 'success'))
+    .catch(() => showToast('❌ Błąd kopiowania', 'error'));
+}
 // H2H MIĘDZY GRACZAMI
 // ═══════════════════════════════════════════════════════════════
 function openPlayerH2H(playerName, teamName) {
@@ -10196,6 +10294,14 @@ async function deleteTeam(teamName) {
   <div class="modal" style="max-width:560px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('manual-captains-modal').classList.remove('open')">✕</button>
     <div id="manual-captains-content"></div>
+  </div>
+</div>
+
+<!-- CAPTAIN NOTIFICATION MODAL -->
+<div class="modal-overlay" id="captain-notif-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1300">
+  <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('captain-notif-modal').classList.remove('open')">✕</button>
+    <div id="captain-notif-modal-content"></div>
   </div>
 </div>
 
