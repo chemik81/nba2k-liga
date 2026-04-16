@@ -10525,7 +10525,27 @@ function renderPlayoffManager(po, standings) {
 
   const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
 
+  // Pre-calculate if playoff can be finished (for top button)
+  const lastRound = po.rounds[po.rounds.length - 1];
+  const allDone = lastRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
+  const isFinishable = _isLoggedInSync() && !po.champion && allDone && lastRound.pairs.length === 1;
+  let topFinishBtn = '';
+  if(isFinishable) {
+    const finPair = lastRound.pairs[0];
+    const champ = finPair.w1 >= winsNeeded ? finPair.team1 : finPair.team2;
+    const thirdRound = po.rounds.find(r => r.thirdPlace);
+    const thirdDone = !thirdRound || thirdRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
+    if(thirdDone) {
+      const thirdPair = thirdRound?.pairs[0];
+      const third = thirdPair ? (thirdPair.w1 >= winsNeeded ? thirdPair.team1 : thirdPair.team2) : null;
+      topFinishBtn = `<button onclick="poSetChampion('${po.id}','${champ}')" style="width:100%;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border:none;border-radius:8px;padding:.75rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(197,150,30,0.4)">
+        🥇 ZAKOŃCZ PLAYOFF — MISTRZ: ${champ}${third ? ' · 🥉 3. miejsce: '+third : ''}
+      </button>`;
+    }
+  }
+
   let html = `
+    ${topFinishBtn}
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
       <div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:2px">🏆 PLAYOFF</div>
