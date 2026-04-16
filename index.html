@@ -785,6 +785,10 @@
         <div style="font-size:.8rem;color:rgba(255,255,255,0.6);margin-top:.25rem;letter-spacing:1px;">OFICJALNA PLATFORMA LIGOWA</div>
       </div>
     </div>
+    <div id="events-dashboard-wrap"></div>
+
+    <div id="playoff-dashboard-wrap"></div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="standings">Tabela</div><button onclick="shareStandings()" title="Udostępnij tabelę" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">&#x1F4E4;</button></div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="stats-table-wrap">
@@ -800,8 +804,6 @@
         </table>
       </div>
     </div>
-
-    <div id="playoff-dashboard-wrap"></div>
 
     <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
     <div class="leaders-grid" id="leaders-grid">
@@ -1777,9 +1779,7 @@ async function callAnthropic(model, max_tokens, messages) {
   if(workerUrl) {
     // Via Cloudflare Worker — API key never touches browser
     // Get stored token hash — computed during login
-    let adminToken = localStorage.getItem('nba2k_admin_token_hash')
-                  || localStorage.getItem('nba2k_events_token_hash')
-                  || '';
+    let adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
     // Fallback: if no hash stored yet, compute from known salt+password combo
     // This handles case where user was logged in before Worker was configured
     if(!adminToken && localStorage.getItem('nba2k_auth') === 'ok') {
@@ -1797,8 +1797,7 @@ async function callAnthropic(model, max_tokens, messages) {
     });
     if(!res.ok) {
       const err = await res.json().catch(() => ({}));
-      const errMsg = typeof err.error === 'string' ? err.error : JSON.stringify(err.error || err);
-      throw new Error('Worker error ' + res.status + ': ' + errMsg);
+      throw new Error('Worker error ' + res.status + ': ' + (err.error || 'Unknown'));
     }
     return await res.json();
   } else if(anthropicKey) {
@@ -2406,54 +2405,6 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`
 // ═══════════════════════════════════════════════════════════════
 // RENDER PARSED PREVIEW
 // ═══════════════════════════════════════════════════════════════
-function renderParsedPreviewHtml(match) {
-  if(!match) return '';
-  const teamHtml = (team) => {
-    if(!team) return '';
-    const q = team.quarters || [];
-    const rows = (team.players||[]).map(p => `
-      <tr>
-        <td style="padding:.25rem .5rem;font-weight:600;font-size:.82rem">${p.name||'—'}</td>
-        <td style="padding:.25rem .3rem;color:var(--muted);font-size:.78rem">${p.pos||'—'}</td>
-        <td style="padding:.25rem .3rem"><span class="grade grade-${(p.grade||'').replace('+','p').replace('-','m')}">${p.grade||'—'}</span></td>
-        ${['pts','reb','ast','stl','blk','to'].map(k=>`<td style="padding:.25rem .3rem;text-align:right;font-size:.82rem">${p[k]??0}</td>`).join('')}
-        <td style="padding:.25rem .3rem;text-align:right;font-size:.78rem;color:var(--muted)">${p.fgm??0}/${p.fga??0}</td>
-        <td style="padding:.25rem .3rem;text-align:right;font-size:.78rem;color:var(--muted)">${p.tpm??0}/${p.tpa??0}</td>
-        <td style="padding:.25rem .3rem;text-align:right;font-size:.78rem;color:var(--muted)">${p.ftm??0}/${p.fta??0}</td>
-      </tr>`).join('');
-    return `
-      <div style="margin-bottom:1rem">
-        <div style="display:flex;align-items:baseline;gap:.6rem;margin-bottom:.4rem">
-          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1rem;letter-spacing:1px;text-transform:uppercase">${team.name}</span>
-          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${team.score}</span>
-          ${q.length ? `<span style="font-size:.72rem;color:var(--muted)">${q.map((s,i)=>`Q${i+1}:${s}`).join(' ')}</span>` : ''}
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:.82rem">
-            <thead><tr style="background:var(--surface);border-bottom:1px solid var(--border)">
-              <th style="text-align:left;padding:.2rem .5rem;font-size:.7rem;color:var(--muted)">Gracz</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted)">Poz</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted)">GRD</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">PTS</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">REB</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">AST</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">STL</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">BLK</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">TO</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">FG</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">3P</th>
-              <th style="padding:.2rem .3rem;font-size:.7rem;color:var(--muted);text-align:right">FT</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </div>`;
-  };
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:.75rem">
-    ${teamHtml(match.team1)}${teamHtml(match.team2)}
-  </div>`;
-}
-
 function renderParsedPreview(match) {
   const container = document.getElementById('parsed-match-preview');
   container.innerHTML = `
@@ -3985,6 +3936,7 @@ function renderScheduleDashboard() {
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 function renderDashboard() {
+  renderEventsDashboard();
   renderStandings();
   loadTeams();
   setTimeout(renderScheduleDashboard, 100);
@@ -4540,15 +4492,6 @@ const _notifiedCaptainEvents = new Set();
 
 function startCaptainWatch() {
   if(!workerUrl) return;
-  // Pre-fill already-captain events so we don't spam on page return
-  if(discordUser) {
-    events.forEach(ev => {
-      if(['closed','draft'].includes(ev.status) &&
-         (ev.teams||[]).some(t => t.captain?.id === discordUser.id)) {
-        _notifiedCaptainEvents.add(ev.id);
-      }
-    });
-  }
   setInterval(async () => {
     if(!discordUser) return;
     try {
@@ -5025,6 +4968,47 @@ function getEventStatus() {
 // Keep backward compat
 const EVENT_STATUS = new Proxy({}, { get: (_, k) => getEventStatus()[k] });
 
+function renderEventsDashboard() {
+  const wrap = document.getElementById('events-dashboard-wrap');
+  if(!wrap) return;
+  const activeStatuses = ['open', 'closed', 'draft', 'active'];
+  const activeEvents = (events || []).filter(ev => activeStatuses.includes(ev.status));
+  if(!activeEvents.length) { wrap.innerHTML = ''; return; }
+  const sorted = [...activeEvents].sort((a, b) => {
+    // active first, then open, then draft, then closed
+    const order = { active: 0, open: 1, draft: 2, closed: 3 };
+    const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
+    if(oa !== ob) return oa - ob;
+    return new Date(a.date||'9999') - new Date(b.date||'9999');
+  });
+  wrap.innerHTML = `
+    <div style="margin-bottom:1.5rem">
+      <div class="section-title" style="margin-bottom:.75rem">🏆 Aktywne Eventy</div>
+      ${sorted.map(ev => {
+        const type = EVENT_TYPES[ev.type] || { label: ev.type };
+        const status = EVENT_STATUS[ev.status] || { label: ev.status, color: 'var(--muted)' };
+        const playerCount = (ev.players||[]).length;
+        const isSignedUp = discordUser && (ev.players||[]).some(p => p.id === discordUser.id);
+        return `<div class="card" style="padding:1rem 1.25rem;margin-bottom:.75rem;cursor:pointer;border-left:3px solid ${status.color}" onclick="openEventDetail('${ev.id}')">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.15rem;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ev.title}</div>
+              <div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">${type.label}${ev.date ? ' · ' + ev.date : ''}${ev.time ? ' · <b style="color:var(--text)">' + ev.time + '</b>' : ''}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.75rem;flex-shrink:0">
+              ${isSignedUp ? '<span style="font-size:.75rem;color:var(--win);font-weight:700">✅ Zapisany</span>' : ''}
+              <div style="text-align:right">
+                <div style="font-weight:700;font-size:.82rem;color:${status.color}">${status.label}</div>
+                <div style="font-size:.78rem;color:var(--muted)">👥 ${playerCount}${ev.maxPlayers?'/'+ev.maxPlayers:''}</div>
+              </div>
+              <span style="color:var(--muted);font-size:1rem">›</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
 function renderEvents() {
   const el = document.getElementById('events-list');
   if(!el) return;
@@ -5036,7 +5020,8 @@ function renderEvents() {
       : '<div class="empty"><div class="icon">🏆</div><p>Brak eventów.</p></div>';
     return;
   }
-    el.innerHTML = [...events].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0)).map(ev => {
+    renderEventsDashboard();
+  el.innerHTML = [...events].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0)).map(ev => {
     const type = EVENT_TYPES[ev.type] || { label: ev.type };
     const status = EVENT_STATUS[ev.status] || { label: ev.status, color: 'var(--muted)' };
     const playerCount = (ev.players||[]).length;
@@ -5726,14 +5711,7 @@ function evLoadFile(file, eventId) {
     _evParseMime = file.type || 'image/png';
     _evParseBase64 = dataUrl.split(',')[1];
     const zone = document.getElementById('ev-upload-zone');
-    if(zone) {
-      zone.innerHTML = `
-        <img src="${dataUrl}" style="width:100%;max-height:260px;object-fit:contain;border-radius:6px;display:block">
-        <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="evFileSelected(event,'${eventId}')">
-      `;
-      zone.style.padding = '0';
-      zone.style.overflow = 'hidden';
-    }
+    if(zone) zone.style.backgroundImage = `url(${dataUrl})`;
     evParseScreenshot(eventId);
   };
   reader.readAsDataURL(file);
@@ -5753,79 +5731,18 @@ async function evParseScreenshot(eventId) {
   statusEl.textContent = '🤖 Analizuję screenshot...';
   if(previewEl) previewEl.style.display = 'none';
 
-  // Build known players hint — from event players + global matches (same as main tab)
-  const evPlayers = (ev.players||[]).map(p => p.name).filter(Boolean);
-  const globalPlayers = [...new Set(
-    matches.flatMap(m => [...(m.team1.players||[]), ...(m.team2.players||[])].map(p => p.name))
-  )].filter(Boolean).sort();
-  const aliasValues = Object.values(aliases||{}).filter(Boolean);
-  const allKnown = [...new Set([...evPlayers, ...globalPlayers, ...aliasValues])].sort();
-  const knownPlayersHint = allKnown.length
-    ? `\n\nZNANI GRACZE W LIDZE (użyj tych nazw gdy pasują fonetycznie/wizualnie do tego co widzisz na screenie):\n${allKnown.join(', ')}`
-    : '';
+  // Build known players hint from event players
+  const knownPlayers = (ev.players||[]).map(p => p.name).filter(Boolean);
+  const knownHint = knownPlayers.length ? `\n\nGRACZE W TYM EVENCIE (użyj tych nazw):\n${knownPlayers.join(', ')}` : '';
 
-  const prompt = `Analizuj ten screenshot z gry NBA 2K z ekranu "Game Stats".
-
-BARDZO WAŻNE - NAZWY GRACZY: Nicki graczy na screenie mogą być zniekształcone przez OCR (podobne litery: 0/O, 1/I/l, rn/m, vv/w, ci/d). 
-Porównaj każdą rozpoznaną nazwę z listą znanych graczy i wybierz najbliższe dopasowanie jeśli różnica to 1-2 znaki.
-Nie zmieniaj nazwy jeśli jesteś pewny że jest poprawna lub nie ma bliskiego dopasowania na liście.${knownPlayersHint}
-
-KOLUMNY W TABELI (kolejność): GRD | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
-KRYTYCZNE: Kolumna 7 = FOULS (nagłówek na ekranie to "FOULS") → zapisz jako "fouls". Kolumna 8 = TO (straty) → zapisz jako "to". NIE mylić!
-
-NAZWY DRUŻYN: Dopasuj logotyp do poniższej listy (użyj DOKŁADNIE tej nazwy):
-${Object.keys(teams||{}).length ? Object.keys(teams).join(', ') : 'Aliens Katowice, Katowice PL, Big Brain Basketball, Illegal Esports V2, Polish Boars, Polish Snickers, White Market, Sternritters, The Outlawz'}
-UWAGA na podobne logotypy: "Aliens Katowice" ma ZIELONY kolor i zielonego aliena. "Katowice PL" ma CZERWONY kolor i czerwonego/białego aliena. To dwie RÓŻNE drużyny — rozróżniaj po kolorze!
-Jeśli w nagłówku tabeli widzisz nick gracza zamiast nazwy (np. "xXxxxxxZZZZ") — ZIGNORUJ, użyj nazwy z logotypu lub "Drużyna 1"/"Drużyna 2".
-
-Wyodrębnij WSZYSTKIE dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown, bez komentarzy):
-{
-  "team1": {
-    "name": "PEŁNA NAZWA DRUŻYNY (nie nick gracza)",
-    "score": 67,
-    "quarters": [18, 17, 16, 16],
-    "players": [
-      {"name": "NickGracza", "pos": "PG", "grade": "B+", "pts": 24, "reb": 0, "ast": 9, "stl": 0, "blk": 0, "fouls": 0, "to": 3, "fgm": 7, "fga": 20, "tpm": 6, "tpa": 16, "ftm": 4, "fta": 4}
-    ]
-  },
-  "team2": {
-    "name": "PEŁNA NAZWA DRUŻYNY (nie nick gracza)",
-    "score": 87,
-    "quarters": [27, 16, 20, 24],
-    "players": [{"name": "NickGracza", "grade": "A+", "pts": 40, "reb": 0, "ast": 11, "stl": 0, "blk": 0, "fouls": 0, "to": 2, "fgm": 15, "fga": 20, "tpm": 10, "tpa": 15, "ftm": 0, "fta": 0}]
-  }
-}
-KRYTYCZNE — JAK LICZYĆ GRACZY W KAŻDEJ DRUŻYNIE:
-Każda sekcja drużyny wygląda tak na ekranie:
-  [WIERSZ NAGŁÓWKA: nick_kapitana | GRD | PTS | REB | AST | ...]  ← IGNORUJ — to nie jest gracz!
-  [gracz 1 → PG]
-  [gracz 2 → SG]
-  [gracz 3 → SF]
-  [gracz 4 → PF]
-  [gracz 5 → C]
-  [WIERSZ TOTAL]  ← IGNORUJ
-
-Nick kapitana widoczny w wierszu nagłówka NIE jest graczem — nie wstawiaj go do tablicy players.
-Każda drużyna ma DOKŁADNIE 5 graczy — 5 wierszy nad TOTAL.
-Licz od dołu: wiersz tuż nad TOTAL = gracz 5 (C), następny = gracz 4 (PF), itd.
-
-POZYCJE: 1=PG, 2=SG, 3=SF, 4=PF, 5=C (licząc od góry, pomijając wiersz nagłówka z kapitanem).
-
-KOLEJNOŚĆ KOLUMN na ekranie Game Stats (od lewej do prawej):
-GRADE | PTS | REB | AST | STL | BLK | FOULS | TO | FGM/FGA | 3PM/3PA | FTM/FTA
-
-WAŻNE — rozróżnienie BLK / FOULS / TO:
-- BLK (bloki) = 6. kolumna. Zazwyczaj 0-2.
-- FOULS (faule) = 7. kolumna, nagłówek na ekranie brzmi "FOULS". → zapisz jako "fouls". Zazwyczaj 0-5.
-- TO (straty) = 8. kolumna. → zapisz jako "to". Zazwyczaj 0-4.
-- NIE zamieniaj kolejności — FOULS jest PRZED TO na ekranie.
-- Gdy TO=0 nie zamieniaj z FOULS — zapisz "to":0.
-- Liczby w tych kolumnach są małe (0-6). Jeśli widzisz dużą liczbę w miejscu BLK/FOULS/TO — to błąd, wstaw 0.
-
-Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
+  const prompt = `Analizuj screenshot z gry NBA 2K — ekran Game Stats.
+Wyodrębnij dane i zwróć WYŁĄCZNIE poprawny JSON (bez markdown):
+{"team1":{"name":"NAZWA","score":67,"quarters":[18,17,16,16],"players":[{"name":"Nick","pos":"PG","grade":"B+","pts":24,"reb":5,"ast":9,"stl":1,"blk":0,"to":3,"fgm":7,"fga":20,"tpm":2,"tpa":6,"ftm":4,"fta":4}]},"team2":{"name":"NAZWA","score":87,"quarters":[27,16,20,24],"players":[...]}}
+POZYCJE (kolejność od góry): 1=PG, 2=SG, 3=SF, 4=PF, 5=C
+KOLUMNY: GRADE | PTS | REB | AST | STL | BLK | TO | PF | FGM-FGA | 3PM-3PA | FTM-FTA${knownHint}`;
 
   try {
-    const data = await callAI(MODEL_SCREENSHOT(), 8192, [{
+    const data = await callAnthropic(MODEL_SCREENSHOT(), 4000, [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: _evParseMime, data: _evParseBase64 } },
@@ -5833,22 +5750,10 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
       ]
     }]);
     if(data.error) throw new Error(data.error.message);
-    if(!data.content || !data.content.length) throw new Error('Pusta odpowiedź API');
-
     const text = data.content.map(c => c.text||'').join('');
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if(firstBrace === -1 || lastBrace === -1) throw new Error('Brak JSON w odpowiedzi');
-    let jsonStr = text.slice(firstBrace, lastBrace + 1);
-    jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-    jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
-    jsonStr = jsonStr.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    jsonStr = jsonStr.replace(/\bNone\b/g,'null').replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false');
-    jsonStr = jsonStr.replace(/\.\.\.\s*(?=[,\]])/g, '');
-
-    const parsed = JSON.parse(jsonStr);
-    const rawMatch = { id: Date.now(), date: new Date().toISOString().split('T')[0], ...parsed };
-    _evParsePending = applyAliasesToMatch(rawMatch);
+    const j = text.slice(text.indexOf('{'), text.lastIndexOf('}')+1);
+    const parsed = JSON.parse(j);
+    _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
 
     statusEl.style.background = 'rgba(46,204,113,.1)';
     statusEl.style.border = '1px solid rgba(46,204,113,.3)';
@@ -5858,19 +5763,16 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     if(previewEl) {
       previewEl.style.display = 'block';
       previewEl.innerHTML = `
-        <div style="background:var(--surface2);border-radius:8px;padding:.75rem 1rem;margin-top:.5rem">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:.75rem">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:800">
-              ${parsed.team1.name} <span style="color:var(--accent)">${parsed.team1.score}</span>
-              <span style="color:var(--muted);font-size:.9rem;margin:0 .5rem">—</span>
-              <span style="color:var(--accent)">${parsed.team2.score}</span> ${parsed.team2.name}
-            </div>
-            <div style="display:flex;gap:.5rem">
-              <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz mecz</button>
-              <button onclick="document.getElementById('ev-parse-preview-${eventId}').style.display='none';_evParsePending=null" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
-            </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:8px;padding:.75rem 1rem;gap:1rem;flex-wrap:wrap">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:800">
+            ${parsed.team1.name} <span style="color:var(--accent)">${parsed.team1.score}</span>
+            <span style="color:var(--muted);font-size:.9rem;margin:0 .5rem">—</span>
+            <span style="color:var(--accent)">${parsed.team2.score}</span> ${parsed.team2.name}
           </div>
-          ${renderParsedPreviewHtml(_evParsePending)}
+          <div style="display:flex;gap:.5rem">
+            <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz mecz</button>
+            <button onclick="document.getElementById('ev-parse-preview-${eventId}').style.display='none';_evParsePending=null" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
+          </div>
         </div>`;
     }
   } catch(err) {
@@ -9918,12 +9820,10 @@ function renderEventBracket(ev) {
 
   return `
     <div style="overflow-x:auto;padding-bottom:.5rem">
-      <div style="display:flex;align-items:flex-start;gap:1rem;min-width:max-content;padding:.5rem 0">${roundsHtml}</div>
+      <div style="display:flex;align-items:flex-start;gap:.25rem;min-width:max-content;padding:.5rem 0">${roundsHtml}</div>
     </div>
     ${champion}
-    ${isAdmin ? `<div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem">
-      <button type="button" onclick="if(confirm('Zresetować drabinkę? Wszystkie wyniki zostaną usunięte.'))initEventBracket('${ev.id}')" class="btn btn-ghost" style="font-size:.82rem">🔄 Resetuj drabinkę</button>
-    </div>` : ''}`;
+    ${isAdmin ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)"><button onclick="initEventBracket('${ev.id}')" class="btn btn-ghost" style="font-size:.82rem">🔄 Resetuj drabinkę</button></div>` : ''}`;
 }
 
 async function saveBracketMatch(eventId, roundIdx, matchIdx) {
@@ -9989,11 +9889,7 @@ function renderEventPhases(ev) {
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.1rem;letter-spacing:1px">${phase.name}</div>
             <div style="font-size:.78rem;color:var(--muted)">${phaseMatches.length} meczów</div>
           </div>
-          ${isAdmin ? `
-            <div style="display:flex;gap:.4rem;align-items:center">
-              <button type="button" onclick="setCurrentPhase('${ev.id}',${pi})" style="background:${ev.currentPhase===pi?'var(--accent)':'var(--surface)'};color:${ev.currentPhase===pi?'#000':'var(--muted)'};border:1px solid ${ev.currentPhase===pi?'var(--accent)':'var(--border)'};border-radius:6px;padding:.25rem .75rem;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:${ev.currentPhase===pi?'700':'400'}">${ev.currentPhase===pi?'✅ Aktywna':'Ustaw aktywną'}</button>
-              <button type="button" onclick="deleteEventPhase('${ev.id}',${pi})" style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;font-family:inherit" title="Usuń fazę">🗑</button>
-            </div>` : ''}
+          ${isAdmin ? `<button onclick="setCurrentPhase('${ev.id}',${pi})" style="background:${ev.currentPhase===pi?'var(--accent)':'var(--surface)'};color:${ev.currentPhase===pi?'#000':'var(--muted)'};border:1px solid ${ev.currentPhase===pi?'var(--accent)':'var(--border)'};border-radius:6px;padding:.25rem .75rem;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:${ev.currentPhase===pi?'700':'400'}">${ev.currentPhase===pi?'✅ Aktywna':'Ustaw aktywną'}</button>` : ''}
         </div>
         ${standings.length ? `
           <div style="display:flex;gap:1rem;flex-wrap:wrap">
@@ -10004,33 +9900,17 @@ function renderEventPhases(ev) {
 
   const addPhaseHtml = isAdmin ? `
     <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:.5rem">
-      <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:.75rem">Dodaj fazę</div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
+      <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:.5rem">Dodaj fazę</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         ${['Faza grupowa','Półfinały','Finał','Runda eliminacyjna'].map(name =>
-          `<button type="button" onclick="addEventPhase('${ev.id}','${name}');return false;" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .85rem;font-size:.82rem;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'">${name}</button>`
+          `<button onclick="addEventPhase('${ev.id}','${name}')" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .7rem;font-size:.8rem;cursor:pointer;font-family:inherit;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${name}</button>`
         ).join('')}
-      </div>
-      <div style="display:flex;gap:.5rem">
-        <input id="custom-phase-name-${ev.id}" type="text" placeholder="Własna nazwa fazy..." style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .7rem;font-size:.82rem;font-family:inherit" onkeydown="if(event.key==='Enter'){addEventPhase('${ev.id}',this.value);this.value=''}">
-        <button type="button" onclick="addEventPhase('${ev.id}',document.getElementById('custom-phase-name-${ev.id}').value);document.getElementById('custom-phase-name-${ev.id}').value=''" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .9rem">+ Dodaj</button>
+        <input id="custom-phase-name" type="text" placeholder="Własna nazwa..." style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .6rem;font-size:.8rem;font-family:inherit">
+        <button onclick="addEventPhase('${ev.id}',document.getElementById('custom-phase-name').value)" class="btn btn-primary" style="font-size:.8rem;padding:.3rem .7rem">+ Dodaj</button>
       </div>
     </div>` : '';
 
   return phaseCards + addPhaseHtml;
-}
-
-async function deleteEventPhase(eventId, phaseIdx) {
-  if(!confirm('Usunąć tę fazę? Mecze przypisane do niej stracą przypisanie.')) return;
-  const ev = events.find(e => e.id === eventId);
-  if(!ev) return;
-  ev.phases.splice(phaseIdx, 1);
-  // Fix currentPhase index
-  if(ev.currentPhase >= ev.phases.length) ev.currentPhase = Math.max(0, ev.phases.length - 1);
-  // Clear phase tags from matches that referenced this phase
-  (ev.matches||[]).forEach(m => { if(m.phase === phaseIdx) delete m.phase; else if(m.phase > phaseIdx) m.phase--; });
-  await saveData();
-  renderEventDetailTab(eventId, 'phases');
-  showToast('🗑 Faza usunięta', 'info');
 }
 
 async function addEventPhase(eventId, name) {
@@ -10191,7 +10071,7 @@ async function deleteTeam(teamName) {
 
 <!-- EVENT DETAIL MODAL -->
 <div class="modal-overlay" id="event-detail-modal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:1100px;width:95vw;max-height:95vh;overflow-y:auto">
+  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('event-detail-modal').classList.remove('open')">✕</button>
     <div id="event-detail-content"></div>
   </div>
@@ -11000,53 +10880,8 @@ function renderPlayoffDashboard() {
         <div class="section-title" style="margin-bottom:0">🏆 Playoff ${formatLabel}</div>
         <button onclick="openPlayoffStats()" style="background:var(--surface2);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:.3rem .9rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;letter-spacing:.5px">📊 Statystyki</button>
         ${po.champion ? `<div style="background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:6px;padding:.3rem 1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem">🥇 MISTRZ: ${po.champion}</div>` : ''}
-      </div>`;
-
-  // Champion banner
-  if (po.champion) {
-    const poMatches = getPlayoffMatches(po);
-    // Compute MVP — best PTS avg among champion's players
-    const playerStats = {};
-    poMatches.forEach(m => {
-      [m.team1, m.team2].forEach(team => {
-        (team.players||[]).forEach(p => {
-          if(!p.name) return;
-          if(!playerStats[p.name]) playerStats[p.name] = { pts:0, reb:0, ast:0, games:0, team: team.name };
-          playerStats[p.name].pts  += p.pts||0;
-          playerStats[p.name].reb  += p.reb||0;
-          playerStats[p.name].ast  += p.ast||0;
-          playerStats[p.name].games++;
-        });
-      });
-    });
-    // MVP = highest avg PTS from champion's team
-    const mvpEntry = Object.entries(playerStats)
-      .filter(([,s]) => s.team === po.champion)
-      .sort(([,a],[,b]) => (b.pts/b.games) - (a.pts/a.games))[0];
-    const mvp = mvpEntry ? { name: mvpEntry[0], ...mvpEntry[1] } : null;
-    const third = po.thirdPlace || null;
-
-    html += `
-      <div style="background:linear-gradient(135deg,rgba(245,197,24,.18),rgba(245,197,24,.06));border:2px solid rgba(245,197,24,.5);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1rem;text-align:center;position:relative;overflow:hidden">
-        <div style="position:absolute;inset:0;opacity:.04;font-size:8rem;display:flex;align-items:center;justify-content:center;pointer-events:none">🏆</div>
-        <div style="font-size:2.5rem;margin-bottom:.25rem">🏆</div>
-        <div style="font-size:.75rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:.25rem">MISTRZ SEZONU</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:.5rem">${po.champion}</div>
-        <div style="font-size:.85rem;color:var(--muted);margin-bottom:${mvp?'1rem':'0'}">Gratulacje dla całego teamu! Zasłużone mistrzostwo 🎉</div>
-        ${mvp ? `
-          <div style="display:inline-flex;align-items:center;gap:.75rem;background:rgba(0,0,0,.25);border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:.6rem 1.25rem">
-            <div style="font-size:1.4rem">⭐</div>
-            <div style="text-align:left">
-              <div style="font-size:.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">MVP PLAYOFF</div>
-              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.15rem;color:var(--accent)">${mvp.name}</div>
-              <div style="font-size:.75rem;color:var(--muted)">${(mvp.pts/mvp.games).toFixed(1)} PTS · ${(mvp.reb/mvp.games).toFixed(1)} REB · ${(mvp.ast/mvp.games).toFixed(1)} AST · ${mvp.games} meczów</div>
-            </div>
-          </div>` : ''}
-        ${third ? `<div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)">🥉 3. miejsce: <strong style="color:var(--text)">${third}</strong></div>` : ''}
-      </div>`;
-  }
-
-  html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem;overflow-x:auto">`;
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem;overflow-x:auto">`;
 
   // Render bracket rounds side by side
   html += `<div style="display:flex;gap:1.5rem;min-width:max-content">`;
