@@ -10526,21 +10526,22 @@ function renderPlayoffManager(po, standings) {
   const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
 
   // Pre-calculate if playoff can be finished (for top button)
-  const thirdRound = po.rounds.find(r => r.thirdPlace);
-  const finalRound = [...po.rounds].reverse().find(r => !r.thirdPlace);
-  const finalDone = finalRound && finalRound.pairs.length === 1 &&
-    finalRound.pairs[0].w1 >= winsNeeded || finalRound?.pairs[0]?.w2 >= winsNeeded;
-  const thirdDone = !thirdRound || thirdRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
-  const isFinishable = _isLoggedInSync() && !po.champion && finalDone && thirdDone;
+  const lastRound = po.rounds[po.rounds.length - 1];
+  const allDone = lastRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
+  const isFinishable = _isLoggedInSync() && !po.champion && allDone && lastRound.pairs.length === 1;
   let topFinishBtn = '';
   if(isFinishable) {
-    const finPair = finalRound.pairs[0];
+    const finPair = lastRound.pairs[0];
     const champ = finPair.w1 >= winsNeeded ? finPair.team1 : finPair.team2;
-    const thirdPair = thirdRound?.pairs[0];
-    const third = thirdPair ? (thirdPair.w1 >= winsNeeded ? thirdPair.team1 : thirdPair.team2) : null;
-    topFinishBtn = `<button onclick="poSetChampion('${po.id}','${champ}')" style="width:100%;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border:none;border-radius:8px;padding:.75rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(197,150,30,0.4)">
-      🥇 ZAKOŃCZ PLAYOFF — MISTRZ: ${champ}${third ? ' · 🥉 3. miejsce: '+third : ''}
-    </button>`;
+    const thirdRound = po.rounds.find(r => r.thirdPlace);
+    const thirdDone = !thirdRound || thirdRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
+    if(thirdDone) {
+      const thirdPair = thirdRound?.pairs[0];
+      const third = thirdPair ? (thirdPair.w1 >= winsNeeded ? thirdPair.team1 : thirdPair.team2) : null;
+      topFinishBtn = `<button onclick="poSetChampion('${po.id}','${champ}')" style="width:100%;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border:none;border-radius:8px;padding:.75rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(197,150,30,0.4)">
+        🥇 ZAKOŃCZ PLAYOFF — MISTRZ: ${champ}${third ? ' · 🥉 3. miejsce: '+third : ''}
+      </button>`;
+    }
   }
 
   let html = `
@@ -11075,20 +11076,28 @@ function renderPlayoffDashboard() {
         poMatches.forEach(m => {
           const side = m.team1.name === po.champion ? m.team1 : m.team2;
           (side.players||[]).forEach(p => {
-            if(!pStats[p.name]) pStats[p.name] = {pts:0,reb:0,ast:0,gp:0};
+            if(!pStats[p.name]) pStats[p.name] = {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,ftm:0,fta:0,gp:0};
             pStats[p.name].pts += p.pts||0;
             pStats[p.name].reb += p.reb||0;
             pStats[p.name].ast += p.ast||0;
+            pStats[p.name].stl += p.stl||0;
+            pStats[p.name].blk += p.blk||0;
+            pStats[p.name].to  += p.to||0;
+            pStats[p.name].fgm += p.fgm||0;
+            pStats[p.name].fga += p.fga||0;
+            pStats[p.name].ftm += p.ftm||0;
+            pStats[p.name].fta += p.fta||0;
             pStats[p.name].gp++;
           });
         });
-        const mvp = Object.entries(pStats).sort((a,b) => (b[1].pts/b[1].gp||0)-(a[1].pts/a[1].gp||0))[0];
-        const mvpHtml = mvp ? `<div style="margin-top:.5rem;font-size:.9rem;opacity:.85">⭐ MVP Playoff: <b>${mvp[0]}</b> — ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : '';
+        const mvp = Object.entries(pStats).sort((a,b) => calcPER(b[1]) - calcPER(a[1]))[0];
+        const mvpPER = mvp ? calcPER(mvp[1]).toFixed(1) : null;
+        const mvpHtml = mvp ? `<div style="margin-top:.5rem;font-size:.9rem;opacity:.85">⭐ MVP Playoff: <b>${mvp[0]}</b> — PER ${mvpPER} · ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : '';
         return `<div style="background:linear-gradient(135deg,#8b6914,#c9962a,#8b6914);border-radius:12px;padding:1.5rem 2rem;margin-bottom:1.25rem;text-align:center;box-shadow:0 4px 24px rgba(197,150,30,0.35)">
           <div style="font-size:2.5rem;margin-bottom:.25rem">🏆</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;color:rgba(0,0,0,0.6);margin-bottom:.2rem">MISTRZ SEZONU</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;color:#000;line-height:1.1">${po.champion}</div>
-          ${mvpHtml ? `<div style="color:rgba(0,0,0,0.7);margin-top:.5rem;font-size:.9rem">⭐ MVP Playoff: <b>${mvp[0]}</b> — ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : ''}
+          ${mvpHtml ? `<div style="color:rgba(0,0,0,0.7);margin-top:.5rem;font-size:.9rem">⭐ MVP Playoff: <b>${mvp[0]}</b> — PER ${mvpPER} · ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : ''}
           <div style="color:rgba(0,0,0,0.5);font-size:.8rem;margin-top:.5rem">🎉 Gratulacje dla całej drużyny!</div>
         </div>`;
       })() : ''}
