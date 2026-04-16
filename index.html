@@ -10511,6 +10511,18 @@ function getRoundName(n) {
 
 function renderPlayoffManager(po, standings) {
   const winsNeeded = getWinsNeeded(po.format);
+
+  // Auto-sync pair wins from actual match results
+  if(po.startDate) {
+    po.rounds.forEach(round => {
+      round.pairs.forEach(pair => {
+        const series = getSeriesResults(po, pair.team1, pair.team2);
+        pair.w1 = series.w1;
+        pair.w2 = series.w2;
+      });
+    });
+  }
+
   const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
 
   let html = `
