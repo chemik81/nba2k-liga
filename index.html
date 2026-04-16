@@ -10526,22 +10526,21 @@ function renderPlayoffManager(po, standings) {
   const formatLabel = { bo1:'Bo1', bo3:'Bo3', bo5:'Bo5', bo7:'Bo7' }[po.format] || po.format;
 
   // Pre-calculate if playoff can be finished (for top button)
-  const lastRound = po.rounds[po.rounds.length - 1];
-  const allDone = lastRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
-  const isFinishable = _isLoggedInSync() && !po.champion && allDone && lastRound.pairs.length === 1;
+  const thirdRound = po.rounds.find(r => r.thirdPlace);
+  const finalRound = [...po.rounds].reverse().find(r => !r.thirdPlace);
+  const finalDone = finalRound && finalRound.pairs.length === 1 &&
+    finalRound.pairs[0].w1 >= winsNeeded || finalRound?.pairs[0]?.w2 >= winsNeeded;
+  const thirdDone = !thirdRound || thirdRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
+  const isFinishable = _isLoggedInSync() && !po.champion && finalDone && thirdDone;
   let topFinishBtn = '';
   if(isFinishable) {
-    const finPair = lastRound.pairs[0];
+    const finPair = finalRound.pairs[0];
     const champ = finPair.w1 >= winsNeeded ? finPair.team1 : finPair.team2;
-    const thirdRound = po.rounds.find(r => r.thirdPlace);
-    const thirdDone = !thirdRound || thirdRound.pairs.every(p => p.w1 >= winsNeeded || p.w2 >= winsNeeded);
-    if(thirdDone) {
-      const thirdPair = thirdRound?.pairs[0];
-      const third = thirdPair ? (thirdPair.w1 >= winsNeeded ? thirdPair.team1 : thirdPair.team2) : null;
-      topFinishBtn = `<button onclick="poSetChampion('${po.id}','${champ}')" style="width:100%;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border:none;border-radius:8px;padding:.75rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(197,150,30,0.4)">
-        🥇 ZAKOŃCZ PLAYOFF — MISTRZ: ${champ}${third ? ' · 🥉 3. miejsce: '+third : ''}
-      </button>`;
-    }
+    const thirdPair = thirdRound?.pairs[0];
+    const third = thirdPair ? (thirdPair.w1 >= winsNeeded ? thirdPair.team1 : thirdPair.team2) : null;
+    topFinishBtn = `<button onclick="poSetChampion('${po.id}','${champ}')" style="width:100%;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border:none;border-radius:8px;padding:.75rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;margin-bottom:1.25rem;box-shadow:0 4px 16px rgba(197,150,30,0.4)">
+      🥇 ZAKOŃCZ PLAYOFF — MISTRZ: ${champ}${third ? ' · 🥉 3. miejsce: '+third : ''}
+    </button>`;
   }
 
   let html = `
