@@ -5270,6 +5270,10 @@ async function closeEventSignups(id) {
   ev.status = 'closed';
   await saveData();
   renderEvents();
+  renderEventsDashboard();
+  // Refresh event detail modal if it's open
+  const detailModal = document.getElementById('event-detail-modal');
+  if(detailModal?.classList.contains('open')) openEventDetail(id);
   showToast(currentLang === 'en' ? '🔒 Sign-ups closed' : '🔒 Zapisy zamknięte', 'info');
 }
 
@@ -5893,12 +5897,17 @@ async function addPlayerManually(eventId) {
     showToast('❌ Osiągnięto limit graczy', 'error'); return;
   }
   if(!ev.players) ev.players = [];
-  ev.players.push({ id: 'p_' + Date.now(), name, discordTag: '', avatar: '' });
+  // Unique ID with random suffix to avoid collisions on rapid adds
+  ev.players.push({ id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name, discordTag: '', avatar: '' });
+  // Clear input BEFORE async save and re-render
+  if(nameEl) nameEl.value = '';
   await saveData();
-  nameEl.value = '';
-  openEventDetail(eventId);
+  renderEventsDashboard();
   renderEvents();
+  openEventDetail(eventId);
   showToast('✅ Gracz dodany', 'success');
+  // Re-focus input after modal rebuild
+  setTimeout(() => { document.getElementById('manual-player-name')?.focus(); }, 80);
 }
 
 async function removePlayerFromEvent(eventId, playerId) {
@@ -5906,8 +5915,11 @@ async function removePlayerFromEvent(eventId, playerId) {
   if(!ev) return;
   ev.players = (ev.players||[]).filter(p => p.id !== playerId);
   await saveData();
-  openEventDetail(eventId);
+  renderEventsDashboard();
   renderEvents();
+  openEventDetail(eventId);
+  // Re-focus manual input if visible
+  setTimeout(() => { document.getElementById('manual-player-name')?.focus(); }, 80);
 }
 
 async function signupToEvent(eventId) {
@@ -11076,28 +11088,20 @@ function renderPlayoffDashboard() {
         poMatches.forEach(m => {
           const side = m.team1.name === po.champion ? m.team1 : m.team2;
           (side.players||[]).forEach(p => {
-            if(!pStats[p.name]) pStats[p.name] = {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,ftm:0,fta:0,gp:0};
+            if(!pStats[p.name]) pStats[p.name] = {pts:0,reb:0,ast:0,gp:0};
             pStats[p.name].pts += p.pts||0;
             pStats[p.name].reb += p.reb||0;
             pStats[p.name].ast += p.ast||0;
-            pStats[p.name].stl += p.stl||0;
-            pStats[p.name].blk += p.blk||0;
-            pStats[p.name].to  += p.to||0;
-            pStats[p.name].fgm += p.fgm||0;
-            pStats[p.name].fga += p.fga||0;
-            pStats[p.name].ftm += p.ftm||0;
-            pStats[p.name].fta += p.fta||0;
             pStats[p.name].gp++;
           });
         });
-        const mvp = Object.entries(pStats).sort((a,b) => calcPER(b[1]) - calcPER(a[1]))[0];
-        const mvpPER = mvp ? calcPER(mvp[1]).toFixed(1) : null;
-        const mvpHtml = mvp ? `<div style="margin-top:.5rem;font-size:.9rem;opacity:.85">⭐ MVP Playoff: <b>${mvp[0]}</b> — PER ${mvpPER} · ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : '';
+        const mvp = Object.entries(pStats).sort((a,b) => (b[1].pts/b[1].gp||0)-(a[1].pts/a[1].gp||0))[0];
+        const mvpHtml = mvp ? `<div style="margin-top:.5rem;font-size:.9rem;opacity:.85">⭐ MVP Playoff: <b>${mvp[0]}</b> — ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : '';
         return `<div style="background:linear-gradient(135deg,#8b6914,#c9962a,#8b6914);border-radius:12px;padding:1.5rem 2rem;margin-bottom:1.25rem;text-align:center;box-shadow:0 4px 24px rgba(197,150,30,0.35)">
           <div style="font-size:2.5rem;margin-bottom:.25rem">🏆</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;color:rgba(0,0,0,0.6);margin-bottom:.2rem">MISTRZ SEZONU</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;letter-spacing:2px;color:#000;line-height:1.1">${po.champion}</div>
-          ${mvpHtml ? `<div style="color:rgba(0,0,0,0.7);margin-top:.5rem;font-size:.9rem">⭐ MVP Playoff: <b>${mvp[0]}</b> — PER ${mvpPER} · ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : ''}
+          ${mvpHtml ? `<div style="color:rgba(0,0,0,0.7);margin-top:.5rem;font-size:.9rem">⭐ MVP Playoff: <b>${mvp[0]}</b> — ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : ''}
           <div style="color:rgba(0,0,0,0.5);font-size:.8rem;margin-top:.5rem">🎉 Gratulacje dla całej drużyny!</div>
         </div>`;
       })() : ''}
