@@ -2013,6 +2013,20 @@ async function loadData() {
     showGlobalLoader(true);
     let record = null;
 
+    // ── Load config (webhook URL etc.) from Worker KV ─────────────────────
+    if(workerUrl) {
+      try {
+        const cfgRes = await fetch(workerUrl.replace(/\/$/, '') + '/config');
+        if(cfgRes.ok) {
+          const cfg = await cfgRes.json();
+          if(cfg.discordWebhookUrl) {
+            discordWebhookUrl = cfg.discordWebhookUrl;
+            localStorage.setItem('nba2k_discord_webhook', discordWebhookUrl);
+          }
+        }
+      } catch(e) { /* config fetch failed, keep localStorage value */ }
+    }
+
     // ── Primary: Cloudflare KV via Worker ────────────────────────────────
     if(workerUrl) {
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
@@ -4376,8 +4390,15 @@ async function saveSetup() {
     const wHook = document.getElementById('setup-webhook')?.value?.trim() || '';
     discordWebhookUrl = wHook;
     localStorage.setItem('nba2k_discord_webhook', wHook);
-    // Also save bin ID in saveData so others can read
-    // Bin ID is baked into the URL after first admin setup
+    // Save webhook to Worker KV so it persists across devices/browsers
+    if(wUrl && wHook) {
+      const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
+      fetch(wUrl.replace(/\/$/, '') + '/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+        body: JSON.stringify({ discordWebhookUrl: wHook })
+      }).catch(() => {}); // fire and forget
+    }
 
     matches = data.record?.matches || [];
     aliases = data.record?.aliases || {};
