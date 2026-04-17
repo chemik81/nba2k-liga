@@ -4534,39 +4534,56 @@ function startCaptainWatch() {
 }
 
 function showCaptainNotification(ev) {
-  // Remove existing notification if any
   document.getElementById('captain-notif')?.remove();
 
   const div = document.createElement('div');
   div.id = 'captain-notif';
   div.style.cssText = `
-    position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
-    background:#1a1a2e;border:2px solid var(--accent);border-radius:14px;
-    padding:1rem 1.25rem;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,.6);
-    font-family:'Barlow Condensed',sans-serif;max-width:340px;width:90%;
-    animation:slideUp .35s ease;
+    position:fixed;inset:0;z-index:99999;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.75);backdrop-filter:blur(4px);
+    animation:fadeIn .25s ease;
   `;
+
+  // Find team name for this captain
+  const team = (ev.teams||[]).find(t => discordUser && t.captain?.id === discordUser.id);
+  const teamName = team?.name || '';
+
   div.innerHTML = `
-    <div style="display:flex;align-items:flex-start;gap:.75rem">
-      <div style="font-size:2rem;flex-shrink:0">🎮</div>
-      <div style="flex:1">
-        <div style="font-weight:900;font-size:1.1rem;letter-spacing:1px;color:var(--accent)">JESTEŚ KAPITANEM!</div>
-        <div style="font-size:.9rem;color:var(--text);margin:.2rem 0 .6rem">
-          Zostałeś wylosowany jako kapitan w evencie <b>${ev.title}</b>.
-        </div>
-        <div style="display:flex;gap:.5rem">
-          <button onclick="openGMPanel('${ev.id}');document.getElementById('captain-notif')?.remove()"
-            style="flex:1;background:var(--accent);border:none;color:#000;border-radius:8px;padding:.5rem;font-family:inherit;font-weight:900;font-size:.9rem;cursor:pointer">
-            Otwórz Panel GM
-          </button>
-          <button onclick="document.getElementById('captain-notif')?.remove()"
-            style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.5rem .75rem;font-family:inherit;cursor:pointer;font-size:.85rem">
-            ✕
-          </button>
-        </div>
+    <div style="
+      background:linear-gradient(135deg,#1a1a2e,#16213e);
+      border:2px solid var(--accent);border-radius:20px;
+      padding:2.5rem 2rem;max-width:440px;width:90%;
+      text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.8);
+      font-family:'Barlow Condensed',sans-serif;
+      animation:slideUp .35s ease;
+    ">
+      <div style="font-size:3.5rem;margin-bottom:.5rem">🎮</div>
+      <div style="font-weight:900;font-size:2rem;letter-spacing:2px;color:var(--accent);margin-bottom:.5rem">JESTEŚ KAPITANEM!</div>
+      <div style="font-size:1.1rem;color:var(--text);margin-bottom:.25rem">
+        Event: <b>${ev.title}</b>
+      </div>
+      ${teamName ? `<div style="font-size:1.3rem;font-weight:900;color:#fff;margin:.5rem 0 1.25rem;padding:.5rem 1rem;background:rgba(245,197,24,.15);border:1px solid rgba(245,197,24,.3);border-radius:8px">
+        🏀 Twoja drużyna: <span style="color:var(--accent)">${teamName}</span>
+      </div>` : '<div style="margin-bottom:1.25rem"></div>'}
+      <div style="color:var(--muted);font-size:.9rem;margin-bottom:1.5rem">
+        Jako kapitan wybierasz graczy podczas draftu.<br>Przejdź do Panelu GM aby zarządzać drużyną.
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:center">
+        <button onclick="openGMPanel('${ev.id}');document.getElementById('captain-notif')?.remove()"
+          style="flex:1;max-width:220px;background:var(--accent);border:none;color:#000;border-radius:10px;padding:.85rem 1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer;box-shadow:0 4px 16px rgba(245,197,24,.4)">
+          🎮 Panel GM →
+        </button>
+        <button onclick="document.getElementById('captain-notif')?.remove()"
+          style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:.85rem 1rem;font-family:inherit;cursor:pointer;font-size:.9rem">
+          Zamknij
+        </button>
       </div>
     </div>
   `;
+
+  // Close on backdrop click
+  div.addEventListener('click', e => { if(e.target === div) div.remove(); });
   document.body.appendChild(div);
 }
 
@@ -5381,12 +5398,31 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         </div>` : ''}
       ${isAdmin && ev.status === 'open' ? `
         <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem">➕ DODAJ GRACZA RĘCZNIE</div>
-          <div style="display:flex;gap:.5rem">
-            <input id="manual-player-name" type="text" placeholder="Nick gracza"
-              style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem;font-family:inherit">
-            <button class="btn btn-primary" onclick="addPlayerManually('${id}')">Dodaj</button>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">➕ DODAJ GRACZA RĘCZNIE</div>
+          <input id="manual-player-name" type="text" placeholder="Nick gracza"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem;font-family:inherit;margin-bottom:.6rem;box-sizing:border-box"
+            onkeydown="if(event.key==='Enter')addPlayerManually('${id}')">
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.35rem">Główna pozycja</div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.3rem;margin-bottom:.5rem">
+            ${['PG','SG','SF','PF','C'].map(p => `<div id="manual-pos-${p}" onclick="selectManualPos('${p}')"
+              style="display:flex;flex-direction:column;align-items:center;padding:.45rem .3rem;background:var(--surface2);border:2px solid var(--border);border-radius:6px;cursor:pointer;text-align:center;user-select:none;transition:all .15s">
+              <div style="font-weight:900;font-size:.85rem">${p}</div>
+            </div>`).join('')}
           </div>
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.35rem">Dodatkowe pozycje (opcjonalnie)</div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.3rem;margin-bottom:.5rem">
+            ${['PG','SG','SF','PF','C'].map(p => `<div id="manual-secpos-${p}" onclick="toggleManualSecPos('${p}')"
+              style="display:flex;flex-direction:column;align-items:center;padding:.45rem .3rem;background:var(--surface2);border:2px solid var(--border);border-radius:6px;cursor:pointer;text-align:center;user-select:none;transition:all .15s">
+              <div style="font-weight:700;font-size:.85rem">${p}</div>
+            </div>`).join('')}
+          </div>
+          <div id="manual-eng-toggle" onclick="toggleManualEnglish()"
+            style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;background:var(--surface2);border:2px solid var(--border);border-radius:6px;cursor:pointer;margin-bottom:.6rem;user-select:none;transition:all .15s">
+            <svg width="24" height="16" viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg" style="border-radius:2px;flex-shrink:0"><rect width="60" height="40" fill="#012169"/><path d="M0,0 L60,40 M60,0 L0,40" stroke="#fff" stroke-width="8"/><path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" stroke-width="4"/><path d="M30,0 V40 M0,20 H60" stroke="#fff" stroke-width="12"/><path d="M30,0 V40 M0,20 H60" stroke="#C8102E" stroke-width="7"/></svg>
+            <span style="font-size:.82rem;font-weight:700;flex:1">Komunikuje się po angielsku</span>
+            <div id="manual-eng-check" style="width:18px;height:18px;border-radius:3px;border:2px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0"></div>
+          </div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="addPlayerManually('${id}')">➕ Dodaj gracza</button>
         </div>` : ''}
 
       ${isAdmin && ev.type === 'draft' && (ev.status === 'closed' || ev.status === 'draft') ? `
@@ -5897,16 +5933,29 @@ async function addPlayerManually(eventId) {
     showToast('❌ Osiągnięto limit graczy', 'error'); return;
   }
   if(!ev.players) ev.players = [];
+  const positions = _manualPrimaryPos
+    ? [_manualPrimaryPos, ..._manualSecondaryPos].filter((v,i,a)=>a.indexOf(v)===i)
+    : [];
   // Unique ID with random suffix to avoid collisions on rapid adds
-  ev.players.push({ id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name, discordTag: '', avatar: '' });
-  // Clear input BEFORE async save and re-render
+  ev.players.push({
+    id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    name,
+    discordTag: '',
+    avatar: '',
+    positions,
+    primaryPos: _manualPrimaryPos || '',
+    speaksEnglish: _manualEnglish,
+  });
+  // Reset state and input BEFORE async save
   if(nameEl) nameEl.value = '';
+  _manualPrimaryPos = null;
+  _manualSecondaryPos = new Set();
+  _manualEnglish = false;
   await saveData();
   renderEventsDashboard();
   renderEvents();
   openEventDetail(eventId);
   showToast('✅ Gracz dodany', 'success');
-  // Re-focus input after modal rebuild
   setTimeout(() => { document.getElementById('manual-player-name')?.focus(); }, 80);
 }
 
@@ -6009,6 +6058,37 @@ async function confirmSignupWithPositions() {
 let _primaryPos = null;
 let _secondaryPos = new Set();
 let _speaksEnglish = false;
+
+// Manual add player position state
+let _manualPrimaryPos = null;
+let _manualSecondaryPos = new Set();
+let _manualEnglish = false;
+
+function selectManualPos(pos) {
+  _manualPrimaryPos = pos;
+  ['PG','SG','SF','PF','C'].forEach(p => {
+    const el = document.getElementById('manual-pos-' + p);
+    if(el) el.style.border = p === pos ? '2px solid var(--accent)' : '2px solid var(--border)';
+  });
+}
+
+function toggleManualSecPos(pos) {
+  if(_manualSecondaryPos.has(pos)) {
+    _manualSecondaryPos.delete(pos);
+  } else {
+    _manualSecondaryPos.add(pos);
+  }
+  const el = document.getElementById('manual-secpos-' + pos);
+  if(el) el.style.border = _manualSecondaryPos.has(pos) ? '2px solid var(--accent)' : '2px solid var(--border)';
+}
+
+function toggleManualEnglish() {
+  _manualEnglish = !_manualEnglish;
+  const toggle = document.getElementById('manual-eng-toggle');
+  const check = document.getElementById('manual-eng-check');
+  if(toggle) toggle.style.border = _manualEnglish ? '2px solid var(--accent)' : '2px solid var(--border)';
+  if(check) check.innerHTML = _manualEnglish ? '<svg width="12" height="12" viewBox="0 0 12 12"><polyline points="1,6 4,9 11,2" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></svg>' : '';
+}
 
 function selectPrimaryPos(pos) {
   _primaryPos = pos;
@@ -6406,6 +6486,10 @@ function refreshStartDraftModal(eventId) {
   // Captains block
   const captBlock = document.getElementById('start-draft-captains');
   if(captBlock) {
+    // Current pick order (custom or default = team order)
+    const pickOrder = ev._pickOrder || teams.map((_, i) => i);
+    const orderedTeams = pickOrder.map(i => teams[i]).filter(Boolean);
+
     captBlock.innerHTML = teams.length ? `
       <div style="margin-bottom:.4rem;font-size:.82rem;color:var(--muted)">Aktualni kapitanowie:</div>
       ${teams.map(t => '<div style="font-size:.82rem;padding:.15rem 0">★ <b>' + (t.captain?.name || '—') + '</b> → ' + t.name + '</div>').join('')}
@@ -6419,12 +6503,43 @@ function refreshStartDraftModal(eventId) {
           ✏️ Zmień ręcznie
         </button>
       </div>
+      <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+          <div style="font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Kolejność pickowania</div>
+          <button onclick="shufflePickOrder('${eventId}')"
+            style="background:rgba(245,197,24,.15);border:1px solid rgba(245,197,24,.4);color:var(--accent);border-radius:5px;padding:.2rem .65rem;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit">
+            🎲 Losuj kolejność
+          </button>
+        </div>
+        <div id="pick-order-list" style="display:flex;flex-direction:column;gap:.25rem">
+          ${orderedTeams.map((t, i) => `<div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;padding:.3rem .5rem;background:var(--surface2);border-radius:5px">
+            <span style="font-weight:900;color:var(--accent);min-width:1.2rem">${i + 1}.</span>
+            <span style="flex:1">${t.name}</span>
+            <span style="color:var(--muted);font-size:.75rem">kpt: ${t.captain?.name || '—'}</span>
+          </div>`).join('')}
+        </div>
+      </div>
       <button onclick="openCaptainNotifModal('${eventId}')"
         style="width:100%;margin-top:.5rem;background:rgba(114,137,218,.12);border:1px solid #7289da;color:#7289da;border-radius:6px;padding:.45rem;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;display:flex;align-items:center;justify-content:center;gap:.4rem">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.032.053a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
         Powiadom kapitanów na Discord
       </button>` : '';
   }
+}
+
+function shufflePickOrder(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !(ev.teams||[]).length) return;
+  const n = ev.teams.length;
+  // Fisher-Yates shuffle of indices
+  const order = Array.from({length: n}, (_, i) => i);
+  for(let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  ev._pickOrder = order;
+  refreshStartDraftModal(eventId);
+  showToast('🎲 Kolejność wylosowana!', 'success');
 }
 
 async function confirmStartDraft() {
@@ -6435,6 +6550,12 @@ async function confirmStartDraft() {
   const timerSecs = +(document.getElementById('start-draft-timer')?.value || 120);
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
+
+  // Apply custom pick order if set — reorder ev.teams accordingly
+  if(ev._pickOrder && ev._pickOrder.length === ev.teams.length) {
+    ev.teams = ev._pickOrder.map(i => ev.teams[i]);
+    delete ev._pickOrder;
+  }
 
   ev.numTeams = numTeams;
 
