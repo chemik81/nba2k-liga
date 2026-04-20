@@ -11284,24 +11284,6 @@ function renderPlayoffDashboard() {
 
   html += '</div></div>';
 
-  // Previews section — visible to all
-  const lastRound = po.rounds[po.rounds.length - 1];
-  const pairsWithPreview = lastRound.pairs.filter(p => p.preview);
-  if (pairsWithPreview.length > 0) {
-    html += `<div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:.75rem">📣 Zapowiedzi — ${lastRound.name}</div>
-      ${lastRound.pairs.map(pair => pair.preview ? `
-        <div style="margin-bottom:.85rem;padding:.85rem 1rem;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;margin-bottom:.5rem">
-            <span style="color:var(--accent)">${pair.team1}</span>
-            <span style="color:var(--muted);padding:0 .3rem">vs</span>
-            ${pair.team2}
-          </div>
-          <div style="font-size:.82rem;line-height:1.75;color:var(--text)">${pair.preview.replace(/\n/g,'<br>')}</div>
-        </div>` : '').join('')}
-    </div>`;
-  }
-
   html += '</div>';
   wrap.innerHTML = html;
 }
