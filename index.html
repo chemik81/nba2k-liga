@@ -5094,11 +5094,9 @@ function renderEvents() {
           style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń</button>
         ${ev.status === 'open' ? `<button onclick="event.stopPropagation();closeEventSignups('${ev.id}')"
           style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">${currentLang==='en'?'🔒 Close sign-ups':'🔒 Zamknij zapisy'}</button>` : ''}
-        ${ev.status === 'closed' && ev.type === 'draft' && !(ev.teams||[]).length ? `<button onclick="event.stopPropagation();assignCaptains('${ev.id}')" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj kapitanów</button>` : ''}
+        ${ev.status === 'closed' && ev.type === 'draft' ? `<button onclick="event.stopPropagation();openDraftSetup('${ev.id}')" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">⚙️ Setup Draftu</button>` : ''}
         ${ev.status === 'draft' ? `<button onclick="event.stopPropagation();openDraftView('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Wróć do Draft</button>` : ''}
-        ${ev.status === 'closed' && ev.type === 'draft' && (ev.teams||[]).length ? `<button onclick="event.stopPropagation();startDraft('${ev.id}')"
-          style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Start Draft</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'pickup' ? `<button onclick="event.stopPropagation();randomizeTeams('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj drużyny</button>` : ''}
       </div>` : ''}
@@ -5456,13 +5454,8 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
             ${ev.status === 'draft' ? `
               <button onclick="document.getElementById('event-detail-modal').classList.remove('open');openDraftView('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">🎯 Wróć do Draft</button>
               <button onclick="finishDraft('${id}')" class="btn btn-ghost">✅ Zakończ draft</button>
-            ` : !(ev.teams||[]).length ? `
-              <button onclick="assignCaptains('${id}')" class="btn btn-primary">🎲 Losuj kapitanów</button>
-              <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">🎯 Wybierz ręcznie</button>
             ` : `
-              <button onclick="startDraft('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">🎯 Start Draft</button>
-              <button onclick="assignCaptains('${id}')" class="btn btn-ghost">🔄 Losuj ponownie</button>
-              <button onclick="openManualCaptainsModal('${id}')" class="btn btn-ghost">✏️ Zmień ręcznie</button>
+              <button onclick="document.getElementById('event-detail-modal').classList.remove('open');openDraftSetup('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">⚙️ Setup Draftu</button>
             `}
           </div>
         </div>` : ''}`;
@@ -11471,9 +11464,565 @@ function closePlayoffModal() {
   document.getElementById('playoff-modal')?.classList.remove('open');
 }
 
+// ═══════════════════════════════════════════════════════════════
+// DRAFT SETUP WIZARD — stan i narzędzia
+// ═══════════════════════════════════════════════════════════════
+
+const _ds = {
+  eventId: null,
+  step: 1,
+  numTeams: 4,
+  perTeam: 5,
+  timerSecs: 120,
+  format: 'snake',
+  teams: [],       // [{name, captainId}]
+  playerPool: [],  // enriched with ovr, isCaptain, excluded
+  order: [],       // indices into teams[] for draft order
+  _pollId: null
+};
+
+function openDraftSetup(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if (!ev) return;
+  _ds.eventId = eventId;
+  _ds.step = 1;
+  _ds.numTeams = ev.numTeams || 4;
+  _ds.perTeam = ev.perTeam || 5;
+  _ds.timerSecs = ev.timerSecs || 120;
+  _ds.format = ev.draftMethod || 'snake';
+  _ds.teams = (ev.teams && ev.teams.length)
+    ? ev.teams.map(t => ({ name: t.name, captainId: t.captain?.id || '' }))
+    : Array.from({length: _ds.numTeams}, (_, i) => ({ name: 'Drużyna ' + String.fromCharCode(65+i), captainId: '' }));
+  _ds.playerPool = [];
+  _ds.order = [];
+  if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId = null; }
+  document.getElementById('draft-setup-modal').classList.add('open');
+  _dsRender();
+}
+
+function _dsClose() {
+  document.getElementById('draft-setup-modal').classList.remove('open');
+  if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId = null; }
+}
+
+function _dsGradeScore(g) {
+  return {'A+':100,'A':90,'A-':80,'B+':70,'B':60,'B-':50,'C+':40,'C':30,'C-':20,'D':10}[g] || 50;
+}
+
+function _dsOvrColor(ovr) {
+  if (ovr >= 90) return '#f5c518';
+  if (ovr >= 80) return '#2ecc71';
+  if (ovr >= 70) return '#3498db';
+  if (ovr >= 60) return '#e67e22';
+  return '#95a5a6';
+}
+
+function _dsComputeOvr(playerList) {
+  const enriched = playerList.map(p => {
+    const posCounts = {};
+    matches.forEach(m => {
+      [...(m.team1.players||[]),...(m.team2.players||[])].forEach(pl => {
+        if (pl.name === p.name && pl.pos) posCounts[pl.pos] = (posCounts[pl.pos]||0)+1;
+      });
+    });
+    const pos = Object.keys(posCounts).length
+      ? Object.keys(posCounts).sort((a,b)=>posCounts[b]-posCounts[a])[0]
+      : (p.primaryPos || 'SF');
+    const pm = matches.filter(m =>
+      [...(m.team1.players||[]),...(m.team2.players||[])].some(pl => pl.name === p.name)
+    );
+    const gp = pm.length;
+    if (!gp) return {...p, pos, ppg:0, rpg:0, apg:0, spg:0, bpg:0, tpg:0, gp:0, per:0, cs:0, ovr:40};
+    const tot = pm.reduce((acc,m) => {
+      const pl = [...(m.team1.players||[]),...(m.team2.players||[])].find(x=>x.name===p.name);
+      if (pl) {
+        acc.pts+=pl.pts||0; acc.reb+=pl.reb||0; acc.ast+=pl.ast||0;
+        acc.stl+=pl.stl||0; acc.blk+=pl.blk||0; acc.to+=pl.to||0;
+        acc.gs+=_dsGradeScore(pl.grade); acc.gc++;
+      }
+      return acc;
+    }, {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0});
+    const ppg=+(tot.pts/gp).toFixed(1), rpg=+(tot.reb/gp).toFixed(1), apg=+(tot.ast/gp).toFixed(1);
+    const spg=+(tot.stl/gp).toFixed(1), bpg=+(tot.blk/gp).toFixed(1), tpg=+(tot.to/gp).toFixed(1);
+    const avgGrade = tot.gc ? tot.gs/tot.gc : 50;
+    const per = +(ppg + rpg*1.2 + apg*1.5 + spg*2 + bpg*2 - tpg*1.5).toFixed(1);
+    const cs = +((Math.min(ppg/50,1)*100)*0.25 + (Math.min(spg/3,1)*100)*0.20 +
+                 (Math.min(bpg/3,1)*100)*0.18 + (Math.min(rpg/20,1)*100)*0.15 +
+                 (Math.min(apg/15,1)*100)*0.12 + avgGrade*0.10).toFixed(1);
+    return {...p, pos, ppg, rpg, apg, spg, bpg, tpg, gp, per, cs};
+  });
+  const pct = (sorted, val) => sorted.length<=1 ? 50 : sorted.filter(v=>v<val).length/(sorted.length-1)*100;
+  const sP = enriched.map(p=>p.per).sort((a,b)=>a-b);
+  const sC = enriched.map(p=>p.cs).sort((a,b)=>a-b);
+  const sG = enriched.map(p=>p.ppg).sort((a,b)=>a-b);
+  return enriched.map(p => {
+    const gpBonus = Math.min(p.gp*2,10);
+    const raw = pct(sP,p.per)*0.45 + pct(sC,p.cs)*0.35 + pct(sG,p.ppg)*0.15 + gpBonus*0.05;
+    return {...p, ovr: Math.max(40,Math.min(99,Math.round(raw*0.59+40)))};
+  }).sort((a,b)=>b.ovr-a.ovr);
+}
+
+function _dsBuildPlayerPool() {
+  const ev = events.find(e=>e.id===_ds.eventId);
+  if (!ev) return;
+  const captainIds = new Set(_ds.teams.map(t=>t.captainId).filter(Boolean));
+  const enriched = _dsComputeOvr(ev.players||[]);
+  _ds.playerPool = enriched.map(p => ({...p, isCaptain: captainIds.has(p.id), excluded: false}));
+}
+
+function _dsBuildOrder() {
+  if (!_ds.order.length)
+    _ds.order = Array.from({length:_ds.numTeams},(_,i)=>i);
+}
+
+// ── nawigacja ────────────────────────────────────────────────
+
+function _dsNext() {
+  if (_ds.step === 1) {
+    _ds.numTeams = +document.getElementById('ds-numteams').value;
+    _ds.perTeam  = +document.getElementById('ds-perteam').value;
+    _ds.timerSecs= +document.getElementById('ds-timer').value || 120;
+    _ds.format   = document.getElementById('ds-format').value;
+    while (_ds.teams.length < _ds.numTeams)
+      _ds.teams.push({name:'Drużyna '+String.fromCharCode(65+_ds.teams.length), captainId:''});
+    _ds.teams = _ds.teams.slice(0, _ds.numTeams);
+  } else if (_ds.step === 2) {
+    for (let i=0;i<_ds.numTeams;i++) {
+      const nm = document.getElementById('ds-tname-'+i)?.value?.trim();
+      const cid= document.getElementById('ds-capt-'+i)?.value;
+      if (nm) _ds.teams[i].name = nm;
+      if (cid !== undefined) _ds.teams[i].captainId = cid;
+    }
+    if (_ds.teams.some(t=>!t.captainId)) { showToast('❌ Wybierz kapitana dla każdej drużyny','error'); return; }
+    if (new Set(_ds.teams.map(t=>t.captainId)).size !== _ds.numTeams) { showToast('❌ Każdy kapitan może być tylko w jednej drużynie','error'); return; }
+    _dsBuildPlayerPool();
+  } else if (_ds.step === 3) {
+    _dsReadExclusions();
+    _ds.order = [];
+    _dsBuildOrder();
+  } else if (_ds.step === 4) {
+    _dsReadOrder();
+  }
+  _ds.step++;
+  if (_ds.step===5) _dsStartPoll();
+  _dsRender();
+}
+
+function _dsBack() {
+  if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId = null; }
+  _ds.step--;
+  _dsRender();
+}
+
+function _dsStep(n) {
+  if (_ds.step > n) { _ds.step = n; _dsRender(); }
+}
+
+function _dsReadExclusions() {
+  _ds.playerPool.forEach((p,i) => {
+    const cb = document.getElementById('ds-pcb-'+i);
+    if (cb) p.excluded = !cb.checked;
+  });
+}
+
+function _dsReadOrder() {
+  const items = document.querySelectorAll('#ds-order-list .ds-oi');
+  if (items.length) _ds.order = Array.from(items).map(el=>+el.dataset.idx);
+}
+
+// ── główny render ─────────────────────────────────────────────
+
+function _dsRender() {
+  const el = document.getElementById('draft-setup-content');
+  if (!el) return;
+  const ev = events.find(e=>e.id===_ds.eventId);
+  if (!ev) return;
+  const labels = ['1. CONFIG','2. TEAMS','3. PLAYERS','4. ORDER','5. LAUNCH'];
+  const tabs = labels.map((s,i)=>{
+    const active=_ds.step===i+1, done=_ds.step>i+1;
+    return `<div onclick="${done?`_dsStep(${i+1})`:'void 0'}" style="flex:1;text-align:center;padding:.65rem .25rem;
+      font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem;letter-spacing:1px;
+      cursor:${done?'pointer':'default'};white-space:nowrap;
+      border-bottom:3px solid ${active?'var(--accent)':done?'rgba(245,197,24,.4)':'transparent'};
+      color:${active?'var(--accent)':done?'rgba(245,197,24,.65)':'var(--muted)'}">${s}</div>`;
+  }).join('');
+  let body='';
+  if (_ds.step===1) body=_dsS1(ev);
+  else if (_ds.step===2) body=_dsS2(ev);
+  else if (_ds.step===3) body=_dsS3(ev);
+  else if (_ds.step===4) body=_dsS4();
+  else if (_ds.step===5) body=_dsS5(ev);
+  el.innerHTML=`
+    <div style="margin-bottom:1.25rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.9rem;letter-spacing:3px;color:var(--accent)">DRAFT SETUP</div>
+      <div style="color:var(--muted);font-size:.82rem">Skonfiguruj draft przed uruchomieniem.</div>
+    </div>
+    <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1.5rem">${tabs}</div>
+    ${body}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
+      ${_ds.step>1?`<button class="btn btn-ghost" onclick="_dsBack()">← Wstecz</button>`:`<span></span>`}
+      ${_ds.step<5
+        ?`<button class="btn btn-primary" onclick="_dsNext()">Dalej →</button>`
+        :`<button onclick="_dsLaunch()" style="background:var(--accent);border:none;color:#000;border-radius:8px;padding:.75rem 2.5rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;letter-spacing:1px;cursor:pointer">🚀 LAUNCH DRAFT</button>`
+      }
+    </div>`;
+  if (_ds.step===4) _dsInitDnD();
+}
+
+// ── krok 1: CONFIG ────────────────────────────────────────────
+
+function _dsS1(ev) {
+  const tOpts=[30,45,60,90,120,180,300].map(s=>`<option value="${s}" ${_ds.timerSecs===s?'selected':''}>${s}s</option>`).join('');
+  const nOpts=Array.from({length:11},(_,i)=>i+2).map(n=>`<option value="${n}" ${_ds.numTeams===n?'selected':''}>${n} drużyny</option>`).join('');
+  const pOpts=[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${_ds.perTeam===n?'selected':''}>${n} zawodników</option>`).join('');
+  const sel = (id,opts) => `<select id="${id}" style="width:100%;margin-top:.3rem;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem .75rem;font-family:inherit;font-size:.9rem">${opts}</select>`;
+  const lbl = txt => `<div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">${txt}</div>`;
+  return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1.25rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>${lbl('Liczba drużyn')}${sel('ds-numteams',nOpts)}</div>
+      <div>${lbl('Zawodników w drużynie')}${sel('ds-perteam',pOpts)}</div>
+      <div>${lbl('Czas na pick')}${sel('ds-timer',tOpts)}</div>
+      <div>${lbl('Format draftu')}
+        <select id="ds-format" style="width:100%;margin-top:.3rem;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem .75rem;font-family:inherit;font-size:.9rem">
+          <option value="snake" ${_ds.format==='snake'?'selected':''}>🐍 Snake (zalecane)</option>
+          <option value="linear" ${_ds.format==='linear'?'selected':''}>➡️ Linear</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:1rem;padding:.75rem;background:var(--bg);border-radius:8px;font-size:.82rem;color:var(--muted)">
+      📋 <b>${ev.title}</b> &nbsp;·&nbsp; 👥 Zapisanych: ${ev.players?.length||0} graczy
+    </div>
+  </div>`;
+}
+
+// ── krok 2: TEAMS ─────────────────────────────────────────────
+
+function _dsS2(ev) {
+  const players = ev.players||[];
+  const rows = _ds.teams.map((t,i)=>{
+    const opts=players.map(p=>`<option value="${p.id}" ${p.id===t.captainId?'selected':''}>${p.name}${p.discordTag&&p.discordTag!==p.name?' ('+p.discordTag+')':''}</option>`).join('');
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.85rem 1rem;display:grid;grid-template-columns:1fr 1fr;gap:.75rem;align-items:end">
+      <div>
+        <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Nazwa drużyny</div>
+        <input id="ds-tname-${i}" type="text" value="${t.name}" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Kapitan</div>
+        <select id="ds-capt-${i}" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem">
+          <option value="">— wybierz —</option>${opts}
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+    <div style="color:var(--muted);font-size:.85rem">Wybierz kapitana każdej drużyny lub wylosuj automatycznie.</div>
+    <button onclick="_dsRandCaptains()" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.45rem 1.1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;cursor:pointer;letter-spacing:.5px">🎲 Losuj kapitanów</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.6rem">${rows}</div>`;
+}
+
+function _dsRandCaptains() {
+  const ev = events.find(e=>e.id===_ds.eventId);
+  if (!ev?.players?.length) return;
+  const shuffled = [...ev.players].sort(()=>Math.random()-.5);
+  const used = new Set();
+  _ds.teams.forEach((t,i)=>{
+    const cap = shuffled.find(p=>!used.has(p.id));
+    if (cap) { t.captainId=cap.id; used.add(cap.id); }
+  });
+  _dsRender();
+}
+
+// ── krok 3: PLAYERS ───────────────────────────────────────────
+
+function _dsS3(ev) {
+  const posFilters=['ALL','PG','SG','SF','PF','C'];
+  const filterBtns=posFilters.map(p=>`<button onclick="_dsFPos('${p}')" id="ds-fp-${p}" style="padding:.28rem .65rem;border-radius:20px;font-size:.78rem;font-weight:700;cursor:pointer;border:1px solid var(--border);background:${p==='ALL'?'var(--accent)':'var(--surface2)'};color:${p==='ALL'?'#000':'var(--text)'};font-family:'Barlow Condensed',sans-serif">${p}</button>`).join('');
+  const rows=_ds.playerPool.map((p,i)=>{
+    const oc=_dsOvrColor(p.ovr);
+    const capBadge=p.isCaptain?`<span style="font-size:.6rem;background:var(--accent);color:#000;border-radius:3px;padding:.05rem .3rem;margin-left:.3rem;font-weight:900;vertical-align:middle">C</span>`:'';
+    return `<tr id="ds-pr-${i}" data-pos="${p.pos||'SF'}" style="border-bottom:1px solid rgba(255,255,255,.05);opacity:${p.excluded?.35:1}">
+      <td style="padding:.4rem .5rem"><input type="checkbox" id="ds-pcb-${i}" ${p.excluded?'':'checked'} ${p.isCaptain?'disabled title="Kapitan zawsze w drużynie"':''} onchange="_dsTgl(${i})" style="accent-color:var(--accent)"></td>
+      <td style="padding:.4rem .5rem;color:var(--muted);font-size:.78rem">${i+1}</td>
+      <td style="padding:.4rem .5rem;font-weight:700;font-size:.85rem">${p.name}${capBadge}</td>
+      <td style="padding:.4rem .5rem;text-align:center"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.08rem .4rem;font-size:.72rem;font-weight:700">${p.pos||'SF'}</span></td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;color:var(--muted);text-align:center">${p.gp}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.ppg}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.rpg}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.apg}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;color:var(--muted);text-align:center">${p.per}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;color:var(--muted);text-align:center">${p.cs}</td>
+      <td style="padding:.4rem .5rem;text-align:center"><span style="background:${oc};color:#000;border-radius:4px;padding:.12rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.88rem">${p.ovr}</span></td>
+    </tr>`;
+  }).join('');
+  const active=_ds.playerPool.filter(p=>!p.excluded).length;
+  const needed=_ds.numTeams*_ds.perTeam;
+  return `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+    <div style="font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">PULA ZAWODNIKÓW</div>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+      <button onclick="_dsSelAll(true)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit">Zaznacz wszystkich</button>
+      <button onclick="_dsSelAll(false)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit">Odznacz wszystkich</button>
+      <button onclick="_dsExclLow()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit">Wyklucz &lt;2 GP</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem">
+    ${filterBtns}
+    <input id="ds-psrch" type="text" placeholder="Szukaj..." oninput="_dsSrch(this.value)" style="margin-left:.25rem;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:.28rem .85rem;font-family:inherit;font-size:.78rem;width:120px">
+  </div>
+  <div style="font-size:.75rem;color:var(--muted);margin-bottom:.6rem">
+    ✅ ${active} / ${_ds.playerPool.length} zawodników &nbsp;·&nbsp; Potrzeba picków: ${needed}
+    ${active<needed?`<span style="color:var(--loss)"> ⚠️ Za mało graczy!</span>`:''}
+  </div>
+  <div style="overflow:auto;max-height:360px;border:1px solid var(--border);border-radius:8px">
+    <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+      <thead style="position:sticky;top:0;background:var(--surface2)">
+        <tr>${['','#','GRACZ','POS','GP','PPG','RPG','APG','PER','CS','OVR'].map(h=>`<th style="padding:.4rem .5rem;text-align:${h===''||h==='GRACZ'?'left':'center'};font-size:.68rem;letter-spacing:1px;color:var(--muted)">${h}</th>`).join('')}</tr>
+      </thead>
+      <tbody id="ds-pb">${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function _dsTgl(i) {
+  if (_ds.playerPool[i]?.isCaptain) return;
+  const cb=document.getElementById('ds-pcb-'+i);
+  if (cb) { _ds.playerPool[i].excluded=!cb.checked; document.getElementById('ds-pr-'+i).style.opacity=cb.checked?'1':'.35'; }
+}
+function _dsSelAll(v) {
+  _ds.playerPool.forEach((p,i)=>{
+    if (p.isCaptain) return;
+    p.excluded=!v;
+    const cb=document.getElementById('ds-pcb-'+i); if(cb)cb.checked=v;
+    const row=document.getElementById('ds-pr-'+i); if(row)row.style.opacity=v?'1':'.35';
+  });
+}
+function _dsExclLow() {
+  _ds.playerPool.forEach((p,i)=>{
+    if (p.isCaptain||p.gp>=2) return;
+    p.excluded=true;
+    const cb=document.getElementById('ds-pcb-'+i); if(cb)cb.checked=false;
+    const row=document.getElementById('ds-pr-'+i); if(row)row.style.opacity='.35';
+  });
+}
+function _dsFPos(pos) {
+  document.querySelectorAll('[id^="ds-fp-"]').forEach(b=>{
+    const p=b.id.replace('ds-fp-','');
+    b.style.background=p===pos?'var(--accent)':'var(--surface2)';
+    b.style.color=p===pos?'#000':'var(--text)';
+  });
+  document.querySelectorAll('#ds-pb tr').forEach(row=>{
+    row.style.display=(pos==='ALL'||row.dataset.pos===pos)?'':'none';
+  });
+}
+function _dsSrch(q) {
+  const lq=q.toLowerCase();
+  document.querySelectorAll('#ds-pb tr').forEach(row=>{
+    const name=row.querySelector('td:nth-child(3)')?.textContent?.toLowerCase()||'';
+    row.style.display=name.includes(lq)?'':'none';
+  });
+}
+
+// ── krok 4: ORDER ─────────────────────────────────────────────
+
+function _dsOrderHTML() {
+  return _ds.order.map((ti,pos)=>{
+    const t=_ds.teams[ti];
+    return `<div class="ds-oi" data-idx="${ti}" draggable="true" style="display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:grab;user-select:none;margin-bottom:.4rem">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:var(--accent);min-width:2rem">#${pos+1}</span>
+      <span style="font-weight:700;font-size:.93rem;flex:1">${t?.name||'—'}</span>
+      <span style="color:var(--muted);font-size:1rem">⠿</span>
+    </div>`;
+  }).join('');
+}
+
+function _dsS4() {
+  _dsBuildOrder();
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem;flex-wrap:wrap;gap:.5rem">
+    <div>
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">KOLEJNOŚĆ DRAFTU — RUNDA 1</div>
+      <div style="color:var(--muted);font-size:.82rem;margin-top:.2rem">Przeciągnij aby zmienić kolejność lub wylosuj.</div>
+    </div>
+    <button onclick="_dsRandOrder()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.4rem .9rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.82rem;cursor:pointer">🎲 Losuj kolejność</button>
+  </div>
+  <div id="ds-order-list">${_dsOrderHTML()}</div>`;
+}
+
+function _dsRandOrder() {
+  for (let i=_ds.order.length-1;i>0;i--) {
+    const j=Math.floor(Math.random()*(i+1));
+    [_ds.order[i],_ds.order[j]]=[_ds.order[j],_ds.order[i]];
+  }
+  const list=document.getElementById('ds-order-list');
+  if (list) { list.innerHTML=_dsOrderHTML(); _dsInitDnD(); }
+}
+
+function _dsInitDnD() {
+  const list=document.getElementById('ds-order-list');
+  if (!list) return;
+  let drag=null;
+  list.querySelectorAll('.ds-oi').forEach(el=>{
+    el.addEventListener('dragstart',()=>{ drag=el; el.style.opacity='.4'; });
+    el.addEventListener('dragend',()=>{ el.style.opacity='1'; });
+    el.addEventListener('dragover',e=>e.preventDefault());
+    el.addEventListener('drop',e=>{
+      e.preventDefault();
+      if (!drag||drag===el) return;
+      const items=[...list.querySelectorAll('.ds-oi')];
+      const si=items.indexOf(drag), di=items.indexOf(el);
+      list.insertBefore(drag, si<di ? el.nextSibling : el);
+      const v=_ds.order.splice(si,1)[0];
+      _ds.order.splice(di,0,v);
+      list.querySelectorAll('.ds-oi').forEach((item,pos)=>{
+        item.querySelector('span:first-child').textContent='#'+(pos+1);
+      });
+    });
+  });
+}
+
+// ── krok 5: LAUNCH ────────────────────────────────────────────
+
+function _dsS5(ev) {
+  const needed=_ds.numTeams*_ds.perTeam;
+  const active=_ds.playerPool.filter(p=>!p.excluded).length;
+  const captainRows=_ds.teams.map((t,i)=>{
+    const cap=(ev.players||[]).find(p=>p.id===t.captainId);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem">
+      <div style="display:flex;align-items:center;gap:.65rem">
+        ${cap?.avatar?`<img src="${cap.avatar}" style="width:30px;height:30px;border-radius:50%;border:2px solid var(--border)">`
+          :`<div style="width:30px;height:30px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.85rem">👤</div>`}
+        <div>
+          <div style="font-weight:700;font-size:.88rem">${t.name}</div>
+          <div style="font-size:.72rem;color:var(--muted)">${cap?.name||'Brak kapitana'}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.4rem">
+        <div id="ds-dot-${i}" style="width:9px;height:9px;border-radius:50%;background:#555"></div>
+        <span id="ds-dotlbl-${i}" style="font-size:.72rem;color:var(--muted)">Offline</span>
+      </div>
+    </div>`;
+  }).join('');
+  const wu=localStorage.getItem('nba2k_worker_url')||'';
+  const base=`${location.origin}${location.pathname}`;
+  const boardUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}#board`:'';
+  const gmUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}#gm`:'';
+  const copyBtn=(label,url)=>url
+    ?`<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem">
+        <span style="font-size:.75rem;color:var(--muted)">${label}:</span>
+        <button onclick="navigator.clipboard.writeText('${url}');showToast('Skopiowano!','success')" style="background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.22rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit;white-space:nowrap">📋 Kopiuj</button>
+      </div>`:'';
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem">
+      <div style="font-size:.68rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem">PODSUMOWANIE</div>
+      <div style="font-size:.83rem;line-height:1.9">
+        📋 <b>${ev.title}</b><br>
+        👥 Drużyny: <b>${_ds.numTeams}</b> &nbsp;·&nbsp; Zawodników/drużynę: <b>${_ds.perTeam}</b><br>
+        ⏱️ Timer: <b>${_ds.timerSecs}s</b> &nbsp;·&nbsp; Format: <b>${_ds.format}</b><br>
+        🎮 Łącznie picków: <b>${needed}</b><br>
+        🏀 Graczy w puli: <b>${active}</b>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem">
+      <div style="font-size:.68rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem">LINKI</div>
+      ${copyBtn('Tablica (Board)',boardUrl)}
+      ${copyBtn('Panel GM',gmUrl)}
+      ${!wu?`<div style="font-size:.75rem;color:var(--muted)">Skonfiguruj Worker URL w ustawieniach aby wygenerować linki.</div>`:''}
+    </div>
+  </div>
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;flex-wrap:wrap;gap:.5rem">
+      <div style="font-size:.68rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">STATUS KAPITANÓW <span style="font-weight:400">· auto-refresh 5s</span></div>
+      <button onclick="_dsNotify('${ev.id}')" style="background:var(--surface2);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:.28rem .85rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.78rem;cursor:pointer;letter-spacing:.5px">📣 Wyślij powiadomienia</button>
+    </div>
+    ${captainRows}
+  </div>`;
+}
+
+function _dsStartPoll() {
+  if (_ds._pollId) clearInterval(_ds._pollId);
+  _ds._pollId = setInterval(async ()=>{
+    const ev=events.find(e=>e.id===_ds.eventId);
+    if (!ev) return;
+    // Odśwież dane z backendu aby mieć aktualny gmOnline
+    try {
+      const wu=localStorage.getItem('nba2k_worker_url');
+      if (wu) {
+        const r=await fetch(wu+'/data');
+        if (r.ok) {
+          const d=await r.json();
+          const freshEv=(d.record?.events||[]).find(e=>e.id===_ds.eventId);
+          if (freshEv) {
+            const gmOnline=freshEv.gmOnline||[];
+            _ds.teams.forEach((t,i)=>{
+              const on=gmOnline.includes(t.captainId);
+              const dot=document.getElementById('ds-dot-'+i);
+              const lbl=document.getElementById('ds-dotlbl-'+i);
+              if (dot) { dot.style.background=on?'#2ecc71':'#555'; }
+              if (lbl) { lbl.textContent=on?'Online':'Offline'; lbl.style.color=on?'#2ecc71':'var(--muted)'; }
+            });
+          }
+        }
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
+async function _dsNotify(eventId) {
+  const ev=events.find(e=>e.id===eventId);
+  const wh=localStorage.getItem('nba2k_discord_webhook');
+  if (!wh) { showToast('⚠️ Brak Discord webhook w ustawieniach','warning'); return; }
+  const wu=localStorage.getItem('nba2k_worker_url')||'';
+  const gmUrl=`${location.origin}${location.pathname}?w=${encodeURIComponent(wu)}&event=${ev.id}#gm`;
+  const caps=_ds.teams.map(t=>{
+    const cap=(ev?.players||[]).find(p=>p.id===t.captainId);
+    return cap?.discordTag?`@${cap.discordTag}`:cap?.name||'';
+  }).filter(Boolean).join(', ');
+  try {
+    await fetch(wh,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`})});
+    showToast('📣 Powiadomienie wysłane!','success');
+  } catch(e) { showToast('❌ Błąd wysyłania powiadomienia','error'); }
+}
+
+async function _dsLaunch() {
+  const ev=events.find(e=>e.id===_ds.eventId);
+  if (!ev) return;
+  ev.numTeams=_ds.numTeams;
+  ev.perTeam=_ds.perTeam;
+  ev.timerSecs=_ds.timerSecs;
+  ev.draftMethod=_ds.format;
+  // Drużyny w kolejności draftu
+  ev.teams=_ds.order.map(ti=>{
+    const t=_ds.teams[ti];
+    const cap=(ev.players||[]).find(p=>p.id===t.captainId);
+    return {name:t.name, captain:cap, players:cap?[cap]:[]};
+  });
+  // Pula graczy (bez kapitanów, bez wykluczonych)
+  const capIds=new Set(ev.teams.map(t=>t.captain?.id).filter(Boolean));
+  ev.draftPool=_ds.playerPool.filter(p=>!p.isCaptain&&!p.excluded);
+  ev.draftTurn=0;
+  ev.draftOrder=buildDraftOrder(_ds.format,_ds.numTeams,ev.draftPool.length);
+  ev.status='draft';
+  ev.timerEnd=new Date(Date.now()+_ds.timerSecs*1000).toISOString();
+  await saveData();
+  if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId=null; }
+  document.getElementById('draft-setup-modal').classList.remove('open');
+  renderEvents();
+  showToast('🚀 Draft wystartował!','success');
+  const eid=_ds.eventId;
+  setTimeout(()=>openDraftView(eid),150);
+}
+
 
 </script>
 
+
+<!-- DRAFT SETUP WIZARD -->
+<div class="modal-overlay" id="draft-setup-modal" onclick="if(event.target===this)_dsClose()" style="z-index:1300;align-items:flex-start;padding:1.5rem;overflow-y:auto">
+  <div class="modal" style="max-width:780px;width:100%;margin:auto;padding:2rem;position:relative">
+    <button class="modal-close" onclick="_dsClose()">&#x2715;</button>
+    <div id="draft-setup-content"></div>
+  </div>
+</div>
 
 <!-- PLAYOFF STATS MODAL -->
 <div class="modal-overlay" id="playoff-stats-modal" onclick="if(event.target===this)this.classList.remove('open')">
