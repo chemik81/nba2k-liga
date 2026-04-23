@@ -5366,15 +5366,27 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
   let tabContent = '';
 
   if(tab === 'info') {
-    const playersList = (ev.players||[]).map(p => `
-      <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)">
-        ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem">👤</div>'}
+    const _ovrOn = ev.type==='draft' && !!_evOvr[id];
+    const _enriched = _ovrOn ? _dsComputeOvr(ev.players||[]) : null;
+    const playersList = (ev.players||[]).map(p => {
+      const ep = _enriched ? _enriched.find(x=>x.id===p.id)||p : p;
+      const pri = p.primaryPos || (p.positions?.[0]);
+      const sec = (p.positions||[]).filter(x=>x!==pri);
+      const posBadges = (pri ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.12);border-radius:4px;padding:.1rem .35rem;font-weight:700">${pri}</span>` : '')
+        + (sec.length ? `<span style="font-size:.7rem;color:var(--muted);background:var(--surface2);border-radius:4px;padding:.1rem .3rem">${sec.join('·')}</span>` : '');
+      const ovrBadge = _ovrOn ? `<span style="background:${_dsOvrColor(ep.ovr)};color:rgba(0,0,0,.75);border-radius:4px;padding:.08rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-left:.25rem">${ep.ovr}</span>` : '';
+      const miniStats = _ovrOn && ep.gp
+        ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">${ep.ppg}pts ${ep.rpg}reb ${ep.apg}ast ${ep.spg}stl ${ep.bpg}blk</span>`
+        : (_ovrOn ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">brak danych</span>` : '');
+      return `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%;flex-shrink:0">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0">👤</div>'}
         <span style="font-weight:600;font-size:.9rem">${p.name}</span>
         ${p.speaksEnglish ? '<span title="Speaks English" style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:2px"><svg width="20" height="13" viewBox="0 0 60 30" style="border-radius:2px;border:1px solid rgba(0,0,0,.2);flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><clipPath id="uf"><path d="M0 0v30h60V0z"/></clipPath><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#uf)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></svg></span>' : ''}
         ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
-        ${(() => { const pri = p.primaryPos || (p.positions?.[0]); const sec = (p.positions||[]).filter(x=>x!==pri); return (pri ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.12);border-radius:4px;padding:.1rem .35rem;font-weight:700">${pri}</span>` : '') + (sec.length ? `<span style="font-size:.7rem;color:var(--muted);background:var(--surface2);border-radius:4px;padding:.1rem .3rem">${sec.join('·')}</span>` : ''); })()}
+        ${posBadges}${ovrBadge}${miniStats}
         ${isAdmin ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')" style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     const teamsHtml = (ev.teams||[]).map(t => `
       <div style="background:var(--surface2);border-radius:8px;padding:.75rem;margin-bottom:.5rem">
@@ -5394,8 +5406,11 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
       </div>
       ${ev.teams?.length ? `<div style="margin-bottom:1.25rem"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">🏀 DRUŻYNY</div>${teamsHtml}</div>` : ''}
       <div style="margin-bottom:1.25rem">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;margin-bottom:.5rem">
-          👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;flex-wrap:wrap;gap:.4rem">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px">
+            👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
+          </div>
+          ${ev.type==='draft'&&(ev.players||[]).length?`<button onclick="_evToggleOvr('${id}')" id="ev-ovr-btn-${id}" style="background:${_evOvr[id]?'var(--accent)':'var(--surface2)'};border:1px solid ${_evOvr[id]?'var(--accent)':'var(--border)'};color:${_evOvr[id]?'#000':'var(--text)'};border-radius:6px;padding:.25rem .7rem;font-size:.75rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700">📊 Overall</button>`:''}
         </div>
         ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
       </div>
@@ -11468,6 +11483,13 @@ function closePlayoffModal() {
 // DRAFT SETUP WIZARD — stan i narzędzia
 // ═══════════════════════════════════════════════════════════════
 
+// Toggle "Overall" w liście zapisanych graczy eventu
+const _evOvr = {};
+function _evToggleOvr(evId) {
+  _evOvr[evId] = !_evOvr[evId];
+  openEventDetail(evId, 'info');
+}
+
 const _ds = {
   eventId: null,
   step: 1,
@@ -11517,6 +11539,16 @@ function _dsOvrColor(ovr) {
   return '#95a5a6';
 }
 
+// Wagi PER i CS zależne od pozycji — bigmani nagradzani za REB/BLK, rozgrywający za AST/PTS
+const _dsPosW = {
+  PG: {per:[1.0,0.8,2.0,1.8,1.2], cs:[0.30,0.20,0.10,0.10,0.20,0.10]},
+  SG: {per:[1.0,1.0,1.6,2.0,1.6], cs:[0.28,0.22,0.12,0.10,0.18,0.10]},
+  SF: {per:[0.9,1.4,1.2,2.0,2.2], cs:[0.22,0.22,0.18,0.18,0.10,0.10]},
+  PF: {per:[0.8,1.6,0.9,1.8,2.5], cs:[0.17,0.18,0.25,0.22,0.08,0.10]},
+  C:  {per:[0.7,1.8,0.7,1.5,3.0], cs:[0.13,0.14,0.30,0.28,0.05,0.10]},
+};
+// per: [ppg,rpg,apg,spg,bpg]  cs: [pts,stl,blk,reb,ast,grade]
+
 function _dsComputeOvr(playerList) {
   const enriched = playerList.map(p => {
     const posCounts = {};
@@ -11545,10 +11577,11 @@ function _dsComputeOvr(playerList) {
     const ppg=+(tot.pts/gp).toFixed(1), rpg=+(tot.reb/gp).toFixed(1), apg=+(tot.ast/gp).toFixed(1);
     const spg=+(tot.stl/gp).toFixed(1), bpg=+(tot.blk/gp).toFixed(1), tpg=+(tot.to/gp).toFixed(1);
     const avgGrade = tot.gc ? tot.gs/tot.gc : 50;
-    const per = +(ppg + rpg*1.2 + apg*1.5 + spg*2 + bpg*2 - tpg*1.5).toFixed(1);
-    const cs = +((Math.min(ppg/50,1)*100)*0.25 + (Math.min(spg/3,1)*100)*0.20 +
-                 (Math.min(bpg/3,1)*100)*0.18 + (Math.min(rpg/20,1)*100)*0.15 +
-                 (Math.min(apg/15,1)*100)*0.12 + avgGrade*0.10).toFixed(1);
+    const w = _dsPosW[pos] || _dsPosW.SF;
+    const per = +(ppg*w.per[0] + rpg*w.per[1] + apg*w.per[2] + spg*w.per[3] + bpg*w.per[4] - tpg*1.5).toFixed(1);
+    const cs = +((Math.min(ppg/50,1)*100)*w.cs[0] + (Math.min(spg/3,1)*100)*w.cs[1] +
+                 (Math.min(bpg/3,1)*100)*w.cs[2] + (Math.min(rpg/20,1)*100)*w.cs[3] +
+                 (Math.min(apg/15,1)*100)*w.cs[4] + avgGrade*w.cs[5]).toFixed(1);
     return {...p, pos, ppg, rpg, apg, spg, bpg, tpg, gp, per, cs};
   });
   const pct = (sorted, val) => sorted.length<=1 ? 50 : sorted.filter(v=>v<val).length/(sorted.length-1)*100;
@@ -11750,9 +11783,11 @@ function _dsS3(ev) {
       <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.ppg}</td>
       <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.rpg}</td>
       <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.apg}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.spg}</td>
+      <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.bpg}</td>
       <td style="padding:.4rem .5rem;font-size:.82rem;color:var(--muted);text-align:center">${p.per}</td>
       <td style="padding:.4rem .5rem;font-size:.82rem;color:var(--muted);text-align:center">${p.cs}</td>
-      <td style="padding:.4rem .5rem;text-align:center"><span style="background:${oc};color:#000;border-radius:4px;padding:.12rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.88rem">${p.ovr}</span></td>
+      <td style="padding:.4rem .5rem;text-align:center"><span style="background:${oc};color:rgba(0,0,0,.75);border-radius:4px;padding:.12rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.88rem">${p.ovr}</span></td>
     </tr>`;
   }).join('');
   const active=_ds.playerPool.filter(p=>!p.excluded).length;
@@ -11776,7 +11811,7 @@ function _dsS3(ev) {
   <div style="overflow:auto;max-height:360px;border:1px solid var(--border);border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:.85rem">
       <thead style="position:sticky;top:0;background:var(--surface2)">
-        <tr>${['','#','GRACZ','POS','GP','PPG','RPG','APG','PER','CS','OVR'].map(h=>`<th style="padding:.4rem .5rem;text-align:${h===''||h==='GRACZ'?'left':'center'};font-size:.68rem;letter-spacing:1px;color:var(--muted)">${h}</th>`).join('')}</tr>
+        <tr>${['','#','GRACZ','POS','GP','PPG','RPG','APG','STL','BLK','PER','CS','OVR'].map(h=>`<th style="padding:.4rem .5rem;text-align:${h===''||h==='GRACZ'?'left':'center'};font-size:.68rem;letter-spacing:1px;color:var(--muted)">${h}</th>`).join('')}</tr>
       </thead>
       <tbody id="ds-pb">${rows}</tbody>
     </table>
