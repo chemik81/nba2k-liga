@@ -5367,13 +5367,17 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
 
   if(tab === 'info') {
     const _ovrOn = ev.type==='draft' && !!_evOvr[id];
-    const _enriched = _ovrOn ? _dsComputeOvr(ev.players||[]) : null;
+    const _enriched = _ovrOn ? _dsComputeOvr(ev.players||[], _evOvr._nameMap||{}) : null;
     const playersList = (ev.players||[]).map(p => {
       const ep = _enriched ? _enriched.find(x=>x.id===p.id)||p : p;
       const pri = p.primaryPos || (p.positions?.[0]);
       const sec = (p.positions||[]).filter(x=>x!==pri);
       const posBadges = (pri ? `<span style="font-size:.7rem;color:var(--accent);background:rgba(245,197,24,.12);border-radius:4px;padding:.1rem .35rem;font-weight:700">${pri}</span>` : '')
         + (sec.length ? `<span style="font-size:.7rem;color:var(--muted);background:var(--surface2);border-radius:4px;padding:.1rem .3rem">${sec.join('·')}</span>` : '');
+      const mIcon = ep.matchMethod==='exact'||ep.matchMethod==='alias'||ep.matchMethod==='manual' ? '🟢'
+        : ep.matchMethod==='fuzzy' ? '🟡' : '';
+      const psnLabel = _ovrOn && ep.ingameName && ep.ingameName!==p.name
+        ? `<span style="font-size:.68rem;color:var(--muted);margin-left:.25rem">${mIcon}PSN: ${ep.ingameName}</span>` : '';
       const ovrBadge = _ovrOn ? `<span style="background:${_dsOvrColor(ep.ovr)};color:rgba(0,0,0,.75);border-radius:4px;padding:.08rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-left:.25rem">${ep.ovr}</span>` : '';
       const miniStats = _ovrOn && ep.gp
         ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">${ep.ppg}pts ${ep.rpg}reb ${ep.apg}ast ${ep.spg}stl ${ep.bpg}blk</span>`
@@ -5383,7 +5387,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         <span style="font-weight:600;font-size:.9rem">${p.name}</span>
         ${p.speaksEnglish ? '<span title="Speaks English" style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:2px"><svg width="20" height="13" viewBox="0 0 60 30" style="border-radius:2px;border:1px solid rgba(0,0,0,.2);flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><clipPath id="uf"><path d="M0 0v30h60V0z"/></clipPath><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#uf)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></svg></span>' : ''}
         ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
-        ${posBadges}${ovrBadge}${miniStats}
+        ${posBadges}${psnLabel}${ovrBadge}${miniStats}
         ${isAdmin ? `<button onclick="removePlayerFromEvent('${id}','${p.id}')" style="margin-left:auto;background:transparent;border:none;color:var(--loss);cursor:pointer;font-size:.9rem">✕</button>` : ''}
       </div>`;
     }).join('');
@@ -11500,8 +11504,17 @@ const _ds = {
   teams: [],       // [{name, captainId}]
   playerPool: [],  // enriched with ovr, isCaptain, excluded
   order: [],       // indices into teams[] for draft order
+  nameMap: {},     // { playerId: ingamePsnName } — ręczne powiązania Discord→PSN
   _pollId: null
 };
+
+// Ręczna zmiana powiązania Discord→PSN dla gracza w wizardzie
+function _dsSetName(playerId, ingameName) {
+  _ds.nameMap[playerId] = ingameName || undefined;
+  if (!ingameName) delete _ds.nameMap[playerId];
+  _dsBuildPlayerPool();
+  _dsRender();
+}
 
 function openDraftSetup(eventId) {
   const ev = events.find(e => e.id === eventId);
@@ -11549,49 +11562,98 @@ const _dsPosW = {
 };
 // per: [ppg,rpg,apg,spg,bpg]  cs: [pts,stl,blk,reb,ast,grade]
 
-function _dsComputeOvr(playerList) {
+// ── fuzzy matching Discord → PSN ──────────────────────────────
+
+function _dsFuzzyScore(a, b) {
+  const cl = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const ca = cl(a), cb = cl(b);
+  if (!ca || !cb) return 0;
+  if (ca === cb) return 1.0;
+  if (cb.startsWith(ca) || ca.startsWith(cb)) return 0.9;
+  if (cb.includes(ca) || ca.includes(cb)) return 0.8;
+  const bg = s => { const r=new Set(); for(let i=0;i<s.length-1;i++) r.add(s.slice(i,i+2)); return r; };
+  const ba=bg(ca), bb=bg(cb);
+  if (!ba.size||!bb.size) return 0;
+  return (2*[...ba].filter(g=>bb.has(g)).length)/(ba.size+bb.size);
+}
+
+// Zwraca {name, method} dla gracza lub null.
+// Kolejność: ręczna mapa → alias → dokładne → fuzzy z nazwy i tagu
+function _dsFindIngameName(player, ingameNames, nameMap={}) {
+  if (nameMap[player.id]) return {name:nameMap[player.id], method:'manual'};
+  const candidates = [player.name, player.discordTag].filter(Boolean);
+  for (const c of candidates) {
+    const al = applyAlias(c);
+    if (al !== c && ingameNames.includes(al)) return {name:al, method:'alias'};
+    const ex = ingameNames.find(n=>n.toLowerCase()===c.toLowerCase());
+    if (ex) return {name:ex, method:'exact'};
+  }
+  let best=null, bestS=0;
+  for (const c of candidates) {
+    for (const n of ingameNames) {
+      const s=_dsFuzzyScore(c,n);
+      if (s>bestS) { bestS=s; best=n; }
+    }
+  }
+  if (bestS>=0.55) return {name:best, method:'fuzzy', score:bestS};
+  return null;
+}
+
+// Zwraca wszystkie unikalne nazwy graczy z historii meczów
+function _dsIngameNames() {
+  return [...new Set(matches.flatMap(m=>
+    [...(m.team1.players||[]),...(m.team2.players||[])].map(p=>p.name)
+  ))].sort();
+}
+
+function _dsComputeOvr(playerList, nameMap={}) {
+  const ingameNames = _dsIngameNames();
   const enriched = playerList.map(p => {
+    const resolved = _dsFindIngameName(p, ingameNames, nameMap);
+    const iname = resolved?.name;
+    // Pozycja: z meczów pod PSN-nickiem
     const posCounts = {};
-    matches.forEach(m => {
-      [...(m.team1.players||[]),...(m.team2.players||[])].forEach(pl => {
-        if (pl.name === p.name && pl.pos) posCounts[pl.pos] = (posCounts[pl.pos]||0)+1;
+    if (iname) {
+      matches.forEach(m => {
+        [...(m.team1.players||[]),...(m.team2.players||[])].forEach(pl => {
+          if (pl.name === iname && pl.pos) posCounts[pl.pos]=(posCounts[pl.pos]||0)+1;
+        });
       });
-    });
+    }
     const pos = Object.keys(posCounts).length
       ? Object.keys(posCounts).sort((a,b)=>posCounts[b]-posCounts[a])[0]
-      : (p.primaryPos || 'SF');
-    const pm = matches.filter(m =>
-      [...(m.team1.players||[]),...(m.team2.players||[])].some(pl => pl.name === p.name)
-    );
+      : (p.primaryPos||'SF');
+    const pm = iname ? matches.filter(m=>
+      [...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>pl.name===iname)
+    ) : [];
     const gp = pm.length;
-    if (!gp) return {...p, pos, ppg:0, rpg:0, apg:0, spg:0, bpg:0, tpg:0, gp:0, per:0, cs:0, ovr:40};
-    const tot = pm.reduce((acc,m) => {
-      const pl = [...(m.team1.players||[]),...(m.team2.players||[])].find(x=>x.name===p.name);
-      if (pl) {
-        acc.pts+=pl.pts||0; acc.reb+=pl.reb||0; acc.ast+=pl.ast||0;
-        acc.stl+=pl.stl||0; acc.blk+=pl.blk||0; acc.to+=pl.to||0;
-        acc.gs+=_dsGradeScore(pl.grade); acc.gc++;
-      }
+    if (!gp) return {...p, pos, ppg:0,rpg:0,apg:0,spg:0,bpg:0,tpg:0,gp:0,per:0,cs:0,ovr:40,
+      ingameName:iname||null, matchMethod:resolved?.method||'none'};
+    const tot = pm.reduce((acc,m)=>{
+      const pl=[...(m.team1.players||[]),...(m.team2.players||[])].find(x=>x.name===iname);
+      if(pl){acc.pts+=pl.pts||0;acc.reb+=pl.reb||0;acc.ast+=pl.ast||0;
+              acc.stl+=pl.stl||0;acc.blk+=pl.blk||0;acc.to+=pl.to||0;
+              acc.gs+=_dsGradeScore(pl.grade);acc.gc++;}
       return acc;
-    }, {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0});
-    const ppg=+(tot.pts/gp).toFixed(1), rpg=+(tot.reb/gp).toFixed(1), apg=+(tot.ast/gp).toFixed(1);
-    const spg=+(tot.stl/gp).toFixed(1), bpg=+(tot.blk/gp).toFixed(1), tpg=+(tot.to/gp).toFixed(1);
-    const avgGrade = tot.gc ? tot.gs/tot.gc : 50;
-    const w = _dsPosW[pos] || _dsPosW.SF;
-    const per = +(ppg*w.per[0] + rpg*w.per[1] + apg*w.per[2] + spg*w.per[3] + bpg*w.per[4] - tpg*1.5).toFixed(1);
-    const cs = +((Math.min(ppg/50,1)*100)*w.cs[0] + (Math.min(spg/3,1)*100)*w.cs[1] +
-                 (Math.min(bpg/3,1)*100)*w.cs[2] + (Math.min(rpg/20,1)*100)*w.cs[3] +
-                 (Math.min(apg/15,1)*100)*w.cs[4] + avgGrade*w.cs[5]).toFixed(1);
-    return {...p, pos, ppg, rpg, apg, spg, bpg, tpg, gp, per, cs};
+    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0});
+    const ppg=+(tot.pts/gp).toFixed(1),rpg=+(tot.reb/gp).toFixed(1),apg=+(tot.ast/gp).toFixed(1);
+    const spg=+(tot.stl/gp).toFixed(1),bpg=+(tot.blk/gp).toFixed(1),tpg=+(tot.to/gp).toFixed(1);
+    const avgGrade=tot.gc?tot.gs/tot.gc:50;
+    const w=_dsPosW[pos]||_dsPosW.SF;
+    const per=+(ppg*w.per[0]+rpg*w.per[1]+apg*w.per[2]+spg*w.per[3]+bpg*w.per[4]-tpg*1.5).toFixed(1);
+    const cs=+((Math.min(ppg/50,1)*100)*w.cs[0]+(Math.min(spg/3,1)*100)*w.cs[1]+
+               (Math.min(bpg/3,1)*100)*w.cs[2]+(Math.min(rpg/20,1)*100)*w.cs[3]+
+               (Math.min(apg/15,1)*100)*w.cs[4]+avgGrade*w.cs[5]).toFixed(1);
+    return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,ingameName:iname,matchMethod:resolved?.method};
   });
-  const pct = (sorted, val) => sorted.length<=1 ? 50 : sorted.filter(v=>v<val).length/(sorted.length-1)*100;
-  const sP = enriched.map(p=>p.per).sort((a,b)=>a-b);
-  const sC = enriched.map(p=>p.cs).sort((a,b)=>a-b);
-  const sG = enriched.map(p=>p.ppg).sort((a,b)=>a-b);
-  return enriched.map(p => {
-    const gpBonus = Math.min(p.gp*2,10);
-    const raw = pct(sP,p.per)*0.45 + pct(sC,p.cs)*0.35 + pct(sG,p.ppg)*0.15 + gpBonus*0.05;
-    return {...p, ovr: Math.max(40,Math.min(99,Math.round(raw*0.59+40)))};
+  const pct=(sorted,val)=>sorted.length<=1?50:sorted.filter(v=>v<val).length/(sorted.length-1)*100;
+  const sP=enriched.map(p=>p.per).sort((a,b)=>a-b);
+  const sC=enriched.map(p=>p.cs).sort((a,b)=>a-b);
+  const sG=enriched.map(p=>p.ppg).sort((a,b)=>a-b);
+  return enriched.map(p=>{
+    const gpBonus=Math.min(p.gp*2,10);
+    const raw=pct(sP,p.per)*0.45+pct(sC,p.cs)*0.35+pct(sG,p.ppg)*0.15+gpBonus*0.05;
+    return {...p,ovr:Math.max(40,Math.min(99,Math.round(raw*0.59+40)))};
   }).sort((a,b)=>b.ovr-a.ovr);
 }
 
@@ -11599,8 +11661,8 @@ function _dsBuildPlayerPool() {
   const ev = events.find(e=>e.id===_ds.eventId);
   if (!ev) return;
   const captainIds = new Set(_ds.teams.map(t=>t.captainId).filter(Boolean));
-  const enriched = _dsComputeOvr(ev.players||[]);
-  _ds.playerPool = enriched.map(p => ({...p, isCaptain: captainIds.has(p.id), excluded: false}));
+  const enriched = _dsComputeOvr(ev.players||[], _ds.nameMap||{});
+  _ds.playerPool = enriched.map(p=>({...p,isCaptain:captainIds.has(p.id),excluded:false}));
 }
 
 function _dsBuildOrder() {
@@ -11771,13 +11833,28 @@ function _dsRandCaptains() {
 function _dsS3(ev) {
   const posFilters=['ALL','PG','SG','SF','PF','C'];
   const filterBtns=posFilters.map(p=>`<button onclick="_dsFPos('${p}')" id="ds-fp-${p}" style="padding:.28rem .65rem;border-radius:20px;font-size:.78rem;font-weight:700;cursor:pointer;border:1px solid var(--border);background:${p==='ALL'?'var(--accent)':'var(--surface2)'};color:${p==='ALL'?'#000':'var(--text)'};font-family:'Barlow Condensed',sans-serif">${p}</button>`).join('');
+  const ingameNames = _dsIngameNames();
   const rows=_ds.playerPool.map((p,i)=>{
     const oc=_dsOvrColor(p.ovr);
     const capBadge=p.isCaptain?`<span style="font-size:.6rem;background:var(--accent);color:#000;border-radius:3px;padding:.05rem .3rem;margin-left:.3rem;font-weight:900;vertical-align:middle">C</span>`:'';
+    // Wskaźnik dopasowania PSN
+    const mDot = p.matchMethod==='exact'||p.matchMethod==='alias'||p.matchMethod==='manual'
+      ? `<span title="Dopasowano: ${p.ingameName}" style="color:#2ecc71;font-size:.8rem">●</span>`
+      : p.matchMethod==='fuzzy'
+        ? `<span title="Fuzzy: ${p.ingameName}" style="color:#f39c12;font-size:.8rem">●</span>`
+        : `<span title="Brak dopasowania PSN" style="color:#e74c3c;font-size:.8rem">●</span>`;
+    const psnOpts = `<option value="">— brak —</option>`
+      + ingameNames.map(n=>`<option value="${n}" ${n===p.ingameName?'selected':''}>${n}</option>`).join('');
     return `<tr id="ds-pr-${i}" data-pos="${p.pos||'SF'}" style="border-bottom:1px solid rgba(255,255,255,.05);opacity:${p.excluded?.35:1}">
       <td style="padding:.4rem .5rem"><input type="checkbox" id="ds-pcb-${i}" ${p.excluded?'':'checked'} ${p.isCaptain?'disabled title="Kapitan zawsze w drużynie"':''} onchange="_dsTgl(${i})" style="accent-color:var(--accent)"></td>
       <td style="padding:.4rem .5rem;color:var(--muted);font-size:.78rem">${i+1}</td>
       <td style="padding:.4rem .5rem;font-weight:700;font-size:.85rem">${p.name}${capBadge}</td>
+      <td style="padding:.4rem .3rem;min-width:130px">
+        <div style="display:flex;align-items:center;gap:.3rem">
+          ${mDot}
+          <select onchange="_dsSetName('${p.id}',this.value)" style="font-size:.7rem;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.15rem .3rem;max-width:110px;font-family:inherit">${psnOpts}</select>
+        </div>
+      </td>
       <td style="padding:.4rem .5rem;text-align:center"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.08rem .4rem;font-size:.72rem;font-weight:700">${p.pos||'SF'}</span></td>
       <td style="padding:.4rem .5rem;font-size:.82rem;color:var(--muted);text-align:center">${p.gp}</td>
       <td style="padding:.4rem .5rem;font-size:.82rem;text-align:center">${p.ppg}</td>
@@ -11811,7 +11888,7 @@ function _dsS3(ev) {
   <div style="overflow:auto;max-height:360px;border:1px solid var(--border);border-radius:8px">
     <table style="width:100%;border-collapse:collapse;font-size:.85rem">
       <thead style="position:sticky;top:0;background:var(--surface2)">
-        <tr>${['','#','GRACZ','POS','GP','PPG','RPG','APG','STL','BLK','PER','CS','OVR'].map(h=>`<th style="padding:.4rem .5rem;text-align:${h===''||h==='GRACZ'?'left':'center'};font-size:.68rem;letter-spacing:1px;color:var(--muted)">${h}</th>`).join('')}</tr>
+        <tr>${['','#','GRACZ','PSN','POS','GP','PPG','RPG','APG','STL','BLK','PER','CS','OVR'].map(h=>`<th style="padding:.4rem .5rem;text-align:${h===''||h==='GRACZ'||h==='PSN'?'left':'center'};font-size:.68rem;letter-spacing:1px;color:var(--muted)">${h}</th>`).join('')}</tr>
       </thead>
       <tbody id="ds-pb">${rows}</tbody>
     </table>
