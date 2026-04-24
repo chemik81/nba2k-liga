@@ -4449,6 +4449,13 @@ async function saveSetup() {
   const _discordParam = _urlParams.get('discord_user');
   const _oauthError   = _urlParams.get('oauth_error');
 
+  // If link contains ?w= (worker URL passed from admin to GM/Board links), save it
+  const _wParam = _urlParams.get('w');
+  if(_wParam) {
+    workerUrl = _wParam;
+    localStorage.setItem('nba2k_worker_url', _wParam);
+  }
+
   if(_oauthError) {
     window.history.replaceState({}, '', window.location.pathname);
     // Show friendly modal with instructions
@@ -9730,11 +9737,53 @@ function checkPendingSignupEvent() {
   setTimeout(() => tryOpen(10), 600);
 }
 
-// Check on load if URL has ?event= param and open it
+// Check on load if URL has ?event= param and open it; handle #gm / #board hashes
 function checkEventUrlParam() {
   const params = new URLSearchParams(window.location.search);
   const evId = params.get('event');
-  if(evId) {
+  if(!evId) return;
+  const hash = window.location.hash;
+
+  if(hash === '#gm') {
+    // GM panel link — requires Discord login; data is already loaded at this point
+    window.history.replaceState({}, '', window.location.pathname);
+    const tryOpenGM = (attempts) => {
+      const ev = events.find(e => e.id === evId);
+      if(!ev) {
+        if(attempts > 0) { setTimeout(() => tryOpenGM(attempts - 1), 500); return; }
+        showToast('❌ Nie znaleziono eventu draftu', 'error');
+        showView('events');
+        return;
+      }
+      if(!discordUser) {
+        showView('events');
+        showToast('⚠️ Zaloguj się przez Discord aby otworzyć Panel GM', 'warning');
+        return;
+      }
+      showView('events');
+      setTimeout(() => openGMPanel(evId), 300);
+    };
+    setTimeout(() => tryOpenGM(10), 600);
+
+  } else if(hash === '#board') {
+    // Board (spectator draft view) — no login required
+    window.history.replaceState({}, '', window.location.pathname);
+    const tryOpenBoard = (attempts) => {
+      const ev = events.find(e => e.id === evId);
+      if(ev && ['draft','active','closed'].includes(ev.status)) {
+        openDraftView(evId);
+      } else if(attempts > 0) {
+        setTimeout(() => tryOpenBoard(attempts - 1), 500);
+      } else {
+        showView('events');
+        showToast('ℹ️ Draft nie jest aktywny', 'info');
+      }
+    };
+    showView('events');
+    setTimeout(() => tryOpenBoard(10), 600);
+
+  } else {
+    // Default: open event detail
     setTimeout(() => {
       showView('events');
       setTimeout(() => openEventDetail(evId), 300);
