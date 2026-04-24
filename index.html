@@ -11966,14 +11966,19 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
     const pos = Object.keys(posCounts).length
       ? Object.keys(posCounts).sort((a,b)=>posCounts[b]-posCounts[a])[0]
       : (p.primaryPos||'SF');
+    const posFromHistory = Object.keys(posCounts).length > 0;
     const pm = iname ? matches.filter(m=>
-      [...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>pl.name===iname)
+      [...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>
+        pl.name===iname && (posFromHistory ? pl.pos===pos : true)
+      )
     ) : [];
     const gp = pm.length;
     if (!gp) return {...p, pos, ppg:0,rpg:0,apg:0,spg:0,bpg:0,tpg:0,gp:0,per:0,cs:0,ovr:40,
       ingameName:iname||null, matchMethod:resolved?.method||'none'};
     const tot = pm.reduce((acc,m)=>{
-      const pl=[...(m.team1.players||[]),...(m.team2.players||[])].find(x=>x.name===iname);
+      const pl=[...(m.team1.players||[]),...(m.team2.players||[])].find(x=>
+        x.name===iname && (posFromHistory ? x.pos===pos : true)
+      );
       if(pl){acc.pts+=pl.pts||0;acc.reb+=pl.reb||0;acc.ast+=pl.ast||0;
               acc.stl+=pl.stl||0;acc.blk+=pl.blk||0;acc.to+=pl.to||0;
               acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
