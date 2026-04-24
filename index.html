@@ -1961,21 +1961,6 @@ async function saveData(silent = false) {
     // ── Save to Cloudflare KV via Worker (primary) ────────────────────────
     if(workerUrl) {
       const adminToken = localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash') || '';
-      // Stale write protection — check if KV has newer data than what we loaded
-      if(window._dataLoadedAt && adminToken) {
-        try {
-          const checkRes = await fetch(workerUrl.replace(/\/$/, '') + '/data');
-          if(checkRes.ok) {
-            const checkData = await checkRes.json();
-            const kvSavedAt = checkData.record?._savedAt || 0;
-            if(kvSavedAt > window._dataLoadedAt + 2000) {
-              // KV is newer — reload local data silently and retry save once
-              await loadData();
-              // Don't abort — fall through to the actual save below
-            }
-          }
-        } catch(e) { /* ignore check errors, proceed with save */ }
-      }
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
@@ -1986,6 +1971,7 @@ async function saveData(silent = false) {
         if(!silent) showToast('❌ Błąd zapisu (Worker): ' + (err.error||res.status), 'error');
         return false;
       }
+      window._dataLoadedAt = Date.now();
       return true;
     }
 
