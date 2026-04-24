@@ -11244,22 +11244,26 @@ function renderPlayoffDashboard() {
         ${po.champion ? `<div style="background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:6px;padding:.3rem 1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem">🥇 MISTRZ: ${po.champion}</div>` : ''}
       </div>
       ${po.champion ? (() => {
-        // Calculate MVP: best avg pts player from champion team in playoff matches
+        // Calculate MVP: best PER player from champion team in playoff matches
         const poStart = po.startDate || '';
         const poMatches = matches.filter(m => m.date >= poStart && (m.team1.name === po.champion || m.team2.name === po.champion));
         const pStats = {};
         poMatches.forEach(m => {
           const side = m.team1.name === po.champion ? m.team1 : m.team2;
           (side.players||[]).forEach(p => {
-            if(!pStats[p.name]) pStats[p.name] = {pts:0,reb:0,ast:0,gp:0};
+            if(!pStats[p.name]) pStats[p.name] = {pts:0,reb:0,ast:0,stl:0,blk:0,tov:0,gp:0};
             pStats[p.name].pts += p.pts||0;
             pStats[p.name].reb += p.reb||0;
             pStats[p.name].ast += p.ast||0;
+            pStats[p.name].stl += p.stl||0;
+            pStats[p.name].blk += p.blk||0;
+            pStats[p.name].tov += p.tov||0;
             pStats[p.name].gp++;
           });
         });
-        const mvp = Object.entries(pStats).sort((a,b) => (b[1].pts/b[1].gp||0)-(a[1].pts/a[1].gp||0))[0];
-        const mvpHtml = mvp ? `<div style="margin-top:.5rem;font-size:.9rem;opacity:.85">⭐ MVP Playoff: <b>${mvp[0]}</b> — ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST na mecz</div>` : '';
+        const _per = s => { const g=s.gp||1; return (s.pts/g)+(s.reb/g)*1.2+(s.ast/g)*1.5+(s.stl/g)*2+(s.blk/g)*2-(s.tov/g)*1.5; };
+        const mvp = Object.entries(pStats).sort((a,b) => _per(b[1])-_per(a[1]))[0];
+        const mvpHtml = mvp ? `<div style="margin-top:.5rem;font-size:.9rem;opacity:.85">⭐ MVP Playoff: <b>${mvp[0]}</b> — ${(mvp[1].pts/mvp[1].gp).toFixed(1)} PTS / ${(mvp[1].reb/mvp[1].gp).toFixed(1)} REB / ${(mvp[1].ast/mvp[1].gp).toFixed(1)} AST · PER ${_per(mvp[1]).toFixed(1)}</div>` : '';
         return `<div style="background:linear-gradient(135deg,#8b6914,#c9962a,#8b6914);border-radius:12px;padding:1.5rem 2rem;margin-bottom:1.25rem;text-align:center;box-shadow:0 4px 24px rgba(197,150,30,0.35)">
           <div style="font-size:2.5rem;margin-bottom:.25rem">🏆</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;color:rgba(0,0,0,0.6);margin-bottom:.2rem">MISTRZ SEZONU</div>
