@@ -11522,7 +11522,7 @@ function _dsLeagueRanking(method) {
       s.pts+=pl.pts||0; s.reb+=pl.reb||0; s.ast+=pl.ast||0;
       s.stl+=pl.stl||0; s.blk+=pl.blk||0; s.to+=pl.to||0;
       s.fgm+=pl.fgm||0; s.fga+=pl.fga||0; s.ftm+=pl.ftm||0; s.fta+=pl.fta||0;
-      s.gs+=_dsGradeScore(pl.grade); s.gc++; s.gp++;
+      s.gs+=gradeToNum(pl.grade||'B'); s.gc++; s.gp++;
       if (pl.pos) s.pos[pl.pos]=(s.pos[pl.pos]||0)+1;
     });
   });
@@ -11917,7 +11917,7 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
       if(pl){acc.pts+=pl.pts||0;acc.reb+=pl.reb||0;acc.ast+=pl.ast||0;
               acc.stl+=pl.stl||0;acc.blk+=pl.blk||0;acc.to+=pl.to||0;
               acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
-              acc.gs+=_dsGradeScore(pl.grade);acc.gc++;}
+              acc.gs+=gradeToNum(pl.grade||'B');acc.gc++;}
       return acc;
     },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,ftm:0,fta:0,gs:0,gc:0});
     const ppg=+(tot.pts/gp).toFixed(1),rpg=+(tot.reb/gp).toFixed(1),apg=+(tot.ast/gp).toFixed(1);
