@@ -9142,9 +9142,10 @@ async function sendEventWebhook(title, description, color) {
 async function _discordNotify(payload) {
   if (workerUrl) {
     try {
+      const adminToken = localStorage.getItem('nba2k_admin_token_hash') || '';
       const r = await fetch(workerUrl.replace(/\/$/, '') + '/discord-notify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
         body: JSON.stringify(payload)
       });
       if (r.ok || r.status === 204) return true;
