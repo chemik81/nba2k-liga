@@ -11562,24 +11562,23 @@ function closePlayoffModal() {
 
 function _dsLeagueRanking(method) {
   const m = method || ovrMethod;
+  // Key by (name, pos) — each player×position is a separate entry
   const statsMap = {};
   matches.forEach(match => {
     [...(match.team1.players||[]),...(match.team2.players||[])].forEach(pl => {
       if (!pl.name) return;
-      if (!statsMap[pl.name]) statsMap[pl.name] = {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0,gp:0,pos:{},fgm:0,fga:0,ftm:0,fta:0};
-      const s = statsMap[pl.name];
+      const pos = pl.pos || null;
+      const key = pos ? `${pl.name}\x00${pos}` : pl.name;
+      if (!statsMap[key]) statsMap[key] = {name:pl.name,pos:pos||'—',pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0,gp:0,fgm:0,fga:0,ftm:0,fta:0};
+      const s = statsMap[key];
       s.pts+=pl.pts||0; s.reb+=pl.reb||0; s.ast+=pl.ast||0;
       s.stl+=pl.stl||0; s.blk+=pl.blk||0; s.to+=pl.to||0;
       s.fgm+=pl.fgm||0; s.fga+=pl.fga||0; s.ftm+=pl.ftm||0; s.fta+=pl.fta||0;
       s.gs+=gradeToNum(pl.grade||'B'); s.gc++; s.gp++;
-      if (pl.pos) s.pos[pl.pos]=(s.pos[pl.pos]||0)+1;
     });
   });
-  const players = Object.entries(statsMap).map(([name, s]) => {
-    const gp=s.gp;
-    const posSorted=Object.keys(s.pos).sort((a,b)=>s.pos[b]-s.pos[a]);
-    const pos=posSorted[0]||'SF';
-    const allPos=posSorted.slice(0,3);
+  const players = Object.values(statsMap).map(s => {
+    const gp=s.gp, pos=s.pos, name=s.name;
     const ppg=+(s.pts/gp).toFixed(1),rpg=+(s.reb/gp).toFixed(1),apg=+(s.ast/gp).toFixed(1);
     const spg=+(s.stl/gp).toFixed(1),bpg=+(s.blk/gp).toFixed(1),tpg=+(s.to/gp).toFixed(1);
     const totObj = {gp, pts:s.pts, reb:s.reb, ast:s.ast, stl:s.stl, blk:s.blk, to:s.to,
@@ -11594,13 +11593,12 @@ function _dsLeagueRanking(method) {
     } else if (m==='classic') {
       cs = +calcCompositeScore(totObj).toFixed(1);
     } else {
-      // kw5 / top98 — jak calcCompositeScore ale bez grade, z maturity
       const mat = gp / (gp + 5);
       cs = +(((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/4,1)*100)*0.20+
                (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
                (Math.min(apg/15,1)*100)*0.12) * mat).toFixed(1);
     }
-    return {name,pos,allPos,gp,ppg,rpg,apg,spg,bpg,tpg,per,cs};
+    return {name,pos,gp,ppg,rpg,apg,spg,bpg,tpg,per,cs};
   });
 
   if (m === 'top98') {
@@ -11690,12 +11688,10 @@ function renderPsnMapModal(previewMethod) {
   const ranking = _dsLeagueRanking(method);
   const rankRows = ranking.map((p,i) => {
     const oc=_dsOvrColor(p.ovr);
-    const posLabel = p.allPos&&p.allPos.length>1 ? p.allPos.join('·') : p.pos;
-    const posTitle = p.allPos&&p.allPos.length>1 ? `title="Grał na: ${p.allPos.join(', ')}"` : '';
     return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)">
       <td style="padding:.35rem .5rem;text-align:center;font-size:.75rem;color:var(--muted);font-weight:700">${i+1}</td>
       <td style="padding:.35rem .5rem;font-weight:600;font-size:.85rem;white-space:nowrap">${p.name}</td>
-      <td style="padding:.35rem .5rem;text-align:center"><span ${posTitle} style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .3rem;font-size:.68rem;font-weight:700;cursor:${p.allPos&&p.allPos.length>1?'help':'default'}">${posLabel}</span></td>
+      <td style="padding:.35rem .5rem;text-align:center"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .3rem;font-size:.68rem;font-weight:700">${p.pos}</span></td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem;color:var(--muted)">${p.gp}</td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem">${p.ppg}</td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem">${p.rpg}</td>
