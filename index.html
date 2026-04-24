@@ -11577,7 +11577,9 @@ function _dsLeagueRanking(method) {
   });
   const players = Object.entries(statsMap).map(([name, s]) => {
     const gp=s.gp;
-    const pos=Object.keys(s.pos).length?Object.keys(s.pos).sort((a,b)=>s.pos[b]-s.pos[a])[0]:'SF';
+    const posSorted=Object.keys(s.pos).sort((a,b)=>s.pos[b]-s.pos[a]);
+    const pos=posSorted[0]||'SF';
+    const allPos=posSorted.slice(0,3);
     const ppg=+(s.pts/gp).toFixed(1),rpg=+(s.reb/gp).toFixed(1),apg=+(s.ast/gp).toFixed(1);
     const spg=+(s.stl/gp).toFixed(1),bpg=+(s.blk/gp).toFixed(1),tpg=+(s.to/gp).toFixed(1);
     const totObj = {gp, pts:s.pts, reb:s.reb, ast:s.ast, stl:s.stl, blk:s.blk, to:s.to,
@@ -11598,7 +11600,7 @@ function _dsLeagueRanking(method) {
                (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
                (Math.min(apg/15,1)*100)*0.12) * mat).toFixed(1);
     }
-    return {name,pos,gp,ppg,rpg,apg,spg,bpg,tpg,per,cs};
+    return {name,pos,allPos,gp,ppg,rpg,apg,spg,bpg,tpg,per,cs};
   });
 
   if (m === 'top98') {
@@ -11667,7 +11669,7 @@ function renderPsnMapModal(previewMethod) {
       <td style="padding:.45rem .5rem">
         <div style="display:flex;align-items:center;gap:.35rem">
           <span title="${ep.matchMethod||'brak'}">${method_icon}</span>
-          <select onchange="_psnMapSet('${key}','${p.name}',this.value)" style="font-size:.78rem;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .4rem;max-width:160px;font-family:inherit">${opts}</select>
+          <select onchange="_psnMapSet('${key}','${p.name}',this.value)" style="font-size:.78rem;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .4rem;max-width:130px;font-family:inherit">${opts}</select>
         </div>
       </td>
       <td style="padding:.45rem .5rem;text-align:center">
@@ -11688,10 +11690,12 @@ function renderPsnMapModal(previewMethod) {
   const ranking = _dsLeagueRanking(method);
   const rankRows = ranking.map((p,i) => {
     const oc=_dsOvrColor(p.ovr);
+    const posLabel = p.allPos&&p.allPos.length>1 ? p.allPos.join('·') : p.pos;
+    const posTitle = p.allPos&&p.allPos.length>1 ? `title="Grał na: ${p.allPos.join(', ')}"` : '';
     return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)">
       <td style="padding:.35rem .5rem;text-align:center;font-size:.75rem;color:var(--muted);font-weight:700">${i+1}</td>
       <td style="padding:.35rem .5rem;font-weight:600;font-size:.85rem;white-space:nowrap">${p.name}</td>
-      <td style="padding:.35rem .5rem;text-align:center"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .3rem;font-size:.68rem;font-weight:700">${p.pos}</span></td>
+      <td style="padding:.35rem .5rem;text-align:center"><span ${posTitle} style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .3rem;font-size:.68rem;font-weight:700;cursor:${p.allPos&&p.allPos.length>1?'help':'default'}">${posLabel}</span></td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem;color:var(--muted)">${p.gp}</td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem">${p.ppg}</td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem">${p.rpg}</td>
@@ -11710,7 +11714,7 @@ function renderPsnMapModal(previewMethod) {
 
   el.innerHTML = `
   <!-- ══ LEWA KOLUMNA: Discord→PSN ══ -->
-  <div style="width:500px;min-width:420px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--surface)">
+  <div style="width:420px;min-width:340px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--surface)">
 
     <!-- nagłówek lewej kolumny (sticky) -->
     <div style="padding:1.25rem 1.5rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0">
@@ -11755,7 +11759,7 @@ function renderPsnMapModal(previewMethod) {
     <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:1rem">
       <div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px">📊 RANKING WSZYSTKICH GRACZY LIGI</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-top:.1rem">Metoda: <b style="color:var(--accent)">${methodLabel}</b> · ${ranking.length} zawodników z historii meczów</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.1rem">Metoda: <b style="color:var(--accent)">${methodLabel}</b> · ${ranking.length} zawodników z historii meczów · <span style="color:var(--accent)">ligowe + playoff</span></div>
       </div>
     </div>
 
