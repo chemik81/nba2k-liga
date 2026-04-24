@@ -1760,7 +1760,7 @@ let rounds = []; // { id, label, from, to } // { "wrong": "correct" }
 let seasons = [];
 let playoffs = []; // array of playoff objects per season
 let discordPsnMap = {}; // { discordName: psnName } — trwałe mapowania Discord→PSN
-let ovrMethod = localStorage.getItem('nba2k_ovr_method') || 'classic'; // 'classic' | 'positional' | 'kw5'
+let ovrMethod = localStorage.getItem('nba2k_ovr_method') || 'classic'; // 'classic' | 'positional' | 'kw5' | 'top98'
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
 // Read-only key (safe to hardcode - only Read permission, no Create/Update/Delete)
@@ -11538,7 +11538,7 @@ function _dsLeagueRanking(method) {
       cs=+((Math.min(ppg/50,1)*100)*w.cs[0]+(Math.min(spg/3,1)*100)*w.cs[1]+
            (Math.min(bpg/3,1)*100)*w.cs[2]+(Math.min(rpg/20,1)*100)*w.cs[3]+
            (Math.min(apg/15,1)*100)*w.cs[4]+avgGrade*w.cs[5]).toFixed(1);
-    } else if (m==='kw5') {
+    } else if (m==='kw5' || m==='top98') {
       per=+(ppg+rpg*1.2+apg*1.5+spg*2+bpg*2-tpg*1.5).toFixed(1);
       cs=+((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/3,1)*100)*0.20+
            (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
@@ -11551,6 +11551,18 @@ function _dsLeagueRanking(method) {
     }
     return {name,pos,gp,ppg,rpg,apg,spg,bpg,tpg,per,cs};
   });
+
+  if (m === 'top98') {
+    const byPos = {};
+    players.forEach(p => { if (!byPos[p.pos]) byPos[p.pos]=[]; byPos[p.pos].push(p); });
+    const comp = p => p.per * 0.6 + p.cs * 0.4;
+    return players.map(p => {
+      const grp = byPos[p.pos] || [p];
+      const maxC = Math.max(...grp.map(comp), 0.01);
+      return {...p, ovr: Math.max(40, Math.min(98, Math.round(40 + comp(p) / maxC * 58)))};
+    }).sort((a,b) => b.ovr - a.ovr);
+  }
+
   const pct=(sorted,val)=>sorted.length<=1?50:sorted.filter(v=>v<val).length/(sorted.length-1)*100;
   const sP=players.map(p=>p.per).sort((a,b)=>a-b);
   const sC=players.map(p=>p.cs).sort((a,b)=>a-b);
@@ -11642,6 +11654,10 @@ function renderPsnMapModal(previewMethod) {
         <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.88rem">
           <input type="radio" name="ovr-method" value="kw5" ${method==='kw5'?'checked':''} onchange="_psnMethodChange('kw5')" style="accent-color:var(--accent)">
           <span><b>KW5 (oryginał)</b> — bez składnika ocen, czysto statystyczny</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.88rem">
+          <input type="radio" name="ovr-method" value="top98" ${method==='top98'?'checked':''} onchange="_psnMethodChange('top98')" style="accent-color:var(--accent)">
+          <span><b>TOP 98</b> — najlepszy na każdej pozycji = 98, pozostali proporcjonalnie (docenia SF/PF)</span>
         </label>
       </div>
     </div>
@@ -11874,6 +11890,7 @@ function _dsIngameNames() {
 
 function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
   const ingameNames = _dsIngameNames();
+  const method = useMethod || ovrMethod;
   const enriched = playerList.map(p => {
     const resolved = _dsFindIngameName(p, ingameNames, nameMap);
     const iname = resolved?.name;
@@ -11906,15 +11923,14 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
     const spg=+(tot.stl/gp).toFixed(1),bpg=+(tot.blk/gp).toFixed(1),tpg=+(tot.to/gp).toFixed(1);
     const avgGrade=tot.gc?tot.gs/tot.gc:50;
     let per, cs;
-    const m = useMethod || ovrMethod;
-    if (m === 'positional') {
+    if (method === 'positional') {
       const w=_dsPosW[pos]||_dsPosW.SF;
       per=+(ppg*w.per[0]+rpg*w.per[1]+apg*w.per[2]+spg*w.per[3]+bpg*w.per[4]-tpg*1.5).toFixed(1);
       cs=+((Math.min(ppg/50,1)*100)*w.cs[0]+(Math.min(spg/3,1)*100)*w.cs[1]+
            (Math.min(bpg/3,1)*100)*w.cs[2]+(Math.min(rpg/20,1)*100)*w.cs[3]+
            (Math.min(apg/15,1)*100)*w.cs[4]+avgGrade*w.cs[5]).toFixed(1);
-    } else if (m === 'kw5') {
-      // Dokładnie jak KW5 Elite — bez składnika ocen (grade), czysto statystyczny
+    } else if (method === 'kw5' || method === 'top98') {
+      // KW5 / TOP98 — bez składnika ocen (grade), czysto statystyczny
       per=+(ppg+rpg*1.2+apg*1.5+spg*2+bpg*2-tpg*1.5).toFixed(1);
       cs=+((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/3,1)*100)*0.20+
            (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
@@ -11928,6 +11944,20 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
     }
     return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,ingameName:iname,matchMethod:resolved?.method};
   });
+
+  // ── Skalowanie OVR ────────────────────────────────────────────
+  if (method === 'top98') {
+    // Najlepszy na każdej pozycji = 98, pozostali proporcjonalnie (40–98)
+    const byPos = {};
+    enriched.forEach(p => { if (!byPos[p.pos]) byPos[p.pos]=[]; byPos[p.pos].push(p); });
+    const comp = p => p.per * 0.6 + p.cs * 0.4;
+    return enriched.map(p => {
+      const grp = byPos[p.pos] || [p];
+      const maxC = Math.max(...grp.map(comp), 0.01);
+      return {...p, ovr: Math.max(40, Math.min(98, Math.round(40 + comp(p) / maxC * 58)))};
+    }).sort((a,b) => b.ovr - a.ovr);
+  }
+
   const pct=(sorted,val)=>sorted.length<=1?50:sorted.filter(v=>v<val).length/(sorted.length-1)*100;
   const sP=enriched.map(p=>p.per).sort((a,b)=>a-b);
   const sC=enriched.map(p=>p.cs).sort((a,b)=>a-b);
