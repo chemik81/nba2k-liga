@@ -11517,10 +11517,11 @@ function _dsLeagueRanking(method) {
   matches.forEach(match => {
     [...(match.team1.players||[]),...(match.team2.players||[])].forEach(pl => {
       if (!pl.name) return;
-      if (!statsMap[pl.name]) statsMap[pl.name] = {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0,gp:0,pos:{}};
+      if (!statsMap[pl.name]) statsMap[pl.name] = {pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0,gp:0,pos:{},fgm:0,fga:0,ftm:0,fta:0};
       const s = statsMap[pl.name];
       s.pts+=pl.pts||0; s.reb+=pl.reb||0; s.ast+=pl.ast||0;
       s.stl+=pl.stl||0; s.blk+=pl.blk||0; s.to+=pl.to||0;
+      s.fgm+=pl.fgm||0; s.fga+=pl.fga||0; s.ftm+=pl.ftm||0; s.fta+=pl.fta||0;
       s.gs+=_dsGradeScore(pl.grade); s.gc++; s.gp++;
       if (pl.pos) s.pos[pl.pos]=(s.pos[pl.pos]||0)+1;
     });
@@ -11530,24 +11531,23 @@ function _dsLeagueRanking(method) {
     const pos=Object.keys(s.pos).length?Object.keys(s.pos).sort((a,b)=>s.pos[b]-s.pos[a])[0]:'SF';
     const ppg=+(s.pts/gp).toFixed(1),rpg=+(s.reb/gp).toFixed(1),apg=+(s.ast/gp).toFixed(1);
     const spg=+(s.stl/gp).toFixed(1),bpg=+(s.blk/gp).toFixed(1),tpg=+(s.to/gp).toFixed(1);
-    const avgGrade=s.gc?s.gs/s.gc:50;
-    let per,cs;
+    const totObj = {gp, pts:s.pts, reb:s.reb, ast:s.ast, stl:s.stl, blk:s.blk, to:s.to,
+                    fgm:s.fgm, fga:s.fga, ftm:s.ftm, fta:s.fta, gradeSum:s.gs};
+    let per, cs;
+    per = +calcPER(totObj).toFixed(1);
     if (m==='positional') {
       const w=_dsPosW[pos]||_dsPosW.SF;
-      per=+(ppg*w.per[0]+rpg*w.per[1]+apg*w.per[2]+spg*w.per[3]+bpg*w.per[4]-tpg*1.5).toFixed(1);
       cs=+((Math.min(ppg/50,1)*100)*w.cs[0]+(Math.min(spg/3,1)*100)*w.cs[1]+
            (Math.min(bpg/3,1)*100)*w.cs[2]+(Math.min(rpg/20,1)*100)*w.cs[3]+
-           (Math.min(apg/15,1)*100)*w.cs[4]+avgGrade*w.cs[5]).toFixed(1);
-    } else if (m==='kw5' || m==='top98') {
-      per=+(ppg+rpg*1.2+apg*1.5+spg*2+bpg*2-tpg*1.5).toFixed(1);
-      cs=+((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/3,1)*100)*0.20+
-           (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
-           (Math.min(apg/15,1)*100)*0.12).toFixed(1);
+           (Math.min(apg/15,1)*100)*w.cs[4]+(s.gs/gp)*w.cs[5]).toFixed(1);
+    } else if (m==='classic') {
+      cs = +calcCompositeScore(totObj).toFixed(1);
     } else {
-      per=+(ppg+rpg*1.2+apg*1.5+spg*2+bpg*2-tpg*1.5).toFixed(1);
-      cs=+((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/3,1)*100)*0.20+
-           (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
-           (Math.min(apg/15,1)*100)*0.12+avgGrade*0.10).toFixed(1);
+      // kw5 / top98 — jak calcCompositeScore ale bez grade, z maturity
+      const mat = gp / (gp + 5);
+      cs = +(((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/4,1)*100)*0.20+
+               (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
+               (Math.min(apg/15,1)*100)*0.12) * mat).toFixed(1);
     }
     return {name,pos,gp,ppg,rpg,apg,spg,bpg,tpg,per,cs};
   });
@@ -11916,31 +11916,29 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
       const pl=[...(m.team1.players||[]),...(m.team2.players||[])].find(x=>x.name===iname);
       if(pl){acc.pts+=pl.pts||0;acc.reb+=pl.reb||0;acc.ast+=pl.ast||0;
               acc.stl+=pl.stl||0;acc.blk+=pl.blk||0;acc.to+=pl.to||0;
+              acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
               acc.gs+=_dsGradeScore(pl.grade);acc.gc++;}
       return acc;
-    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0});
+    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,ftm:0,fta:0,gs:0,gc:0});
     const ppg=+(tot.pts/gp).toFixed(1),rpg=+(tot.reb/gp).toFixed(1),apg=+(tot.ast/gp).toFixed(1);
     const spg=+(tot.stl/gp).toFixed(1),bpg=+(tot.blk/gp).toFixed(1),tpg=+(tot.to/gp).toFixed(1);
-    const avgGrade=tot.gc?tot.gs/tot.gc:50;
+    const totObj = {gp, pts:tot.pts, reb:tot.reb, ast:tot.ast, stl:tot.stl, blk:tot.blk,
+                    to:tot.to, fgm:tot.fgm, fga:tot.fga, ftm:tot.ftm, fta:tot.fta, gradeSum:tot.gs};
     let per, cs;
+    per = +calcPER(totObj).toFixed(1);
     if (method === 'positional') {
       const w=_dsPosW[pos]||_dsPosW.SF;
-      per=+(ppg*w.per[0]+rpg*w.per[1]+apg*w.per[2]+spg*w.per[3]+bpg*w.per[4]-tpg*1.5).toFixed(1);
       cs=+((Math.min(ppg/50,1)*100)*w.cs[0]+(Math.min(spg/3,1)*100)*w.cs[1]+
            (Math.min(bpg/3,1)*100)*w.cs[2]+(Math.min(rpg/20,1)*100)*w.cs[3]+
-           (Math.min(apg/15,1)*100)*w.cs[4]+avgGrade*w.cs[5]).toFixed(1);
-    } else if (method === 'kw5' || method === 'top98') {
-      // KW5 / TOP98 — bez składnika ocen (grade), czysto statystyczny
-      per=+(ppg+rpg*1.2+apg*1.5+spg*2+bpg*2-tpg*1.5).toFixed(1);
-      cs=+((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/3,1)*100)*0.20+
-           (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
-           (Math.min(apg/15,1)*100)*0.12).toFixed(1);
+           (Math.min(apg/15,1)*100)*w.cs[4]+(tot.gs/gp)*w.cs[5]).toFixed(1);
+    } else if (method === 'classic') {
+      cs = +calcCompositeScore(totObj).toFixed(1);
     } else {
-      // Classic — jak KW5 ale ze składnikiem ocen (grade 10%)
-      per=+(ppg+rpg*1.2+apg*1.5+spg*2+bpg*2-tpg*1.5).toFixed(1);
-      cs=+((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/3,1)*100)*0.20+
-           (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
-           (Math.min(apg/15,1)*100)*0.12+avgGrade*0.10).toFixed(1);
+      // kw5 / top98 — jak calcCompositeScore ale bez grade, z maturity
+      const mat = gp / (gp + 5);
+      cs = +(((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/4,1)*100)*0.20+
+               (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
+               (Math.min(apg/15,1)*100)*0.12) * mat).toFixed(1);
     }
     return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,ingameName:iname,matchMethod:resolved?.method};
   });
