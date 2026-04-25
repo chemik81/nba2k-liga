@@ -6776,7 +6776,17 @@ function renderDraftView(eventId) {
   const overlay = document.getElementById('draft-overlay');
   if(!ev || !overlay) return;
 
-  const pool = ev.draftPool || [];
+  // Build OVR lookup by player id for pool and picked players
+  const _allDraftPlayers = [
+    ...(ev.draftPool||[]),
+    ...(ev.teams||[]).flatMap(t => t.players||[])
+  ];
+  const _draftOvrEnriched = _dsComputeOvr(_allDraftPlayers, {});
+  const _draftOvrById = {};
+  _draftOvrEnriched.forEach(p => { _draftOvrById[p.id] = p.ovr; });
+  const _getOvr = (p) => _draftOvrById[p.id] ?? p.ovr;
+
+  const pool = (ev.draftPool || []).map(p => ({...p, ovr: _getOvr(p)}));
   const order = ev.draftOrder || [];
   const turn = ev.draftTurn || 0;
   const notStarted = ev.status === 'closed' && order.length === 0;
@@ -6865,7 +6875,8 @@ function renderDraftView(eventId) {
     <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:10px">
       ${(ev.teams||[]).map((t, ti) => {
         const isOtc = !isDone && ti === currentTeamIdx;
-        const teamPicks = (t.players||[]).filter(p => p.id !== t.captain?.id);
+        const teamPicks = (t.players||[]).filter(p => p.id !== t.captain?.id).map(p => ({...p, ovr: _getOvr(p)}));
+        const captainOvr = t.captain ? _getOvr(t.captain) : null;
         const logoHtml = t.logoB64 ? `<img src="${t.logoB64}" style="width:100%;height:100%;object-fit:cover">` : (t.name||'?')[0];
         const onlineStatus = (ev.gmOnline||[]).includes(t.captain?.id);
         return `<div style="background:#10131a;border:1px solid ${isOtc ? '#f5c518' : 'rgba(245,197,24,.15)'};border-radius:8px;overflow:hidden;${isOtc ? 'box-shadow:0 0 16px rgba(245,197,24,.2)' : ''}">
@@ -6883,7 +6894,7 @@ function renderDraftView(eventId) {
           <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(245,197,24,.08);min-height:38px">
             <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 6px;border-radius:4px;min-width:32px;text-align:center;background:rgba(245,197,24,.15);color:#f5c518">★</span>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f5c518">${t.captain?.name || '—'}</div>
-            ${t.captain?.ovr ? `<span style="background:${_dsOvrColor(t.captain.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px">${t.captain.ovr}</span>` : ''}
+            ${captainOvr ? `<span style="background:${_dsOvrColor(captainOvr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px">${captainOvr}</span>` : ''}
             <span style="font-size:11px;color:#f5c518;flex-shrink:0">kpt</span>
           </div>
           ${teamPicks.map((p, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.04);min-height:38px">
