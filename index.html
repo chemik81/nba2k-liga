@@ -1953,6 +1953,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
+      ovrMethod,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2083,6 +2084,7 @@ async function loadData() {
     events = record.events || []
     playoffs = record.playoffs || [];;
     discordPsnMap = record.discordPsnMap || {};
+    if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
     // Fix playoffs with missing startDate — use createdAt date as fallback
     playoffs.forEach(po => {
       if (!po.startDate && po.createdAt) {
