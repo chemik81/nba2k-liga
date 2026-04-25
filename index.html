@@ -6785,10 +6785,11 @@ function renderDraftView(eventId) {
   const pool = ev.draftPool || [];
   const order = ev.draftOrder || [];
   const turn = ev.draftTurn || 0;
-  const isDone = turn >= order.length;
-  const currentTeamIdx = isDone ? -1 : order[turn];
-  const currentTeam = isDone ? null : (ev.teams[currentTeamIdx] || null);
-  if(!isDone && !currentTeam) { console.warn('[Draft] currentTeamIdx', currentTeamIdx, 'out of range, teams:', ev.teams.length); }
+  const notStarted = ev.status === 'closed' && order.length === 0;
+  const isDone = !notStarted && (ev.status !== 'draft' || (order.length > 0 && turn >= order.length));
+  const currentTeamIdx = (isDone || notStarted) ? -1 : order[turn];
+  const currentTeam = (isDone || notStarted) ? null : (ev.teams[currentTeamIdx] || null);
+  if(!isDone && !notStarted && !currentTeam) { console.warn('[Draft] currentTeamIdx', currentTeamIdx, 'out of range, teams:', ev.teams.length); }
   const isMyTurn = currentTeam && discordUser && currentTeam.captain?.id === discordUser.id;
   const isAdmin = _isEventsAdminSync();
   const lastPick = ev.lastPick || null;
@@ -6799,7 +6800,13 @@ function renderDraftView(eventId) {
   }
 
   let topContentHtml = '';
-  if(isDone) {
+  if(notStarted) {
+    topContentHtml = `<div style="text-align:center;padding:2.5rem 2rem;background:#10131a;border:2px solid rgba(245,197,24,.3);border-radius:8px;margin-bottom:20px">
+      <div style="font-size:2.5rem;margin-bottom:.5rem">⏳</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;color:#6b7080;letter-spacing:2px">OCZEKIWANIE NA START</div>
+      <div style="color:#6b7080;margin-top:.5rem;font-size:.9rem">Kapitanowie zostali przypisani. Admin zaraz uruchomi draft.</div>
+    </div>`;
+  } else if(isDone) {
     topContentHtml = `<div style="text-align:center;padding:3rem 2rem;background:#10131a;border:2px solid #f5c518;border-radius:8px;margin-bottom:20px">
       <div style="font-size:2.5rem;margin-bottom:.5rem">🏆</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:2.5rem;font-weight:900;color:#f5c518;letter-spacing:2px">DRAFT ZAKOŃCZONY!</div>
@@ -6902,9 +6909,9 @@ function renderDraftView(eventId) {
   overlay.innerHTML = `
     <style>@keyframes dvticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style>
     <div style="background:#10131a;border-bottom:2px solid #f5c518;padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;flex-wrap:wrap">
-      <div style="width:8px;height:8px;border-radius:50%;background:${isDone?'#6b7080':'#4ade80'};${isDone?'':'animation:hpulse 1.5s infinite'};flex-shrink:0"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:${isDone||notStarted?'#6b7080':'#4ade80'};${isDone||notStarted?'':'animation:hpulse 1.5s infinite'};flex-shrink:0"></div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:#f5c518;letter-spacing:.05em">🎯 DRAFT — ${ev.title}</div>
-      <div style="font-size:12px;color:#6b7080;text-transform:uppercase;letter-spacing:.1em">${isDone ? 'ZAKOŃCZONY' : 'LIVE'}</div>
+      <div style="font-size:12px;color:#6b7080;text-transform:uppercase;letter-spacing:.1em">${isDone ? 'ZAKOŃCZONY' : notStarted ? 'OCZEKIWANIE' : 'LIVE'}</div>
       ${!isDone && (ev.teams||[]).length ? `<span style="font-size:.75rem;color:#6b7080">GM: <b style="color:${(ev.gmOnline||[]).length>=(ev.teams||[]).length?'#4ade80':'#f5c518'}">${(ev.gmOnline||[]).length}/${(ev.teams||[]).length}</b> online</span>` : ''}
       <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
         <button onclick="copyDraftWatchLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">🔗 Link</button>
@@ -6915,7 +6922,7 @@ function renderDraftView(eventId) {
     <div style="max-width:1400px;margin:0 auto;padding:20px;color:#e8eaf0;font-family:'Barlow',sans-serif">
       ${topContentHtml}
       ${tickerHtml}
-      ${isDone
+      ${(isDone || notStarted)
         ? boardHtml
         : `<div style="display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start">${poolHtml}${boardHtml}</div>`}
     </div>`;
