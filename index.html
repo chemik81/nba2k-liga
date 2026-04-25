@@ -5213,21 +5213,13 @@ async function loadTestEvents() {
   const testEvs = [
     {
       id:'test_ev_1',
-      title:'Demo Draft — 20 graczy (gotowy do startu)',
+      title:'Demo Draft — otwarte zapisy (test powiadomień)',
       type:'draft', date: today,
-      description:'Event testowy — zapisanych 20 graczy, kapitanowie wylosowani, gotowy do Start Draft.',
-      status:'closed',
+      description:'Event testowy — otwarte zapisy. Dołącz jako gracz, zamknij zapisy, wylosuj kapitanów, wyślij powiadomienia.',
+      status:'open',
       maxPlayers:20, numTeams:4,
-      players: players20,
-      teams:[
-        {name:'Drużyna A', captain:players20[9], players:[players20[9]]},
-        {name:'Drużyna B', captain:players20[4], players:[players20[4]]},
-        {name:'Drużyna C', captain:players20[10], players:[players20[10]]},
-        {name:'Drużyna D', captain:players20[8], players:[players20[8]]},
-      ],
-      draftPool: players20.filter((_,i) => ![9,4,10,8].includes(i)),
-      draftTurn:0,
-      draftOrder:[],
+      players: players20.slice(0, 12),
+      teams:[], draftPool:[], draftTurn:0, draftOrder:[],
       createdAt: new Date().toISOString(),
     },
     {
