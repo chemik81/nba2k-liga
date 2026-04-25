@@ -12300,6 +12300,7 @@ function _dsS3(ev) {
       <button onclick="_dsSelAll(true)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit">Zaznacz wszystkich</button>
       <button onclick="_dsSelAll(false)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit">Odznacz wszystkich</button>
       <button onclick="_dsExclLow()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit">Wyklucz &lt;2 GP</button>
+      <button onclick="_dsSavePool()" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.3rem .65rem;font-size:.75rem;cursor:pointer;font-family:inherit;font-weight:700">💾 Zapisz</button>
     </div>
   </div>
   <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem">
@@ -12340,6 +12341,21 @@ function _dsExclLow() {
     const cb=document.getElementById('ds-pcb-'+i); if(cb)cb.checked=false;
     const row=document.getElementById('ds-pr-'+i); if(row)row.style.opacity='.35';
   });
+}
+async function _dsSavePool() {
+  const ev = events.find(e => e.id === _ds.eventId);
+  if(!ev) return;
+  // Save current draft pool (non-excluded, non-captain players) to the event
+  ev.draftPool = _ds.playerPool.filter(p => !p.isCaptain && !p.excluded);
+  // Also persist any manual PSN name overrides
+  _ds.playerPool.forEach(p => {
+    if(p.ingameName) {
+      const ep = (ev.players||[]).find(x => x.id === p.id);
+      if(ep) ep._psnOverride = p.ingameName;
+    }
+  });
+  const ok = await saveData(true);
+  if(ok !== false) showToast('✅ Pula graczy zapisana!', 'success');
 }
 function _dsFPos(pos) {
   document.querySelectorAll('[id^="ds-fp-"]').forEach(b=>{
