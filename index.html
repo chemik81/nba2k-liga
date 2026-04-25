@@ -6977,13 +6977,24 @@ async function openGMPanel(eventId) {
   if(!ev || !discordUser) return;
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
   if(!myTeam) { showToast('❌ Nie jesteś kapitanem w tym drafcie', 'error'); return; }
-  if(!['closed','draft','active'].includes(ev.status)) { showToast('❌ Draft jeszcze nie jest gotowy', 'error'); return; }
-  // Mark GM as online locally (no saveData — captain doesn't have write token)
+  // Allow 'open' status when teams are already assigned (wizard step 5 pre-launch check-in)
+  if(!['open','closed','draft','active'].includes(ev.status)) { showToast('❌ Draft jeszcze nie jest gotowy', 'error'); return; }
+  // Mark GM as online
   if(!ev.gmOnline) ev.gmOnline = [];
-  if(!ev.gmOnline.includes(discordUser.id)) {
-    ev.gmOnline.push(discordUser.id);
-    // Try to save silently — only works if events admin or full admin is logged in
+  if(!ev.gmOnline.includes(discordUser.id)) ev.gmOnline.push(discordUser.id);
+  // Attempt to persist online status — try admin saveData first, then captain ping fallback
+  const adminToken = localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash') || '';
+  if(adminToken && workerUrl) {
     try { await saveData(true); } catch(e) {}
+  } else if(workerUrl && discordUser) {
+    // Non-admin captain: send a lightweight ping via event-signup update so admin poll detects it
+    try {
+      const pingPlayer = { ...(ev.players||[]).find(p=>p.id===discordUser.id)||{}, id: discordUser.id, name: discordUser.name, discordTag: discordUser.discordTag, avatar: discordUser.avatar, gmOnlineAt: Date.now() };
+      await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId, player: pingPlayer })
+      });
+    } catch(e) {}
   }
   window._gmPanelEventId = eventId;
   renderGMPanel(eventId);
@@ -12597,12 +12608,21 @@ function _dsStartPoll() {
           const d=await r.json();
           const freshEv=(d.record?.events||[]).find(e=>e.id===_ds.eventId);
           if (freshEv) {
-            const gmOnline=freshEv.gmOnline||[];
+            // Merge gmOnline from KV into local events[] so saveData doesn't overwrite it
+            const localEv=events.find(e=>e.id===_ds.eventId);
+            if(localEv) {
+              const merged=[...new Set([...(localEv.gmOnline||[]),...(freshEv.gmOnline||[])])];
+              localEv.gmOnline=merged;
+              freshEv.gmOnline=merged;
+            }
+            // Also check gmOnlineAt on players (captain ping fallback for non-admin captains)
+            const pingIds=(freshEv.players||[]).filter(p=>p.gmOnlineAt && Date.now()-p.gmOnlineAt<120000).map(p=>p.id);
+            const gmOnline=[...(freshEv.gmOnline||[]),...pingIds];
             _ds.teams.forEach((t,i)=>{
               const on=gmOnline.includes(t.captainId);
               const dot=document.getElementById('ds-dot-'+i);
               const lbl=document.getElementById('ds-dotlbl-'+i);
-              if (dot) { dot.style.background=on?'#2ecc71':'#555'; }
+              if (dot) { dot.style.background=on?'#2ecc71':'#555'; if(on) dot.style.boxShadow='0 0 6px #2ecc71'; else dot.style.boxShadow='none'; }
               if (lbl) { lbl.textContent=on?'Online':'Offline'; lbl.style.color=on?'#2ecc71':'var(--muted)'; }
             });
           }
