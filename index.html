@@ -9181,15 +9181,19 @@ async function _discordNotify(payload) {
         body: JSON.stringify(payload)
       });
       if (r.ok || r.status === 204) return true;
+      // Worker returned error — log status for debugging
+      console.warn('Worker /discord-notify returned', r.status, await r.text().catch(()=>''));
     } catch(e) { console.warn('Worker discord-notify error:', e); }
   }
   if (!discordWebhookUrl) return false;
-  await fetch(discordWebhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return true;
+  try {
+    const r2 = await fetch(discordWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return r2.ok || r2.status === 204;
+  } catch(e) { console.warn('Direct webhook error:', e); return false; }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -9787,12 +9791,12 @@ function checkEventUrlParam() {
 
     if(!discordUser) {
       // Not logged in — store intent and redirect to Discord OAuth.
-      // Return URL must NOT include #gm — Workers append ?discord_user= as query
-      // param and some implementations break when the return URL has a fragment.
-      // The pending intent in localStorage is the reliable fallback.
+      // Return URL MUST be bare (no ? or # params) because the Worker does string
+      // concatenation: return_url + '?discord_user=TOKEN', so any existing ? or #
+      // in return_url breaks the resulting URL. State is preserved via localStorage.
       localStorage.setItem('nba2k_pending_gm_event', evId);
       if(workerUrl) {
-        const returnUrl = `${location.origin}${location.pathname}?w=${encodeURIComponent(workerUrl)}&event=${evId}`;
+        const returnUrl = `${location.origin}${location.pathname}`;
         window.location.href = workerUrl.replace(/\/$/, '') + '/discord-login?return=' + encodeURIComponent(returnUrl);
       } else {
         showView('events');
@@ -9801,18 +9805,18 @@ function checkEventUrlParam() {
       return;
     }
 
+    // Already logged in — show the page immediately while retrying captain check
+    showView('events');
     const tryOpenGM = (attempts) => {
       const ev = events.find(e => e.id === evId);
       if(!ev) {
         if(attempts > 0) { setTimeout(() => tryOpenGM(attempts - 1), 500); return; }
         showToast('❌ Nie znaleziono eventu draftu', 'error');
-        showView('events');
         return;
       }
       // Also wait if ev.teams has no captains yet (KV propagation lag after _dsNotify)
       const isCaptain = (ev.teams||[]).some(t => t.captain?.id === discordUser?.id);
       if(!isCaptain && attempts > 0) { setTimeout(() => tryOpenGM(attempts - 1), 500); return; }
-      showView('events');
       setTimeout(() => openGMPanel(evId), 300);
     };
     setTimeout(() => tryOpenGM(10), 600);
@@ -12095,7 +12099,7 @@ function _dsBuildOrder() {
 
 // ── nawigacja ────────────────────────────────────────────────
 
-function _dsNext() {
+async function _dsNext() {
   if (_ds.step === 1) {
     _ds.numTeams = +document.getElementById('ds-numteams').value;
     _ds.perTeam  = +document.getElementById('ds-perteam').value;
@@ -12104,6 +12108,8 @@ function _dsNext() {
     while (_ds.teams.length < _ds.numTeams)
       _ds.teams.push({name:'Drużyna '+String.fromCharCode(65+_ds.teams.length), captainId:''});
     _ds.teams = _ds.teams.slice(0, _ds.numTeams);
+    const ev1 = events.find(e => e.id === _ds.eventId);
+    if (ev1) { ev1.numTeams=_ds.numTeams; ev1.perTeam=_ds.perTeam; ev1.timerSecs=_ds.timerSecs; ev1.draftMethod=_ds.format; saveData(true); }
   } else if (_ds.step === 2) {
     for (let i=0;i<_ds.numTeams;i++) {
       const nm = document.getElementById('ds-tname-'+i)?.value?.trim();
@@ -12218,17 +12224,24 @@ function _dsS1(ev) {
 function _dsS2(ev) {
   const players = ev.players||[];
   const rows = _ds.teams.map((t,i)=>{
+    const cap = players.find(p => p.id === t.captainId);
     const opts=players.map(p=>`<option value="${p.id}" ${p.id===t.captainId?'selected':''}>${p.name}${p.discordTag&&p.discordTag!==p.name?' ('+p.discordTag+')':''}</option>`).join('');
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.85rem 1rem;display:grid;grid-template-columns:1fr 1fr;gap:.75rem;align-items:end">
-      <div>
-        <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Nazwa drużyny</div>
-        <input id="ds-tname-${i}" type="text" value="${t.name}" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem;box-sizing:border-box">
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:rgba(245,197,24,.07);border-bottom:1px solid var(--border)">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:1px">${t.name}</span>
+        ${cap?`<span style="font-size:.75rem;color:var(--accent)">🏆 kpt: ${cap.name}</span>`:`<span style="font-size:.75rem;color:var(--muted)">— brak kapitana —</span>`}
       </div>
-      <div>
-        <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Kapitan</div>
-        <select id="ds-capt-${i}" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem">
-          <option value="">— wybierz —</option>${opts}
-        </select>
+      <div style="padding:.85rem 1rem;display:grid;grid-template-columns:1fr 1fr;gap:.75rem;align-items:end">
+        <div>
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Nazwa drużyny</div>
+          <input id="ds-tname-${i}" type="text" value="${t.name}" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem">Kapitan</div>
+          <select id="ds-capt-${i}" onchange="_dsS2Update()" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.9rem">
+            <option value="">— wybierz —</option>${opts}
+          </select>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -12237,6 +12250,17 @@ function _dsS2(ev) {
     <button onclick="_dsRandCaptains()" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.45rem 1.1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;cursor:pointer;letter-spacing:.5px">🎲 Losuj kapitanów</button>
   </div>
   <div style="display:flex;flex-direction:column;gap:.6rem">${rows}</div>`;
+}
+
+function _dsS2Update() {
+  // Read all current team name + captain values into _ds, then re-render
+  for(let i=0;i<_ds.numTeams;i++){
+    const nm=document.getElementById('ds-tname-'+i)?.value?.trim();
+    const cid=document.getElementById('ds-capt-'+i)?.value||'';
+    if(nm) _ds.teams[i].name=nm;
+    _ds.teams[i].captainId=cid;
+  }
+  _dsRender();
 }
 
 function _dsRandCaptains() {
@@ -12536,13 +12560,15 @@ async function _dsNotify(eventId) {
     await saveData(true);
   }
 
-  try {
-    await _discordNotify({
-      content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`,
-      allowed_mentions:{parse:[],users:capIds}
-    });
+  const ok = await _discordNotify({
+    content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`,
+    allowed_mentions:{parse:[],users:capIds}
+  });
+  if(ok) {
     showToast('📣 Powiadomienie wysłane!','success');
-  } catch(e) { showToast('❌ Błąd wysyłania powiadomienia','error'); }
+  } else {
+    showToast('❌ Błąd wysyłania — sprawdź konfigurację webhook w ustawieniach','error');
+  }
 }
 
 async function _dsLaunch() {
