@@ -7168,7 +7168,15 @@ async function finishDraft(eventId) {
   ev.status = 'active';
   ev.draftPool = [];
   await saveData();
-  sendEventWebhook('🏆 Draft zakończony!', '**' + (ev.title||'') + '**\n' + (ev.teams||[]).map(t => t.name + ': ' + (t.players||[]).map(p=>p.name).join(', ')).join('\n'), 0x2ecc71);
+  sendEventWebhook('🏆 Draft zakończony!',
+    '**' + (ev.title||'') + '**\n' +
+    (ev.teams||[]).map(t => {
+      const capName = t.captain?.name || '—';
+      const picked = (t.players||[]).filter(p => p.id !== t.captain?.id).map(p => p.name).join(', ');
+      return `**${t.name}** (kpt: ${capName})${picked ? ': ' + picked : ''}`;
+    }).join('\n') +
+    '\n\n🎮 Róbcie screeny z wynikami meczów. Powodzenia dla wszystkich!',
+    0x2ecc71);
   stopDraftPolling();
   document.getElementById('draft-overlay').style.display = 'none';
   renderEvents();
@@ -12472,12 +12480,14 @@ async function _dsNotify(eventId) {
   if (!workerUrl && !discordWebhookUrl) { showToast('⚠️ Brak Discord webhook w ustawieniach','warning'); return; }
   const wu=localStorage.getItem('nba2k_worker_url')||'';
   const gmUrl=`${location.origin}${location.pathname}?w=${encodeURIComponent(wu)}&event=${ev.id}#gm`;
-  const caps=_ds.teams.map(t=>{
-    const cap=(ev?.players||[]).find(p=>p.id===t.captainId);
-    return cap?.discordTag?`@${cap.discordTag}`:cap?.name||'';
-  }).filter(Boolean).join(', ');
+  const capPlayers=_ds.teams.map(t=>(ev?.players||[]).find(p=>p.id===t.captainId)).filter(Boolean);
+  const caps=capPlayers.map(cap=>`<@${cap.id}>`).join(', ');
+  const capIds=capPlayers.map(cap=>cap.id);
   try {
-    await _discordNotify({content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`});
+    await _discordNotify({
+      content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`,
+      allowed_mentions:{parse:[],users:capIds}
+    });
     showToast('📣 Powiadomienie wysłane!','success');
   } catch(e) { showToast('❌ Błąd wysyłania powiadomienia','error'); }
 }
