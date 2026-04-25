@@ -12115,31 +12115,33 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
   });
 
   // ── Skalowanie OVR ────────────────────────────────────────────
+  // Build PSN→OVR lookup from the global ranking (sorted desc by OVR).
+  // A player can appear multiple times (one row per position played).
+  // We must take the FIRST occurrence per PSN name (= highest OVR),
+  // NOT the last — otherwise the lower-OVR position overwrites the best one.
+  const _buildGlobalByPsn = (ranking) => {
+    const m = {};
+    ranking.forEach(g => { if (!(g.name in m)) m[g.name] = g.ovr; });
+    return m;
+  };
+
   if (method === 'top98') {
-    // Use the GLOBAL ranking as reference pool so event-list OVR matches the ranking panel.
-    // Without this, OVR is scaled only against event participants (e.g. best SG among 21
-    // signups = 98) which differs from the global ranking (best SG among 112 players).
-    const globalRanking = _dsLeagueRanking('top98'); // [{name:PSN, ovr, ...}]
-    const globalByPsn = {};
-    globalRanking.forEach(g => { globalByPsn[g.name] = g.ovr; });
-    // Fall back to local scaling only for players with no match history at all
+    const globalByPsn = _buildGlobalByPsn(_dsLeagueRanking('top98'));
     const comp = p => (p.per * 0.6 + p.cs * 0.4) * (0.5 + 0.5 * p.gp / (p.gp + 5));
     const byPos = {};
     enriched.forEach(p => { if (!byPos[p.pos]) byPos[p.pos]=[]; byPos[p.pos].push(p); });
     return enriched.map(p => {
       if (p.ingameName && globalByPsn[p.ingameName] !== undefined)
         return {...p, ovr: globalByPsn[p.ingameName]};
-      // No history — scale locally within position group as fallback
+      // No match history — scale locally within position group
       const grp = byPos[p.pos] || [p];
       const maxC = Math.max(...grp.map(comp), 0.01);
       return {...p, ovr: Math.max(40, Math.min(98, Math.round(40 + comp(p) / maxC * 58)))};
     }).sort((a,b) => b.ovr - a.ovr);
   }
 
-  // classic / positional / kw5: also use global ranking OVR for consistent values
-  const globalRankingFb = _dsLeagueRanking(method);
-  const globalByPsnFb = {};
-  globalRankingFb.forEach(g => { globalByPsnFb[g.name] = g.ovr; });
+  // classic / positional / kw5
+  const globalByPsnFb = _buildGlobalByPsn(_dsLeagueRanking(method));
   const pct=(sorted,val)=>sorted.length<=1?50:sorted.filter(v=>v<val).length/(sorted.length-1)*100;
   const sP=enriched.map(p=>p.per).sort((a,b)=>a-b);
   const sC=enriched.map(p=>p.cs).sort((a,b)=>a-b);
