@@ -9786,10 +9786,13 @@ function checkEventUrlParam() {
     window.history.replaceState({}, '', window.location.pathname);
 
     if(!discordUser) {
-      // Not logged in — store intent and redirect to Discord OAuth
+      // Not logged in — store intent and redirect to Discord OAuth.
+      // Return URL must NOT include #gm — Workers append ?discord_user= as query
+      // param and some implementations break when the return URL has a fragment.
+      // The pending intent in localStorage is the reliable fallback.
       localStorage.setItem('nba2k_pending_gm_event', evId);
       if(workerUrl) {
-        const returnUrl = `${location.origin}${location.pathname}?w=${encodeURIComponent(workerUrl)}&event=${evId}#gm`;
+        const returnUrl = `${location.origin}${location.pathname}?w=${encodeURIComponent(workerUrl)}&event=${evId}`;
         window.location.href = workerUrl.replace(/\/$/, '') + '/discord-login?return=' + encodeURIComponent(returnUrl);
       } else {
         showView('events');
@@ -9806,6 +9809,9 @@ function checkEventUrlParam() {
         showView('events');
         return;
       }
+      // Also wait if ev.teams has no captains yet (KV propagation lag after _dsNotify)
+      const isCaptain = (ev.teams||[]).some(t => t.captain?.id === discordUser?.id);
+      if(!isCaptain && attempts > 0) { setTimeout(() => tryOpenGM(attempts - 1), 500); return; }
       showView('events');
       setTimeout(() => openGMPanel(evId), 300);
     };
