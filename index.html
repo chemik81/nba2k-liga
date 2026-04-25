@@ -6850,6 +6850,7 @@ function renderDraftView(eventId) {
             ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:4px;padding:.1rem .35rem">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:#6b7080;font-size:.68rem">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}` : p.positions?.length ? `<span style="color:#f5c518">${p.positions.join(' · ')}</span>` : ''}
           </div>
         </div>
+        ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.8rem;flex-shrink:0">${p.ovr}</span>` : ''}
         ${canPick ? '<span style="color:#f5c518;font-size:.8rem;flex-shrink:0;font-weight:700">+ Pick</span>' : ''}
       </div>`).join('')}
       ${pool.length === 0 && !isDone ? '<div style="color:#6b7080;font-size:.85rem;padding:.5rem">Wszyscy gracze wybrani</div>' : ''}
@@ -6880,13 +6881,14 @@ function renderDraftView(eventId) {
           <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(245,197,24,.08);min-height:38px">
             <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 6px;border-radius:4px;min-width:32px;text-align:center;background:rgba(245,197,24,.15);color:#f5c518">★</span>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f5c518">${t.captain?.name || '—'}</div>
+            ${t.captain?.ovr ? `<span style="background:${_dsOvrColor(t.captain.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px">${t.captain.ovr}</span>` : ''}
             <span style="font-size:11px;color:#f5c518;flex-shrink:0">kpt</span>
           </div>
           ${teamPicks.map((p, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.04);min-height:38px">
             <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 6px;border-radius:4px;min-width:32px;text-align:center;background:rgba(255,255,255,.06);color:#6b7080">${i+1}</span>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e8eaf0">${p.name}</div>
             ${p.positions?.length ? `<span style="font-size:10px;color:#f5c518;font-weight:700;flex-shrink:0">${p.positions.join('·')}</span>` : ''}
-            <span style="font-size:11px;color:#6b7080;flex-shrink:0">#${i+1}</span>
+            ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;flex-shrink:0">${p.ovr}</span>` : ''}
           </div>`).join('')}
           ${Array.from({length: Math.max(0, perTeam - teamPicks.length)}, () => `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.04);min-height:38px;opacity:.4">
             <span style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 6px;border-radius:4px;min-width:32px;text-align:center;background:rgba(255,255,255,.04);color:#6b7080">—</span>
@@ -7065,6 +7067,7 @@ function renderGMPanel(eventId) {
                 ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:4px;padding:.1rem .3rem">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:#6b7080">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}` : p.positions?.length ? `<span style="color:#f5c518">${p.positions.join(' · ')}</span>` : ''}
               </div>
             </div>
+            ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem;flex-shrink:0">${p.ovr}</span>` : ''}
             ${isMyTurn ? '<span style="color:#f5c518;font-size:.8rem;flex-shrink:0;font-weight:700">+ Pick</span>' : ''}
           </div>`).join('')}
           ${pool.length === 0 ? '<div style="color:#6b7080;font-size:.85rem;padding:.5rem">Wszyscy wybrani</div>' : ''}
@@ -7072,8 +7075,9 @@ function renderGMPanel(eventId) {
       </div>
       <div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem;color:#6b7080">🏀 MÓJ SKŁAD (${myPicks.length}/${perTeam})</div>
-        <div style="background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem">
-          <div style="font-size:.85rem;color:#f5c518;font-weight:700">★ ${myTeam.captain?.name} (kpt)</div>
+        <div style="background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem">
+          <div style="flex:1;font-size:.85rem;color:#f5c518;font-weight:700">★ ${myTeam.captain?.name} (kpt)</div>
+          ${myTeam.captain?.ovr ? `<span style="background:${_dsOvrColor(myTeam.captain.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem">${myTeam.captain.ovr}</span>` : ''}
         </div>
         ${myPicks.map((p, i) => `<div style="background:#161922;border:1px solid rgba(245,197,24,.1);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem">
           <span style="font-size:.75rem;color:#6b7080">#${i+1}</span>
@@ -7083,6 +7087,7 @@ function renderGMPanel(eventId) {
               ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:#6b7080">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}` : p.positions?.length ? `<span style="color:#f5c518">${p.positions.join('·')}</span>` : ''}
             </div>
           </div>
+          ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem">${p.ovr}</span>` : ''}
         </div>`).join('')}
         ${Array.from({length: Math.max(0, perTeam - myPicks.length)}, () => `<div style="background:#161922;border:1px dashed rgba(245,197,24,.15);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;opacity:.35">
           <div style="font-size:.8rem;color:#6b7080">— wolny slot</div>
@@ -11618,7 +11623,7 @@ function closePlayoffModal() {
 
 function _dsLeagueRanking(method) {
   const m = method || ovrMethod;
-  // Key by (name, pos) — each player×position is a separate entry
+  // Key by (name, pos) — each player×position is a separate entry; no-pos uses plain name key
   const statsMap = {};
   matches.forEach(match => {
     [...(match.team1.players||[]),...(match.team2.players||[])].forEach(pl => {
@@ -11632,6 +11637,23 @@ function _dsLeagueRanking(method) {
       s.fgm+=pl.fgm||0; s.fga+=pl.fga||0; s.ftm+=pl.ftm||0; s.fta+=pl.fta||0;
       s.gs+=gradeToNum(pl.grade||'B'); s.gc++; s.gp++;
     });
+  });
+  // Merge no-position entries ("-") into existing positional entries for the same player.
+  // If a player has both "Name\x00PG" and "Name" (no-pos), fold the no-pos games into PG.
+  // If a player has ONLY no-pos entries, keep them as-is (shows as "—").
+  Object.keys(statsMap).forEach(key => {
+    if (key.includes('\x00')) return; // already a positional key
+    const noPos = statsMap[key];
+    const posKeys = Object.keys(statsMap).filter(k => k.startsWith(noPos.name + '\x00'));
+    if (!posKeys.length) return; // no positional entry — keep as-is
+    // merge into the positional entry with most games
+    const mainKey = posKeys.sort((a,b) => statsMap[b].gp - statsMap[a].gp)[0];
+    const main = statsMap[mainKey];
+    main.pts+=noPos.pts; main.reb+=noPos.reb; main.ast+=noPos.ast;
+    main.stl+=noPos.stl; main.blk+=noPos.blk; main.to+=noPos.to;
+    main.fgm+=noPos.fgm; main.fga+=noPos.fga; main.ftm+=noPos.ftm; main.fta+=noPos.fta;
+    main.gs+=noPos.gs; main.gc+=noPos.gc; main.gp+=noPos.gp;
+    delete statsMap[key];
   });
   const players = Object.values(statsMap).map(s => {
     const gp=s.gp, pos=s.pos, name=s.name;
@@ -11660,7 +11682,8 @@ function _dsLeagueRanking(method) {
   if (m === 'top98') {
     const byPos = {};
     players.forEach(p => { if (!byPos[p.pos]) byPos[p.pos]=[]; byPos[p.pos].push(p); });
-    const comp = p => p.per * 0.6 + p.cs * 0.4;
+    // Apply Bayesian shrinkage: fewer games → lower effective score so small samples don't dominate
+    const comp = p => (p.per * 0.6 + p.cs * 0.4) * (0.5 + 0.5 * p.gp / (p.gp + 5));
     return players.map(p => {
       const grp = byPos[p.pos] || [p];
       const maxC = Math.max(...grp.map(comp), 0.01);
@@ -12063,9 +12086,10 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
   // ── Skalowanie OVR ────────────────────────────────────────────
   if (method === 'top98') {
     // Najlepszy na każdej pozycji = 98, pozostali proporcjonalnie (40–98)
+    // GP shrinkage: małe próby (mało meczów) dostają penalty żeby nie dominowali rankingngu
     const byPos = {};
     enriched.forEach(p => { if (!byPos[p.pos]) byPos[p.pos]=[]; byPos[p.pos].push(p); });
-    const comp = p => p.per * 0.6 + p.cs * 0.4;
+    const comp = p => (p.per * 0.6 + p.cs * 0.4) * (0.5 + 0.5 * p.gp / (p.gp + 5));
     return enriched.map(p => {
       const grp = byPos[p.pos] || [p];
       const maxC = Math.max(...grp.map(comp), 0.01);
@@ -12547,8 +12571,11 @@ async function _dsNotify(eventId) {
   const wu=localStorage.getItem('nba2k_worker_url')||'';
   const gmUrl=`${location.origin}${location.pathname}?w=${encodeURIComponent(wu)}&event=${ev.id}#gm`;
   const capPlayers=_ds.teams.map(t=>(ev?.players||[]).find(p=>p.id===t.captainId)).filter(Boolean);
-  const caps=capPlayers.map(cap=>`<@${cap.id}>`).join(', ');
-  const capIds=capPlayers.map(cap=>cap.id);
+  // Only real Discord snowflake IDs (15-20 digits) are valid in allowed_mentions.users;
+  // test/fake IDs (e.g. "tp_01") cause Discord to reject the entire message with 400.
+  const validIds=capPlayers.map(c=>c.id).filter(id=>/^\d{15,20}$/.test(id));
+  const caps=capPlayers.map(cap=>/^\d{15,20}$/.test(cap.id)?`<@${cap.id}>`:cap.name).join(', ');
+  const capIds=validIds;
 
   // Save captain assignments to KV now so GM links work before draft is launched
   if(ev) {
