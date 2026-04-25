@@ -9789,8 +9789,12 @@ function checkPendingSignupEvent() {
     localStorage.removeItem('nba2k_pending_gm_event');
     const tryGm = (attempts) => {
       const ev = events.find(e => e.id === pendingGmId);
-      if(ev) { showView('events'); setTimeout(() => openGMPanel(pendingGmId), 300); }
-      else if(attempts > 0) { setTimeout(() => tryGm(attempts - 1), 400); }
+      if(!ev) { if(attempts > 0) { setTimeout(() => tryGm(attempts - 1), 500); } return; }
+      const isCaptain = (ev.teams||[]).some(t => t.captain?.id === discordUser?.id);
+      if(!isCaptain && attempts > 0) { setTimeout(() => tryGm(attempts - 1), 500); return; }
+      if(!isCaptain) { showToast('⚠️ Nie jesteś przypisany jako kapitan w tym drafcie', 'warning'); return; }
+      showView('events');
+      setTimeout(() => openGMPanel(pendingGmId), 300);
     };
     setTimeout(() => tryGm(10), 600);
   }
