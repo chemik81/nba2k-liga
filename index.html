@@ -6598,9 +6598,16 @@ async function confirmStartDraft() {
   // n = actual number of teams (may differ from numTeams selector if captains were assigned differently)
   const n = ev.teams.length || numTeams;
 
+  // Compute OVR for all players upfront so it's persisted to KV and visible in draft-watch.html
+  const _draftEnriched = _dsComputeOvr(ev.players||[], {});
+  const _draftOvrMap = {};
+  _draftEnriched.forEach(ep => { _draftOvrMap[ep.id] = ep.ovr; });
+  const _applyOvr = p => (p && _draftOvrMap[p.id]) ? {...p, ovr: _draftOvrMap[p.id]} : p;
+  ev.teams.forEach(t => { if(t.captain) t.captain = _applyOvr(t.captain); });
+
   if(method === 'random') {
     const maxPicks = n * (perTeam - 1);
-    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).sort(() => Math.random() - 0.5).slice(0, maxPicks);
+    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).map(_applyOvr).sort(() => Math.random() - 0.5).slice(0, maxPicks);
     ev.perTeam = perTeam;
     remaining.forEach((p, i) => ev.teams[i % n].players.push(p));
     ev.draftPool = [];
@@ -6615,7 +6622,7 @@ async function confirmStartDraft() {
   }
 
   if(method === 'balanced') {
-    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id));
+    const remaining = (ev.players||[]).filter(p => !captainIds.has(p.id)).map(_applyOvr);
     const scored = remaining.map(p => {
       const pm = matches.filter(m => [...(m.team1.players||[]),...(m.team2.players||[])].some(x => x.name === p.name));
       if(!pm.length) return { p, score: 0 };
@@ -6649,7 +6656,7 @@ async function confirmStartDraft() {
   ev.teams.forEach(t => { t.players = [t.captain]; }); // reset to captains only
   ev.perTeam = perTeam;
   const maxPicks = n * (perTeam - 1); // captains already in teams, so perTeam-1 picks per team
-  const allPool = (ev.players||[]).filter(p => !captainIds.has(p.id));
+  const allPool = (ev.players||[]).filter(p => !captainIds.has(p.id)).map(_applyOvr);
   ev.draftPool = allPool.slice(0, maxPicks); // limit pool to exactly what's needed
   ev.draftPoolExcluded = allPool.slice(maxPicks); // track who didn't make the draft
   ev.draftTurn = 0;

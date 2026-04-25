@@ -354,11 +354,24 @@ async function fetchData() {
 }
 
 // ═══════════════════════════════════════════════════
-// POS BADGE
+// POS BADGE + OVR BADGE
 // ═══════════════════════════════════════════════════
 function posBadge(pos) {
   const cls = { PG:'pos-pg', SG:'pos-sg', SF:'pos-sf', LCK:'pos-lck', PF:'pos-pf', C:'pos-c' }[pos] || 'pos-flex';
   return `<span class="pos-badge ${cls}">${pos}</span>`;
+}
+
+function ovrColor(ovr) {
+  if (ovr >= 90) return '#4ade80';
+  if (ovr >= 80) return '#a3e635';
+  if (ovr >= 70) return '#facc15';
+  if (ovr >= 60) return '#fb923c';
+  return '#f87171';
+}
+
+function ovrBadge(ovr) {
+  if (!ovr) return '';
+  return `<span style="background:${ovrColor(ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;flex-shrink:0">${ovr}</span>`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -465,6 +478,7 @@ function render(ev) {
     html += `<div class="pick-slot">
       ${posBadge('★')}
       <div class="pick-name" style="color:var(--gold)">${t.captain?.name || '—'}</div>
+      ${ovrBadge(t.captain?.ovr)}
       <span class="pick-num" style="color:var(--gold)">kpt</span>
     </div>`;
 
@@ -475,6 +489,7 @@ function render(ev) {
         ${posBadge((i + 1).toString())}
         <div class="pick-name">${p.name}</div>
         ${posArr.length ? `<span class="pick-positions">${posArr.join('·')}</span>` : ''}
+        ${ovrBadge(p.ovr)}
         <span class="pick-num">#${i + 1}</span>
       </div>`;
     });
