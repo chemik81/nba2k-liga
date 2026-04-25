@@ -9761,6 +9761,18 @@ function checkPendingSignupEvent() {
     }
   };
   setTimeout(() => tryOpen(10), 600);
+
+  // Also handle pending GM panel intent (set when user wasn't logged in and clicked GM link)
+  const pendingGmId = localStorage.getItem('nba2k_pending_gm_event');
+  if(pendingGmId) {
+    localStorage.removeItem('nba2k_pending_gm_event');
+    const tryGm = (attempts) => {
+      const ev = events.find(e => e.id === pendingGmId);
+      if(ev) { showView('events'); setTimeout(() => openGMPanel(pendingGmId), 300); }
+      else if(attempts > 0) { setTimeout(() => tryGm(attempts - 1), 400); }
+    };
+    setTimeout(() => tryGm(10), 600);
+  }
 }
 
 // Check on load if URL has ?event= param and open it; handle #gm / #board hashes
@@ -9771,19 +9783,28 @@ function checkEventUrlParam() {
   const hash = window.location.hash;
 
   if(hash === '#gm') {
-    // GM panel link — requires Discord login; data is already loaded at this point
+    // GM panel link — requires Discord login
     window.history.replaceState({}, '', window.location.pathname);
+
+    if(!discordUser) {
+      // Not logged in — store intent and redirect to Discord OAuth
+      localStorage.setItem('nba2k_pending_gm_event', evId);
+      if(workerUrl) {
+        const returnUrl = `${location.origin}${location.pathname}?w=${encodeURIComponent(workerUrl)}&event=${evId}#gm`;
+        window.location.href = workerUrl.replace(/\/$/, '') + '/discord-login?return=' + encodeURIComponent(returnUrl);
+      } else {
+        showView('events');
+        showToast('⚠️ Zaloguj się przez Discord aby otworzyć Panel GM', 'warning');
+      }
+      return;
+    }
+
     const tryOpenGM = (attempts) => {
       const ev = events.find(e => e.id === evId);
       if(!ev) {
         if(attempts > 0) { setTimeout(() => tryOpenGM(attempts - 1), 500); return; }
         showToast('❌ Nie znaleziono eventu draftu', 'error');
         showView('events');
-        return;
-      }
-      if(!discordUser) {
-        showView('events');
-        showToast('⚠️ Zaloguj się przez Discord aby otworzyć Panel GM', 'warning');
         return;
       }
       showView('events');
@@ -12483,6 +12504,17 @@ async function _dsNotify(eventId) {
   const capPlayers=_ds.teams.map(t=>(ev?.players||[]).find(p=>p.id===t.captainId)).filter(Boolean);
   const caps=capPlayers.map(cap=>`<@${cap.id}>`).join(', ');
   const capIds=capPlayers.map(cap=>cap.id);
+
+  // Save captain assignments to KV now so GM links work before draft is launched
+  if(ev) {
+    ev.teams = _ds.order.map(ti => {
+      const t = _ds.teams[ti];
+      const cap = (ev.players||[]).find(p => p.id === t.captainId);
+      return {name: t.name, captain: cap, players: cap ? [cap] : []};
+    });
+    await saveData(true);
+  }
+
   try {
     await _discordNotify({
       content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`,
