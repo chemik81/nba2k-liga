@@ -1760,6 +1760,7 @@ let rounds = []; // { id, label, from, to } // { "wrong": "correct" }
 let seasons = [];
 let playoffs = []; // array of playoff objects per season
 let discordPsnMap = {}; // { discordName: psnName } — trwałe mapowania Discord→PSN
+let ovrOverrides = {}; // { psnIngameName: overrideOvr } — ręczne nadpisania OVR przez admina
 let ovrMethod = localStorage.getItem('nba2k_ovr_method') || 'classic'; // 'classic' | 'positional' | 'kw5' | 'top98'
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
@@ -1953,7 +1954,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod,
+      ovrMethod, ovrOverrides,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2084,6 +2085,7 @@ async function loadData() {
     events = record.events || []
     playoffs = record.playoffs || [];;
     discordPsnMap = record.discordPsnMap || {};
+    ovrOverrides = record.ovrOverrides || {};
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
     // Fix playoffs with missing startDate — use createdAt date as fallback
     playoffs.forEach(po => {
@@ -11687,7 +11689,9 @@ function _dsLeagueRanking(method) {
     return players.map(p => {
       const grp = byPos[p.pos] || [p];
       const maxC = Math.max(...grp.map(comp), 0.01);
-      return {...p, ovr: Math.max(40, Math.min(98, Math.round(40 + comp(p) / maxC * 58)))};
+      const calcOvr = Math.max(40, Math.min(98, Math.round(40 + comp(p) / maxC * 58)));
+      const ovr = ovrOverrides[p.name] ?? calcOvr;
+      return {...p, ovr, ovrOverridden: ovrOverrides[p.name] !== undefined};
     }).sort((a,b) => b.ovr - a.ovr);
   }
 
@@ -11698,7 +11702,9 @@ function _dsLeagueRanking(method) {
   return players.map(p=>{
     const gpBonus=Math.min(p.gp*2,10);
     const raw=pct(sP,p.per)*0.45+pct(sC,p.cs)*0.35+pct(sG,p.ppg)*0.15+gpBonus*0.05;
-    return {...p,ovr:Math.max(40,Math.min(99,Math.round(raw*0.59+40)))};
+    const calcOvr=Math.max(40,Math.min(99,Math.round(raw*0.59+40)));
+    const ovr = ovrOverrides[p.name] ?? calcOvr;
+    return {...p, ovr, ovrOverridden: ovrOverrides[p.name] !== undefined};
   }).sort((a,b)=>b.ovr-a.ovr);
 }
 
@@ -11711,6 +11717,7 @@ function renderPsnMapModal(previewMethod) {
   const el = document.getElementById('psn-map-content');
   if (!el) return;
   const method = previewMethod || ovrMethod;
+  const isAdmin = _isEventsAdminSync();
   const ingameNames = _dsIngameNames();
 
   // Zbierz wszystkich unikalnych graczy z eventów
@@ -11759,7 +11766,13 @@ function renderPsnMapModal(previewMethod) {
       <td style="padding:.45rem .5rem;font-size:.8rem;text-align:center">${ep.spg||0}</td>
       <td style="padding:.45rem .5rem;font-size:.8rem;text-align:center">${ep.bpg||0}</td>
       <td style="padding:.45rem .5rem;text-align:center">
-        <span style="background:${oc};color:rgba(0,0,0,.75);border-radius:4px;padding:.1rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.88rem">${ep.ovr}</span>
+        ${isAdmin && ep.ingameName ? `
+          <div style="display:flex;align-items:center;gap:.2rem;justify-content:center">
+            <input type="number" min="40" max="99" value="${ep.ovr}"
+              style="width:44px;background:${ep.ovrOverridden?'rgba(245,197,24,.15)':'var(--surface2)'};border:1px solid ${ep.ovrOverridden?'var(--accent)':'var(--border)'};color:${oc};border-radius:4px;padding:.1rem .25rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.88rem;text-align:center"
+              onchange="_psnOvrSet('${ep.ingameName}',this.value)" onblur="_psnOvrSet('${ep.ingameName}',this.value)">
+            ${ep.ovrOverridden?`<span title="Ręczny override — kliknij ✕ aby przywrócić" onclick="_psnOvrClear('${ep.ingameName}')" style="cursor:pointer;color:var(--accent);font-size:.7rem;line-height:1" >✕</span>`:''}
+          </div>` : `<span style="background:${oc};color:rgba(0,0,0,.75);border-radius:4px;padding:.1rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.88rem">${ep.ovr}</span>`}
       </td>
     </tr>`;
   }).join('');
@@ -11767,9 +11780,9 @@ function renderPsnMapModal(previewMethod) {
   const ranking = _dsLeagueRanking(method);
   const rankRows = ranking.map((p,i) => {
     const oc=_dsOvrColor(p.ovr);
-    return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)">
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)${p.ovrOverridden?';background:rgba(245,197,24,.04)':''}">
       <td style="padding:.35rem .5rem;text-align:center;font-size:.75rem;color:var(--muted);font-weight:700">${i+1}</td>
-      <td style="padding:.35rem .5rem;font-weight:600;font-size:.85rem;white-space:nowrap">${p.name}</td>
+      <td style="padding:.35rem .5rem;font-weight:600;font-size:.85rem;white-space:nowrap">${p.name}${p.ovrOverridden?'<span style="font-size:.6rem;color:var(--accent);margin-left:.3rem;vertical-align:middle" title="Ręczny OVR">M</span>':''}</td>
       <td style="padding:.35rem .5rem;text-align:center"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .3rem;font-size:.68rem;font-weight:700">${p.pos}</span></td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem;color:var(--muted)">${p.gp}</td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem">${p.ppg}</td>
@@ -11780,7 +11793,14 @@ function renderPsnMapModal(previewMethod) {
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem;color:#3498db;font-weight:700">${p.per}</td>
       <td style="padding:.35rem .4rem;text-align:center;font-size:.78rem;color:var(--accent);font-weight:700">${p.cs}</td>
       <td style="padding:.35rem .4rem;text-align:center">
-        <span style="background:${oc};color:rgba(0,0,0,.75);border-radius:4px;padding:.1rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem">${p.ovr}</span>
+        ${isAdmin ? `
+          <div style="display:flex;align-items:center;gap:.2rem;justify-content:center">
+            <input type="number" min="40" max="99" value="${p.ovr}"
+              style="width:44px;background:${p.ovrOverridden?'rgba(245,197,24,.15)':'var(--surface2)'};border:1px solid ${p.ovrOverridden?'var(--accent)':'var(--border)'};color:${oc};border-radius:4px;padding:.1rem .25rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;text-align:center"
+              onchange="_psnOvrSet('${p.name}',this.value)" onblur="_psnOvrSet('${p.name}',this.value)">
+            ${p.ovrOverridden?`<span title="Przywróć auto" onclick="_psnOvrClear('${p.name}')" style="cursor:pointer;color:var(--accent);font-size:.7rem">✕</span>`:''}
+          </div>` :
+          `<span style="background:${oc};color:rgba(0,0,0,.75);border-radius:4px;padding:.1rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem">${p.ovr}</span>`}
       </td>
     </tr>`;
   }).join('');
@@ -11883,6 +11903,17 @@ function _psnAutoAll() {
   showToast('🤖 Auto-dopasowanie gotowe — sprawdź i zapisz', 'info');
 }
 
+function _psnOvrSet(psnName, rawVal) {
+  const v = parseInt(rawVal, 10);
+  if (!psnName || isNaN(v)) return;
+  ovrOverrides[psnName] = Math.max(40, Math.min(99, v));
+}
+
+function _psnOvrClear(psnName) {
+  delete ovrOverrides[psnName];
+  renderPsnMapModal();
+}
+
 async function _psnSave() {
   // Zapamiętaj metodę OVR
   const selected = document.querySelector('input[name="ovr-method"]:checked');
@@ -11891,7 +11922,7 @@ async function _psnSave() {
     localStorage.setItem('nba2k_ovr_method', ovrMethod);
   }
   await saveData();
-  showToast('✅ Powiązania i metoda OVR zapisane!', 'success');
+  showToast('✅ Powiązania, metoda OVR i ręczne overrides zapisane!', 'success');
   renderPsnMapModal();
 }
 
