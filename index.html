@@ -5655,6 +5655,9 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
 
     tabContent = `
       <div style="margin-bottom:1rem">${matchCards}</div>
+      ${isAdmin && evMatches.length ? `
+        <div id="ev-name-fix-${id}" style="margin-bottom:.75rem"></div>
+        <button onclick="openEvNameFix('${id}')" class="btn btn-ghost" style="font-size:.8rem;margin-bottom:1rem">🔗 Dopasuj nazwy graczy do rankingu</button>` : ''}
       ${isAdmin ? `
         <div style="border-top:1px solid var(--border);padding-top:1rem">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem">📸 DODAJ MECZ ZE SCREENA</div>
@@ -6157,6 +6160,115 @@ async function saveEditEventMatch(eventId, matchIdx) {
   await saveData();
   renderEventDetailTab(eventId, 'matches');
   showToast('✅ Mecz zaktualizowany!', 'success');
+}
+
+// ── Dopasowanie nazw graczy z eventów do nazw z rankingu ligowego ──
+
+let _evNameFixList = []; // [{evName, idx}] — używane przez applyEvNameFix
+
+function openEvNameFix(eventId) {
+  const el = document.getElementById('ev-name-fix-' + eventId);
+  if(!el) return;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+
+  // Nazwy z globalnego rankingu (PSN)
+  const leagueNames = [...new Set(matches.flatMap(m =>
+    [...(m.team1?.players||[]),...(m.team2?.players||[])].map(p=>p.name)
+  ).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+
+  // Nazwy z meczów eventu
+  const evNames = [...new Set((ev.matches||[]).flatMap(m =>
+    [...(m.team1?.players||[]),...(m.team2?.players||[])].map(p=>p.name)
+  ).filter(Boolean))];
+
+  const leagueSet = new Set(leagueNames);
+
+  // Znajdź niezgodności i najlepsze fuzzy-matche
+  _evNameFixList = evNames
+    .filter(n => !leagueSet.has(n))
+    .map(evName => {
+      let best = null, bestScore = 0;
+      for(const ln of leagueNames) {
+        const s = _dsFuzzyScore(evName, ln);
+        if(s > bestScore) { bestScore = s; best = ln; }
+      }
+      return { evName, suggestion: bestScore >= 0.4 ? best : null, score: bestScore };
+    });
+
+  if(!_evNameFixList.length) {
+    el.innerHTML = `<div style="color:var(--win);font-size:.85rem;padding:.4rem .75rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:6px">✅ Wszystkie nazwy graczy są zgodne z rankingiem</div>`;
+    return;
+  }
+
+  const opts = leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}">${ln}</option>`).join('');
+
+  el.innerHTML = `
+    <div style="background:rgba(245,197,24,.05);border:1px solid rgba(245,197,24,.25);border-radius:8px;padding:.75rem 1rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:.5px;margin-bottom:.6rem">
+        🔗 DOPASUJ NAZWY GRACZY — ${_evNameFixList.length} niezgodności
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">
+        Nazwy z screenów po lewej → wybierz prawidłową nazwę z listy po prawej
+      </div>
+      ${_evNameFixList.map((s,i) => `
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;flex-wrap:wrap">
+          <span style="font-size:.85rem;font-weight:700;color:var(--loss);min-width:120px">${s.evName}</span>
+          <span style="color:var(--muted);font-size:.8rem">→</span>
+          <select id="evfix-${eventId}-${i}" style="flex:1;min-width:140px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.25rem .4rem;font-size:.82rem">
+            <option value="">— pomiń —</option>
+            ${leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}" ${ln===s.suggestion?'selected':''}>${ln}${ln===s.suggestion&&s.score<1?' (podobne: '+Math.round(s.score*100)+'%)':''}</option>`).join('')}
+          </select>
+          <button onclick="applySingleEvFix('${eventId}',${i})" class="btn btn-primary" style="font-size:.78rem;padding:.25rem .6rem">✓</button>
+        </div>`).join('')}
+      <button onclick="applyAllEvFixes('${eventId}')" class="btn btn-primary" style="font-size:.82rem;margin-top:.5rem;padding:.35rem .9rem">✅ Zastosuj wszystkie zaznaczone</button>
+    </div>`;
+}
+
+async function applySingleEvFix(eventId, idx) {
+  const sel = document.getElementById(`evfix-${eventId}-${idx}`);
+  const newName = sel?.value;
+  const oldName = _evNameFixList[idx]?.evName;
+  if(!newName || !oldName) return;
+  await _applyEvPlayerRename(eventId, oldName, newName);
+}
+
+async function applyAllEvFixes(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  let count = 0;
+  for(let i = 0; i < _evNameFixList.length; i++) {
+    const sel = document.getElementById(`evfix-${eventId}-${i}`);
+    const newName = sel?.value;
+    const oldName = _evNameFixList[i]?.evName;
+    if(!newName || !oldName || newName === oldName) continue;
+    (ev.matches||[]).forEach(m => {
+      [m.team1, m.team2].forEach(team => {
+        (team?.players||[]).forEach(p => { if(p.name === oldName) { p.name = newName; count++; } });
+      });
+    });
+  }
+  if(count) {
+    await saveData();
+    renderEventDetailTab(eventId, 'matches');
+    showToast(`✅ Zmieniono ${count} nazw graczy`, 'success');
+  }
+}
+
+async function _applyEvPlayerRename(eventId, oldName, newName) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !oldName || !newName || oldName === newName) return;
+  let count = 0;
+  (ev.matches||[]).forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team?.players||[]).forEach(p => { if(p.name === oldName) { p.name = newName; count++; } });
+    });
+  });
+  if(count) {
+    await saveData();
+    renderEventDetailTab(eventId, 'matches');
+    showToast(`✅ "${oldName}" → "${newName}" (${count}×)`, 'success');
+  }
 }
 
 function openEventMatchDetail(eventId, matchIdx) {
