@@ -831,6 +831,7 @@
       </div>
     </div>
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
+    <div id="event-ratings-wrap" style="margin-bottom:1.5rem"></div>
     <div id="milestone-banner" style="margin-bottom:1.5rem"></div>
     <div id="round-comparison-wrap" style="margin-bottom:1.5rem"></div>
   </div>
@@ -3957,6 +3958,7 @@ function renderDashboard() {
   updateSeasonBadge();
   renderMilestoneBanner();
   renderRoundComparison();
+  renderEventRatings();
 }
 
 function getHotPlayers() {
@@ -4806,6 +4808,131 @@ function renderRoundComparisonRows() {
     </div>`;
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT RATINGS PANEL (dashboard)
+// ═══════════════════════════════════════════════════════════════
+
+function renderEventRatings() {
+  const wrap = document.getElementById('event-ratings-wrap');
+  if(!wrap) return;
+
+  // Znajdź ostatni event z meczami
+  const evWithMatches = events.filter(e => (e.matches||[]).length > 0)
+    .sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+  if(!evWithMatches.length) { wrap.innerHTML = ''; return; }
+  const ev = evWithMatches[0];
+  const evMatchList = ev.matches || [];
+
+  // Zagreguj statystyki gracza z meczów eventu
+  const statsMap = {};
+  evMatchList.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team?.players||[]).forEach(p => {
+        if(!p.name) return;
+        if(!statsMap[p.name]) statsMap[p.name] = {name:p.name, gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, to:0, fgm:0, fga:0, gs:0};
+        const s = statsMap[p.name];
+        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gs+=gradeToNum(p.grade||'B');
+      });
+    });
+  });
+
+  const playerNames = Object.keys(statsMap);
+  if(!playerNames.length) { wrap.innerHTML = ''; return; }
+
+  // OVR przed eventem (tylko globalne mecze ligowe)
+  const baseRanking = _dsLeagueRanking();
+  const baseOvr = {};
+  baseRanking.forEach(p => { if(!(p.name in baseOvr)) baseOvr[p.name] = p.ovr; });
+
+  // OVR po evencie — tymczasowo dodaj mecze eventu do globalnych
+  const evForRanking = evMatchList.map(m => ({
+    team1: {name: m.team1?.name||'', players: m.team1?.players||[]},
+    team2: {name: m.team2?.name||'', players: m.team2?.players||[]},
+    date: m.date || ev.date || new Date().toISOString().slice(0,10)
+  }));
+  const savedMatches = matches;
+  matches = [...matches, ...evForRanking];
+  const newRanking = _dsLeagueRanking();
+  matches = savedMatches;
+  const newOvr = {};
+  newRanking.forEach(p => { if(!(p.name in newOvr)) newOvr[p.name] = p.ovr; });
+
+  // Zbuduj listę graczy do wyświetlenia
+  const rows = playerNames.map(name => {
+    const s = statsMap[name];
+    const before = baseOvr[name] ?? null;
+    const after  = newOvr[name]  ?? (before ?? 40);
+    const delta  = (before !== null) ? after - before : null;
+    const ppg = s.gp ? +(s.pts/s.gp).toFixed(1) : 0;
+    const rpg = s.gp ? +(s.reb/s.gp).toFixed(1) : 0;
+    const apg = s.gp ? +(s.ast/s.gp).toFixed(1) : 0;
+    const spg = s.gp ? +(s.stl/s.gp).toFixed(1) : 0;
+    const bpg = s.gp ? +(s.blk/s.gp).toFixed(1) : 0;
+    const fgpct = s.fga ? Math.round(s.fgm/s.fga*100) : null;
+    const avgGrade = s.gp ? numToGrade(s.gs/s.gp) : null;
+    return {name, before, after, delta, ppg, rpg, apg, spg, bpg, fgpct, gp: s.gp, avgGrade};
+  }).sort((a,b) => b.after - a.after);
+
+  const ovrCell = ovr => {
+    const c = _dsOvrColor(ovr);
+    return `<span style="background:${c};color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .5rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center">${ovr}</span>`;
+  };
+  const deltaCell = d => {
+    if(d === null || d === 0) return `<span style="color:var(--muted);font-size:.8rem">—</span>`;
+    const up = d > 0;
+    return `<span style="color:${up?'var(--win)':'var(--loss)'};font-weight:700;font-size:.85rem">${up?'▲':'▼'}${Math.abs(d)}</span>`;
+  };
+  const statCell = (val, decimals=1) =>
+    `<span style="font-size:.85rem;color:var(--text);font-weight:600">${val !== null ? (decimals===0 ? val : val.toFixed(decimals)) : '—'}</span>`;
+
+  const headerCol = (label, title='') =>
+    `<th style="font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:.05em;padding:.4rem .5rem;text-align:center;white-space:nowrap" title="${title}">${label}</th>`;
+
+  wrap.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div style="padding:.85rem 1.1rem .6rem;display:flex;align-items:baseline;gap:.75rem;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.05rem;letter-spacing:1px">🎯 RANKINGI GRACZY</span>
+        <span style="font-size:.8rem;color:var(--muted)">${ev.title}</span>
+        <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${evMatchList.length} mecze · ${rows.length} graczy</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              <th style="font-size:.7rem;color:var(--muted);font-weight:700;padding:.4rem .5rem .4rem .9rem;text-align:left;white-space:nowrap">#</th>
+              <th style="font-size:.7rem;color:var(--muted);font-weight:700;padding:.4rem .5rem;text-align:left">GRACZ</th>
+              ${headerCol('OVR')} ${headerCol('±', 'Zmiana OVR po tym evencie')}
+              ${headerCol('PPG')} ${headerCol('RPG')} ${headerCol('APG')} ${headerCol('SPG')} ${headerCol('BPG')} ${headerCol('FG%')} ${headerCol('GP')}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r, i) => {
+              const gradeHtml = r.avgGrade ? `<span class="grade grade-${r.avgGrade.replace('+','p').replace('-','m')}" style="font-size:.7rem;padding:.05rem .3rem">${r.avgGrade}</span>` : '';
+              return `<tr style="border-bottom:1px solid rgba(255,255,255,.04);${i%2===1?'background:rgba(255,255,255,.015)':''}">
+                <td style="padding:.5rem .5rem .5rem .9rem;color:var(--muted);font-size:.85rem;font-weight:700">${i+1}</td>
+                <td style="padding:.5rem .6rem;white-space:nowrap">
+                  <span style="font-weight:700;font-size:.9rem">${r.name}</span>
+                  ${gradeHtml ? `<span style="margin-left:.35rem">${gradeHtml}</span>` : ''}
+                </td>
+                <td style="padding:.5rem;text-align:center">${ovrCell(r.after)}</td>
+                <td style="padding:.5rem;text-align:center">${deltaCell(r.delta)}</td>
+                <td style="padding:.5rem;text-align:center">${statCell(r.ppg)}</td>
+                <td style="padding:.5rem;text-align:center">${statCell(r.rpg)}</td>
+                <td style="padding:.5rem;text-align:center">${statCell(r.apg)}</td>
+                <td style="padding:.5rem;text-align:center">${statCell(r.spg)}</td>
+                <td style="padding:.5rem;text-align:center">${statCell(r.bpg)}</td>
+                <td style="padding:.5rem;text-align:center">${r.fgpct !== null ? statCell(r.fgpct+'%', 0) : statCell(null)}</td>
+                <td style="padding:.5rem;text-align:center;color:var(--muted);font-size:.85rem">${r.gp}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // DISCORD SCREENSHOT QUEUE
