@@ -342,15 +342,156 @@ function stopTimer() {
 // ═══════════════════════════════════════════════════
 // FETCH DATA
 // ═══════════════════════════════════════════════════
+let _ovrRanking = null; // built once from /data, rebuilt on change
+
 async function fetchData() {
   if (!WORKER_URL) return null;
   try {
     const res = await fetch(WORKER_URL + '/data');
     if (!res.ok) return null;
     const d = await res.json();
-    const allEvents = d.record?.events || d.events || [];
+    const rec = d.record || d;
+    const allEvents = rec.events || [];
+    // Build OVR ranking from full record data (matches + method + overrides + psnMap)
+    const matches      = rec.matches || [];
+    const ovrMethod    = rec.ovrMethod || 'top98';
+    const ovrOverrides = rec.ovrOverrides || {};
+    const discordPsnMap = rec.discordPsnMap || {};
+    if (matches.length) {
+      _ovrRanking = { ranking: buildLeagueRanking(matches, ovrMethod, ovrOverrides), discordPsnMap };
+    }
     return allEvents.find(e => e.id === EVENT_ID) || null;
   } catch(e) { return null; }
+}
+
+// ═══════════════════════════════════════════════════
+// OVR ENGINE (ported from index.html)
+// ═══════════════════════════════════════════════════
+function gradeToNum(g) {
+  const map = {'A+':13,'A':12,'A-':11,'B+':10,'B':9,'B-':8,'C+':7,'C':6,'C-':5,'D+':4,'D':3,'D-':2,'F':1};
+  return map[(g||'').toUpperCase()] || 0;
+}
+function calcPER(p) {
+  const gp = Math.max(p.gp,1);
+  return Math.round(((p.pts+p.reb+p.ast+p.stl+p.blk-(p.fga-p.fgm)-(p.fta-p.ftm)-p.to)/gp)*10)/10;
+}
+function calcCompositeScore(p) {
+  const gp = Math.max(p.gp,1), mat = gp/(gp+5);
+  return (Math.min(p.pts/gp/50,1)*100*0.25 + Math.min(p.stl/gp/4,1)*100*0.20 +
+          Math.min(p.blk/gp/3,1)*100*0.18  + Math.min(p.reb/gp/20,1)*100*0.15 +
+          Math.min(p.ast/gp/15,1)*100*0.12  + (p.gradeSum/gp)/13*100*0.10) * mat;
+}
+const _dsPosW = {
+  PG:{cs:[0.30,0.20,0.10,0.10,0.20,0.10]}, SG:{cs:[0.28,0.22,0.12,0.10,0.18,0.10]},
+  SF:{cs:[0.22,0.22,0.18,0.18,0.10,0.10]}, PF:{cs:[0.17,0.18,0.25,0.22,0.08,0.10]},
+  C: {cs:[0.13,0.14,0.30,0.28,0.05,0.10]},
+};
+function buildLeagueRanking(matches, method, ovrOverrides) {
+  const m = method || 'top98';
+  const statsMap = {};
+  matches.forEach(match => {
+    [...(match.team1?.players||[]),...(match.team2?.players||[])].forEach(pl => {
+      if (!pl.name) return;
+      const pos = pl.pos || null;
+      const key = pos ? `${pl.name}\x00${pos}` : pl.name;
+      if (!statsMap[key]) statsMap[key] = {name:pl.name,pos:pos||'—',pts:0,reb:0,ast:0,stl:0,blk:0,to:0,gs:0,gc:0,gp:0,fgm:0,fga:0,ftm:0,fta:0};
+      const s = statsMap[key];
+      s.pts+=pl.pts||0; s.reb+=pl.reb||0; s.ast+=pl.ast||0;
+      s.stl+=pl.stl||0; s.blk+=pl.blk||0; s.to+=pl.to||0;
+      s.fgm+=pl.fgm||0; s.fga+=pl.fga||0; s.ftm+=pl.ftm||0; s.fta+=pl.fta||0;
+      s.gs+=gradeToNum(pl.grade||'B'); s.gc++; s.gp++;
+    });
+  });
+  // Scal wpisy bez pozycji z pozycyjnymi
+  Object.keys(statsMap).forEach(key => {
+    if (key.includes('\x00')) return;
+    const noPos = statsMap[key];
+    const posKeys = Object.keys(statsMap).filter(k => k.startsWith(noPos.name+'\x00'));
+    if (!posKeys.length) return;
+    const mainKey = posKeys.sort((a,b) => statsMap[b].gp-statsMap[a].gp)[0];
+    const main = statsMap[mainKey];
+    main.pts+=noPos.pts; main.reb+=noPos.reb; main.ast+=noPos.ast;
+    main.stl+=noPos.stl; main.blk+=noPos.blk; main.to+=noPos.to;
+    main.fgm+=noPos.fgm; main.fga+=noPos.fga; main.ftm+=noPos.ftm; main.fta+=noPos.fta;
+    main.gs+=noPos.gs; main.gc+=noPos.gc; main.gp+=noPos.gp;
+    delete statsMap[key];
+  });
+  const players = Object.values(statsMap).map(s => {
+    const {gp,pos,name} = s;
+    const ppg=+(s.pts/gp).toFixed(1), rpg=+(s.reb/gp).toFixed(1), apg=+(s.ast/gp).toFixed(1);
+    const spg=+(s.stl/gp).toFixed(1), bpg=+(s.blk/gp).toFixed(1);
+    const tot = {gp,pts:s.pts,reb:s.reb,ast:s.ast,stl:s.stl,blk:s.blk,to:s.to,fgm:s.fgm,fga:s.fga,ftm:s.ftm,fta:s.fta,gradeSum:s.gs};
+    const per = +calcPER(tot).toFixed(1);
+    let cs;
+    if (m==='positional') {
+      const w=_dsPosW[pos]||_dsPosW.SF;
+      cs=+((Math.min(ppg/50,1)*100)*w.cs[0]+(Math.min(spg/3,1)*100)*w.cs[1]+
+           (Math.min(bpg/3,1)*100)*w.cs[2]+(Math.min(rpg/20,1)*100)*w.cs[3]+
+           (Math.min(apg/15,1)*100)*w.cs[4]+(s.gs/gp)*w.cs[5]).toFixed(1);
+    } else if (m==='classic') {
+      cs=+calcCompositeScore(tot).toFixed(1);
+    } else {
+      const mat=gp/(gp+5);
+      cs=+(((Math.min(ppg/50,1)*100)*0.25+(Math.min(spg/4,1)*100)*0.20+
+            (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
+            (Math.min(apg/15,1)*100)*0.12)*mat).toFixed(1);
+    }
+    return {name,pos,gp,ppg,rpg,apg,spg,bpg,per,cs};
+  });
+  if (m==='top98') {
+    const byPos={};
+    players.forEach(p=>{if(!byPos[p.pos])byPos[p.pos]=[];byPos[p.pos].push(p);});
+    const comp=p=>(p.per*0.6+p.cs*0.4)*(0.5+0.5*p.gp/(p.gp+5));
+    return players.map(p=>{
+      const grp=byPos[p.pos]||[p];
+      const maxC=Math.max(...grp.map(comp),0.01);
+      const calcOvr=Math.max(40,Math.min(98,Math.round(40+comp(p)/maxC*58)));
+      return {...p,ovr:(ovrOverrides||{})[p.name]??calcOvr};
+    }).sort((a,b)=>b.ovr-a.ovr);
+  }
+  const pct=(arr,val)=>arr.length<=1?50:arr.filter(v=>v<val).length/(arr.length-1)*100;
+  const sP=players.map(p=>p.per).sort((a,b)=>a-b);
+  const sC=players.map(p=>p.cs).sort((a,b)=>a-b);
+  const sG=players.map(p=>p.ppg).sort((a,b)=>a-b);
+  return players.map(p=>{
+    const gpBonus=Math.min(p.gp*2,10);
+    const raw=pct(sP,p.per)*0.45+pct(sC,p.cs)*0.35+pct(sG,p.ppg)*0.15+gpBonus*0.05;
+    const calcOvr=Math.max(40,Math.min(99,Math.round(raw*0.59+40)));
+    return {...p,ovr:(ovrOverrides||{})[p.name]??calcOvr};
+  }).sort((a,b)=>b.ovr-a.ovr);
+}
+function _fuzzyScore(a,b) {
+  const cl=s=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const ca=cl(a),cb=cl(b);
+  if(!ca||!cb) return 0;
+  if(ca===cb) return 1;
+  if(cb.startsWith(ca)||ca.startsWith(cb)) return 0.9;
+  if(cb.includes(ca)||ca.includes(cb)) return 0.8;
+  const bg=s=>{const r=new Set();for(let i=0;i<s.length-1;i++)r.add(s.slice(i,i+2));return r;};
+  const ba=bg(ca),bb=bg(cb);
+  if(!ba.size||!bb.size) return 0;
+  return (2*[...ba].filter(g=>bb.has(g)).length)/(ba.size+bb.size);
+}
+function resolveOvr(player) {
+  // If OVR already stored on player (new drafts), use it directly
+  if (player.ovr) return player.ovr;
+  if (!_ovrRanking) return null;
+  const {ranking, discordPsnMap} = _ovrRanking;
+  // Build PSN name → OVR map (first = highest for multi-pos players)
+  const rankMap = {};
+  ranking.forEach(r => { if (!(r.name in rankMap)) rankMap[r.name] = r.ovr; });
+  const names = Object.keys(rankMap);
+  // 1. discordPsnMap lookup
+  const psnName = discordPsnMap[player.discordTag] || discordPsnMap[player.name];
+  if (psnName && rankMap[psnName] !== undefined) return rankMap[psnName];
+  // 2. Exact case-insensitive
+  const exact = names.find(n => n.toLowerCase() === (player.name||'').toLowerCase());
+  if (exact) return rankMap[exact];
+  // 3. Fuzzy
+  let best=null, bestS=0;
+  for (const n of names) { const s=_fuzzyScore(player.name||'',n); if(s>bestS){bestS=s;best=n;} }
+  if (bestS>=0.55 && best) return rankMap[best];
+  return null;
 }
 
 // ═══════════════════════════════════════════════════
@@ -478,7 +619,7 @@ function render(ev) {
     html += `<div class="pick-slot">
       ${posBadge('★')}
       <div class="pick-name" style="color:var(--gold)">${t.captain?.name || '—'}</div>
-      ${ovrBadge(t.captain?.ovr)}
+      ${ovrBadge(resolveOvr(t.captain || {}))}
       <span class="pick-num" style="color:var(--gold)">kpt</span>
     </div>`;
 
@@ -489,7 +630,7 @@ function render(ev) {
         ${posBadge((i + 1).toString())}
         <div class="pick-name">${p.name}</div>
         ${posArr.length ? `<span class="pick-positions">${posArr.join('·')}</span>` : ''}
-        ${ovrBadge(p.ovr)}
+        ${ovrBadge(resolveOvr(p))}
         <span class="pick-num">#${i + 1}</span>
       </div>`;
     });
