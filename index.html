@@ -5509,7 +5509,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
           <div style="border:2px dashed var(--border);border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;position:relative;transition:border-color .2s"
             id="ev-upload-zone" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
             ondragleave="this.style.borderColor='var(--border)'" ondrop="evDropFile(event,'${id}')">
-            <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+            <input type="file" accept="image/*" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
               onchange="evFileSelected(event,'${id}')">
             <div style="font-size:2rem;margin-bottom:.5rem">📸</div>
             <div style="font-weight:600;font-size:.9rem">Wrzuć screenshot lub kliknij</div>
@@ -5771,23 +5771,29 @@ function openEventPlayerModal(eventId, playerName, teamName) {
 
 // Event match screenshot upload
 let _evParseBase64 = null, _evParseMime = null, _evParsePending = null;
+let _evParseDataUrl = null, _evParseQueue = [], _evParseQueueIdx = 0;
 
 function evFileSelected(e, eventId) {
-  const file = e.target.files[0];
-  if(file) evLoadFile(file, eventId);
+  const files = Array.from(e.target.files);
+  if(files.length) { _evParseQueue = files; _evParseQueueIdx = 0; evProcessNextInQueue(eventId); }
 }
 function evDropFile(e, eventId) {
   e.preventDefault();
   document.getElementById('ev-upload-zone').style.borderColor = 'var(--border)';
-  const file = e.dataTransfer.files[0];
-  if(file) evLoadFile(file, eventId);
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if(files.length) { _evParseQueue = files; _evParseQueueIdx = 0; evProcessNextInQueue(eventId); }
+}
+function evProcessNextInQueue(eventId) {
+  if(_evParseQueueIdx >= _evParseQueue.length) return;
+  evLoadFile(_evParseQueue[_evParseQueueIdx], eventId);
 }
 function evLoadFile(file, eventId) {
   const reader = new FileReader();
-  reader.onload = async (e) => {
-    const dataUrl = e.target.result;
+  reader.onload = async (ev) => {
+    const dataUrl = ev.target.result;
     _evParseMime = file.type || 'image/png';
     _evParseBase64 = dataUrl.split(',')[1];
+    _evParseDataUrl = dataUrl;
     const zone = document.getElementById('ev-upload-zone');
     if(zone) {
       zone.style.backgroundImage = `url(${dataUrl})`;
@@ -5795,7 +5801,6 @@ function evLoadFile(file, eventId) {
       zone.style.backgroundRepeat = 'no-repeat';
       zone.style.backgroundPosition = 'center';
       zone.style.minHeight = '160px';
-      // Hide inner text so image is visible
       const inner = zone.querySelector('div');
       if(inner) inner.style.opacity = '0';
     }
@@ -5876,16 +5881,28 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
 
     if(previewEl) {
       previewEl.style.display = 'block';
+      const queueTotal = _evParseQueue.length;
+      const queueCurrent = _evParseQueueIdx + 1;
+      const progressHtml = queueTotal > 1
+        ? `<div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">📋 Screen ${queueCurrent} z ${queueTotal}</div>`
+        : '';
+      const inpStyle = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700;min-width:0';
+      const scoreStyle = inpStyle + ';width:56px;text-align:center;color:var(--accent)';
       previewEl.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:8px;padding:.75rem 1rem;gap:1rem;flex-wrap:wrap">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:800">
-            ${parsed.team1.name} <span style="color:var(--accent)">${parsed.team1.score}</span>
-            <span style="color:var(--muted);font-size:.9rem;margin:0 .5rem">—</span>
-            <span style="color:var(--accent)">${parsed.team2.score}</span> ${parsed.team2.name}
+        <div style="background:var(--surface2);border-radius:8px;padding:.75rem 1rem">
+          ${progressHtml}
+          ${_evParseDataUrl ? `<img src="${_evParseDataUrl}" style="width:100%;max-height:140px;object-fit:contain;border-radius:6px;margin-bottom:.6rem;display:block">` : ''}
+          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">
+            <input id="ev-t1name-${eventId}" value="${parsed.team1.name.replace(/"/g,'&quot;')}" style="${inpStyle};flex:1 1 120px">
+            <input id="ev-t1score-${eventId}" type="number" value="${parsed.team1.score}" style="${scoreStyle}">
+            <span style="color:var(--muted);font-weight:700">—</span>
+            <input id="ev-t2score-${eventId}" type="number" value="${parsed.team2.score}" style="${scoreStyle}">
+            <input id="ev-t2name-${eventId}" value="${parsed.team2.name.replace(/"/g,'&quot;')}" style="${inpStyle};flex:1 1 120px">
           </div>
           <div style="display:flex;gap:.5rem">
-            <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz mecz</button>
-            <button onclick="document.getElementById('ev-parse-preview-${eventId}').style.display='none';_evParsePending=null" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
+            <button onclick="evSaveMatch('${eventId}')" class="btn btn-primary" style="font-size:.85rem;padding:.5rem 1rem">💾 Zapisz${queueTotal > 1 ? ' i następny' : ''}</button>
+            ${queueTotal > 1 ? `<button onclick="evSkipMatch('${eventId}')" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">⏭ Pomiń</button>` : ''}
+            <button onclick="_evParseQueue=[];_evParsePending=null;document.getElementById('ev-parse-preview-${eventId}').style.display='none'" class="btn btn-ghost" style="font-size:.85rem;padding:.5rem 1rem">Anuluj</button>
           </div>
         </div>`;
     }
@@ -5900,17 +5917,48 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
 async function evSaveMatch(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev || !_evParsePending) return;
+  // Apply editable field values
+  const t1name  = document.getElementById('ev-t1name-' + eventId);
+  const t1score = document.getElementById('ev-t1score-' + eventId);
+  const t2name  = document.getElementById('ev-t2name-' + eventId);
+  const t2score = document.getElementById('ev-t2score-' + eventId);
+  if(t1name)  _evParsePending.team1.name  = t1name.value.trim() || _evParsePending.team1.name;
+  if(t1score) _evParsePending.team1.score = parseInt(t1score.value) || _evParsePending.team1.score;
+  if(t2name)  _evParsePending.team2.name  = t2name.value.trim() || _evParsePending.team2.name;
+  if(t2score) _evParsePending.team2.score = parseInt(t2score.value) || _evParsePending.team2.score;
   if(!ev.matches) ev.matches = [];
-  // Tag with current phase if phases exist
   if(ev.phases && ev.phases.length && ev.currentPhase !== undefined) {
     _evParsePending.phase = ev.currentPhase;
   }
   ev.matches.push(_evParsePending);
   _evParsePending = null;
   _evParseBase64 = null;
+  _evParseDataUrl = null;
   await saveData();
   showToast('✅ Mecz zapisany!', 'success');
-  renderEventDetailTab(eventId, 'matches');
+  _evParseQueueIdx++;
+  if(_evParseQueueIdx < _evParseQueue.length) {
+    renderEventDetailTab(eventId, 'matches');
+    // małe opóźnienie żeby tab się przerenderował zanim zaczniemy kolejny
+    setTimeout(() => evProcessNextInQueue(eventId), 200);
+  } else {
+    _evParseQueue = [];
+    renderEventDetailTab(eventId, 'matches');
+  }
+}
+
+function evSkipMatch(eventId) {
+  _evParsePending = null;
+  _evParseBase64 = null;
+  _evParseDataUrl = null;
+  _evParseQueueIdx++;
+  if(_evParseQueueIdx < _evParseQueue.length) {
+    renderEventDetailTab(eventId, 'matches');
+    setTimeout(() => evProcessNextInQueue(eventId), 200);
+  } else {
+    _evParseQueue = [];
+    renderEventDetailTab(eventId, 'matches');
+  }
 }
 
 async function deleteEventMatch(eventId, matchIdx) {
