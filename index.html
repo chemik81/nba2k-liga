@@ -5631,8 +5631,25 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${m.team2?.score>m.team1?.score?'var(--accent)':'var(--text)'}">${m.team2?.score??'—'}</div>
           </div>
         </div>
-        ${isAdmin ? `<button onclick="event.stopPropagation();deleteEventMatch('${id}',${i})"
-          style="margin-top:.5rem;background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;float:right">🗑 Usuń</button>` : ''}
+        ${isAdmin ? `<div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem" onclick="event.stopPropagation()">
+          <button onclick="openEditEventMatch('${id}',${i})"
+            style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">✏️ Edytuj</button>
+          <button onclick="deleteEventMatch('${id}',${i})"
+            style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">🗑 Usuń</button>
+        </div>
+        <div id="ev-match-edit-${id}-${i}" style="display:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
+          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
+            <input id="em-t1n-${id}-${i}" value="${(m.team1?.name||'').replace(/"/g,'&quot;')}" style="flex:1 1 110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700">
+            <input id="em-t1s-${id}-${i}" type="number" value="${m.team1?.score??''}" style="width:56px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:900;text-align:center">
+            <span style="color:var(--muted);font-weight:700">—</span>
+            <input id="em-t2s-${id}-${i}" type="number" value="${m.team2?.score??''}" style="width:56px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:900;text-align:center">
+            <input id="em-t2n-${id}-${i}" value="${(m.team2?.name||'').replace(/"/g,'&quot;')}" style="flex:1 1 110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700">
+          </div>
+          <div style="display:flex;gap:.5rem">
+            <button onclick="saveEditEventMatch('${id}',${i})" class="btn btn-primary" style="font-size:.8rem;padding:.35rem .8rem">💾 Zapisz</button>
+            <button onclick="document.getElementById('ev-match-edit-${id}-${i}').style.display='none'" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem">Anuluj</button>
+          </div>
+        </div>` : ''}
       </div>`).join('')
     : '<div style="color:var(--muted);text-align:center;padding:2rem">Brak meczów — dodaj pierwszy screen poniżej</div>';
 
@@ -6005,8 +6022,20 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = data.content.map(c => c.text||'').join('');
     let jsonStr = text.slice(text.indexOf('{'), text.lastIndexOf('}')+1);
-    jsonStr = jsonStr.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/,\s*([}\]])/g,'$1').replace(/\/\/[^\n]*/g,'');
-    const parsed = JSON.parse(jsonStr);
+    const tryParse = s => { try { return JSON.parse(s); } catch(e) { return null; } };
+    // Próba 1: podstawowe czyszczenie
+    let cleaned = jsonStr
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'')
+      .replace(/,\s*([}\]])/g,'$1')
+      .replace(/\/\/[^\n]*/g,'');
+    // Próba 2: escapuj dosłowne newline/CR wewnątrz stringów
+    const escapeStrings = s => s.replace(/"((?:[^"\\]|\\.)*)"/g,
+      (_,inner) => '"' + inner.replace(/\r/g,'').replace(/\n/g,' ').replace(/\t/g,' ') + '"');
+    // Próba 3: agresywne — zamień wszystkie białe znaki na spacje
+    const parsed = tryParse(cleaned)
+      ?? tryParse(escapeStrings(cleaned))
+      ?? tryParse(cleaned.replace(/[\r\n\t]+/g,' '))
+      ?? (() => { throw new Error('Nie udało się sparsować JSON — spróbuj z wyraźniejszym zdjęciem'); })();
     _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
 
     statusEl.style.background = 'rgba(46,204,113,.1)';
@@ -6104,6 +6133,30 @@ async function deleteEventMatch(eventId, matchIdx) {
   await saveData();
   renderEventDetailTab(eventId, 'matches');
   showToast('🗑 Mecz usunięty', 'info');
+}
+
+function openEditEventMatch(eventId, matchIdx) {
+  const el = document.getElementById(`ev-match-edit-${eventId}-${matchIdx}`);
+  if(!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveEditEventMatch(eventId, matchIdx) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  const m = (ev.matches||[])[matchIdx];
+  if(!m) return;
+  const t1n = document.getElementById(`em-t1n-${eventId}-${matchIdx}`);
+  const t1s = document.getElementById(`em-t1s-${eventId}-${matchIdx}`);
+  const t2n = document.getElementById(`em-t2n-${eventId}-${matchIdx}`);
+  const t2s = document.getElementById(`em-t2s-${eventId}-${matchIdx}`);
+  if(t1n) m.team1.name  = t1n.value.trim() || m.team1.name;
+  if(t1s) m.team1.score = parseInt(t1s.value) || m.team1.score;
+  if(t2n) m.team2.name  = t2n.value.trim() || m.team2.name;
+  if(t2s) m.team2.score = parseInt(t2s.value) || m.team2.score;
+  await saveData();
+  renderEventDetailTab(eventId, 'matches');
+  showToast('✅ Mecz zaktualizowany!', 'success');
 }
 
 function openEventMatchDetail(eventId, matchIdx) {
