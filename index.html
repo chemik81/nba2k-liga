@@ -12658,7 +12658,8 @@ const _ds = {
   playerPool: [],  // enriched with ovr, isCaptain, excluded
   order: [],       // indices into teams[] for draft order
   nameMap: {},     // { playerId: ingamePsnName } — ręczne powiązania Discord→PSN
-  _pollId: null
+  _pollId: null,
+  captainFilter: { type: 'all', pos: '', ovrMin: '', ovrMax: '' }
 };
 
 // Ręczna zmiana powiązania Discord→PSN dla gracza w wizardzie
@@ -13028,7 +13029,16 @@ function _dsS2(ev) {
   }).join('');
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
     <div style="color:var(--muted);font-size:.85rem">Wybierz kapitana każdej drużyny lub wylosuj automatycznie.</div>
-    <button onclick="_dsRandCaptains()" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.45rem 1.1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;cursor:pointer;letter-spacing:.5px">🎲 Losuj kapitanów</button>
+    <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
+      <select onchange="_ds.captainFilter.type=this.value;_dsRender()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .6rem;font-size:.8rem;font-family:inherit">
+        <option value="all" ${_ds.captainFilter.type==='all'?'selected':''}>Wszyscy</option>
+        <option value="pos" ${_ds.captainFilter.type==='pos'?'selected':''}>Pozycja</option>
+        <option value="ovr" ${_ds.captainFilter.type==='ovr'?'selected':''}>OVR</option>
+      </select>
+      ${_ds.captainFilter.type==='pos'?`<select onchange="_ds.captainFilter.pos=this.value" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .6rem;font-size:.8rem;font-family:inherit"><option value="">—poz—</option>${['PG','SG','SF','PF','C'].map(p=>'<option value="'+p+'" '+((_ds.captainFilter.pos===p)?'selected':'')+'>'+p+'</option>').join('')}</select>`:''}
+      ${_ds.captainFilter.type==='ovr'?`<input type="number" placeholder="min" value="${_ds.captainFilter.ovrMin}" oninput="_ds.captainFilter.ovrMin=this.value" style="width:54px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .4rem;font-size:.8rem;text-align:center"><span style="color:var(--muted);font-size:.8rem">–</span><input type="number" placeholder="max" value="${_ds.captainFilter.ovrMax}" oninput="_ds.captainFilter.ovrMax=this.value" style="width:54px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .4rem;font-size:.8rem;text-align:center">`:''}
+      <button onclick="_dsRandCaptains()" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.45rem 1.1rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;cursor:pointer;letter-spacing:.5px">🎲 Losuj kapitanów</button>
+    </div>
   </div>
   <div style="display:flex;flex-direction:column;gap:.6rem">${rows}</div>`;
 }
@@ -13047,7 +13057,20 @@ function _dsS2Update() {
 function _dsRandCaptains() {
   const ev = events.find(e=>e.id===_ds.eventId);
   if (!ev?.players?.length) return;
-  const shuffled = [...ev.players].sort(()=>Math.random()-.5);
+  let pool = [...ev.players];
+  const f = _ds.captainFilter;
+  if(f.type==='pos' && f.pos) {
+    const filtered = pool.filter(p => p.primaryPos===f.pos || (p.positions||[]).includes(f.pos));
+    if(filtered.length >= _ds.teams.length) pool = filtered;
+  } else if(f.type==='ovr') {
+    const min = +f.ovrMin||0, max = +f.ovrMax||99;
+    const enriched = _dsComputeOvr(pool, _ds.nameMap);
+    const ovrById = {};
+    enriched.forEach(p => { ovrById[p.id] = p.ovr||0; });
+    const filtered = pool.filter(p => { const o=ovrById[p.id]||0; return (!min||o>=min)&&(!max||o<=max); });
+    if(filtered.length >= _ds.teams.length) pool = filtered;
+  }
+  const shuffled = pool.sort(()=>Math.random()-.5);
   const used = new Set();
   _ds.teams.forEach((t,i)=>{
     const cap = shuffled.find(p=>!used.has(p.id));
@@ -13390,12 +13413,13 @@ async function _dsLaunch() {
   ev.draftTurn=0;
   ev.draftOrder=buildDraftOrder(_ds.format,_ds.numTeams,ev.draftPool.length);
   ev.status='draft';
-  ev.timerEnd=new Date(Date.now()+_ds.timerSecs*1000).toISOString();
+  ev.draftPaused=true;
+  ev.timerEnd=null;
   await saveData();
   if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId=null; }
   document.getElementById('draft-setup-modal').classList.remove('open');
   renderEvents();
-  showToast('🚀 Draft wystartował!','success');
+  showToast('✅ Draft załadowany — kliknij ▶ Start gdy GMowie są gotowi','success');
   const eid=_ds.eventId;
   setTimeout(()=>openDraftView(eid),150);
 }
