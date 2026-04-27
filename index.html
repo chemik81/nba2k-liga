@@ -4826,12 +4826,15 @@ function renderEventRatings() {
 
   const statsMap = {};
   evMatchList.forEach(m => {
-    [m.team1, m.team2].forEach(team => {
+    const t1won = (m.team1?.score ?? 0) > (m.team2?.score ?? 0);
+    [m.team1, m.team2].forEach((team, ti) => {
+      const won = ti === 0 ? t1won : !t1won;
       (team?.players||[]).forEach(p => {
         if(!p.name) return;
-        if(!statsMap[p.name]) statsMap[p.name] = {name:p.name,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gs:0};
+        if(!statsMap[p.name]) statsMap[p.name] = {name:p.name,gp:0,wins:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gs:0};
         const s = statsMap[p.name];
-        s.gp++; s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+        s.gp++; if(won) s.wins++;
+        s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gs+=gradeToNum(p.grade||'B');
       });
@@ -4848,12 +4851,13 @@ function renderEventRatings() {
   const perf = (ppg, rpg, apg, spg, bpg) =>
     ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
 
-  const calcDelta = (evPerf, hist) => {
+  const calcDelta = (evPerf, hist, winBonus) => {
     if(!hist || hist.ppg + hist.rpg + hist.apg + hist.spg + hist.bpg === 0) return null;
     const histPerf = perf(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg);
     if(histPerf <= 0) return null;
     const pct = (evPerf - histPerf) / histPerf;
-    return Math.round(Math.max(-8, Math.min(8, pct * 15)));
+    // 70% indywidualne wyniki + 30% wyniki drużyny (winBonus: -3 do +3)
+    return Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
   };
 
   // Compute event average performance — baseline for players with no league history
@@ -4881,10 +4885,15 @@ function renderEventRatings() {
     const hist  = histByName[s.name] || null;
     const preOvr  = hist?.ovr ?? 40;
     const evPerf  = perf(ppg, rpg, apg, spg, bpg);
-    const delta   = hist ? calcDelta(evPerf, hist) : 8; // nowi gracze zawsze +8 za debiut
+    const wins    = s.wins;
+    const losses  = gp - wins;
+    // winBonus: +3 przy 100% wygranych, -3 przy 100% porażek, 0 przy 50/50
+    const winBonus = (gp > 0) ? (wins/gp - 0.5) * 6 : 0;
+    const delta   = hist ? calcDelta(evPerf, hist, winBonus) : 8; // nowi gracze zawsze +8 za debiut
     const postOvr = Math.max(40, Math.min(99, preOvr + (delta ?? 0)));
     return {
       name: s.name, preOvr, postOvr, delta, isNew: !hist,
+      wins, losses, winBonus,
       ppg, rpg, apg, spg, bpg, fgpct, gp, avgGrade,
       histPpg: hist?.ppg ?? null, histRpg: hist?.rpg ?? null,
       histApg: hist?.apg ?? null, histSpg: hist?.spg ?? null, histBpg: hist?.bpg ?? null
@@ -4926,7 +4935,7 @@ function renderEventRatings() {
               ${hCol(showHist ? 'APG★' : 'APG', showHist ? 'Asysty/mecz (hist.)' : 'Asysty/mecz')}
               ${hCol(showHist ? 'SPG★' : 'SPG', showHist ? 'Przechwyty/mecz (hist.)' : 'Przechwyty/mecz')}
               ${hCol(showHist ? 'BPG★' : 'BPG', showHist ? 'Bloki/mecz (hist.)' : 'Bloki/mecz')}
-              ${hCol('FG%')} ${hCol('GP')}
+              ${hCol('FG%')} ${hCol('W-L','Wygrane-Porażki drużyny. Wpływa na zmianę OVR: +3 przy 100% wygranych, -3 przy 100% porażek.')}
             </tr>
           </thead>
           <tbody>
@@ -4940,6 +4949,8 @@ function renderEventRatings() {
               const apgVal  = showHist ? (r.histApg !== null ? r.histApg.toFixed(1) : null) : r.apg.toFixed(1);
               const spgVal  = showHist ? (r.histSpg !== null ? r.histSpg.toFixed(1) : null) : r.spg.toFixed(1);
               const bpgVal  = showHist ? (r.histBpg !== null ? r.histBpg.toFixed(1) : null) : r.bpg.toFixed(1);
+              const wlColor = r.wins > r.losses ? 'var(--win)' : r.wins < r.losses ? 'var(--loss)' : 'var(--muted)';
+              const wlCell  = `<span style="font-size:.8rem;font-weight:700;color:${wlColor}">${r.wins}-${r.losses}</span>`;
               return `<tr style="border-bottom:1px solid rgba(255,255,255,.04);${i%2===1?'background:rgba(255,255,255,.015)':''}">
                 <td style="padding:.5rem .5rem .5rem .9rem;color:var(--muted);font-size:.85rem;font-weight:700">${i+1}</td>
                 <td style="padding:.5rem .6rem;white-space:nowrap">
@@ -4953,7 +4964,7 @@ function renderEventRatings() {
                 <td style="padding:.5rem;text-align:center">${statCell(spgVal)}</td>
                 <td style="padding:.5rem;text-align:center">${statCell(bpgVal)}</td>
                 <td style="padding:.5rem;text-align:center">${r.fgpct!==null?statCell(r.fgpct+'%'):statCell(null)}</td>
-                <td style="padding:.5rem;text-align:center;color:var(--muted);font-size:.85rem">${r.gp}</td>
+                <td style="padding:.5rem;text-align:center">${wlCell}</td>
               </tr>`;
             }).join('')}
           </tbody>
