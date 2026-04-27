@@ -4844,14 +4844,7 @@ function renderEventRatings() {
   });
   if(!Object.keys(statsMap).length) { wrap.innerHTML = ''; return; }
 
-  // League history by player
-  const ranking = _dsLeagueRanking();
-  const histByName = {};
-  ranking.forEach(p => {
-    if(!(p.name in histByName)) histByName[p.name] = {ovr:p.ovr, ppg:p.ppg, rpg:p.rpg, apg:p.apg, spg:p.spg, bpg:p.bpg};
-  });
-
-  // Historical dominant position per player (from global matches)
+  // Historical dominant position per player (built first — needed for histByName selection)
   const histPosCount = {};
   matches.forEach(m => {
     [m.team1, m.team2].forEach(team => {
@@ -4867,6 +4860,21 @@ function renderEventRatings() {
     if(!pm) return null;
     return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];
   };
+
+  // League history by player — prefer the entry for dominant historical position
+  // (a player may appear multiple times in ranking, once per position played)
+  const ranking = _dsLeagueRanking();
+  const allRankByName = {};
+  ranking.forEach(p => {
+    if(!allRankByName[p.name]) allRankByName[p.name] = [];
+    allRankByName[p.name].push(p);
+  });
+  const histByName = {};
+  Object.entries(allRankByName).forEach(([name, entries]) => {
+    const domPos = getHistPos(name);
+    const best = (domPos && entries.find(e => e.pos === domPos)) || entries[0];
+    histByName[name] = {ovr:best.ovr, ppg:best.ppg, rpg:best.rpg, apg:best.apg, spg:best.spg, bpg:best.bpg};
+  });
   const getEvPos = s => {
     if(!s.positions.length) return null;
     const pm = {};
