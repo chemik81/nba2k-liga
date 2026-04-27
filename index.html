@@ -6204,55 +6204,118 @@ function openEvNameFix(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
 
-  // Nazwy z globalnego rankingu (PSN)
   const leagueNames = [...new Set(matches.flatMap(m =>
     [...(m.team1?.players||[]),...(m.team2?.players||[])].map(p=>p.name)
   ).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const leagueSet = new Set(leagueNames);
+  const leagueLower = new Map();
+  leagueNames.forEach(n => leagueLower.set(n.toLowerCase(), n));
 
-  // Nazwy z meczów eventu
   const evNames = [...new Set((ev.matches||[]).flatMap(m =>
     [...(m.team1?.players||[]),...(m.team2?.players||[])].map(p=>p.name)
   ).filter(Boolean))];
 
-  const leagueSet = new Set(leagueNames);
+  // Group ev names by lowercase to detect case-variant duplicates within event
+  const evLowerGroups = new Map();
+  evNames.forEach(n => {
+    const lower = n.toLowerCase();
+    if(!evLowerGroups.has(lower)) evLowerGroups.set(lower, []);
+    evLowerGroups.get(lower).push(n);
+  });
 
-  // Znajdź niezgodności i najlepsze fuzzy-matche
-  _evNameFixList = evNames
-    .filter(n => !leagueSet.has(n))
-    .map(evName => {
-      let best = null, bestScore = 0;
-      for(const ln of leagueNames) {
-        const s = _dsFuzzyScore(evName, ln);
-        if(s > bestScore) { bestScore = s; best = ln; }
+  const fixSet = new Set();
+  _evNameFixList = [];
+
+  evNames.forEach(evName => {
+    if(fixSet.has(evName)) return;
+    const lower = evName.toLowerCase();
+    const group = evLowerGroups.get(lower);
+    const leagueCanonical = leagueLower.get(lower);
+
+    // Exact match in league and no case-dup in event -> OK
+    if(leagueSet.has(evName) && group.length === 1) return;
+
+    // Case-duplicate within event (same player, two capitalizations)
+    if(group.length > 1) {
+      const bestForm = group.find(v => v !== v.toUpperCase()) || leagueCanonical || group[0];
+      group.forEach(v => {
+        if(!fixSet.has(v)) {
+          fixSet.add(v);
+          _evNameFixList.push({ evName: v, suggestion: bestForm, score: 1.0, isCaseDup: true });
+        }
+      });
+      return;
+    }
+
+    // Not in league exactly
+    if(!leagueSet.has(evName)) {
+      fixSet.add(evName);
+      if(leagueCanonical) {
+        _evNameFixList.push({ evName, suggestion: leagueCanonical, score: 0.99 });
+      } else {
+        // Try fuzzy match vs league names
+        let best = null, bestScore = 0;
+        for(const ln of leagueNames) {
+          const s = _dsFuzzyScore(evName, ln);
+          if(s > bestScore) { bestScore = s; best = ln; }
+        }
+        // Also try fuzzy match vs OTHER ev names (catches OCR variants of same non-league player)
+        let bestEv = null, bestEvScore = 0;
+        for(const other of evNames) {
+          if(other === evName) continue;
+          const s = _dsFuzzyScore(evName, other);
+          if(s > bestEvScore) { bestEvScore = s; bestEv = other; }
+        }
+        // Pick whichever match is better; use lower threshold (0.3) for same-event names
+        const suggestion = (bestScore >= 0.4 && bestScore >= bestEvScore) ? best
+          : (bestEvScore >= 0.3) ? bestEv
+          : (bestScore >= 0.4) ? best : null;
+        const score = suggestion === bestEv ? bestEvScore : bestScore;
+        _evNameFixList.push({ evName, suggestion, score, isEvMatch: suggestion === bestEv });
       }
-      return { evName, suggestion: bestScore >= 0.4 ? best : null, score: bestScore };
-    });
+    }
+  });
 
   if(!_evNameFixList.length) {
-    el.innerHTML = `<div style="color:var(--win);font-size:.85rem;padding:.4rem .75rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:6px">✅ Wszystkie nazwy graczy są zgodne z rankingiem</div>`;
+    el.innerHTML = '<div style="color:var(--win);font-size:.85rem;padding:.4rem .75rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:6px">✅ Wszystkie nazwy graczy są zgodne z rankingiem</div>';
     return;
   }
 
-  const opts = leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}">${ln}</option>`).join('');
+  // ev names that are NOT mismatches (for "other ev names" optgroup in selects)
+  const cleanEvNames = evNames.filter(n => !_evNameFixList.find(f => f.evName === n));
 
   el.innerHTML = `
     <div style="background:rgba(245,197,24,.05);border:1px solid rgba(245,197,24,.25);border-radius:8px;padding:.75rem 1rem">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:.5px;margin-bottom:.6rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:.5px;margin-bottom:.3rem">
         🔗 DOPASUJ NAZWY GRACZY — ${_evNameFixList.length} niezgodności
       </div>
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">
-        Nazwy z screenów po lewej → wybierz prawidłową nazwę z listy po prawej
+        Nazwy z screenów po lewej → wybierz prawidłową nazwę z listy po prawej.<br>
+        Gracze spoza ligi: wybierz inną nazwę z eventu lub „pominą" żeby zachować jak jest.
       </div>
-      ${_evNameFixList.map((s,i) => `
+      ${_evNameFixList.map((s,i) => {
+        const hint = s.isCaseDup
+          ? ' <span style="font-size:.7rem;color:var(--accent)">⚠️ dup.pisowni</span>'
+          : s.isEvMatch
+            ? ' <span style="font-size:.7rem;color:var(--muted)">nie w lidze</span>'
+            : ' <span style="font-size:.7rem;color:var(--muted)">nie w lidze</span>';
+        const evOptsHtml = (cleanEvNames.length + _evNameFixList.filter((_,j)=>j!==i).length)
+          ? `<optgroup label="— z eventu —">${
+              [..._evNameFixList.filter((_,j)=>j!==i).map(f=>f.evName), ...cleanEvNames]
+                .map(n => `<option value="${n.replace(/"/g,'&quot;')}" ${n===s.suggestion?'selected':''}>${n}</option>`).join('')
+            }</optgroup>` : '';
+        return `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;flex-wrap:wrap">
-          <span style="font-size:.85rem;font-weight:700;color:var(--loss);min-width:120px">${s.evName}</span>
+          <span style="font-size:.85rem;font-weight:700;color:var(--loss);min-width:120px">${s.evName}${hint}</span>
           <span style="color:var(--muted);font-size:.8rem">→</span>
           <select id="evfix-${eventId}-${i}" style="flex:1;min-width:140px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.25rem .4rem;font-size:.82rem">
-            <option value="">— pomiń —</option>
-            ${leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}" ${ln===s.suggestion?'selected':''}>${ln}${ln===s.suggestion&&s.score<1?' (podobne: '+Math.round(s.score*100)+'%)':''}</option>`).join('')}
+            <option value="">— pominą —</option>
+            <optgroup label="— z ligi —">${leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}" ${ln===s.suggestion?'selected':''}>${ln}${ln===s.suggestion&&s.score<1?' (podobne: '+Math.round(s.score*100)+'%)':''}</option>`).join('')}</optgroup>
+            ${evOptsHtml}
           </select>
           <button onclick="applySingleEvFix('${eventId}',${i})" class="btn btn-primary" style="font-size:.78rem;padding:.25rem .6rem">✓</button>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
       <button onclick="applyAllEvFixes('${eventId}')" class="btn btn-primary" style="font-size:.82rem;margin-top:.5rem;padding:.35rem .9rem">✅ Zastosuj wszystkie zaznaczone</button>
     </div>`;
 }
