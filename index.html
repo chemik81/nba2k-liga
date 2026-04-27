@@ -5390,6 +5390,7 @@ async function saveEvent(editId) {
 }
 
 async function deleteEvent(id) {
+  if(!_isLoggedInSync()) { showToast('❌ Tylko główny admin może usuwać eventy', 'error'); return; }
   if(!confirm('Usunąć event?')) return;
   events = events.filter(e => e.id !== id);
   await saveData();
