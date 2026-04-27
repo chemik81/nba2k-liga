@@ -4893,10 +4893,11 @@ function renderEventRatings() {
 
   const ovrCell = (ovr, pre, delta) => {
     const c = _dsOvrColor(ovr);
-    const arrow = delta !== null && delta !== 0
-      ? `<span style="font-size:.65rem;color:${delta>0?'var(--win)':'var(--loss)'};margin-left:.15rem">${delta>0?'▲':'▼'}${Math.abs(delta)}</span>`
-      : '';
-    return `<span style="background:${c};color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center" title="Przed: ${pre}">${ovr}${arrow}</span>`;
+    const badge = `<span style="background:${c};color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center" title="Przed draftem: ${pre}">${ovr}</span>`;
+    const arrow = (delta !== null && delta !== 0)
+      ? `<span style="font-size:.72rem;font-weight:800;color:${delta>0?'var(--win)':'var(--loss)'};margin-left:.25rem">${delta>0?'▲':'▼'}${Math.abs(delta)}</span>`
+      : (delta === 0 ? `<span style="font-size:.72rem;color:var(--muted);margin-left:.25rem">—</span>` : '');
+    return `<span style="display:inline-flex;align-items:center;white-space:nowrap">${badge}${arrow}</span>`;
   };
   const statCell = (val, hi=false) =>
     `<span style="font-size:.85rem;font-weight:${hi?'800':'600'};color:${hi?'var(--accent)':'var(--text)'}">${val!==null?val:'—'}</span>`;
