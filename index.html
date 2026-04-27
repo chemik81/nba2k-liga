@@ -1122,7 +1122,7 @@
 
 <!-- GM PANEL MODAL -->
 <div class="modal-overlay" id="gm-panel-modal" style="z-index:10000">
-  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
+  <div class="modal" style="max-width:1080px;width:95vw;max-height:92vh;overflow-y:auto">
     <button class="modal-close" id="gm-panel-close-btn" onclick="closeGMPanel(window._gmPanelEventId)">&#x2715;</button>
     <div id="gm-panel-content"></div>
   </div>
@@ -6864,8 +6864,27 @@ async function assignCaptains(eventId) {
   const n = ev.numTeams || 2;
   if(ev.players.length < n) { showToast('❌ Za mało graczy na ' + n + ' drużyny', 'error'); return; }
 
+  // Apply captain lottery filter before shuffling
+  let _captPool = [...ev.players];
+  const _fType = window._captFilterType || 'all';
+  if(_fType === 'pos') {
+    const _fPos = window._captFilterPos || '';
+    if(_fPos) _captPool = _captPool.filter(p => p.primaryPos === _fPos || (p.positions||[]).includes(_fPos));
+    if(_captPool.length < n) _captPool = [...ev.players]; // fallback if filter leaves too few
+  } else if(_fType === 'ovr') {
+    const _ovrMin = +(window._captOvrMin || 0);
+    const _ovrMax = +(window._captOvrMax || 99);
+    const _enriched = _dsComputeOvr(ev.players, {});
+    const _ovrById = {};
+    _enriched.forEach(p => { _ovrById[p.id] = p.ovr || 0; });
+    _captPool = _captPool.filter(p => {
+      const o = _ovrById[p.id] || 0;
+      return (!_ovrMin || o >= _ovrMin) && (!_ovrMax || o <= _ovrMax);
+    });
+    if(_captPool.length < n) _captPool = [...ev.players]; // fallback
+  }
   // Shuffle and pick captains
-  const shuffled = [...ev.players].sort(() => Math.random() - 0.5);
+  const shuffled = _captPool.sort(() => Math.random() - 0.5);
   const teamNames = ['Drużyna A','Drużyna B','Drużyna C','Drużyna D','Drużyna E','Drużyna F','Drużyna G','Drużyna H'];
   ev.teams = Array.from({length: n}, (_, i) => ({
     name: teamNames[i] || 'Drużyna ' + (i+1),
@@ -7047,7 +7066,24 @@ function refreshStartDraftModal(eventId) {
     captBlock.innerHTML = teams.length ? `
       <div style="margin-bottom:.4rem;font-size:.82rem;color:var(--muted)">Aktualni kapitanowie:</div>
       ${teams.map(t => '<div style="font-size:.82rem;padding:.15rem 0">★ <b>' + (t.captain?.name || '—') + '</b> → ' + t.name + '</div>').join('')}
-      <div style="display:flex;gap:.5rem;margin-top:.6rem">
+      <div style="background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:6px;padding:.5rem;margin-top:.5rem;margin-bottom:.25rem">
+        <div style="font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:.07em;margin-bottom:.35rem">FILTR LOSOWANIA</div>
+        <select id="capt-filter-type" onchange="(function(){const t=this.value;document.getElementById('capt-f-pos').style.display=t==='pos'?'flex':'none';document.getElementById('capt-f-ovr').style.display=t==='ovr'?'flex':'none';window._captFilterType=t}).call(this)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.3rem;font-size:.78rem;margin-bottom:.35rem;font-family:inherit">
+          <option value="all" ${(window._captFilterType||'all')==='all'?'selected':''}>Wszyscy gracze</option>
+          <option value="pos" ${(window._captFilterType||'all')==='pos'?'selected':''}>Po pozycji (primaryPos)</option>
+          <option value="ovr" ${(window._captFilterType||'all')==='ovr'?'selected':''}>Po OVR (przedział)</option>
+        </select>
+        <div id="capt-f-pos" style="display:${(window._captFilterType||'all')==='pos'?'flex':'none'};gap:.25rem;flex-wrap:wrap;margin-bottom:.3rem">
+          ${['PG','SG','SF','PF','C'].map(pos => `<button onclick="window._captFilterPos='${pos}';document.querySelectorAll('.capt-pos-b').forEach(b=>{b.style.background='';b.style.color='var(--muted)'});this.style.background='var(--accent)';this.style.color='#000'" class="capt-pos-b" style="background:${(window._captFilterPos||'')==='${pos}'?'var(--accent)':'var(--surface2)'};color:${(window._captFilterPos||'')==='${pos}'?'#000':'var(--muted)'};border:1px solid var(--border);border-radius:4px;padding:.2rem .5rem;cursor:pointer;font-size:.78rem;font-weight:700;font-family:inherit">${pos}</button>`).join('')}
+        </div>
+        <div id="capt-f-ovr" style="display:${(window._captFilterType||'all')==='ovr'?'flex':'none'};gap:.35rem;align-items:center">
+          <span style="font-size:.75rem;color:var(--muted)">OVR:</span>
+          <input id="capt-ovr-min" type="number" min="40" max="99" value="${window._captOvrMin||''}" oninput="window._captOvrMin=this.value" placeholder="min" style="width:52px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.2rem .35rem;font-size:.78rem;text-align:center">
+          <span style="font-size:.75rem;color:var(--muted)">–</span>
+          <input id="capt-ovr-max" type="number" min="40" max="99" value="${window._captOvrMax||''}" oninput="window._captOvrMax=this.value" placeholder="max" style="width:52px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.2rem .35rem;font-size:.78rem;text-align:center">
+        </div>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.4rem">
         <button onclick="reassignCaptainsFromModal('${eventId}', false)" 
           style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.4rem;cursor:pointer;font-family:inherit;font-size:.78rem">
           🎲 Losuj ponownie
@@ -7598,8 +7634,20 @@ function renderGMPanel(eventId) {
   const closeBtn = document.getElementById('gm-panel-close-btn');
   if(closeBtn) closeBtn.style.color = '#6b7080';
 
-  const pool = ev.draftPool || [];
   const order = ev.draftOrder || [];
+  // Enrich pool players with full league stats for table display
+  const _gmAllForEnrich = [...(ev.draftPool||[]), ...(ev.teams||[]).flatMap(t=>t.players||[])];
+  const _gmStatsMap = {};
+  _dsComputeOvr(_gmAllForEnrich, {}).forEach(p => { _gmStatsMap[p.id] = p; });
+  const _eGM = p => p ? {...p, ..._gmStatsMap[p.id]} : p;
+  const pool = (ev.draftPool||[]).map(_eGM).sort((a,b)=>(b.ovr||0)-(a.ovr||0));
+  const _posF = window._gmPosFilter || 'ALL';
+  const _srchQ = (window._gmSearchQuery||'').toLowerCase().trim();
+  const filteredPool = pool.filter(p => {
+    const okPos = _posF==='ALL' || p.primaryPos===_posF || (p.positions||[]).includes(_posF);
+    const okSrch = !_srchQ || p.name.toLowerCase().includes(_srchQ);
+    return okPos && okSrch;
+  });
   const turn = ev.draftTurn || 0;
   const isDraftActive = ev.status === 'draft';
   const isDone = !isDraftActive || turn >= order.length;
@@ -7640,65 +7688,105 @@ function renderGMPanel(eventId) {
   }
 
   document.getElementById('gm-panel-content').innerHTML = `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.25rem;color:#f5c518">🎮 PANEL GM — ${myTeam.name}</div>
-    <div style="font-size:.85rem;color:#6b7080;margin-bottom:1.25rem">Kapitan: ${myTeam.captain?.name}</div>
-    ${statusCard}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem;color:#6b7080">👥 PULA GRACZY (${pool.length})</div>
-        <div style="display:flex;flex-direction:column;gap:.3rem;max-height:400px;overflow-y:auto">
-          ${pool.map(p => `<div style="display:flex;align-items:center;gap:.5rem;background:#161922;border-radius:8px;padding:.5rem .75rem;border:1px solid ${isMyTurn ? 'rgba(245,197,24,.15)' : 'transparent'};${isMyTurn ? 'cursor:pointer;transition:border-color .15s' : 'opacity:.6'}"
-            ${isMyTurn ? `onclick="draftPickPlayer('${eventId}','${p.id}')" onmouseover="this.style.borderColor='#f5c518'" onmouseout="this.style.borderColor='rgba(245,197,24,.15)'"` : ''}>
-            ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%">` : '<div style="width:28px;height:28px;border-radius:50%;background:#1d2130;display:flex;align-items:center;justify-content:center;font-size:14px">👤</div>'}
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:600;font-size:.9rem;color:#e8eaf0;display:flex;align-items:center;gap:.3rem">${p.name}${p.speaksEnglish ? gmFlag() : ''}</div>
-              <div style="font-size:.7rem;margin-top:.15rem;display:flex;align-items:center;gap:.25rem">
-                ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:4px;padding:.1rem .3rem">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:#6b7080">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}` : p.positions?.length ? `<span style="color:#f5c518">${p.positions.join(' · ')}</span>` : ''}
-              </div>
-            </div>
-            ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem;flex-shrink:0">${p.ovr}</span>` : ''}
-            ${isMyTurn ? '<span style="color:#f5c518;font-size:.8rem;flex-shrink:0;font-weight:700">+ Pick</span>' : ''}
-          </div>`).join('')}
-          ${pool.length === 0 ? '<div style="color:#6b7080;font-size:.85rem;padding:.5rem">Wszyscy wybrani</div>' : ''}
-        </div>
-      </div>
-      <div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem;color:#6b7080">🏀 MÓJ SKŁAD (${myPicks.length}/${perTeam})</div>
-        <div style="background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem">
-          <div style="flex:1;font-size:.85rem;color:#f5c518;font-weight:700">★ ${myTeam.captain?.name} (kpt)</div>
-          ${myTeam.captain?.ovr ? `<span style="background:${_dsOvrColor(myTeam.captain.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem">${myTeam.captain.ovr}</span>` : ''}
-        </div>
-        ${myPicks.map((p, i) => `<div style="background:#161922;border:1px solid rgba(245,197,24,.1);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem">
-          <span style="font-size:.75rem;color:#6b7080">#${i+1}</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:.85rem;font-weight:600;color:#e8eaf0;display:flex;align-items:center;gap:.25rem">${p.name}${p.speaksEnglish ? gmFlag() : ''}</div>
-            <div style="font-size:.7rem;display:flex;align-items:center;gap:.2rem;margin-top:.1rem">
-              ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518">${p.primaryPos}</span>${p.positions?.filter(x=>x!==p.primaryPos).length ? '<span style="color:#6b7080">' + p.positions.filter(x=>x!==p.primaryPos).join('·') + '</span>' : ''}` : p.positions?.length ? `<span style="color:#f5c518">${p.positions.join('·')}</span>` : ''}
-            </div>
-          </div>
-          ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .3rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.78rem">${p.ovr}</span>` : ''}
-        </div>`).join('')}
-        ${Array.from({length: Math.max(0, perTeam - myPicks.length)}, () => `<div style="background:#161922;border:1px dashed rgba(245,197,24,.15);border-radius:8px;padding:.6rem .75rem;margin-bottom:.25rem;opacity:.35">
-          <div style="font-size:.8rem;color:#6b7080">— wolny slot</div>
-        </div>`).join('')}
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;color:#f5c518">🎮 PANEL GM — ${myTeam.name}</div>
+        <div style="font-size:.78rem;color:#6b7080">Kapitan: ${myTeam.captain?.name}</div>
       </div>
     </div>
-    ${ev.status === 'draft' || ev.status === 'closed' ? `
-    <div style="margin-top:1.25rem;border-top:1px solid rgba(245,197,24,.15);padding-top:1rem">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.75rem;color:#6b7080">🏀 WSZYSTKIE DRUŻYNY</div>
-      <div style="display:grid;grid-template-columns:repeat(${Math.min(ev.teams.length,2)},1fr);gap:.5rem">
-        ${(ev.teams||[]).map(t => {
-          const isMe = t.captain?.id === discordUser?.id;
-          const tPicks = (t.players||[]).filter(p => p.id !== t.captain?.id);
-          return `<div style="background:#161922;border-radius:8px;padding:.6rem .75rem;border:1px solid ${isMe ? '#f5c518' : 'rgba(245,197,24,.15)'}">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;margin-bottom:.3rem;color:${isMe ? '#f5c518' : '#e8eaf0'}">${t.name}${isMe ? ' ★' : ''}</div>
-            <div style="font-size:.75rem;color:#f5c518">★ ${t.captain?.name||'—'}</div>
-            ${tPicks.map(p => `<div style="font-size:.75rem;padding:.1rem 0;color:#e8eaf0">${p.name}${p.positions?.length ? ' <span style="color:#6b7080">' + p.positions.join('·') + '</span>' : ''}</div>`).join('')}
-            ${ev.draftPool ? Array.from({length:Math.max(0,perTeam-tPicks.length)},()=>'<div style="font-size:.72rem;color:#6b7080;opacity:.4">— slot</div>').join('') : ''}
-          </div>`;
-        }).join('')}
+    ${statusCard}
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:1.25rem;margin-top:.75rem;align-items:start">
+      <!-- LEFT: Available Players table -->
+      <div>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;color:#6b7080">DOSTĘPNI GRACZE (${filteredPool.length}/${pool.length})</div>
+          <div style="display:flex;gap:.2rem;flex-shrink:0">
+            ${['ALL','PG','SG','SF','PF','C'].map(pos => `<button onclick="window._gmPosFilter='${pos}';renderGMPanel('${eventId}')" style="background:${'${_posF}'===pos?'#f5c518':'rgba(245,197,24,.1)'};color:${'${_posF}'===pos?'#000':'#f5c518'};border:none;border-radius:4px;padding:.2rem .4rem;cursor:pointer;font-size:.72rem;font-weight:700;font-family:inherit">${pos}</button>`).join('')}
+          </div>
+          <input type="text" placeholder="Szukaj..." value="${_srchQ}"
+            oninput="window._gmSearchQuery=this.value;renderGMPanel('${eventId}')"
+            style="margin-left:auto;background:#161922;border:1px solid rgba(245,197,24,.2);color:#e8eaf0;border-radius:6px;padding:.25rem .55rem;font-size:.8rem;width:130px;font-family:inherit">
+        </div>
+        <div style="overflow-y:auto;max-height:480px">
+          <table style="width:100%;border-collapse:collapse">
+            <thead style="position:sticky;top:0;background:#0f1117">
+              <tr style="border-bottom:1px solid rgba(245,197,24,.2)">
+                <th style="text-align:left;padding:.35rem .4rem;color:#6b7080;font-size:.7rem;font-weight:700;letter-spacing:.07em">GRACZ</th>
+                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">POS</th>
+                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">GP</th>
+                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">PPG</th>
+                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">RPG</th>
+                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">APG</th>
+                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">OVR</th>
+                ${isMyTurn ? '<th style="width:52px"></th>' : ''}
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredPool.map(p => `<tr style="border-bottom:1px solid rgba(255,255,255,.04);${isMyTurn?'cursor:pointer':''}" ${isMyTurn ? `onclick="draftPickPlayer('${eventId}','${p.id}')" onmouseover="this.style.background='rgba(245,197,24,.05)'" onmouseout="this.style.background=''"` : 'style="opacity:.7"'}>
+                <td style="padding:.4rem;display:flex;align-items:center;gap:.4rem">
+                  ${p.avatar ? `<img src="${p.avatar}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0">` : '<div style="width:24px;height:24px;border-radius:50%;background:#1d2130;flex-shrink:0"></div>'}
+                  <span style="font-weight:600;font-size:.85rem;color:#e8eaf0;white-space:nowrap">${p.name}${p.speaksEnglish ? gmFlag() : ''}</span>
+                </td>
+                <td style="text-align:center;padding:.4rem">
+                  ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:3px;padding:.1rem .3rem;font-size:.75rem">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="color:#6b7080;font-size:.75rem">${p.positions[0]}</span>` : '<span style="color:#6b7080">—</span>')}
+                </td>
+                <td style="text-align:center;padding:.4rem;color:#6b7080;font-size:.82rem">${p.gp||'—'}</td>
+                <td style="text-align:center;padding:.4rem;color:#e8eaf0;font-weight:700;font-size:.82rem">${p.ppg||'—'}</td>
+                <td style="text-align:center;padding:.4rem;color:#e8eaf0;font-size:.82rem">${p.rpg||'—'}</td>
+                <td style="text-align:center;padding:.4rem;color:#e8eaf0;font-size:.82rem">${p.apg||'—'}</td>
+                <td style="text-align:center;padding:.4rem">
+                  ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;display:inline-block">${p.ovr}</span>` : '<span style="color:#6b7080">—</span>'}
+                </td>
+                ${isMyTurn ? `<td style="text-align:center;padding:.4rem"><span style="color:#f5c518;font-size:.75rem;font-weight:700">+ Pick</span></td>` : ''}
+              </tr>`).join('')}
+            </tbody>
+          </table>
+          ${filteredPool.length===0 ? '<div style="color:#6b7080;text-align:center;padding:1.5rem;font-size:.85rem">' + (pool.length===0 ? 'Wszyscy gracze zostali wybrani' : 'Brak graczy dla wybranego filtra') + '</div>' : ''}
+        </div>
       </div>
-    </div>` : ''}
+      <!-- RIGHT: My team + all teams -->
+      <div>
+        <!-- My team -->
+        <div style="margin-bottom:1rem">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;margin-bottom:.4rem;color:#6b7080">MÓJ SKŁAD (${myPicks.length+1}/${perTeam+1})</div>
+          <div style="display:flex;align-items:center;gap:.5rem;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.35);border-radius:8px;padding:.45rem .7rem;margin-bottom:.2rem">
+            <span style="font-size:.7rem;font-weight:900;color:#f5c518;min-width:1.8rem">KPT</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.85rem;font-weight:700;color:#f5c518;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${myTeam.captain?.name}</div>
+              ${(_eGM(myTeam.captain||{})).primaryPos ? `<span style="font-size:.7rem;color:rgba(245,197,24,.6)">${(_eGM(myTeam.captain||{})).primaryPos}</span>` : ''}
+            </div>
+            ${(_eGM(myTeam.captain||{})).ovr ? `<span style="background:${_dsOvrColor((_eGM(myTeam.captain||{})).ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;flex-shrink:0">${(_eGM(myTeam.captain||{})).ovr}</span>` : (myTeam.captain?.ovr ? `<span style="background:${_dsOvrColor(myTeam.captain.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;flex-shrink:0">${myTeam.captain.ovr}</span>` : '')}
+          </div>
+          ${myPicks.map((p,i) => `<div style="display:flex;align-items:center;gap:.5rem;background:#161922;border:1px solid rgba(245,197,24,.1);border-radius:8px;padding:.45rem .7rem;margin-bottom:.2rem">
+            <span style="font-size:.7rem;color:#6b7080;min-width:1.8rem">#${i+1}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.83rem;font-weight:600;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+              ${p.primaryPos ? `<span style="font-size:.7rem;color:#f5c518">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="font-size:.7rem;color:#6b7080">${p.positions.join('·')}</span>` : '')}
+            </div>
+            ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;flex-shrink:0">${p.ovr}</span>` : ''}
+          </div>`).join('')}
+          ${Array.from({length:Math.max(0,perTeam-myPicks.length)},()=>'<div style="background:#161922;border:1px dashed rgba(245,197,24,.1);border-radius:8px;padding:.45rem .7rem;margin-bottom:.2rem;opacity:.4"><div style="font-size:.78rem;color:#6b7080">— wolny slot</div></div>').join('')}
+        </div>
+        <!-- All teams -->
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;margin-bottom:.4rem;color:#6b7080">WSZYSTKIE DRUŻYNY</div>
+          ${(ev.teams||[]).map(t => {
+            const isMe = t.captain?.id === discordUser?.id;
+            const tAll = [t.captain, ...(t.players||[]).filter(p=>p.id!==t.captain?.id)].filter(Boolean);
+            return `<div style="background:#161922;border-radius:8px;padding:.5rem .7rem;border:1px solid ${isMe?'rgba(245,197,24,.5)':'rgba(245,197,24,.1)'};margin-bottom:.25rem">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.82rem;margin-bottom:.25rem;color:${isMe?'#f5c518':'#e8eaf0'}">${t.name}${isMe?' ★':''}</div>
+              ${tAll.map((p,i) => `<div style="display:flex;align-items:center;gap:.35rem;padding:.15rem 0;${i>0?'border-top:1px solid rgba(255,255,255,.04)':''}">
+                <span style="font-size:.68rem;min-width:1.5rem;color:${i===0?'#f5c518':'#6b7080'}">${i===0?'★':'#'+i}</span>
+                <span style="flex:1;font-size:.78rem;color:${i===0?'#f5c518':'#e8eaf0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</span>
+                ${p.primaryPos ? `<span style="font-size:.68rem;color:#6b7080;flex-shrink:0">${p.primaryPos}</span>` : ''}
+                ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:3px;padding:.05rem .25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.72rem;flex-shrink:0">${p.ovr}</span>` : ''}
+              </div>`).join('')}
+              ${Array.from({length:Math.max(0,perTeam+1-tAll.length)},()=>'<div style="font-size:.7rem;color:#6b7080;opacity:.35;padding:.15rem 0">— slot</div>').join('')}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
     `;
 
   if(ev.timerEnd && isDraftActive && !isDone) startGMTimer(ev.timerEnd, eventId);
