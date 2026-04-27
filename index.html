@@ -6024,21 +6024,50 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     }]);
     if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = data.content.map(c => c.text||'').join('');
-    let jsonStr = text.slice(text.indexOf('{'), text.lastIndexOf('}')+1);
+    console.log('[evParse] raw AI response:', text.slice(0, 500));
+
+    const firstBrace = text.indexOf('{');
+    const lastBrace  = text.lastIndexOf('}');
+    if(firstBrace === -1 || lastBrace <= firstBrace)
+      throw new Error('AI nie zwróciło JSON. Odpowiedź: ' + text.slice(0,300));
+
+    let jsonStr = text.slice(firstBrace, lastBrace + 1);
     const tryParse = s => { try { return JSON.parse(s); } catch(e) { return null; } };
-    // Próba 1: podstawowe czyszczenie
+
+    // Próba 1: normalizacja znaków + trailing commas + JS comments
     let cleaned = jsonStr
+      .replace(/﻿/g, '')                    // BOM
+      .replace(/[“”]/g, '"')           // typograficzne cudzysłowy → "
+      .replace(/[‘’]/g, "'")           // typograficzne apostrofy → '
       .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'')
       .replace(/,\s*([}\]])/g,'$1')
       .replace(/\/\/[^\n]*/g,'');
-    // Próba 2: escapuj dosłowne newline/CR wewnątrz stringów
-    const escapeStrings = s => s.replace(/"((?:[^"\\]|\\.)*)"/g,
-      (_,inner) => '"' + inner.replace(/\r/g,'').replace(/\n/g,' ').replace(/\t/g,' ') + '"');
-    // Próba 3: agresywne — zamień wszystkie białe znaki na spacje
-    const parsed = tryParse(cleaned)
-      ?? tryParse(escapeStrings(cleaned))
+
+    // Próba 2: znak-po-znaku escapuj literal newline/tab wewnątrz stringów JSON
+    const escapeInsideStrings = s => {
+      let out = '', inStr = false, esc = false;
+      for(const ch of s) {
+        if(esc)        { out += ch; esc = false; continue; }
+        if(ch==='\\')  { out += ch; esc = true;  continue; }
+        if(ch==='"')   { inStr = !inStr; out += ch; continue; }
+        if(inStr && (ch==='\n'||ch==='\r'||ch==='\t')) { out += ' '; continue; }
+        out += ch;
+      }
+      return out;
+    };
+
+    // 4 próby, coraz bardziej agresywne
+    let parsed = tryParse(cleaned)
+      ?? tryParse(escapeInsideStrings(cleaned))
       ?? tryParse(cleaned.replace(/[\r\n\t]+/g,' '))
-      ?? (() => { throw new Error('Nie udało się sparsować JSON — spróbuj z wyraźniejszym zdjęciem'); })();
+      ?? tryParse(escapeInsideStrings(cleaned).replace(/[\r\n\t]+/g,' '));
+    if(!parsed) {
+      const finalAttempt = escapeInsideStrings(cleaned).replace(/[\r\n\t]+/g,' ');
+      let parseErr = '';
+      try { JSON.parse(finalAttempt); } catch(e) { parseErr = e.message; }
+      console.error('[evParse] all 4 attempts failed.\nError:', parseErr, '\nExtracted JSON:', jsonStr.slice(0,800));
+      throw new Error('Błąd parsowania JSON: ' + parseErr + '\n\nFragment JSON:\n' + jsonStr.slice(0,300));
+    }
     _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
 
     statusEl.style.background = 'rgba(46,204,113,.1)';
@@ -6077,7 +6106,13 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     statusEl.style.background = 'rgba(232,69,60,.1)';
     statusEl.style.border = '1px solid rgba(232,69,60,.3)';
     statusEl.style.color = 'var(--loss)';
-    statusEl.textContent = '❌ ' + err.message;
+    const msgParts = err.message.split('\n\nFragment JSON:\n');
+    if(msgParts.length > 1) {
+      statusEl.innerHTML = `<span>❌ ${msgParts[0].replace(/</g,'&lt;')}</span>`
+        + `<pre style="margin:.5rem 0 0;font-size:.7rem;white-space:pre-wrap;word-break:break-all;background:rgba(0,0,0,.3);padding:.4rem;border-radius:4px;color:#ccc;max-height:120px;overflow:auto">${msgParts[1].replace(/</g,'&lt;')}</pre>`;
+    } else {
+      statusEl.textContent = '❌ ' + err.message;
+    }
   }
 }
 
