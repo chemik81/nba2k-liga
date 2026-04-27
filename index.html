@@ -6034,14 +6034,16 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     let jsonStr = text.slice(firstBrace, lastBrace + 1);
     const tryParse = s => { try { return JSON.parse(s); } catch(e) { return null; } };
 
-    // Próba 1: normalizacja znaków + trailing commas + JS comments
+    // Próba 1: normalizacja znaków + trailing commas + JS comments + missing commas between objects
     let cleaned = jsonStr
-      .replace(/﻿/g, '')                    // BOM
-      .replace(/[“”]/g, '"')           // typograficzne cudzysłowy → "
-      .replace(/[‘’]/g, "'")           // typograficzne apostrofy → '
-      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'')
-      .replace(/,\s*([}\]])/g,'$1')
-      .replace(/\/\/[^\n]*/g,'');
+      .replace(/﻿/g, ‘’)                    // BOM
+      .replace(/[“”]/g, ‘”’)           // typograficzne cudzysłowy → “
+      .replace(/[‘’]/g, “’”)           // typograficzne apostrofy → ‘
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,’’)
+      .replace(/,\s*([}\]])/g,’$1’)     // trailing commas
+      .replace(/\/\/[^\n]*/g,’’)        // JS line comments
+      .replace(/\}\s*\{/g,’},{‘)        // brakujący przecinek między obiektami: }{  →  },{
+      .replace(/\]\s*\[/g,’],[‘);       // brakujący przecinek między tablicami: ][  →  ],[
 
     // Próba 2: znak-po-znaku escapuj literal newline/tab wewnątrz stringów JSON
     const escapeInsideStrings = s => {
