@@ -4874,25 +4874,11 @@ function renderEventRatings() {
     return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];
   };
 
-  // Per-position event averages (for cross-position comparison)
-  const posStatsTotals = {};
-  Object.values(statsMap).forEach(s => {
-    const pos = getEvPos(s);
-    if(!pos) return;
-    if(!posStatsTotals[pos]) posStatsTotals[pos] = {n:0,pts:0,reb:0,ast:0,stl:0,blk:0};
-    const gp = s.gp;
-    posStatsTotals[pos].n++;
-    posStatsTotals[pos].pts += s.pts/gp;
-    posStatsTotals[pos].reb += s.reb/gp;
-    posStatsTotals[pos].ast += s.ast/gp;
-    posStatsTotals[pos].stl += s.stl/gp;
-    posStatsTotals[pos].blk += s.blk/gp;
-  });
-  const posAvg = {};
-  Object.entries(posStatsTotals).forEach(([pos,d]) => {
-    if(d.n < 2) return; // need at least 2 players for a meaningful average
-    posAvg[pos] = {ppg:d.pts/d.n, rpg:d.reb/d.n, apg:d.ast/d.n, spg:d.stl/d.n, bpg:d.blk/d.n};
-  });
+  // Event average grade (position-neutral baseline for cross-position comparison)
+  const evAvgGradeNum = (() => {
+    const nums = Object.values(statsMap).map(s => s.gs / s.gp).filter(n => n > 0);
+    return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 9;
+  })();
 
   const perf = (ppg, rpg, apg, spg, bpg) =>
     ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
@@ -4922,14 +4908,17 @@ function renderEventRatings() {
     const winBonus = gp > 0 ? (wins/gp - 0.5) * 6 : 0;
     const evPos    = getEvPos(s);
     const histPos  = getHistPos(s.name);
-    const posChanged = !!(hist && evPos && histPos && evPos !== histPos && posAvg[evPos]);
+    const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
 
     let delta;
     if(!hist) {
       delta = 8; // new player debut bonus
     } else if(posChanged) {
-      // Different position in event: compare to event average for that position
-      delta = calcDelta(evPerf, posAvg[evPos], winBonus);
+      // Different position: use NBA2K grade as comparator (already position-aware)
+      // Grade A- (11) vs event avg B (9) → +3; Grade B- (8) vs avg B (9) → -1
+      const gradeNum = s.gs / s.gp;
+      const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
+      delta = Math.round(Math.max(-8, Math.min(8, pct * 20 + winBonus)));
     } else {
       delta = calcDelta(evPerf, hist, winBonus);
     }
