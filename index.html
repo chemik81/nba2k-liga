@@ -1,4 +1,15 @@
-<!DOCTYPE html><!-- v1772545680 -->
+<!
+async function finishEvent(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  if(!confirm('Zakończyć event "' + ev.title + '"? Status zmieni się na Zakończony.')) return;
+  ev.status = 'finished';
+  await saveData();
+  renderEvents();
+  showToast('🏆 Event zakończony!', 'success');
+}
+
+DOCTYPE html><!-- v1772545680 -->
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
@@ -5317,6 +5328,8 @@ function renderEvents() {
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎯 Wróć do Draft</button>` : ''}
         ${ev.status === 'closed' && ev.type === 'pickup' ? `<button onclick="event.stopPropagation();randomizeTeams('${ev.id}')"
           style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">🎲 Losuj drużyny</button>` : ''}
+        ${ev.status === 'active' ? `<button onclick="event.stopPropagation();finishEvent('${ev.id}')"
+          style="background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit;font-weight:700">✅ Zakończ event</button>` : ''}
       </div>` : ''}
     </div>`;
   }).join('');
