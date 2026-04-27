@@ -4896,7 +4896,7 @@ function renderEventRatings() {
     const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg);
     if(basePerf <= 0) return null;
     const pct = (evPerf - basePerf) / basePerf;
-    return Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
+    return Math.round(Math.max(-8, Math.min(8, pct * 11 + winBonus)));
   };
 
   const rows = Object.values(statsMap).map(s => {
@@ -4913,7 +4913,7 @@ function renderEventRatings() {
     const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
-    const winBonus = gp > 0 ? (wins/gp - 0.5) * 6 : 0;
+    const winBonus = gp > 0 ? (wins/gp - 0.5) * 10 : 0;
     const evPos    = getEvPos(s);
     const histPos  = getHistPos(s.name);
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
@@ -4926,7 +4926,7 @@ function renderEventRatings() {
       // Grade A- (11) vs event avg B (9) → +3; Grade B- (8) vs avg B (9) → -1
       const gradeNum = s.gs / s.gp;
       const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
-      delta = Math.round(Math.max(-8, Math.min(8, pct * 20 + winBonus)));
+      delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
     } else {
       delta = calcDelta(evPerf, hist, winBonus);
     }
