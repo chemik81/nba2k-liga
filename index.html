@@ -4881,7 +4881,7 @@ function renderEventRatings() {
     const hist  = histByName[s.name] || null;
     const preOvr  = hist?.ovr ?? 40;
     const evPerf  = perf(ppg, rpg, apg, spg, bpg);
-    const delta   = hist ? calcDelta(evPerf, hist) : calcDeltaNew(evPerf);
+    const delta   = hist ? calcDelta(evPerf, hist) : 8; // nowi gracze zawsze +8 za debiut
     const postOvr = Math.max(40, Math.min(99, preOvr + (delta ?? 0)));
     return {
       name: s.name, preOvr, postOvr, delta, isNew: !hist,
