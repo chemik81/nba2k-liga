@@ -7183,7 +7183,8 @@ async function confirmStartDraft() {
   ev.draftOrder = buildDraftOrder(method, n, ev.draftPool.length);
   ev.draftMethod = method;
   ev.timerSecs = timerSecs;
-  ev.timerEnd = new Date(Date.now() + timerSecs * 1000).toISOString();
+  ev.timerEnd = null;
+  ev.draftPaused = true;
   ev.status = 'draft';
   await saveData();
   document.getElementById('start-draft-modal').classList.remove('open');
@@ -7243,7 +7244,7 @@ function startDraftTimer(endsAt, eventId) {
       // Only admin triggers autopick to avoid race condition
       if(_draftTimerEventId && _isEventsAdminSync()) {
         const ev = events.find(e => e.id === _draftTimerEventId);
-        if(ev && ev.status === 'draft' && ev.draftPool?.length) {
+        if(ev && ev.status === 'draft' && ev.draftPool?.length && !ev.draftPaused) {
           console.log('[Timer] Auto-pick triggered for', ev.draftPool[0].name);
           draftPickPlayer(_draftTimerEventId, ev.draftPool[0].id);
         }
@@ -7267,11 +7268,12 @@ function startDraftPolling(eventId) {
       const freshEv = freshEvents.find(e => e.id === eventId);
       if(!freshEv) return;
       const localEv = events.find(e => e.id === eventId);
-      if(!localEv || freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status) {
+      if(!localEv || freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status || freshEv.draftPaused !== localEv.draftPaused || freshEv.timerEnd !== localEv.timerEnd) {
         const idx = events.findIndex(e => e.id === eventId);
         if(idx !== -1) events[idx] = freshEv;
         renderDraftView(eventId);
-        if(freshEv.timerEnd) startDraftTimer(freshEv.timerEnd, eventId);
+        if(freshEv.timerEnd && !freshEv.draftPaused) startDraftTimer(freshEv.timerEnd, eventId);
+        else if(!freshEv.timerEnd && _draftTimerInterval) clearInterval(_draftTimerInterval);
         if(freshEv.status !== 'draft') { stopDraftPolling(); clearInterval(_draftTimerInterval); }
       }
     } catch(e) { /* ignore network errors */ }
@@ -7295,7 +7297,7 @@ function openDraftView(eventId) {
   renderDraftView(eventId);
   startDraftPolling(eventId);
   const _ev = events.find(e=>e.id===eventId);
-  if(_ev?.timerEnd) startDraftTimer(_ev.timerEnd, eventId);
+  if(_ev?.timerEnd && !_ev?.draftPaused) startDraftTimer(_ev.timerEnd, eventId);
 }
 
 function renderDraftView(eventId) {
@@ -7323,6 +7325,7 @@ function renderDraftView(eventId) {
   if(!isDone && !notStarted && !currentTeam) { console.warn('[Draft] currentTeamIdx', currentTeamIdx, 'out of range, teams:', ev.teams.length); }
   const isMyTurn = currentTeam && discordUser && currentTeam.captain?.id === discordUser.id;
   const isAdmin = _isEventsAdminSync();
+  const isPaused = !!(ev.draftPaused && ev.status === 'draft');
   const lastPick = ev.lastPick || null;
   const perTeam = order.length ? (order.length / (ev.teams.length || 1)) | 0 : 0;
 
@@ -7344,6 +7347,13 @@ function renderDraftView(eventId) {
       <div style="color:#6b7080;margin-top:.5rem;font-size:.9rem">Wszystkie drafty zostały wykonane</div>
       ${isAdmin ? `<button onclick="finishDraft('${eventId}')" class="btn btn-primary" style="margin-top:1rem">✅ Zatwierdź drużyny</button>` : ''}
     </div>`;
+  } else if(isPaused) {
+    topContentHtml = `<div style="text-align:center;padding:2.5rem 2rem;background:#10131a;border:2px solid rgba(245,197,24,.3);border-radius:8px;margin-bottom:20px">
+      <div style="font-size:2.5rem;margin-bottom:.5rem">⏸️</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;color:#f5c518;letter-spacing:2px">DRAFT WSTRZYMANY</div>
+      <div style="color:#6b7080;margin-top:.5rem;font-size:.9rem">Admin wstrzymał draft — pick #${turn + 1} z ${order.length}</div>
+      ${isAdmin ? `<button onclick="draftPlay('${eventId}')" style="margin-top:1rem;background:#4ade80;border:none;color:#000;padding:.5rem 1.5rem;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.95rem">&#9654; Uruchom draft</button>` : '<div style="color:#6b7080;font-size:.85rem;margin-top:.5rem">Poczekaj na admina...</div>'}
+    </div>`;
   } else if(currentTeam) {
     const logoHtml = currentTeam.logoB64 ? `<img src="${currentTeam.logoB64}" style="width:100%;height:100%;object-fit:cover">` : (currentTeam.name||'?')[0];
     const round = Math.floor(turn / ev.teams.length) + 1;
@@ -7363,7 +7373,7 @@ function renderDraftView(eventId) {
       </div>` : ''}
       ${ev.timerSecs ? `<div style="margin-left:auto;text-align:center">
         <div style="font-size:10px;color:#6b7080;text-transform:uppercase;letter-spacing:.1em">Czas</div>
-        <div id="draft-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:900;color:#f5c518;line-height:1;min-width:100px;text-align:center">—</div>
+        <div id="draft-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:900;color:#f5c518;line-height:1;min-width:100px;text-align:center">${isPaused ? '⏸️' : '—'}</div>
       </div>` : ''}
     </div>`;
   }
@@ -7443,14 +7453,16 @@ function renderDraftView(eventId) {
   overlay.innerHTML = `
     <style>@keyframes dvticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style>
     <div style="background:#10131a;border-bottom:2px solid #f5c518;padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;flex-wrap:wrap">
-      <div style="width:8px;height:8px;border-radius:50%;background:${isDone||notStarted?'#6b7080':'#4ade80'};${isDone||notStarted?'':'animation:hpulse 1.5s infinite'};flex-shrink:0"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:${isDone||notStarted||isPaused?'#6b7080':'#4ade80'};${isDone||notStarted||isPaused?'':'animation:hpulse 1.5s infinite'};flex-shrink:0"></div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:#f5c518;letter-spacing:.05em">🎯 DRAFT — ${ev.title}</div>
-      <div style="font-size:12px;color:#6b7080;text-transform:uppercase;letter-spacing:.1em">${isDone ? 'ZAKOŃCZONY' : notStarted ? 'OCZEKIWANIE' : 'LIVE'}</div>
+      <div style="font-size:12px;color:#6b7080;text-transform:uppercase;letter-spacing:.1em">${isDone ? 'ZAKOŃCZONY' : notStarted ? 'OCZEKIWANIE' : isPaused ? 'WSTRZYMANY' : 'LIVE'}</div>
       ${!isDone && (ev.teams||[]).length ? `<span style="font-size:.75rem;color:#6b7080">GM: <b style="color:${(ev.gmOnline||[]).length>=(ev.teams||[]).length?'#4ade80':'#f5c518'}">${(ev.gmOnline||[]).length}/${(ev.teams||[]).length}</b> online</span>` : ''}
       <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
         <button onclick="copyDraftWatchLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">🔗 Link</button>
         ${discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `<button onclick="openGMPanel('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">🎮 Panel GM</button>` : ''}
-        <button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')" style="background:#10131a;border:1px solid rgba(255,255,255,.1);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">✕ Zamknij</button>
+        ${isAdmin && !isDone && !notStarted ? `<button onclick="${isPaused ? 'draftPlay' : 'draftPause'}('${eventId}')" style="background:${isPaused ? '#4ade80' : 'rgba(245,197,24,.15)'};border:1px solid ${isPaused ? '#4ade80' : 'rgba(245,197,24,.4)'};color:${isPaused ? '#000' : '#f5c518'};border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">${isPaused ? '&#9654; Start' : '&#9646;&#9646; Pauza'}</button>` : ''}
+        ${isAdmin && !isDone ? `<button onclick="openCaptainNotifModal('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#f5c518;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">&#128226; Powiadom</button>` : ''}
+        <button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')" style="background:#10131a;border:1px solid rgba(255,255,255,.1);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">&#x2715; Zamknij</button>
       </div>
     </div>
     <div style="max-width:1400px;margin:0 auto;padding:20px;color:#e8eaf0;font-family:'Barlow',sans-serif">
@@ -7479,7 +7491,7 @@ async function draftPickPlayer(eventId, playerId) {
   ev.draftTurn = turn + 1;
   ev.lastPick = { playerName: player.name, teamName: ev.teams[teamIdx].name, pickNum: turn + 1, ts: new Date().toISOString() };
   // Reset timer for next pick
-  if(ev.timerSecs && ev.draftTurn < (ev.draftOrder||[]).length) {
+  if(ev.timerSecs && ev.draftTurn < (ev.draftOrder||[]).length && !ev.draftPaused) {
     ev.timerEnd = new Date(Date.now() + ev.timerSecs * 1000).toISOString();
   } else {
     ev.timerEnd = null;
@@ -7508,6 +7520,26 @@ async function adminPickFor(eventId) {
   if(!ev || !ev.draftPool?.length) return;
   // Auto-pick first available player
   await draftPickPlayer(eventId, ev.draftPool[0].id);
+}
+
+async function draftPlay(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || ev.status !== 'draft') return;
+  ev.draftPaused = false;
+  ev.timerEnd = new Date(Date.now() + ev.timerSecs * 1000).toISOString();
+  await saveData();
+  renderDraftView(eventId);
+  startDraftTimer(ev.timerEnd, eventId);
+}
+
+async function draftPause(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || ev.status !== 'draft') return;
+  ev.draftPaused = true;
+  ev.timerEnd = null;
+  if(_draftTimerInterval) clearInterval(_draftTimerInterval);
+  await saveData();
+  renderDraftView(eventId);
 }
 
 async function openGMPanel(eventId) {
@@ -7583,7 +7615,13 @@ function renderGMPanel(eventId) {
   }
 
   let statusCard = '';
-  if(ev.status === 'closed') {
+  if(ev.draftPaused && isDraftActive) {
+    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
+      <div style="font-size:1.5rem;margin-bottom:.4rem">⏸️</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:#f5c518">Draft wstrzymany</div>
+      <div style="font-size:.82rem;color:#6b7080;margin-top:.3rem">Admin wstrzymał draft. Poczekaj na wznowienie.</div>
+    </div>`;
+  } else if(ev.status === 'closed') {
     statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
       <div style="font-size:1.5rem;margin-bottom:.4rem">⏳</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:#6b7080">Oczekiwanie na start draftu</div>
@@ -7677,7 +7715,24 @@ function startGMTimer(endsAt, eventId) {
     const ss = String(left%60).padStart(2,'0');
     el.textContent = mm + ':' + ss;
     el.style.color = left <= 10 ? '#f87171' : left <= 30 ? '#fb923c' : '#f5c518';
-    if(left === 0) clearInterval(_gmTimerInterval);
+    if(left === 0) {
+      clearInterval(_gmTimerInterval);
+      // Immediately fetch fresh state so panel doesn't stay on stale 'isMyTurn'
+      if(workerUrl) {
+        fetch(workerUrl.replace(/\/$/, '') + '/data')
+          .then(r => r.json())
+          .then(fresh => {
+            const fEvs = fresh.record?.events || fresh.events || [];
+            const fEv = fEvs.find(e => e.id === eventId);
+            if(fEv) {
+              const fi = events.findIndex(e => e.id === eventId);
+              if(fi !== -1) events[fi] = fEv;
+              renderGMPanel(eventId);
+              if(fEv.timerEnd && fEv.status === 'draft' && !fEv.draftPaused) startGMTimer(fEv.timerEnd, eventId);
+            }
+          }).catch(() => {});
+      }
+    }
   }, 500);
 }
 
@@ -7702,19 +7757,21 @@ function startGMPolling(eventId) {
         const prevTurn   = events[idx].draftTurn;
         const prevStatus = events[idx].status;
         const prevTimer  = events[idx].timerEnd;
+        const prevPaused = events[idx].draftPaused;
         events[idx] = freshEv;
         // Update _dataLoadedAt so stale check doesn't false-positive after polling
         window._dataLoadedAt = freshEv._savedAt || Date.now();
         const changed = freshEv.draftTurn !== prevTurn
                      || freshEv.status    !== prevStatus
-                     || freshEv.timerEnd  !== prevTimer;
+                     || freshEv.timerEnd  !== prevTimer
+                     || freshEv.draftPaused !== prevPaused;
         if(changed) {
           renderGMPanel(eventId);
           if(freshEv.timerEnd && freshEv.status === 'draft') startGMTimer(freshEv.timerEnd, eventId);
         }
       }
     } catch(e) {}
-  }, 2500);
+  }, 1500);
 }
 
 async function finishDraft(eventId) {
