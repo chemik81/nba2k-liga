@@ -4896,7 +4896,7 @@ function renderEventRatings() {
     const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg);
     if(basePerf <= 0) return null;
     const pct = (evPerf - basePerf) / basePerf;
-    return Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
+    return Math.round(Math.max(-8, Math.min(8, pct * 11 + winBonus)));
   };
 
   const rows = Object.values(statsMap).map(s => {
@@ -4913,7 +4913,7 @@ function renderEventRatings() {
     const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
-    const winBonus = gp > 0 ? (wins/gp - 0.5) * 6 : 0;
+    const winBonus = gp > 0 ? (wins/gp - 0.5) * 10 : 0;
     const evPos    = getEvPos(s);
     const histPos  = getHistPos(s.name);
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
@@ -4926,7 +4926,7 @@ function renderEventRatings() {
       // Grade A- (11) vs event avg B (9) → +3; Grade B- (8) vs avg B (9) → -1
       const gradeNum = s.gs / s.gp;
       const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
-      delta = Math.round(Math.max(-8, Math.min(8, pct * 20 + winBonus)));
+      delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
     } else {
       delta = calcDelta(evPerf, hist, winBonus);
     }
@@ -7778,7 +7778,7 @@ function renderGMPanel(eventId) {
               ${tAll.map((p,i) => `<div style="display:flex;align-items:center;gap:.35rem;padding:.15rem 0;${i>0?'border-top:1px solid rgba(255,255,255,.04)':''}">
                 <span style="font-size:.68rem;min-width:1.5rem;color:${i===0?'#f5c518':'#6b7080'}">${i===0?'★':'#'+i}</span>
                 <span style="flex:1;font-size:.78rem;color:${i===0?'#f5c518':'#e8eaf0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</span>
-                ${p.primaryPos ? `<span style="font-size:.68rem;color:#6b7080;flex-shrink:0">${p.primaryPos}</span>` : ''}
+                ${(p.primaryPos||p.positions?.length) ? `<span style="font-size:.68rem;color:#6b7080;flex-shrink:0">${p.primaryPos||p.positions[0]}</span>` : ''}
                 ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:3px;padding:.05rem .25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.72rem;flex-shrink:0">${p.ovr}</span>` : ''}
               </div>`).join('')}
               ${Array.from({length:Math.max(0,perTeam+1-tAll.length)},()=>'<div style="font-size:.7rem;color:#6b7080;opacity:.35;padding:.15rem 0">— slot</div>').join('')}
