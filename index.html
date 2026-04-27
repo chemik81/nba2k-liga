@@ -4824,6 +4824,7 @@ function renderEventRatings() {
   if(!ev) { wrap.innerHTML = ''; return; }
   const evMatchList = ev.matches || [];
 
+  // Aggregate stats + track positions and wins
   const statsMap = {};
   evMatchList.forEach(m => {
     const t1won = (m.team1?.score ?? 0) > (m.team2?.score ?? 0);
@@ -4831,9 +4832,10 @@ function renderEventRatings() {
       const won = ti === 0 ? t1won : !t1won;
       (team?.players||[]).forEach(p => {
         if(!p.name) return;
-        if(!statsMap[p.name]) statsMap[p.name] = {name:p.name,gp:0,wins:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gs:0};
+        if(!statsMap[p.name]) statsMap[p.name] = {name:p.name,gp:0,wins:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gs:0,positions:[]};
         const s = statsMap[p.name];
         s.gp++; if(won) s.wins++;
+        if(p.pos) s.positions.push(p.pos);
         s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
         s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gs+=gradeToNum(p.grade||'B');
@@ -4842,35 +4844,65 @@ function renderEventRatings() {
   });
   if(!Object.keys(statsMap).length) { wrap.innerHTML = ''; return; }
 
+  // League history by player
   const ranking = _dsLeagueRanking();
   const histByName = {};
   ranking.forEach(p => {
     if(!(p.name in histByName)) histByName[p.name] = {ovr:p.ovr, ppg:p.ppg, rpg:p.rpg, apg:p.apg, spg:p.spg, bpg:p.bpg};
   });
 
+  // Historical dominant position per player (from global matches)
+  const histPosCount = {};
+  matches.forEach(m => {
+    [m.team1, m.team2].forEach(team => {
+      (team?.players||[]).forEach(p => {
+        if(!p.name || !p.pos) return;
+        if(!histPosCount[p.name]) histPosCount[p.name] = {};
+        histPosCount[p.name][p.pos] = (histPosCount[p.name][p.pos]||0) + 1;
+      });
+    });
+  });
+  const getHistPos = name => {
+    const pm = histPosCount[name];
+    if(!pm) return null;
+    return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];
+  };
+  const getEvPos = s => {
+    if(!s.positions.length) return null;
+    const pm = {};
+    s.positions.forEach(p => { pm[p] = (pm[p]||0)+1; });
+    return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];
+  };
+
+  // Per-position event averages (for cross-position comparison)
+  const posStatsTotals = {};
+  Object.values(statsMap).forEach(s => {
+    const pos = getEvPos(s);
+    if(!pos) return;
+    if(!posStatsTotals[pos]) posStatsTotals[pos] = {n:0,pts:0,reb:0,ast:0,stl:0,blk:0};
+    const gp = s.gp;
+    posStatsTotals[pos].n++;
+    posStatsTotals[pos].pts += s.pts/gp;
+    posStatsTotals[pos].reb += s.reb/gp;
+    posStatsTotals[pos].ast += s.ast/gp;
+    posStatsTotals[pos].stl += s.stl/gp;
+    posStatsTotals[pos].blk += s.blk/gp;
+  });
+  const posAvg = {};
+  Object.entries(posStatsTotals).forEach(([pos,d]) => {
+    if(d.n < 2) return; // need at least 2 players for a meaningful average
+    posAvg[pos] = {ppg:d.pts/d.n, rpg:d.reb/d.n, apg:d.ast/d.n, spg:d.stl/d.n, bpg:d.blk/d.n};
+  });
+
   const perf = (ppg, rpg, apg, spg, bpg) =>
     ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
 
-  const calcDelta = (evPerf, hist, winBonus) => {
-    if(!hist || hist.ppg + hist.rpg + hist.apg + hist.spg + hist.bpg === 0) return null;
-    const histPerf = perf(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg);
-    if(histPerf <= 0) return null;
-    const pct = (evPerf - histPerf) / histPerf;
-    // 70% indywidualne wyniki + 30% wyniki drużyny (winBonus: -3 do +3)
+  const calcDelta = (evPerf, baseline, winBonus) => {
+    if(!baseline || baseline.ppg + baseline.rpg + baseline.apg + baseline.spg + baseline.bpg === 0) return null;
+    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg);
+    if(basePerf <= 0) return null;
+    const pct = (evPerf - basePerf) / basePerf;
     return Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
-  };
-
-  // Compute event average performance — baseline for players with no league history
-  const allPerfs = Object.values(statsMap).map(s => {
-    const gp = s.gp;
-    return perf(s.pts/gp, s.reb/gp, s.ast/gp, s.stl/gp, s.blk/gp);
-  });
-  const evAvgPerf = allPerfs.length ? allPerfs.reduce((a,b)=>a+b,0)/allPerfs.length : 5;
-
-  const calcDeltaNew = (evPerf) => {
-    if(evAvgPerf <= 0) return 0;
-    const pct = (evPerf - evAvgPerf) / evAvgPerf;
-    return Math.round(Math.max(-8, Math.min(8, pct * 15)));
   };
 
   const rows = Object.values(statsMap).map(s => {
@@ -4880,23 +4912,35 @@ function renderEventRatings() {
     const apg = +(s.ast/gp).toFixed(1);
     const spg = +(s.stl/gp).toFixed(1);
     const bpg = +(s.blk/gp).toFixed(1);
-    const fgpct   = s.fga ? Math.round(s.fgm/s.fga*100) : null;
+    const fgpct    = s.fga ? Math.round(s.fgm/s.fga*100) : null;
     const avgGrade = numToGrade(s.gs/gp);
-    const hist  = histByName[s.name] || null;
-    const preOvr  = hist?.ovr ?? 40;
-    const evPerf  = perf(ppg, rpg, apg, spg, bpg);
-    const wins    = s.wins;
-    const losses  = gp - wins;
-    // winBonus: +3 przy 100% wygranych, -3 przy 100% porażek, 0 przy 50/50
-    const winBonus = (gp > 0) ? (wins/gp - 0.5) * 6 : 0;
-    const delta   = hist ? calcDelta(evPerf, hist, winBonus) : 8; // nowi gracze zawsze +8 za debiut
+    const hist     = histByName[s.name] || null;
+    const preOvr   = hist?.ovr ?? 40;
+    const evPerf   = perf(ppg, rpg, apg, spg, bpg);
+    const wins     = s.wins;
+    const losses   = gp - wins;
+    const winBonus = gp > 0 ? (wins/gp - 0.5) * 6 : 0;
+    const evPos    = getEvPos(s);
+    const histPos  = getHistPos(s.name);
+    const posChanged = !!(hist && evPos && histPos && evPos !== histPos && posAvg[evPos]);
+
+    let delta;
+    if(!hist) {
+      delta = 8; // new player debut bonus
+    } else if(posChanged) {
+      // Different position in event: compare to event average for that position
+      delta = calcDelta(evPerf, posAvg[evPos], winBonus);
+    } else {
+      delta = calcDelta(evPerf, hist, winBonus);
+    }
+
     const postOvr = Math.max(40, Math.min(99, preOvr + (delta ?? 0)));
     return {
-      name: s.name, preOvr, postOvr, delta, isNew: !hist,
-      wins, losses, winBonus,
+      name:s.name, preOvr, postOvr, delta, isNew:!hist,
+      wins, losses, evPos, histPos, posChanged,
       ppg, rpg, apg, spg, bpg, fgpct, gp, avgGrade,
-      histPpg: hist?.ppg ?? null, histRpg: hist?.rpg ?? null,
-      histApg: hist?.apg ?? null, histSpg: hist?.spg ?? null, histBpg: hist?.bpg ?? null
+      histPpg:hist?.ppg??null, histRpg:hist?.rpg??null,
+      histApg:hist?.apg??null, histSpg:hist?.spg??null, histBpg:hist?.bpg??null
     };
   }).sort((a,b) => b.postOvr - a.postOvr);
 
@@ -4929,33 +4973,38 @@ function renderEventRatings() {
             <tr style="border-bottom:1px solid var(--border)">
               <th style="font-size:.7rem;color:var(--muted);font-weight:700;padding:.4rem .5rem .4rem .9rem;text-align:left">#</th>
               <th style="font-size:.7rem;color:var(--muted);font-weight:700;padding:.4rem .5rem;text-align:left">GRACZ</th>
-              ${hCol('OVR','Overall po drafcie (szara liczba = przed draftem)')}
+              ${hCol('OVR','Overall po drafcie (tooltip = przed draftem). ± uwzględnia pozycję i bilans W/L.')}
               ${hCol(showHist ? 'PPG★' : 'PPG', showHist ? 'Historyczna średnia z ligi' : 'Punkty/mecz w evencie')}
               ${hCol(showHist ? 'RPG★' : 'RPG', showHist ? 'Zbiórki/mecz (hist.)' : 'Zbiórki/mecz')}
               ${hCol(showHist ? 'APG★' : 'APG', showHist ? 'Asysty/mecz (hist.)' : 'Asysty/mecz')}
               ${hCol(showHist ? 'SPG★' : 'SPG', showHist ? 'Przechwyty/mecz (hist.)' : 'Przechwyty/mecz')}
               ${hCol(showHist ? 'BPG★' : 'BPG', showHist ? 'Bloki/mecz (hist.)' : 'Bloki/mecz')}
-              ${hCol('FG%')} ${hCol('W-L','Wygrane-Porażki drużyny. Wpływa na zmianę OVR: +3 przy 100% wygranych, -3 przy 100% porażek.')}
+              ${hCol('FG%')}
+              ${hCol('W-L','Wygrane-Porażki. +3 OVR przy 100% wygranych, -3 przy 100% porażkach.')}
             </tr>
           </thead>
           <tbody>
             ${rows.map((r,i) => {
               const gradeHtml = `<span class="grade grade-${r.avgGrade.replace('+','p').replace('-','m')}" style="font-size:.7rem;padding:.05rem .3rem">${r.avgGrade}</span>`;
-              const newBadge = r.isNew ? ' <span style="font-size:.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 .2rem">NEW</span>' : '';
+              const newBadge = r.isNew
+                ? ' <span style="font-size:.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 .2rem">NEW</span>'
+                : '';
+              const posBadge = r.posChanged
+                ? ` <span style="font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .2rem" title="Gra na ${r.evPos} (hist. ${r.histPos}) — porównanie vs avg ${r.evPos} eventu">${r.histPos}→${r.evPos}</span>`
+                : '';
               const hiPpg = !showHist && r.histPpg !== null && r.ppg > r.histPpg * 1.15;
               const hiRpg = !showHist && r.histRpg !== null && r.rpg > r.histRpg * 1.15;
-              const ppgVal  = showHist ? (r.histPpg !== null ? r.histPpg.toFixed(1) : null) : r.ppg.toFixed(1);
-              const rpgVal  = showHist ? (r.histRpg !== null ? r.histRpg.toFixed(1) : null) : r.rpg.toFixed(1);
-              const apgVal  = showHist ? (r.histApg !== null ? r.histApg.toFixed(1) : null) : r.apg.toFixed(1);
-              const spgVal  = showHist ? (r.histSpg !== null ? r.histSpg.toFixed(1) : null) : r.spg.toFixed(1);
-              const bpgVal  = showHist ? (r.histBpg !== null ? r.histBpg.toFixed(1) : null) : r.bpg.toFixed(1);
+              const ppgVal = showHist ? (r.histPpg !== null ? r.histPpg.toFixed(1) : null) : r.ppg.toFixed(1);
+              const rpgVal = showHist ? (r.histRpg !== null ? r.histRpg.toFixed(1) : null) : r.rpg.toFixed(1);
+              const apgVal = showHist ? (r.histApg !== null ? r.histApg.toFixed(1) : null) : r.apg.toFixed(1);
+              const spgVal = showHist ? (r.histSpg !== null ? r.histSpg.toFixed(1) : null) : r.spg.toFixed(1);
+              const bpgVal = showHist ? (r.histBpg !== null ? r.histBpg.toFixed(1) : null) : r.bpg.toFixed(1);
               const wlColor = r.wins > r.losses ? 'var(--win)' : r.wins < r.losses ? 'var(--loss)' : 'var(--muted)';
-              const wlCell  = `<span style="font-size:.8rem;font-weight:700;color:${wlColor}">${r.wins}-${r.losses}</span>`;
               return `<tr style="border-bottom:1px solid rgba(255,255,255,.04);${i%2===1?'background:rgba(255,255,255,.015)':''}">
                 <td style="padding:.5rem .5rem .5rem .9rem;color:var(--muted);font-size:.85rem;font-weight:700">${i+1}</td>
                 <td style="padding:.5rem .6rem;white-space:nowrap">
                   <span style="font-weight:700;font-size:.9rem">${r.name}</span>
-                  <span style="margin-left:.35rem">${gradeHtml}</span>${newBadge}
+                  <span style="margin-left:.35rem">${gradeHtml}</span>${newBadge}${posBadge}
                 </td>
                 <td style="padding:.5rem;text-align:center">${ovrCell(r.postOvr, r.preOvr, r.delta)}</td>
                 <td style="padding:.5rem;text-align:center">${statCell(ppgVal, hiPpg)}</td>
@@ -4964,7 +5013,7 @@ function renderEventRatings() {
                 <td style="padding:.5rem;text-align:center">${statCell(spgVal)}</td>
                 <td style="padding:.5rem;text-align:center">${statCell(bpgVal)}</td>
                 <td style="padding:.5rem;text-align:center">${r.fgpct!==null?statCell(r.fgpct+'%'):statCell(null)}</td>
-                <td style="padding:.5rem;text-align:center">${wlCell}</td>
+                <td style="padding:.5rem;text-align:center"><span style="font-size:.8rem;font-weight:700;color:${wlColor}">${r.wins}-${r.losses}</span></td>
               </tr>`;
             }).join('')}
           </tbody>
