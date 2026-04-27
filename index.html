@@ -6253,12 +6253,25 @@ function openEvNameFix(eventId) {
       if(leagueCanonical) {
         _evNameFixList.push({ evName, suggestion: leagueCanonical, score: 0.99 });
       } else {
+        // Try fuzzy match vs league names
         let best = null, bestScore = 0;
         for(const ln of leagueNames) {
           const s = _dsFuzzyScore(evName, ln);
           if(s > bestScore) { bestScore = s; best = ln; }
         }
-        _evNameFixList.push({ evName, suggestion: bestScore >= 0.4 ? best : null, score: bestScore });
+        // Also try fuzzy match vs OTHER ev names (catches OCR variants of same non-league player)
+        let bestEv = null, bestEvScore = 0;
+        for(const other of evNames) {
+          if(other === evName) continue;
+          const s = _dsFuzzyScore(evName, other);
+          if(s > bestEvScore) { bestEvScore = s; bestEv = other; }
+        }
+        // Pick whichever match is better; use lower threshold (0.3) for same-event names
+        const suggestion = (bestScore >= 0.4 && bestScore >= bestEvScore) ? best
+          : (bestEvScore >= 0.3) ? bestEv
+          : (bestScore >= 0.4) ? best : null;
+        const score = suggestion === bestEv ? bestEvScore : bestScore;
+        _evNameFixList.push({ evName, suggestion, score, isEvMatch: suggestion === bestEv });
       }
     }
   });
@@ -6268,6 +6281,9 @@ function openEvNameFix(eventId) {
     return;
   }
 
+  // ev names that are NOT mismatches (for "other ev names" optgroup in selects)
+  const cleanEvNames = evNames.filter(n => !_evNameFixList.find(f => f.evName === n));
+
   el.innerHTML = `
     <div style="background:rgba(245,197,24,.05);border:1px solid rgba(245,197,24,.25);border-radius:8px;padding:.75rem 1rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.9rem;letter-spacing:.5px;margin-bottom:.3rem">
@@ -6275,19 +6291,27 @@ function openEvNameFix(eventId) {
       </div>
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">
         Nazwy z screenów po lewej → wybierz prawidłową nazwę z listy po prawej.<br>
-        Gracze spoza ligi („pominą”) zostaną zachowani pod oryginalną nazwą.
+        Gracze spoza ligi: wybierz inną nazwę z eventu lub „pominą" żeby zachować jak jest.
       </div>
       ${_evNameFixList.map((s,i) => {
         const hint = s.isCaseDup
           ? ' <span style="font-size:.7rem;color:var(--accent)">⚠️ dup.pisowni</span>'
-          : '';
+          : s.isEvMatch
+            ? ' <span style="font-size:.7rem;color:var(--muted)">nie w lidze</span>'
+            : ' <span style="font-size:.7rem;color:var(--muted)">nie w lidze</span>';
+        const evOptsHtml = (cleanEvNames.length + _evNameFixList.filter((_,j)=>j!==i).length)
+          ? `<optgroup label="— z eventu —">${
+              [..._evNameFixList.filter((_,j)=>j!==i).map(f=>f.evName), ...cleanEvNames]
+                .map(n => `<option value="${n.replace(/"/g,'&quot;')}" ${n===s.suggestion?'selected':''}>${n}</option>`).join('')
+            }</optgroup>` : '';
         return `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;flex-wrap:wrap">
           <span style="font-size:.85rem;font-weight:700;color:var(--loss);min-width:120px">${s.evName}${hint}</span>
           <span style="color:var(--muted);font-size:.8rem">→</span>
           <select id="evfix-${eventId}-${i}" style="flex:1;min-width:140px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.25rem .4rem;font-size:.82rem">
             <option value="">— pominą —</option>
-            ${leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}" ${ln===s.suggestion?'selected':''}>${ln}${ln===s.suggestion&&s.score<1?' (podobne: '+Math.round(s.score*100)+'%)':''}</option>`).join('')}
+            <optgroup label="— z ligi —">${leagueNames.map(ln => `<option value="${ln.replace(/"/g,'&quot;')}" ${ln===s.suggestion?'selected':''}>${ln}${ln===s.suggestion&&s.score<1?' (podobne: '+Math.round(s.score*100)+'%)':''}</option>`).join('')}</optgroup>
+            ${evOptsHtml}
           </select>
           <button onclick="applySingleEvFix('${eventId}',${i})" class="btn btn-primary" style="font-size:.78rem;padding:.25rem .6rem">✓</button>
         </div>`;
