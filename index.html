@@ -1,15 +1,4 @@
-<!
-async function finishEvent(eventId) {
-  const ev = events.find(e => e.id === eventId);
-  if(!ev) return;
-  if(!confirm('Zakończyć event "' + ev.title + '"? Status zmieni się na Zakończony.')) return;
-  ev.status = 'finished';
-  await saveData();
-  renderEvents();
-  showToast('🏆 Event zakończony!', 'success');
-}
-
-DOCTYPE html><!-- v1772545680 -->
+<!DOCTYPE html><!-- v1772545680 -->
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
@@ -5407,6 +5396,16 @@ async function deleteEvent(id) {
   renderEvents();
   showToast('🗑 Event usunięty', 'info');
 }
+async function finishEvent(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  if(!confirm('Zakończyć event "' + ev.title + '"? Status zmieni się na Zakończony.')) return;
+  ev.status = 'finished';
+  await saveData();
+  renderEvents();
+  showToast('🏆 Event zakończony!', 'success');
+}
+
 
 async function loadTestEvents() {
   if(!_isEventsAdminSync()) return;
