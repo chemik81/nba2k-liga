@@ -6659,13 +6659,60 @@ function showSignupWelcome(eventId, playerObj) {
       ${deltaHtml}
     </div>` : '';
 
+  const sisyphusOvr = ovr || 75;
+  const ballX = 62 + Math.round((sisyphusOvr - 40) / 59 * 28);
+  const ballY = 74 - Math.round((sisyphusOvr - 40) / 59 * 30);
+  const sisyphusImg = `<svg viewBox="0 0 160 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:280px;margin:0 auto .25rem;display:block">
+    <!-- sky gradient -->
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#1a2236"/></linearGradient>
+      <linearGradient id="hillg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2d3a1e"/><stop offset="100%" stop-color="#1a2010"/></linearGradient>
+    </defs>
+    <rect width="160" height="110" fill="url(#sky)"/>
+    <!-- stars -->
+    <circle cx="15" cy="8" r=".8" fill="#f5c518" opacity=".7"/><circle cx="40" cy="4" r=".6" fill="#fff" opacity=".5"/>
+    <circle cx="70" cy="7" r=".9" fill="#fff" opacity=".4"/><circle cx="100" cy="3" r=".7" fill="#f5c518" opacity=".6"/>
+    <circle cx="130" cy="9" r=".6" fill="#fff" opacity=".5"/><circle cx="150" cy="5" r=".8" fill="#fff" opacity=".3"/>
+    <!-- moon -->
+    <circle cx="140" cy="14" r="7" fill="#f5c518" opacity=".25"/>
+    <!-- hill -->
+    <polygon points="0,110 0,85 160,20 160,110" fill="url(#hillg)"/>
+    <line x1="0" y1="85" x2="160" y2="20" stroke="#4a5e2a" stroke-width="1.5"/>
+    <!-- "99" flag at top -->
+    <line x1="148" y1="22" x2="148" y2="9" stroke="#f5c518" stroke-width="1.2"/>
+    <polygon points="148,9 158,12 148,15" fill="#f5c518"/>
+    <text x="149.5" y="13.5" font-size="4.5" fill="#000" font-family="Arial" font-weight="bold">99</text>
+    <!-- basketball (position on hill based on OVR) -->
+    <circle cx="${ballX}" cy="${ballY}" r="7" fill="#e07020" stroke="#c05010" stroke-width=".8"/>
+    <path d="M${ballX-7},${ballY} Q${ballX},${ballY-4} ${ballX+7},${ballY}" stroke="#3a1a00" stroke-width=".9" fill="none"/>
+    <path d="M${ballX-7},${ballY} Q${ballX},${ballY+4} ${ballX+7},${ballY}" stroke="#3a1a00" stroke-width=".9" fill="none"/>
+    <line x1="${ballX}" y1="${ballY-7}" x2="${ballX}" y2="${ballY+7}" stroke="#3a1a00" stroke-width=".9"/>
+    <!-- Sisyphus body (stick figure, leaning into hill) -->
+    <!-- legs -->
+    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX-6}" y2="${ballY+22}" stroke="#a0b8ff" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX+2}" y2="${ballY+22}" stroke="#a0b8ff" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- torso (leaning forward ~30deg) -->
+    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX-7}" y2="${ballY+4}" stroke="#a0b8ff" stroke-width="2" stroke-linecap="round"/>
+    <!-- arms pushing ball -->
+    <line x1="${ballX-5}" y1="${ballY+7}" x2="${ballX-7}" y2="${ballY+1}" stroke="#a0b8ff" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="${ballX-5}" y1="${ballY+7}" x2="${ballX+1}" y2="${ballY+1}" stroke="#a0b8ff" stroke-width="1.6" stroke-linecap="round"/>
+    <!-- head -->
+    <circle cx="${ballX-7}" cy="${ballY+1}" r="3.2" fill="#a0b8ff"/>
+    <!-- sweat drop -->
+    <ellipse cx="${ballX-1}" cy="${ballY-3}" rx="1.2" ry="1.8" fill="#60a0ff" opacity=".7"/>
+    <!-- OVR label near ball -->
+    <text x="${ballX+9}" y="${ballY-1}" font-size="6" fill="#f5c518" font-family="Arial" font-weight="bold">${sisyphusOvr}</text>
+    <!-- ground label -->
+    <text x="4" y="107" font-size="5.5" fill="#4a5e2a" font-family="Arial" font-weight="bold">40</text>
+  </svg>`;
+
   document.getElementById('signup-welcome-content').innerHTML = `
-    <div style="font-size:2rem;margin-bottom:.5rem">✅</div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">ZAPISANO NA DRAFT!</div>
-    <div style="color:var(--muted);font-size:.9rem;margin-bottom:.5rem">Hej <b style="color:var(--text)">${playerObj.name}</b>, jesteś na liście.</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.5rem">ZAPISANO NA DRAFT! ✅</div>
+    <div style="color:var(--muted);font-size:.88rem;margin-bottom:.75rem">Hej <b style="color:var(--text)">${playerObj.name}</b>, jesteś na liście.</div>
+    ${sisyphusImg}
     ${ovrHtml}
-    <div style="background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:.75rem 1rem;font-size:.88rem;line-height:1.55;color:var(--muted);text-align:left;margin-top:.75rem">${msg}</div>
-    <button onclick="document.getElementById('signup-welcome-modal').classList.remove('open')" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem">Zamknij</button>`;
+    <div style="background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:.75rem 1rem;font-size:.85rem;line-height:1.55;color:var(--muted);text-align:left;margin-top:.75rem">${msg}</div>
+    <button onclick="document.getElementById('signup-welcome-modal').classList.remove('open')" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem">Let's go 🏀</button>`;
   document.getElementById('signup-welcome-modal').classList.add('open');
 }
 
