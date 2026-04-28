@@ -6660,51 +6660,83 @@ function showSignupWelcome(eventId, playerObj) {
     </div>` : '';
 
   const sisyphusOvr = ovr || 75;
-  const ballX = 62 + Math.round((sisyphusOvr - 40) / 59 * 28);
-  const ballY = 74 - Math.round((sisyphusOvr - 40) / 59 * 30);
-  const sisyphusImg = `<svg viewBox="0 0 160 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:280px;margin:0 auto .25rem;display:block">
-    <!-- sky gradient -->
-    <defs>
-      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#1a2236"/></linearGradient>
-      <linearGradient id="hillg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2d3a1e"/><stop offset="100%" stop-color="#1a2010"/></linearGradient>
-    </defs>
-    <rect width="160" height="110" fill="url(#sky)"/>
-    <!-- stars -->
-    <circle cx="15" cy="8" r=".8" fill="#f5c518" opacity=".7"/><circle cx="40" cy="4" r=".6" fill="#fff" opacity=".5"/>
-    <circle cx="70" cy="7" r=".9" fill="#fff" opacity=".4"/><circle cx="100" cy="3" r=".7" fill="#f5c518" opacity=".6"/>
-    <circle cx="130" cy="9" r=".6" fill="#fff" opacity=".5"/><circle cx="150" cy="5" r=".8" fill="#fff" opacity=".3"/>
-    <!-- moon -->
-    <circle cx="140" cy="14" r="7" fill="#f5c518" opacity=".25"/>
-    <!-- hill -->
-    <polygon points="0,110 0,85 160,20 160,110" fill="url(#hillg)"/>
-    <line x1="0" y1="85" x2="160" y2="20" stroke="#4a5e2a" stroke-width="1.5"/>
-    <!-- "99" flag at top -->
-    <line x1="148" y1="22" x2="148" y2="9" stroke="#f5c518" stroke-width="1.2"/>
-    <polygon points="148,9 158,12 148,15" fill="#f5c518"/>
-    <text x="149.5" y="13.5" font-size="4.5" fill="#000" font-family="Arial" font-weight="bold">99</text>
-    <!-- basketball (position on hill based on OVR) -->
-    <circle cx="${ballX}" cy="${ballY}" r="7" fill="#e07020" stroke="#c05010" stroke-width=".8"/>
-    <path d="M${ballX-7},${ballY} Q${ballX},${ballY-4} ${ballX+7},${ballY}" stroke="#3a1a00" stroke-width=".9" fill="none"/>
-    <path d="M${ballX-7},${ballY} Q${ballX},${ballY+4} ${ballX+7},${ballY}" stroke="#3a1a00" stroke-width=".9" fill="none"/>
-    <line x1="${ballX}" y1="${ballY-7}" x2="${ballX}" y2="${ballY+7}" stroke="#3a1a00" stroke-width=".9"/>
-    <!-- Sisyphus body (stick figure, leaning into hill) -->
-    <!-- legs -->
-    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX-6}" y2="${ballY+22}" stroke="#a0b8ff" stroke-width="1.8" stroke-linecap="round"/>
-    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX+2}" y2="${ballY+22}" stroke="#a0b8ff" stroke-width="1.8" stroke-linecap="round"/>
-    <!-- torso (leaning forward ~30deg) -->
-    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX-7}" y2="${ballY+4}" stroke="#a0b8ff" stroke-width="2" stroke-linecap="round"/>
-    <!-- arms pushing ball -->
-    <line x1="${ballX-5}" y1="${ballY+7}" x2="${ballX-7}" y2="${ballY+1}" stroke="#a0b8ff" stroke-width="1.6" stroke-linecap="round"/>
-    <line x1="${ballX-5}" y1="${ballY+7}" x2="${ballX+1}" y2="${ballY+1}" stroke="#a0b8ff" stroke-width="1.6" stroke-linecap="round"/>
-    <!-- head -->
-    <circle cx="${ballX-7}" cy="${ballY+1}" r="3.2" fill="#a0b8ff"/>
-    <!-- sweat drop -->
-    <ellipse cx="${ballX-1}" cy="${ballY-3}" rx="1.2" ry="1.8" fill="#60a0ff" opacity=".7"/>
-    <!-- OVR label near ball -->
-    <text x="${ballX+9}" y="${ballY-1}" font-size="6" fill="#f5c518" font-family="Arial" font-weight="bold">${sisyphusOvr}</text>
-    <!-- ground label -->
-    <text x="4" y="107" font-size="5.5" fill="#4a5e2a" font-family="Arial" font-weight="bold">40</text>
-  </svg>`;
+  // Ball position along hill (280x170 canvas, hill from (0,108) to (280,42))
+  const _bx = Math.round(58 + (sisyphusOvr - 40) / 59 * 168);
+  const _by = Math.round(108 - _bx * 66 / 280 - 16);
+  const sisyphusImg = `<svg viewBox="0 0 280 170" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px;margin:0 auto .5rem;display:block;border-radius:10px">
+  <defs>
+    <linearGradient id="swSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#020408"/><stop offset="65%" stop-color="#09152a"/><stop offset="100%" stop-color="#0e2040"/></linearGradient>
+    <linearGradient id="swHill" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#0c1806"/><stop offset="100%" stop-color="#162808"/></linearGradient>
+    <radialGradient id="swBall" cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#f8b050"/><stop offset="45%" stop-color="#d86010"/><stop offset="100%" stop-color="#8c2800"/></radialGradient>
+    <radialGradient id="swMoonH" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fff8c0" stop-opacity=".28"/><stop offset="100%" stop-color="#fff8c0" stop-opacity="0"/></radialGradient>
+    <filter id="swGl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="swSg" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+  <rect width="280" height="170" fill="url(#swSky)" rx="10"/>
+  <ellipse cx="140" cy="38" rx="95" ry="20" fill="#1a2068" opacity=".09" transform="rotate(-15,140,38)"/>
+  <g fill="#ffffff">
+    <circle cx="11" cy="7" r=".8" opacity=".9"/><circle cx="27" cy="15" r="1.1" opacity=".7"/><circle cx="46" cy="5" r=".7" opacity=".8"/><circle cx="66" cy="13" r=".9" opacity=".65"/>
+    <circle cx="84" cy="4" r="1.2" opacity=".9"/><circle cx="99" cy="21" r=".7" opacity=".7"/><circle cx="117" cy="7" r=".6" opacity=".8"/><circle cx="132" cy="25" r="1.0" opacity=".6"/>
+    <circle cx="157" cy="10" r=".8" opacity=".7"/><circle cx="171" cy="3" r="1.3" opacity=".9"/><circle cx="191" cy="17" r=".7" opacity=".75"/><circle cx="211" cy="8" r=".9" opacity=".65"/>
+    <circle cx="245" cy="14" r=".8" opacity=".8"/><circle cx="267" cy="5" r="1.1" opacity=".7"/><circle cx="276" cy="22" r=".7" opacity=".6"/>
+    <circle cx="35" cy="31" r=".6" opacity=".55"/><circle cx="57" cy="38" r=".7" opacity=".6"/><circle cx="107" cy="30" r=".6" opacity=".5"/>
+    <circle cx="147" cy="34" r=".8" opacity=".5"/><circle cx="201" cy="27" r=".6" opacity=".6"/><circle cx="257" cy="33" r=".7" opacity=".5"/>
+    <circle cx="21" cy="46" r=".5" opacity=".45"/><circle cx="77" cy="43" r=".6" opacity=".5"/><circle cx="232" cy="39" r=".6" opacity=".45"/>
+  </g>
+  <g fill="#f8e878" opacity=".92">
+    <circle cx="22" cy="18" r="1.5"/><circle cx="91" cy="11" r="1.3"/><circle cx="179" cy="8" r="1.6"/><circle cx="241" cy="23" r="1.4"/><circle cx="53" cy="22" r="1.1"/>
+  </g>
+  <circle cx="246" cy="27" r="30" fill="url(#swMoonH)"/>
+  <circle cx="246" cy="27" r="14" fill="#f5e898" opacity=".88"/>
+  <circle cx="253" cy="23" r="12" fill="#0b1523"/>
+  <circle cx="240" cy="33" r="2.8" fill="#d5cf88" opacity=".32"/>
+  <circle cx="250" cy="39" r="1.6" fill="#d5cf88" opacity=".22"/>
+  <circle cx="244" cy="24" r="1.2" fill="#d5cf88" opacity=".2"/>
+  <polygon points="0,170 0,108 280,42 280,170" fill="url(#swHill)"/>
+  <line x1="0" y1="108" x2="280" y2="42" stroke="#1e3a0e" stroke-width="1.5"/>
+  <path d="M16,163 L28,148 L36,158 Z" fill="#0a1506" opacity=".7"/>
+  <path d="M52,149 L62,136 L70,144 Z" fill="#0a1506" opacity=".6"/>
+  <path d="M190,105 L198,93 L207,102 Z" fill="#0a1506" opacity=".6"/>
+  <path d="M228,88 L235,78 L242,86 Z" fill="#0a1506" opacity=".5"/>
+  <g stroke="#2d5010" stroke-width="1.4" fill="none" stroke-linecap="round">
+    <path d="M36,143 C36,135 34,132 34,129"/><path d="M39,143 C40,135 42,132 44,129"/>
+    <path d="M163,111 C163,103 161,100 161,97"/><path d="M166,111 C167,103 169,100 171,97"/>
+    <path d="M241,74 C241,66 239,63 239,60"/><path d="M244,74 C245,66 247,63 249,60"/>
+  </g>
+  <line x1="266" y1="44" x2="266" y2="12" stroke="#a07818" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="274" cy="22" r="13" fill="#f5c518" opacity=".18" filter="url(#swSg)"/>
+  <path d="M266,12 L286,18 L266,24 Z" fill="#f5c518" filter="url(#swGl)"/>
+  <text x="268" y="22.5" font-size="5.8" font-weight="900" font-family="Arial Black,sans-serif" fill="#1a0e00">99</text>
+  <ellipse cx="${_bx+4}" cy="${_by+18}" rx="14" ry="5" fill="#000" opacity=".38" transform="rotate(-13,${_bx+4},${_by+18})"/>
+  <circle cx="${_bx}" cy="${_by}" r="16" fill="url(#swBall)"/>
+  <path d="M${_bx-16},${_by} Q${_bx},${_by-9} ${_bx+16},${_by}" stroke="#7a2200" stroke-width="1.4" fill="none"/>
+  <path d="M${_bx-16},${_by} Q${_bx},${_by+9} ${_bx+16},${_by}" stroke="#7a2200" stroke-width="1.4" fill="none"/>
+  <line x1="${_bx}" y1="${_by-16}" x2="${_bx}" y2="${_by+16}" stroke="#7a2200" stroke-width="1.4"/>
+  <path d="M${_bx-8},${_by-14} Q${_bx-17},${_by} ${_bx-8},${_by+14}" stroke="#7a2200" stroke-width="1.0" fill="none"/>
+  <path d="M${_bx+8},${_by-14} Q${_bx+17},${_by} ${_bx+8},${_by+14}" stroke="#7a2200" stroke-width="1.0" fill="none"/>
+  <ellipse cx="${_bx-5}" cy="${_by-5}" rx="5.5" ry="4" fill="#ffcc80" opacity=".42" transform="rotate(-20,${_bx-5},${_by-5})"/>
+  <rect x="${_bx+19}" y="${_by-11}" width="28" height="18" rx="5" fill="#f5c518"/>
+  <text x="${_bx+33}" y="${_by+3}" font-size="11" font-weight="900" font-family="Arial Black,sans-serif" fill="#1a0e00" text-anchor="middle">${sisyphusOvr}</text>
+  <ellipse cx="${_bx-27}" cy="${_by+24}" rx="10" ry="6.5" fill="#1a2848" transform="rotate(-13,${_bx-27},${_by+24})"/>
+  <path d="M${_bx-36},${_by+6} C${_bx-32},${_by+11} ${_bx-27},${_by+17} ${_bx-23},${_by+26} C${_bx-18},${_by+26} ${_bx-17},${_by+20} ${_bx-21},${_by+14} C${_bx-25},${_by+9} ${_bx-28},${_by+4} ${_bx-36},${_by+6} Z" fill="#1a2848"/>
+  <path d="M${_bx-34},${_by+10} C${_bx-29},${_by+4} ${_bx-22},${_by+1} ${_bx-17},${_by-2} C${_bx-14},${_by-5} ${_bx-14},${_by-8} ${_bx-18},${_by-7} C${_bx-23},${_by-4} ${_bx-30},${_by+2} ${_bx-35},${_by+7} Z" fill="#1a2848"/>
+  <path d="M${_bx-17},${_by-2} C${_bx-11},${_by-5} ${_bx-6},${_by-6} ${_bx-2},${_by-4} C${_bx},${_by-2} ${_bx},${_by+1} ${_bx-3},${_by+2} C${_bx-8},${_by+1} ${_bx-13},${_by-1} ${_bx-18},${_by+1} Z" fill="#1a2848"/>
+  <path d="M${_bx-32},${_by+14} C${_bx-25},${_by+9} ${_bx-18},${_by+6} ${_bx-13},${_by+5} C${_bx-10},${_by+4} ${_bx-10},${_by+8} ${_bx-13},${_by+9} C${_bx-19},${_by+10} ${_bx-26},${_by+12} ${_bx-33},${_by+16} Z" fill="#1a2848"/>
+  <path d="M${_bx-23},${_by+26} C${_bx-19},${_by+35} ${_bx-13},${_by+43} ${_bx-9},${_by+54} C${_bx-6},${_by+57} ${_bx-2},${_by+57} ${_bx-3},${_by+54} C${_bx-7},${_by+45} ${_bx-14},${_by+37} ${_bx-18},${_by+28} Z" fill="#1a2848"/>
+  <path d="M${_bx-32},${_by+24} C${_bx-38},${_by+32} ${_bx-46},${_by+39} ${_bx-52},${_by+48} C${_bx-49},${_by+52} ${_bx-45},${_by+52} ${_bx-44},${_by+49} C${_bx-38},${_by+41} ${_bx-31},${_by+34} ${_bx-26},${_by+26} Z" fill="#1a2848"/>
+  <circle cx="${_bx-38}" cy="${_by+1}" r="9" fill="#1a2848"/>
+  <ellipse cx="${_bx-38}" cy="${_by-6}" rx="6.5" ry="3.5" fill="#1a2848"/>
+  <path d="M${_bx-45},${_by+6} C${_bx-42},${_by+3} ${_bx-40},${_by+1} ${_bx-38},${_by+2} C${_bx-36},${_by+1} ${_bx-34},${_by+4} ${_bx-33},${_by+8} C${_bx-35},${_by+9} ${_bx-38},${_by+11} ${_bx-43},${_by+9} Z" fill="#242e50"/>
+  <ellipse cx="${_bx-50}" cy="${_by-10}" rx="2.4" ry="4" fill="#5090ff" opacity=".62" transform="rotate(-30,${_bx-50},${_by-10})"/>
+  <ellipse cx="${_bx-56}" cy="${_by+1}" rx="1.7" ry="3" fill="#5090ff" opacity=".48" transform="rotate(-40,${_bx-56},${_by+1})"/>
+  <ellipse cx="${_bx-46}" cy="${_by-17}" rx="1.4" ry="2.3" fill="#5090ff" opacity=".38" transform="rotate(-20,${_bx-46},${_by-17})"/>
+  <g stroke="#3050a0" stroke-width="1.0" opacity=".52" stroke-linecap="round">
+    <line x1="${_bx-59}" y1="${_by-5}" x2="${_bx-66}" y2="${_by-10}"/>
+    <line x1="${_bx-58}" y1="${_by+2}" x2="${_bx-66}" y2="${_by+1}"/>
+    <line x1="${_bx-58}" y1="${_by+9}" x2="${_bx-65}" y2="${_by+13}"/>
+  </g>
+  <text x="140" y="163" font-size="7.5" font-weight="700" font-family="Arial,sans-serif" fill="#f5c518" opacity=".38" text-anchor="middle" letter-spacing="3">ROAD TO 99</text>
+</svg>`;
 
   document.getElementById('signup-welcome-content').innerHTML = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.5rem">ZAPISANO NA DRAFT! ✅</div>
