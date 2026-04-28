@@ -11310,7 +11310,7 @@ async function deleteTeam(teamName) {
 </div>
 
 <!-- CAPTAIN NOTIFICATION MODAL -->
-<div class="modal-overlay" id="captain-notif-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1300">
+<div class="modal-overlay" id="captain-notif-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1400">
   <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('captain-notif-modal').classList.remove('open')">✕</button>
     <div id="captain-notif-modal-content"></div>
@@ -13364,35 +13364,15 @@ function _dsStartPoll() {
 
 async function _dsNotify(eventId) {
   const ev=events.find(e=>e.id===eventId);
-  if (!workerUrl && !discordWebhookUrl) { showToast('⚠️ Brak Discord webhook w ustawieniach','warning'); return; }
-  const wu=localStorage.getItem('nba2k_worker_url')||'';
-  const gmUrl=`${location.origin}${location.pathname}?w=${encodeURIComponent(wu)}&event=${ev.id}#gm`;
-  const capPlayers=_ds.teams.map(t=>(ev?.players||[]).find(p=>p.id===t.captainId)).filter(Boolean);
-  // Only real Discord snowflake IDs (15-20 digits) are valid in allowed_mentions.users;
-  // test/fake IDs (e.g. "tp_01") cause Discord to reject the entire message with 400.
-  const validIds=capPlayers.map(c=>c.id).filter(id=>/^\d{15,20}$/.test(id));
-  const caps=capPlayers.map(cap=>/^\d{15,20}$/.test(cap.id)?`<@${cap.id}>`:cap.name).join(', ');
-  const capIds=validIds;
-
-  // Save captain assignments to KV now so GM links work before draft is launched
-  if(ev) {
-    ev.teams = _ds.order.map(ti => {
-      const t = _ds.teams[ti];
-      const cap = (ev.players||[]).find(p => p.id === t.captainId);
-      return {name: t.name, captain: cap, players: cap ? [cap] : []};
-    });
-    await saveData(true);
-  }
-
-  const ok = await _discordNotify({
-    content:`🎯 **Draft "${ev?.title||''}" — Kapitanowie, zalogujcie się!**\n${caps?caps+' — ':''}Wasz panel GM: ${gmUrl}`,
-    allowed_mentions:{parse:[],users:capIds}
+  if(!ev) return;
+  // Save captain assignments to ev.teams so the notification modal can read them
+  ev.teams = _ds.order.map(ti => {
+    const t = _ds.teams[ti];
+    const cap = (ev.players||[]).find(p => p.id === t.captainId);
+    return {name: t.name, captain: cap, players: cap ? [cap] : []};
   });
-  if(ok) {
-    showToast('📣 Powiadomienie wysłane!','success');
-  } else {
-    showToast('❌ Błąd wysyłania — sprawdź konfigurację webhook w ustawieniach','error');
-  }
+  await saveData(true);
+  openCaptainNotifModal(eventId);
 }
 
 async function _dsLaunch() {
