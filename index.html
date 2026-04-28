@@ -5589,7 +5589,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
   let tabContent = '';
 
   if(tab === 'info') {
-    const _ovrOn = ev.type==='draft' && !!_evOvr[id];
+    const _ovrOn = !!_evOvr[id];
     const _enriched = _ovrOn ? _dsComputeOvr(ev.players||[], _evOvr._nameMap||{}) : null;
     const playersList = (ev.players||[]).map(p => {
       const ep = _enriched ? _enriched.find(x=>x.id===p.id)||p : p;
@@ -5637,7 +5637,7 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px">
             👥 ZAPISANI GRACZE (${(ev.players||[]).length}${ev.maxPlayers?'/'+ev.maxPlayers:''})
           </div>
-          ${ev.type==='draft'&&(ev.players||[]).length?`<button onclick="_evToggleOvr('${id}')" id="ev-ovr-btn-${id}" style="background:${_evOvr[id]?'var(--accent)':'var(--surface2)'};border:1px solid ${_evOvr[id]?'var(--accent)':'var(--border)'};color:${_evOvr[id]?'#000':'var(--text)'};border-radius:6px;padding:.25rem .7rem;font-size:.75rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700">📊 Overall</button>`:''}
+          ${(ev.players||[]).length?`<button onclick="_evToggleOvr('${id}')" id="ev-ovr-btn-${id}" style="background:${_evOvr[id]?'var(--accent)':'var(--surface2)'};border:1px solid ${_evOvr[id]?'var(--accent)':'var(--border)'};color:${_evOvr[id]?'#000':'var(--text)'};border-radius:6px;padding:.25rem .7rem;font-size:.75rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700">📊 Overall</button>`:''}
         </div>
         ${playersList || '<div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Brak zapisanych graczy</div>'}
       </div>
