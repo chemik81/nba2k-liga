@@ -6620,8 +6620,53 @@ async function confirmSignupWithPositions() {
     document.getElementById('position-picker-modal').classList.remove('open');
     openEventDetail(eventId);
     renderEvents();
-    showToast('✅ Zapisano na draft!', 'success');
+    showSignupWelcome(eventId, playerObj);
   } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
+}
+
+function showSignupWelcome(eventId, playerObj) {
+  const enriched = _dsComputeOvr([playerObj], {});
+  const ep = enriched[0];
+  const ovr = ep?.ovr || null;
+
+  // Delta from most recent event
+  const latestEv = events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0];
+  let delta = null;
+  if(latestEv && ep?.ingameName) {
+    const preMap = _computeChainedOvrMap(latestEv.id);
+    const postMap = _computeChainedOvrMap();
+    const pre = preMap[ep.ingameName], post = postMap[ep.ingameName];
+    if(pre !== undefined && post !== undefined) delta = post - pre;
+  }
+
+  const MSGS_UP   = ['Dobra forma się utrzymuje – nie zwalniaj! 💪','Statystyki nie kłamią. Kontynuuj robotę. 📈','Wysoka forma zobowiązuje – pokaż to znowu! 🔥'];
+  const MSGS_DOWN = ['To tylko chwilowe – w następnym evencie odbijasz! 🔄','Dołek bywa częścią drogi. Ważne, co z nim zrobisz. 🏋','Rebounds nie kłamią. Wróć mocniejszy. 💎'];
+  const MSGS_SAME = ['Stabilność to też wartość – teraz czas na skok! 🚀','Jesteś gotowy. Zostały tylko mecze. 🎯','Forma trzyma się mocno – czas przełożyć ją na parkiet! 🏀'];
+  const MSGS_NEW  = ['Witaj w lidze! Czas pokazać co masz w sobie. 🌟','Każda legenda zaczynała od pierwszego meczu. To jest Twój. 🏆','Nowa twarz, nowe możliwości. Zrób wrażenie! 👀'];
+
+  let msgs, deltaHtml = '';
+  if(ovr === null || !ep?.ingameName) { msgs = MSGS_NEW; }
+  else if(delta === null)             { msgs = MSGS_NEW; }
+  else if(delta > 0)  { msgs = MSGS_UP;   deltaHtml = `<div style="color:#4ade80;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9650; +${delta} po ostatnim evencie</div>`; }
+  else if(delta < 0)  { msgs = MSGS_DOWN; deltaHtml = `<div style="color:#f87171;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9660; ${delta} po ostatnim evencie</div>`; }
+  else                { msgs = MSGS_SAME; deltaHtml = `<div style="color:var(--muted);font-size:.95rem;margin-bottom:.15rem">Bez zmian po ostatnim evencie</div>`; }
+
+  const msg = msgs[Math.floor(Math.random()*msgs.length)];
+  const ovrHtml = ovr ? `
+    <div style="margin:1rem 0 .5rem">
+      <div style="font-size:.75rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">TWÓJ OBECNY OVERALL</div>
+      <div style="display:inline-block;background:${_dsOvrColor(ovr)};color:rgba(0,0,0,.8);border-radius:12px;padding:.35rem 1.25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.8rem;letter-spacing:2px">${ovr}</div>
+      ${deltaHtml}
+    </div>` : '';
+
+  document.getElementById('signup-welcome-content').innerHTML = `
+    <div style="font-size:2rem;margin-bottom:.5rem">✅</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">ZAPISANO NA DRAFT!</div>
+    <div style="color:var(--muted);font-size:.9rem;margin-bottom:.5rem">Hej <b style="color:var(--text)">${playerObj.name}</b>, jesteś na liście.</div>
+    ${ovrHtml}
+    <div style="background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:.75rem 1rem;font-size:.88rem;line-height:1.55;color:var(--muted);text-align:left;margin-top:.75rem">${msg}</div>
+    <button onclick="document.getElementById('signup-welcome-modal').classList.remove('open')" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem">Zamknij</button>`;
+  document.getElementById('signup-welcome-modal').classList.add('open');
 }
 
 let _primaryPos = null;
@@ -11308,6 +11353,14 @@ async function deleteTeam(teamName) {
   <div class="modal" style="max-width:560px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('manual-captains-modal').classList.remove('open')">✕</button>
     <div id="manual-captains-content"></div>
+  </div>
+</div>
+
+<!-- SIGNUP WELCOME MODAL -->
+<div class="modal-overlay" id="signup-welcome-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1400">
+  <div class="modal" style="max-width:400px;text-align:center;padding:2rem 1.75rem">
+    <button class="modal-close" onclick="document.getElementById('signup-welcome-modal').classList.remove('open')">✕</button>
+    <div id="signup-welcome-content"></div>
   </div>
 </div>
 
