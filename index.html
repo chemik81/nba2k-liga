@@ -4875,6 +4875,8 @@ function renderEventRatings() {
     const best = (domPos && entries.find(e => e.pos === domPos)) || entries[0];
     histByName[name] = {ovr:best.ovr, ppg:best.ppg, rpg:best.rpg, apg:best.apg, spg:best.spg, bpg:best.bpg};
   });
+  // Chained OVR: preOvr for this event = postOvr of all previous events
+  const chainedPreOvr = _computeChainedOvrMap(ev.id);
   const getEvPos = s => {
     if(!s.positions.length) return null;
     const pm = {};
@@ -4909,7 +4911,7 @@ function renderEventRatings() {
     const fgpct    = s.fga ? Math.round(s.fgm/s.fga*100) : null;
     const avgGrade = numToGrade(s.gs/gp);
     const hist     = histByName[s.name] || null;
-    const preOvr   = hist?.ovr ?? 40;
+    const preOvr   = chainedPreOvr[s.name] ?? hist?.ovr ?? 40;
     const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
@@ -6618,8 +6620,100 @@ async function confirmSignupWithPositions() {
     document.getElementById('position-picker-modal').classList.remove('open');
     openEventDetail(eventId);
     renderEvents();
-    showToast('✅ Zapisano na draft!', 'success');
+    showSignupWelcome(eventId, playerObj);
   } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
+}
+
+function showSignupWelcome(eventId, playerObj) {
+  const enriched = _dsComputeOvr([playerObj], {});
+  const ep = enriched[0];
+  const ovr = ep?.ovr || null;
+
+  // Delta from most recent event
+  const latestEv = events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0];
+  let delta = null;
+  if(latestEv && ep?.ingameName) {
+    const preMap = _computeChainedOvrMap(latestEv.id);
+    const postMap = _computeChainedOvrMap();
+    const pre = preMap[ep.ingameName], post = postMap[ep.ingameName];
+    if(pre !== undefined && post !== undefined) delta = post - pre;
+  }
+
+  const MSGS_UP   = ['Dobra forma się utrzymuje – nie zwalniaj! 💪','Statystyki nie kłamią. Kontynuuj robotę. 📈','Wysoka forma zobowiązuje – pokaż to znowu! 🔥'];
+  const MSGS_DOWN = ['To tylko chwilowe – w następnym evencie odbijasz! 🔄','Dołek bywa częścią drogi. Ważne, co z nim zrobisz. 🏋','Rebounds nie kłamią. Wróć mocniejszy. 💎'];
+  const MSGS_SAME = ['Stabilność to też wartość – teraz czas na skok! 🚀','Jesteś gotowy. Zostały tylko mecze. 🎯','Forma trzyma się mocno – czas przełożyć ją na parkiet! 🏀'];
+  const MSGS_NEW  = ['Witaj w lidze! Czas pokazać co masz w sobie. 🌟','Każda legenda zaczynała od pierwszego meczu. To jest Twój. 🏆','Nowa twarz, nowe możliwości. Zrób wrażenie! 👀'];
+
+  let msgs, deltaHtml = '';
+  if(ovr === null || !ep?.ingameName) { msgs = MSGS_NEW; }
+  else if(delta === null)             { msgs = MSGS_NEW; }
+  else if(delta > 0)  { msgs = MSGS_UP;   deltaHtml = `<div style="color:#4ade80;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9650; +${delta} po ostatnim evencie</div>`; }
+  else if(delta < 0)  { msgs = MSGS_DOWN; deltaHtml = `<div style="color:#f87171;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9660; ${delta} po ostatnim evencie</div>`; }
+  else                { msgs = MSGS_SAME; deltaHtml = `<div style="color:var(--muted);font-size:.95rem;margin-bottom:.15rem">Bez zmian po ostatnim evencie</div>`; }
+
+  const msg = msgs[Math.floor(Math.random()*msgs.length)];
+  const ovrHtml = ovr ? `
+    <div style="margin:1rem 0 .5rem">
+      <div style="font-size:.75rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">TWÓJ OBECNY OVERALL</div>
+      <div style="display:inline-block;background:${_dsOvrColor(ovr)};color:rgba(0,0,0,.8);border-radius:12px;padding:.35rem 1.25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.8rem;letter-spacing:2px">${ovr}</div>
+      ${deltaHtml}
+    </div>` : '';
+
+  const sisyphusOvr = ovr || 75;
+  const ballX = 62 + Math.round((sisyphusOvr - 40) / 59 * 28);
+  const ballY = 74 - Math.round((sisyphusOvr - 40) / 59 * 30);
+  const sisyphusImg = `<svg viewBox="0 0 160 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:280px;margin:0 auto .25rem;display:block">
+    <!-- sky gradient -->
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#1a2236"/></linearGradient>
+      <linearGradient id="hillg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2d3a1e"/><stop offset="100%" stop-color="#1a2010"/></linearGradient>
+    </defs>
+    <rect width="160" height="110" fill="url(#sky)"/>
+    <!-- stars -->
+    <circle cx="15" cy="8" r=".8" fill="#f5c518" opacity=".7"/><circle cx="40" cy="4" r=".6" fill="#fff" opacity=".5"/>
+    <circle cx="70" cy="7" r=".9" fill="#fff" opacity=".4"/><circle cx="100" cy="3" r=".7" fill="#f5c518" opacity=".6"/>
+    <circle cx="130" cy="9" r=".6" fill="#fff" opacity=".5"/><circle cx="150" cy="5" r=".8" fill="#fff" opacity=".3"/>
+    <!-- moon -->
+    <circle cx="140" cy="14" r="7" fill="#f5c518" opacity=".25"/>
+    <!-- hill -->
+    <polygon points="0,110 0,85 160,20 160,110" fill="url(#hillg)"/>
+    <line x1="0" y1="85" x2="160" y2="20" stroke="#4a5e2a" stroke-width="1.5"/>
+    <!-- "99" flag at top -->
+    <line x1="148" y1="22" x2="148" y2="9" stroke="#f5c518" stroke-width="1.2"/>
+    <polygon points="148,9 158,12 148,15" fill="#f5c518"/>
+    <text x="149.5" y="13.5" font-size="4.5" fill="#000" font-family="Arial" font-weight="bold">99</text>
+    <!-- basketball (position on hill based on OVR) -->
+    <circle cx="${ballX}" cy="${ballY}" r="7" fill="#e07020" stroke="#c05010" stroke-width=".8"/>
+    <path d="M${ballX-7},${ballY} Q${ballX},${ballY-4} ${ballX+7},${ballY}" stroke="#3a1a00" stroke-width=".9" fill="none"/>
+    <path d="M${ballX-7},${ballY} Q${ballX},${ballY+4} ${ballX+7},${ballY}" stroke="#3a1a00" stroke-width=".9" fill="none"/>
+    <line x1="${ballX}" y1="${ballY-7}" x2="${ballX}" y2="${ballY+7}" stroke="#3a1a00" stroke-width=".9"/>
+    <!-- Sisyphus body (stick figure, leaning into hill) -->
+    <!-- legs -->
+    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX-6}" y2="${ballY+22}" stroke="#a0b8ff" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX+2}" y2="${ballY+22}" stroke="#a0b8ff" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- torso (leaning forward ~30deg) -->
+    <line x1="${ballX-2}" y1="${ballY+12}" x2="${ballX-7}" y2="${ballY+4}" stroke="#a0b8ff" stroke-width="2" stroke-linecap="round"/>
+    <!-- arms pushing ball -->
+    <line x1="${ballX-5}" y1="${ballY+7}" x2="${ballX-7}" y2="${ballY+1}" stroke="#a0b8ff" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="${ballX-5}" y1="${ballY+7}" x2="${ballX+1}" y2="${ballY+1}" stroke="#a0b8ff" stroke-width="1.6" stroke-linecap="round"/>
+    <!-- head -->
+    <circle cx="${ballX-7}" cy="${ballY+1}" r="3.2" fill="#a0b8ff"/>
+    <!-- sweat drop -->
+    <ellipse cx="${ballX-1}" cy="${ballY-3}" rx="1.2" ry="1.8" fill="#60a0ff" opacity=".7"/>
+    <!-- OVR label near ball -->
+    <text x="${ballX+9}" y="${ballY-1}" font-size="6" fill="#f5c518" font-family="Arial" font-weight="bold">${sisyphusOvr}</text>
+    <!-- ground label -->
+    <text x="4" y="107" font-size="5.5" fill="#4a5e2a" font-family="Arial" font-weight="bold">40</text>
+  </svg>`;
+
+  document.getElementById('signup-welcome-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:2px;margin-bottom:.5rem">ZAPISANO NA DRAFT! ✅</div>
+    <div style="color:var(--muted);font-size:.88rem;margin-bottom:.75rem">Hej <b style="color:var(--text)">${playerObj.name}</b>, jesteś na liście.</div>
+    ${sisyphusImg}
+    ${ovrHtml}
+    <div style="background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:.75rem 1rem;font-size:.85rem;line-height:1.55;color:var(--muted);text-align:left;margin-top:.75rem">${msg}</div>
+    <button onclick="document.getElementById('signup-welcome-modal').classList.remove('open')" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem">Let's go 🏀</button>`;
+  document.getElementById('signup-welcome-modal').classList.add('open');
 }
 
 let _primaryPos = null;
@@ -11309,6 +11403,14 @@ async function deleteTeam(teamName) {
   </div>
 </div>
 
+<!-- SIGNUP WELCOME MODAL -->
+<div class="modal-overlay" id="signup-welcome-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1400">
+  <div class="modal" style="max-width:400px;text-align:center;padding:2rem 1.75rem">
+    <button class="modal-close" onclick="document.getElementById('signup-welcome-modal').classList.remove('open')">✕</button>
+    <div id="signup-welcome-content"></div>
+  </div>
+</div>
+
 <!-- CAPTAIN NOTIFICATION MODAL -->
 <div class="modal-overlay" id="captain-notif-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1400">
   <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
@@ -12766,29 +12868,12 @@ function _dsIngameNames() {
   ))].sort();
 }
 
-let _postOvrCacheKey = null, _postOvrCacheVal = null;
-function _buildPostOvrMap() {
-  const key = matches.length + '|' + events.map(e=>(e.matches||[]).length).join(',');
-  if (_postOvrCacheKey === key) return _postOvrCacheVal;
-  const ev = events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0];
-  if (!ev) { _postOvrCacheKey=key; _postOvrCacheVal={}; return {}; }
-  const statsMap={};
-  (ev.matches||[]).forEach(m=>{
-    const t1won=(m.team1?.score??0)>(m.team2?.score??0);
-    [m.team1,m.team2].forEach((team,ti)=>{
-      const won=ti===0?t1won:!t1won;
-      (team?.players||[]).forEach(p=>{
-        if(!p.name) return;
-        if(!statsMap[p.name]) statsMap[p.name]={name:p.name,gp:0,wins:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gs:0,positions:[]};
-        const s=statsMap[p.name];
-        s.gp++; if(won) s.wins++;
-        if(p.pos) s.positions.push(p.pos);
-        s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
-        s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
-        s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gs+=gradeToNum(p.grade||'B');
-      });
-    });
-  });
+const _chainedOvrCache={};
+function _computeChainedOvrMap(stopBeforeEvId=null) {
+  const cacheKey=matches.length+'|'+events.map(e=>`${e.id}:${(e.matches||[]).length}`).join(',')+'|'+(stopBeforeEvId||'');
+  if(_chainedOvrCache[cacheKey]) return _chainedOvrCache[cacheKey];
+  const eventsInOrder=events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
+  const ranking=_dsLeagueRanking();
   const histPosCount={};
   matches.forEach(m=>{[m.team1,m.team2].forEach(team=>{(team?.players||[]).forEach(p=>{
     if(!p.name||!p.pos) return;
@@ -12796,43 +12881,61 @@ function _buildPostOvrMap() {
     histPosCount[p.name][p.pos]=(histPosCount[p.name][p.pos]||0)+1;
   });});});
   const getHistPos=name=>{const pm=histPosCount[name];return pm?Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0]:null;};
-  const ranking=_dsLeagueRanking();
   const allRankByName={};
   ranking.forEach(p=>{if(!allRankByName[p.name])allRankByName[p.name]=[];allRankByName[p.name].push(p);});
-  const histByName={};
+  const initialOvrByName={},initialStatsByName={};
   Object.entries(allRankByName).forEach(([name,entries])=>{
     const domPos=getHistPos(name);
     const best=(domPos&&entries.find(e=>e.pos===domPos))||entries[0];
-    histByName[name]={ovr:best.ovr,ppg:best.ppg,rpg:best.rpg,apg:best.apg,spg:best.spg,bpg:best.bpg};
+    initialOvrByName[name]=best.ovr;
+    initialStatsByName[name]={ppg:best.ppg,rpg:best.rpg,apg:best.apg,spg:best.spg,bpg:best.bpg};
   });
+  const currentOvr={};
   const perf=(ppg,rpg,apg,spg,bpg)=>ppg*0.40+spg*0.20+bpg*0.18+rpg*0.15+apg*0.12;
-  const evAvgGradeNum=(()=>{const nums=Object.values(statsMap).map(s=>s.gs/s.gp).filter(n=>n>0);return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:9;})();
-  const calcDelta=(evPerf,baseline,winBonus)=>{
-    if(!baseline||baseline.ppg+baseline.rpg+baseline.apg+baseline.spg+baseline.bpg===0) return null;
-    const basePerf=perf(baseline.ppg,baseline.rpg,baseline.apg,baseline.spg,baseline.bpg);
-    if(basePerf<=0) return null;
-    return Math.round(Math.max(-8,Math.min(8,(evPerf-basePerf)/basePerf*11+winBonus)));
-  };
-  const getEvPos=s=>{if(!s.positions.length)return null;const pm={};s.positions.forEach(p=>{pm[p]=(pm[p]||0)+1;});return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];};
-  const result={};
-  Object.values(statsMap).forEach(s=>{
-    const gp=s.gp;
-    const ppg=+(s.pts/gp).toFixed(1),rpg=+(s.reb/gp).toFixed(1),apg=+(s.ast/gp).toFixed(1);
-    const spg=+(s.stl/gp).toFixed(1),bpg=+(s.blk/gp).toFixed(1);
-    const hist=histByName[s.name]||null;
-    const preOvr=hist?.ovr??40;
-    const evPerf=perf(ppg,rpg,apg,spg,bpg);
-    const wins=s.wins, winBonus=gp>0?(wins/gp-0.5)*10:0;
-    const evPos=getEvPos(s), histPos=getHistPos(s.name);
-    const posChanged=!!(hist&&evPos&&histPos&&evPos!==histPos);
-    let delta;
-    if(!hist){ delta=8; }
-    else if(posChanged){ const gradeNum=s.gs/s.gp; delta=Math.round(Math.max(-8,Math.min(8,(gradeNum-evAvgGradeNum)/Math.max(evAvgGradeNum,1)*15+winBonus))); }
-    else { delta=calcDelta(evPerf,hist,winBonus); }
-    result[s.name]=Math.max(40,Math.min(99,preOvr+(delta??0)));
-  });
-  _postOvrCacheKey=key; _postOvrCacheVal=result;
-  return result;
+  for(const ev of eventsInOrder){
+    if(stopBeforeEvId&&ev.id===stopBeforeEvId) break;
+    const statsMap={};
+    (ev.matches||[]).forEach(m=>{
+      const t1won=(m.team1?.score??0)>(m.team2?.score??0);
+      [m.team1,m.team2].forEach((team,ti)=>{
+        const won=ti===0?t1won:!t1won;
+        (team?.players||[]).forEach(p=>{
+          if(!p.name) return;
+          if(!statsMap[p.name]) statsMap[p.name]={name:p.name,gp:0,wins:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,gs:0,positions:[]};
+          const s=statsMap[p.name];
+          s.gp++; if(won) s.wins++;
+          if(p.pos) s.positions.push(p.pos);
+          s.pts+=p.pts||0; s.reb+=p.reb||0; s.ast+=p.ast||0;
+          s.stl+=p.stl||0; s.blk+=p.blk||0; s.to+=p.to||0;
+          s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.gs+=gradeToNum(p.grade||'B');
+        });
+      });
+    });
+    const evAvgGradeNum=(()=>{const nums=Object.values(statsMap).map(s=>s.gs/s.gp).filter(n=>n>0);return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:9;})();
+    const getEvPos=s=>{if(!s.positions.length)return null;const pm={};s.positions.forEach(p=>{pm[p]=(pm[p]||0)+1;});return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];};
+    Object.values(statsMap).forEach(s=>{
+      const gp=s.gp;
+      const ppg=+(s.pts/gp).toFixed(1),rpg=+(s.reb/gp).toFixed(1),apg=+(s.ast/gp).toFixed(1);
+      const spg=+(s.stl/gp).toFixed(1),bpg=+(s.blk/gp).toFixed(1);
+      const evPerf=perf(ppg,rpg,apg,spg,bpg);
+      const wins=s.wins,winBonus=gp>0?(wins/gp-0.5)*10:0;
+      const preOvr=currentOvr[s.name]??initialOvrByName[s.name]??40;
+      const baseStats=initialStatsByName[s.name];
+      const evPos=getEvPos(s),histPos=getHistPos(s.name);
+      const hasHistory=currentOvr[s.name]!==undefined||initialOvrByName[s.name]!==undefined;
+      const posChanged=!!(hasHistory&&evPos&&histPos&&evPos!==histPos);
+      let delta;
+      if(!hasHistory){delta=8;}
+      else if(posChanged){const g=s.gs/s.gp;delta=Math.round(Math.max(-8,Math.min(8,(g-evAvgGradeNum)/Math.max(evAvgGradeNum,1)*15+winBonus)));}
+      else if(baseStats&&baseStats.ppg+baseStats.rpg+baseStats.apg+baseStats.spg+baseStats.bpg>0){
+        const bp=perf(baseStats.ppg,baseStats.rpg,baseStats.apg,baseStats.spg,baseStats.bpg);
+        delta=bp>0?Math.round(Math.max(-8,Math.min(8,(evPerf-bp)/bp*11+winBonus))):Math.round(Math.max(-8,Math.min(8,winBonus)));
+      }else{delta=Math.round(Math.max(-8,Math.min(8,winBonus)));}
+      currentOvr[s.name]=Math.max(40,Math.min(99,preOvr+(delta??0)));
+    });
+  }
+  _chainedOvrCache[cacheKey]=currentOvr;
+  return currentOvr;
 }
 
 function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
@@ -12911,7 +13014,7 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
     const comp = p => (p.per * 0.6 + p.cs * 0.4) * (0.5 + 0.5 * p.gp / (p.gp + 5));
     const byPos = {};
     enriched.forEach(p => { if (!byPos[p.pos]) byPos[p.pos]=[]; byPos[p.pos].push(p); });
-    const postOvrMap = _buildPostOvrMap();
+    const postOvrMap = _computeChainedOvrMap();
     return enriched.map(p => {
       if (p.ingameName && postOvrMap[p.ingameName] !== undefined)
         return {...p, ovr: postOvrMap[p.ingameName]};
@@ -12926,7 +13029,7 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
 
   // classic / positional / kw5
   const globalByPsnFb = _buildGlobalByPsn(_dsLeagueRanking(method));
-  const postOvrMapFb = _buildPostOvrMap();
+  const postOvrMapFb = _computeChainedOvrMap();
   const pct=(sorted,val)=>sorted.length<=1?50:sorted.filter(v=>v<val).length/(sorted.length-1)*100;
   const sP=enriched.map(p=>p.per).sort((a,b)=>a-b);
   const sC=enriched.map(p=>p.cs).sort((a,b)=>a-b);
