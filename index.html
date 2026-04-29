@@ -6663,13 +6663,76 @@ function showSignupWelcome(eventId, playerObj) {
     }
   }
 
-  const MSGS_NEW      = ['Witaj w lidze! Czas pokazać co masz w sobie. 🌟','Każda legenda zaczynała od pierwszego meczu. To jest właśnie Twój. 🏆','Nowa twarz, nowe możliwości. Zrób wrażenie! 👀','Statystyki nie kłamią — a Twoje jeszcze nie istnieją. Czas to zmienić. 📋'];
-  const MSGS_DEBUT    = ['Debiut zaliczony. Teraz już wiesz o co chodzi — czas to wykorzystać. 💡','Pierwszy event był tylko rozgrzewką. Na tym pokażesz prawdziwy poziom. 🔥','Overall wyznaczony. Droga do 99 właśnie się zaczęła. 🗺️','Próbka to nie ocena. Na tym evencie piszesz historię od nowa. ✍️'];
-  const MSGS_BIG_UP   = ['BOOM! Rakieta startuje. Czy ktoś zawiadomił NASA? 🚀','Chyba ktoś grał w nocy i coś mu kliknęło. Naprawdę nieźle. 😎','Inni też trenują — ale Ty też, i WIDAĆ. Tak trzymaj. 💪','To się mówi forma! Zimna woda, gorące liczby. 🔥'];
-  const MSGS_SMALL_UP = ['Plus na koncie. Z takim tempem za rok będziesz bogiem. 📈','Progres mały, ale prawdziwy. Szacunek za robotę. 👊','Krok do przodu. Nie zatrzymuj się, kolejny event czeka. 🏀','Rośnie legenda. Powoli, ale pewnie. 👑'];
-  const MSGS_SAME     = ['Zero zmian. Świat się kręci, Ty stoisz. Może czas przyspieszyć? ⏩','Stabilność to cnota — ale 99 nie przyjdzie samo. Czas zaatakować. 🎯','Forma trzyma. Teraz przełóż ją na parkiet i uderz mocniej. 💥','Ani w górę, ani w dół. Klasyczny pat. Czas go przełamać. 🎲'];
-  const MSGS_SMALL_DOWN=['Malutki dołek, takie rzeczy się zdarzają. Odbijesz na tym evencie. 🔄','Cofnąłeś się krok, żeby skoczyć dwa. Klasyk. 🏋','Kilka złych meczów to nie koniec kariery. Wróć mocniejszy. 💎','Statystyki trochę w dół, ale mecze wygrasz głową. 🧠'];
-  const MSGS_BIG_DOWN = ['Ekhm. Spory dół. Ale Syzyf też nie rezygnował — i Ty nie rezygnuj. 🪨','Karma? Pech? Forma? Jedno z trzech. Może wszystkie. Odbuduj się. 🛠️','No to były ciężkie mecze. Nie ma co płakać — trzeba grać. 😤','Tyle punktów w dół... Może warto spać wcześniej przed eventem? 😅'];
+  const MSGS_NEW      = [
+    'Witaj w lidze! Czas pokazać co masz w sobie. 🌟',
+    'Każda legenda zaczynała od pierwszego meczu. To jest właśnie Twój. 🏆',
+    'Nowa twarz, nowe możliwości. Zrób wrażenie! 👀',
+    'Statystyki nie kłamią — a Twoje jeszcze nie istnieją. Czas to zmienić. 📋',
+    'Historia ligowa: strona pusta. Zaraz to naprawisz. ✍️',
+    'Pierwszy mecz zawsze boli. Drugi już mniej. Powodzenia! 😬',
+    'Ktoś musi być najnowszym — dziś to Ty. Nie zawiedź. 🆕',
+    'Liga czeka. Ty zapisany. Teraz już tylko parkiet. 🏀',
+  ];
+  const MSGS_DEBUT    = [
+    'Debiut zaliczony. Teraz już wiesz o co chodzi — czas to wykorzystać. 💡',
+    'Pierwszy event był tylko rozgrzewką. Na tym pokażesz prawdziwy poziom. 🔥',
+    'Overall wyznaczony. Droga do 99 właśnie się zaczęła. 🗺️',
+    'Próbka to nie ocena. Na tym evencie piszesz historię od nowa. ✍️',
+    'Etykieta nałożona. Teraz pytanie — czy ona kłamie? 🎯',
+    'Widziałem Twój ostatni event. Liga też widziała. Pora coś z tym zrobić. 😏',
+    'Startowa wartość ustalona. Jedyna droga — w górę. Prawda? 📈',
+    'Baza jest. Reszta to praca. No to do roboty. 🛠️',
+  ];
+  const MSGS_BIG_UP   = [
+    'BOOM! Rakieta startuje. Czy ktoś zawiadomił NASA? 🚀',
+    'Chyba ktoś grał w nocy i coś mu kliknęło. Naprawdę nieźle. 😎',
+    'Inni też trenują — ale Ty też, i WIDAĆ. Tak trzymaj. 💪',
+    'To się mówi forma! Zimna woda, gorące liczby. 🔥',
+    'Skoro tak idziesz w górę, to strzelam że niedługo będziesz GM-em. Spokojnie. 😂',
+    'Taki skok overalla to się widuje raz na kilka eventów. Zapamiętają Cię. 👑',
+    'Ktoś odblokował tryb boga. Następny event zweryfikuje czy to trend, czy fluk. 🎲',
+    'Liga notuje. Rywale patrzą. Nie zwalniaj teraz. 🏆',
+  ];
+  const MSGS_SMALL_UP = [
+    'Plus na koncie. Z takim tempem za rok będziesz bogiem. 📈',
+    'Progres mały, ale prawdziwy. Szacunek za robotę. 👊',
+    'Krok do przodu. Nie zatrzymuj się, kolejny event czeka. 🏀',
+    'Rośnie legenda. Powoli, ale pewnie. 👑',
+    'Nie spektakularnie, ale do przodu. Każdy punkt się liczy. 🔢',
+    'Mały plus, ale jednak plus. Syzyf by się uśmiechnął. 🪨',
+    'Droga do 99 krok po kroku. Jesteś na niej. 🗺️',
+    'Nie rewolucja, ale ewolucja. I o to chodzi. 🧬',
+  ];
+  const MSGS_SAME     = [
+    'Zero zmian. Świat się kręci, Ty stoisz. Może czas przyspieszyć? ⏩',
+    'Stabilność to cnota — ale 99 nie przyjdzie samo. Czas zaatakować. 🎯',
+    'Forma trzyma. Teraz przełóż ją na parkiet i uderz mocniej. 💥',
+    'Ani w górę, ani w dół. Klasyczny pat. Czas go przełamać. 🎲',
+    'Tyle samo co ostatnio. Liga czeka na coś więcej. 🥱',
+    'Bez zmian. Dobrze czy źle? Zależy co z tym zrobisz na evencie. 🤷',
+    'Plateau. Wszyscy przez to przechodzą. Nieliczni je przebijają. 🧱',
+    'Overall zamrożony. Odmrozi się tylko na parkiecie. ❄️',
+  ];
+  const MSGS_SMALL_DOWN = [
+    'Malutki dołek, takie rzeczy się zdarzają. Odbijesz na tym evencie. 🔄',
+    'Cofnąłeś się krok, żeby skoczyć dwa. Klasyk. 🏋',
+    'Kilka złych meczów to nie koniec kariery. Wróć mocniejszy. 💎',
+    'Statystyki trochę w dół, ale mecze wygrasz głową. 🧠',
+    'Minus jest. Ale jeszcze nie alarm. Czas działać. ⚠️',
+    'Forma faluje — to normalne. Ważne żeby fala wróciła. 🌊',
+    'Trochę w dół, ale nie tragedia. Jeden dobry event i wracasz. 🔁',
+    'Zdarza się najlepszym. Kluczowe co zrobisz na tym evencie. 🔑',
+  ];
+  const MSGS_BIG_DOWN = [
+    'Ekhm. Spory dół. Ale Syzyf też nie rezygnował — i Ty nie rezygnuj. 🪨',
+    'Karma? Pech? Forma? Jedno z trzech. Może wszystkie. Odbuduj się. 🛠️',
+    'No to były ciężkie mecze. Nie ma co płakać — trzeba grać. 😤',
+    'Tyle punktów w dół... Może warto spać wcześniej przed eventem? 😅',
+    'Naprawdę? Aż tyle? No dobra, grunt że się zapisałeś. Odrabiaj straty. 📉',
+    'Taki spadek to sygnał. Liga wysyła wiadomość. Czas jej odpowiedzieć. 📩',
+    'Wszyscy mają gorszy period. Twój właśnie dobiegł końca — teraz odbijaš. 🏹',
+    'Statystyki mówią "nie". Ty na evencie powiesz "owszem". 😤',
+  ];
 
   let msgs, deltaHtml = '';
   if(ovr === null || !ep?.ingameName) {
