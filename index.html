@@ -6629,27 +6629,60 @@ function showSignupWelcome(eventId, playerObj) {
   const ep = enriched[0];
   const ovr = ep?.ovr || null;
 
-  // Delta from most recent event
-  const latestEv = events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0];
+  // Delta from most recent completed event
+  const eventsWithMatches = events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
+  const latestEv = eventsWithMatches[eventsWithMatches.length-1] || null;
   let delta = null;
+  let playedLastEvent = false;
   if(latestEv && ep?.ingameName) {
-    const preMap = _computeChainedOvrMap(latestEv.id);
     const postMap = _computeChainedOvrMap();
-    const pre = preMap[ep.ingameName], post = postMap[ep.ingameName];
-    if(pre !== undefined && post !== undefined) delta = post - pre;
+    const post = postMap[ep.ingameName];
+    if(post !== undefined) {
+      const preMap = _computeChainedOvrMap(latestEv.id);
+      let pre = preMap[ep.ingameName];
+      if(pre === undefined) {
+        // Player debut in latestEv — get their pre-event baseline from ranking
+        const ranks = _dsLeagueRanking();
+        const histPosCount={};
+        matches.forEach(m=>{[m.team1,m.team2].forEach(team=>{(team?.players||[]).forEach(p=>{
+          if(!p.name||!p.pos)return;
+          if(!histPosCount[p.name])histPosCount[p.name]={};
+          histPosCount[p.name][p.pos]=(histPosCount[p.name][p.pos]||0)+1;
+        });});});
+        const domPos=histPosCount[ep.ingameName]
+          ? Object.entries(histPosCount[ep.ingameName]).sort((a,b)=>b[1]-a[1])[0][0] : null;
+        const entries=ranks.filter(r=>r.name===ep.ingameName);
+        const best=(domPos&&entries.find(e=>e.pos===domPos))||entries[0];
+        if(best) pre = best.ovr;
+      }
+      // Check player appeared in latestEv matches
+      playedLastEvent = (latestEv.matches||[]).some(m=>
+        [...(m.team1?.players||[]),...(m.team2?.players||[])].some(p=>p.name===ep.ingameName)
+      );
+      if(pre !== undefined) delta = post - pre;
+    }
   }
 
-  const MSGS_UP   = ['Dobra forma się utrzymuje – nie zwalniaj! 💪','Statystyki nie kłamią. Kontynuuj robotę. 📈','Wysoka forma zobowiązuje – pokaż to znowu! 🔥'];
-  const MSGS_DOWN = ['To tylko chwilowe – w następnym evencie odbijasz! 🔄','Dołek bywa częścią drogi. Ważne, co z nim zrobisz. 🏋','Rebounds nie kłamią. Wróć mocniejszy. 💎'];
-  const MSGS_SAME = ['Stabilność to też wartość – teraz czas na skok! 🚀','Jesteś gotowy. Zostały tylko mecze. 🎯','Forma trzyma się mocno – czas przełożyć ją na parkiet! 🏀'];
-  const MSGS_NEW  = ['Witaj w lidze! Czas pokazać co masz w sobie. 🌟','Każda legenda zaczynała od pierwszego meczu. To jest Twój. 🏆','Nowa twarz, nowe możliwości. Zrób wrażenie! 👀'];
+  const MSGS_NEW      = ['Witaj w lidze! Czas pokazać co masz w sobie. 🌟','Każda legenda zaczynała od pierwszego meczu. To jest właśnie Twój. 🏆','Nowa twarz, nowe możliwości. Zrób wrażenie! 👀','Statystyki nie kłamią — a Twoje jeszcze nie istnieją. Czas to zmienić. 📋'];
+  const MSGS_DEBUT    = ['Debiut zaliczony. Teraz już wiesz o co chodzi — czas to wykorzystać. 💡','Pierwszy event był tylko rozgrzewką. Na tym pokażesz prawdziwy poziom. 🔥','Overall wyznaczony. Droga do 99 właśnie się zaczęła. 🗺️','Próbka to nie ocena. Na tym evencie piszesz historię od nowa. ✍️'];
+  const MSGS_BIG_UP   = ['BOOM! Rakieta startuje. Czy ktoś zawiadomił NASA? 🚀','Chyba ktoś grał w nocy i coś mu kliknęło. Naprawdę nieźle. 😎','Inni też trenują — ale Ty też, i WIDAĆ. Tak trzymaj. 💪','To się mówi forma! Zimna woda, gorące liczby. 🔥'];
+  const MSGS_SMALL_UP = ['Plus na koncie. Z takim tempem za rok będziesz bogiem. 📈','Progres mały, ale prawdziwy. Szacunek za robotę. 👊','Krok do przodu. Nie zatrzymuj się, kolejny event czeka. 🏀','Rośnie legenda. Powoli, ale pewnie. 👑'];
+  const MSGS_SAME     = ['Zero zmian. Świat się kręci, Ty stoisz. Może czas przyspieszyć? ⏩','Stabilność to cnota — ale 99 nie przyjdzie samo. Czas zaatakować. 🎯','Forma trzyma. Teraz przełóż ją na parkiet i uderz mocniej. 💥','Ani w górę, ani w dół. Klasyczny pat. Czas go przełamać. 🎲'];
+  const MSGS_SMALL_DOWN=['Malutki dołek, takie rzeczy się zdarzają. Odbijesz na tym evencie. 🔄','Cofnąłeś się krok, żeby skoczyć dwa. Klasyk. 🏋','Kilka złych meczów to nie koniec kariery. Wróć mocniejszy. 💎','Statystyki trochę w dół, ale mecze wygrasz głową. 🧠'];
+  const MSGS_BIG_DOWN = ['Ekhm. Spory dół. Ale Syzyf też nie rezygnował — i Ty nie rezygnuj. 🪨','Karma? Pech? Forma? Jedno z trzech. Może wszystkie. Odbuduj się. 🛠️','No to były ciężkie mecze. Nie ma co płakać — trzeba grać. 😤','Tyle punktów w dół... Może warto spać wcześniej przed eventem? 😅'];
 
   let msgs, deltaHtml = '';
-  if(ovr === null || !ep?.ingameName) { msgs = MSGS_NEW; }
-  else if(delta === null)             { msgs = MSGS_NEW; }
-  else if(delta > 0)  { msgs = MSGS_UP;   deltaHtml = `<div style="color:#4ade80;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9650; +${delta} po ostatnim evencie</div>`; }
-  else if(delta < 0)  { msgs = MSGS_DOWN; deltaHtml = `<div style="color:#f87171;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9660; ${delta} po ostatnim evencie</div>`; }
-  else                { msgs = MSGS_SAME; deltaHtml = `<div style="color:var(--muted);font-size:.95rem;margin-bottom:.15rem">Bez zmian po ostatnim evencie</div>`; }
+  if(ovr === null || !ep?.ingameName) {
+    msgs = MSGS_NEW;
+  } else if(delta === null && !playedLastEvent) {
+    msgs = MSGS_NEW;
+  } else if(delta === null) {
+    msgs = MSGS_DEBUT;
+  } else if(delta >= 4)  { msgs = MSGS_BIG_UP;    deltaHtml = `<div style="color:#4ade80;font-size:1.05rem;font-weight:800;margin-bottom:.15rem;letter-spacing:1px">&#9650;&#9650; +${delta} po ostatnim evencie</div>`; }
+  else if(delta > 0)     { msgs = MSGS_SMALL_UP;  deltaHtml = `<div style="color:#4ade80;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9650; +${delta} po ostatnim evencie</div>`; }
+  else if(delta === 0)   { msgs = MSGS_SAME;       deltaHtml = `<div style="color:var(--muted);font-size:.9rem;margin-bottom:.15rem">&#9472; bez zmian po ostatnim evencie</div>`; }
+  else if(delta >= -3)   { msgs = MSGS_SMALL_DOWN; deltaHtml = `<div style="color:#f87171;font-size:.95rem;font-weight:700;margin-bottom:.15rem">&#9660; ${delta} po ostatnim evencie</div>`; }
+  else                   { msgs = MSGS_BIG_DOWN;   deltaHtml = `<div style="color:#f87171;font-size:1.05rem;font-weight:800;margin-bottom:.15rem;letter-spacing:1px">&#9660;&#9660; ${delta} po ostatnim evencie</div>`; }
 
   const msg = msgs[Math.floor(Math.random()*msgs.length)];
   const ovrHtml = ovr ? `
