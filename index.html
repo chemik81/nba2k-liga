@@ -4448,6 +4448,14 @@ async function saveSetup() {
     localStorage.setItem('nba2k_worker_url', _wParam);
   }
 
+  // If link contains ?ev_tok= (events token embedded in GM panel link), store it
+  const _evTok = _urlParams.get('ev_tok');
+  if(_evTok) {
+    localStorage.setItem('nba2k_events_token_hash', _evTok);
+    localStorage.setItem('nba2k_events_auth', 'ok');
+    window.history.replaceState({}, '', window.location.pathname + (window.location.hash || ''));
+  }
+
   if(_oauthError) {
     window.history.replaceState({}, '', window.location.pathname);
     // Show friendly modal with instructions
@@ -10328,6 +10336,12 @@ function openCaptainNotifModal(eventId) {
 
   const hasWebhook = !!discordWebhookUrl;
 
+  const _notifWu = localStorage.getItem('nba2k_worker_url') || '';
+  const _notifTok = localStorage.getItem('nba2k_events_token_hash') || '';
+  const _notifBase = `${location.origin}${location.pathname}`;
+  const _notifGmUrl = _notifWu
+    ? `${_notifBase}?w=${encodeURIComponent(_notifWu)}&event=${ev.id}${_notifTok ? '&ev_tok=' + encodeURIComponent(_notifTok) : ''}#gm`
+    : '';
   const defaultMsg = `📣 **${ev.title}** — przydzielono kapitanów!\n\n` +
     ev.teams.map(team => {
       const c = team.captain;
@@ -10335,7 +10349,7 @@ function openCaptainNotifModal(eventId) {
       const mention = c.id ? `<@${c.id}>` : c.name;
       return `🏀 **${team.name}** → kapitan: ${mention}`;
     }).filter(Boolean).join('\n') +
-    `\n\nKapitanowie — zaloguj się na platformę i otwórz Panel GM aby zarządzać swoją drużyną podczas draftu! 🎮`;
+    `\n\nKapitanowie — otwórzcie swój Panel GM i dokonajcie picków! 🎮${_notifGmUrl ? '\n🔗 ' + _notifGmUrl : ''}`;
 
   document.getElementById('captain-notif-modal-content').innerHTML = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:2px;margin-bottom:.25rem">📣 POWIADOM KAPITANÓW</div>
@@ -11727,7 +11741,7 @@ async function deleteTeam(teamName) {
 </div>
 
 <!-- CAPTAIN NOTIFICATION MODAL -->
-<div class="modal-overlay" id="captain-notif-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1400">
+<div class="modal-overlay" id="captain-notif-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:10001">
   <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="document.getElementById('captain-notif-modal').classList.remove('open')">✕</button>
     <div id="captain-notif-modal-content"></div>
@@ -13776,9 +13790,10 @@ function _dsS5(ev) {
     </div>`;
   }).join('');
   const wu=localStorage.getItem('nba2k_worker_url')||'';
+  const _evTokStored=localStorage.getItem('nba2k_events_token_hash')||'';
   const base=`${location.origin}${location.pathname}`;
   const boardUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}#board`:'';
-  const gmUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}#gm`:'';
+  const gmUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}${_evTokStored?'&ev_tok='+encodeURIComponent(_evTokStored):''}#gm`:'';
   const copyBtn=(label,url)=>url
     ?`<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem">
         <span style="font-size:.75rem;color:var(--muted)">${label}:</span>
