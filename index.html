@@ -7762,6 +7762,35 @@ function renderDraftView(eventId) {
     </div>
   </div>`;
 
+  const _gmOnlineNow = ev.gmOnline || [];
+  const captainStatusHtml = isAdmin && (ev.teams||[]).length ? `
+    <div style="background:#10131a;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px 16px;margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:.4rem">
+        <div style="font-size:.68rem;font-weight:700;letter-spacing:2px;color:#6b7080;text-transform:uppercase">STATUS KAPITANÓW <span style="font-weight:400;letter-spacing:0">· odśwież aby zaktualizować</span></div>
+        <div style="display:flex;gap:.4rem">
+          <button onclick="dvPollCaptains(this,'${eventId}')" style="background:#1a1e2a;border:1px solid rgba(255,255,255,.12);color:#e8eaf0;border-radius:6px;padding:.25rem .7rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.76rem;cursor:pointer;letter-spacing:.5px">🔄 Odśwież</button>
+          <button onclick="openCaptainNotifModal('${eventId}')" style="background:#1a1e2a;border:1px solid rgba(245,197,24,.35);color:#f5c518;border-radius:6px;padding:.25rem .7rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.76rem;cursor:pointer;letter-spacing:.5px">📣 Powiadom</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.4rem">
+        ${(ev.teams||[]).map((t,i)=>{
+          const isOn=_gmOnlineNow.includes(t.captain?.id);
+          const ava=t.captain?.avatar?`<img src="${t.captain.avatar}" style="width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(255,255,255,.12);flex-shrink:0">`:'<div style="width:26px;height:26px;border-radius:50%;background:#1d2130;display:flex;align-items:center;justify-content:center;font-size:.65rem;flex-shrink:0">👤</div>';
+          return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .65rem;background:#161922;border:1px solid rgba(255,255,255,.06);border-radius:6px">
+            ${ava}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.captain?.name||'—'}</div>
+              <div style="font-size:.66rem;color:#6b7080;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.25rem;flex-shrink:0">
+              <div id="dv-dot-${i}" style="width:7px;height:7px;border-radius:50%;background:${isOn?'#4ade80':'#4b5563'};box-shadow:${isOn?'0 0 5px #4ade80':'none'}"></div>
+              <span id="dv-dotlbl-${i}" style="font-size:.66rem;color:${isOn?'#4ade80':'#6b7080'}">${isOn?'Online':'Offline'}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
   overlay.style.cssText = 'position:fixed;inset:0;background:#0a0c10;z-index:9999;overflow-y:auto;padding:0';
   overlay.innerHTML = `
     <style>@keyframes dvticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style>
@@ -7775,7 +7804,6 @@ function renderDraftView(eventId) {
         ${discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `<button onclick="openGMPanel('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">🎮 Panel GM</button>` : ''}
         ${isAdmin && !isDone && !notStarted ? `<button onclick="${isPaused ? 'draftPlay' : 'draftPause'}('${eventId}')" style="background:${isPaused ? '#4ade80' : 'rgba(245,197,24,.15)'};border:1px solid ${isPaused ? '#4ade80' : 'rgba(245,197,24,.4)'};color:${isPaused ? '#000' : '#f5c518'};border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">${isPaused ? '&#9654; Start' : '&#9646;&#9646; Pauza'}</button>` : ''}
         ${isAdmin && !isDone && !notStarted && turn > 0 ? `<button onclick="draftUndoPick('${eventId}')" style="background:#10131a;border:1px solid rgba(248,113,113,.4);color:#f87171;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem" title="Cofnij ostatni pick">&#8617; Cofnij</button>` : ''}
-        ${isAdmin && !isDone ? `<button onclick="openCaptainNotifModal('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#f5c518;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">&#128226; Powiadom</button>` : ''}
         <button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')" style="background:#10131a;border:1px solid rgba(255,255,255,.1);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">&#x2715; Zamknij</button>
       </div>
     </div>
@@ -7785,6 +7813,7 @@ function renderDraftView(eventId) {
       ${(isDone || notStarted)
         ? boardHtml
         : `<div style="display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start">${poolHtml}${boardHtml}</div>`}
+      ${captainStatusHtml}
     </div>`;
 }
 
@@ -7854,6 +7883,36 @@ async function adminPickFor(eventId) {
   if(!ev || !ev.draftPool?.length) return;
   // Auto-pick first available player
   await draftPickPlayer(eventId, ev.draftPool[0].id);
+}
+
+async function dvPollCaptains(btn, eventId) {
+  if(btn) { btn.textContent='⏳'; btn.disabled=true; }
+  try {
+    const wu = localStorage.getItem('nba2k_worker_url');
+    if(wu) {
+      const r = await fetch(wu.replace(/\/$/,'') + '/data');
+      if(r.ok) {
+        const d = await r.json();
+        const freshEv = (d.record?.events||d.events||[]).find(e=>e.id===eventId);
+        if(freshEv) {
+          const ev = events.find(e=>e.id===eventId);
+          if(ev) {
+            const pingIds = (freshEv.players||[]).filter(p=>p.gmOnlineAt&&Date.now()-p.gmOnlineAt<120000).map(p=>p.id);
+            const gmOnline = [...new Set([...(freshEv.gmOnline||[]),...pingIds])];
+            ev.gmOnline = gmOnline;
+            (ev.teams||[]).forEach((t,i)=>{
+              const on = gmOnline.includes(t.captain?.id);
+              const dot = document.getElementById('dv-dot-'+i);
+              const lbl = document.getElementById('dv-dotlbl-'+i);
+              if(dot){ dot.style.background=on?'#4ade80':'#4b5563'; dot.style.boxShadow=on?'0 0 5px #4ade80':'none'; }
+              if(lbl){ lbl.textContent=on?'Online':'Offline'; lbl.style.color=on?'#4ade80':'#6b7080'; }
+            });
+          }
+        }
+      }
+    }
+  } catch(e) {}
+  if(btn) { btn.textContent='🔄 Odśwież'; btn.disabled=false; }
 }
 
 async function draftUndoPick(eventId) {
