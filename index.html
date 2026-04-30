@@ -8947,7 +8947,51 @@ function renderCmp() {
     const fmt=(v,gr)=>gr?`<span class="grade grade-${String(v).replace('+','p').replace('-','m')}">${v}</span>`:v;
     return `<div class="cmprow"><div class="cmpval ${b1?'cmpbetter':b2?'cmpworse':''}">${fmt(s.v1,s.gr)}</div><div class="cmplbl">${s.l}</div><div class="cmpval ${b2?'cmpbetter':b1?'cmpworse':''}">${fmt(s.v2,s.gr)}</div></div>`;
   }).join('');
-  el.innerHTML=`<div style="display:flex;gap:1rem;margin-bottom:.5rem"><div style="flex:1;text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${n1}</div><div style="font-size:.85rem;color:var(--muted)">${p1.team} &middot; ${p1.gp} GP</div></div><div style="width:55px"></div><div style="flex:1;text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent2)">${n2}</div><div style="font-size:.85rem;color:var(--muted)">${p2.team} &middot; ${p2.gp} GP</div></div></div>${rows}`;
+  const radarHtml = _cmpRadar(p1, p2, n1, n2, agg);
+  el.innerHTML=`<div style="display:flex;gap:1rem;margin-bottom:.75rem"><div style="flex:1;text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent)">${n1}</div><div style="font-size:.85rem;color:var(--muted)">${p1.team} &middot; ${p1.gp} GP</div></div><div style="width:55px"></div><div style="flex:1;text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;color:var(--accent2)">${n2}</div><div style="font-size:.85rem;color:var(--muted)">${p2.team} &middot; ${p2.gp} GP</div></div></div>${radarHtml}${rows}`;
+}
+
+function _cmpRadar(p1, p2, n1, n2, agg) {
+  const axes = [
+    {l:'PPG', f:p=>p.gp>0?p.pts/p.gp:0},
+    {l:'RPG', f:p=>p.gp>0?p.reb/p.gp:0},
+    {l:'APG', f:p=>p.gp>0?p.ast/p.gp:0},
+    {l:'SPG', f:p=>p.gp>0?p.stl/p.gp:0},
+    {l:'BPG', f:p=>p.gp>0?p.blk/p.gp:0},
+    {l:'FG%', f:p=>p.fga>0?p.fgm/p.fga:0},
+  ];
+  const maxes = axes.map(a=>Math.max(...agg.map(p=>a.f(p)),0.001));
+  const norm = (p,i) => Math.min(axes[i].f(p)/maxes[i],1);
+  const v1 = axes.map((_,i)=>norm(p1,i));
+  const v2 = axes.map((_,i)=>norm(p2,i));
+  const cx=120,cy=108,R=72,N=6;
+  const ax = i => i*2*Math.PI/N - Math.PI/2;
+  const pt = (r,i) => [+(cx+r*Math.cos(ax(i))).toFixed(1), +(cy+r*Math.sin(ax(i))).toFixed(1)];
+  const poly = vs => vs.map((_,i)=>pt(R*vs[i],i).join(',')).join(' ');
+  const c1='#f5c518', c2='#e74c3c';
+  const rings=[.25,.5,.75,1].map(f=>{
+    const pts=axes.map((_,i)=>pt(R*f,i));
+    return `<path d="M${pts.map(p=>p.join(',')).join('L')}Z" fill="none" stroke="#fff" stroke-opacity="${f===1?.2:.09}" stroke-width="${f===1?1.2:.7}"/>`;
+  }).join('');
+  const axLines=axes.map((_,i)=>{const[x,y]=pt(R,i);return`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#fff" stroke-opacity=".12" stroke-width="1"/>`;}).join('');
+  const lblOff=14;
+  const labels=axes.map((a,i)=>{
+    const[x,y]=pt(R+lblOff,i);
+    const va=Math.abs(Math.sin(ax(i)))<0.3?'middle':Math.sin(ax(i))<0?'auto':'hanging';
+    return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="${va}" font-size="9.5" font-weight="700" fill="#99a0b0" font-family="Arial,sans-serif" letter-spacing=".5">${a.l}</text>`;
+  }).join('');
+  const dots=(vs,c)=>vs.map((_,i)=>{const[x,y]=pt(R*vs[i],i);return`<circle cx="${x}" cy="${y}" r="3.2" fill="${c}" stroke="#111" stroke-width=".8"/>`;}).join('');
+  return `<svg viewBox="0 0 240 228" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:300px;margin:0 auto .75rem;display:block">
+    ${rings}${axLines}
+    <polygon points="${poly(v2)}" fill="${c2}" fill-opacity=".18" stroke="${c2}" stroke-width="1.8" stroke-opacity=".88" stroke-linejoin="round"/>
+    <polygon points="${poly(v1)}" fill="${c1}" fill-opacity=".18" stroke="${c1}" stroke-width="1.8" stroke-opacity=".88" stroke-linejoin="round"/>
+    ${dots(v2,c2)}${dots(v1,c1)}
+    ${labels}
+    <g font-size="9" font-family="Arial,sans-serif">
+      <circle cx="12" cy="216" r="5" fill="${c1}"/><text x="21" y="220" fill="${c1}" font-weight="700">${n1}</text>
+      <circle cx="12" cy="226" r="5" fill="${c2}"/><text x="21" y="230" fill="${c2}" font-weight="700">${n2}</text>
+    </g>
+  </svg>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
