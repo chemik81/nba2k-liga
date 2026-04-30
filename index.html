@@ -4453,20 +4453,44 @@ async function saveSetup() {
     // Show friendly modal with instructions
     setTimeout(() => {
       const msg = decodeURIComponent(_oauthError);
-      const isInAppBrowser = msg.includes('Chrome') || msg.includes('Safari') || msg.includes('access token') || msg.includes('invalid_grant');
-      const html = `<div style="text-align:center;padding:.5rem">
-        <div style="font-size:2.5rem;margin-bottom:.75rem">⚠️</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:1px;margin-bottom:.75rem">BŁĄD LOGOWANIA DISCORD</div>
-        <div style="background:var(--surface2);border-radius:8px;padding:.75rem;font-size:.85rem;color:var(--muted);margin-bottom:1rem;text-align:left">${msg}</div>
-        <div style="font-size:.9rem;margin-bottom:1rem;line-height:1.6">
-          Jeśli logujesz się z <b>telefonu przez Discord</b>, link otwiera się w wbudowanej przeglądarce która blokuje logowanie.<br><br>
+      const isRateLimited = /rate.?limit|too many token/i.test(msg);
+      const isInAppBrowser = !isRateLimited && /invalid_grant|access.?token|in.app.browser/i.test(msg);
+      let body;
+      if(isRateLimited) {
+        body = `<div style="font-size:.9rem;line-height:1.7;margin-bottom:1rem">
+          Discord zablokował logowanie z Twojego konta z powodu <b>zbyt wielu prób w krótkim czasie</b>.<br><br>
+          <b>Co zrobić?</b><br>
+          1. Poczekaj <b>kilka godzin</b> (lub do następnego dnia) i spróbuj ponownie.<br>
+          2. Jeśli problem się powtarza — poproś <b>admina o dodanie Cię ręcznie</b> do eventu.
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button onclick="document.getElementById('oauth-error-modal').classList.remove('open')" class="btn btn-primary" style="flex:1;justify-content:center">OK, rozumiem</button>
+        </div>`;
+      } else if(isInAppBrowser) {
+        body = `<div style="font-size:.9rem;line-height:1.7;margin-bottom:1rem">
+          Logujesz się z <b>telefonu przez Discord</b> — link otworzył się w wbudowanej przeglądarce która blokuje logowanie.<br><br>
           <b>Rozwiązanie:</b> Skopiuj link poniżej i otwórz go w <b>Chrome</b> lub <b>Safari</b>.
         </div>
         <div style="background:var(--surface2);border-radius:6px;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);word-break:break-all;margin-bottom:.75rem">${window.location.origin + window.location.pathname}</div>
         <div style="display:flex;gap:.5rem">
-          <button onclick="navigator.clipboard?.writeText(window.location.origin + window.location.pathname).then(()=>showToast('✅ Link skopiowany!','success'))" class="btn btn-primary" style="flex:1;justify-content:center">📋 Kopiuj link</button>
+          <button onclick="navigator.clipboard?.writeText(window.location.origin+window.location.pathname).then(()=>showToast('✅ Link skopiowany!','success'))" class="btn btn-primary" style="flex:1;justify-content:center">📋 Kopiuj link</button>
           <button onclick="document.getElementById('oauth-error-modal').classList.remove('open')" class="btn btn-ghost">OK</button>
+        </div>`;
+      } else {
+        body = `<div style="background:var(--surface2);border-radius:8px;padding:.75rem;font-size:.85rem;color:var(--muted);margin-bottom:1rem;text-align:left">${msg}</div>
+        <div style="font-size:.9rem;margin-bottom:1rem;line-height:1.6">
+          Jeśli otwierasz link z aplikacji Discord na telefonie — skopiuj go i otwórz w <b>Chrome</b> lub <b>Safari</b>.
         </div>
+        <div style="background:var(--surface2);border-radius:6px;padding:.5rem .75rem;font-size:.75rem;color:var(--muted);word-break:break-all;margin-bottom:.75rem">${window.location.origin + window.location.pathname}</div>
+        <div style="display:flex;gap:.5rem">
+          <button onclick="navigator.clipboard?.writeText(window.location.origin+window.location.pathname).then(()=>showToast('✅ Link skopiowany!','success'))" class="btn btn-primary" style="flex:1;justify-content:center">📋 Kopiuj link</button>
+          <button onclick="document.getElementById('oauth-error-modal').classList.remove('open')" class="btn btn-ghost">OK</button>
+        </div>`;
+      }
+      const html = `<div style="text-align:center;padding:.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.75rem">${isRateLimited?'🕐':'⚠️'}</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:1px;margin-bottom:.75rem">BŁĄD LOGOWANIA DISCORD</div>
+        ${body}
       </div>`;
       let modal = document.getElementById('oauth-error-modal');
       if(!modal) {
