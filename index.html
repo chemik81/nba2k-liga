@@ -13581,9 +13581,10 @@ function _dsSrch(q) {
 function _dsOrderHTML() {
   return _ds.order.map((ti,pos)=>{
     const t=_ds.teams[ti];
+    const cap=_ds.playerPool.find(p=>p.id===t?.captainId);
     return `<div class="ds-oi" data-idx="${ti}" draggable="true" style="display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:grab;user-select:none;margin-bottom:.4rem">
       <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:var(--accent);min-width:2rem">#${pos+1}</span>
-      <span style="font-weight:700;font-size:.93rem;flex:1">${t?.name||'—'}</span>
+      <span style="font-weight:700;font-size:.93rem;flex:1">${t?.name||'—'}${cap?`<span style="font-weight:400;font-size:.78rem;color:var(--muted);margin-left:.5rem">★ ${cap.name}</span>`:''}</span>
       <span style="color:var(--muted);font-size:1rem">⠿</span>
     </div>`;
   }).join('');
