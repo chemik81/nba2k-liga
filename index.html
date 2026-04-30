@@ -7562,6 +7562,24 @@ function startDraftPolling(eventId) {
       if(!freshEvents) return;
       const freshEv = freshEvents.find(e => e.id === eventId);
       if(!freshEv) return;
+      // Detect pick intent from a captain (submitted via /event-signup, no auth needed)
+      const hasAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
+      if(hasAuth && freshEv.status === 'draft') {
+        const currentTurn = freshEv.draftTurn || 0;
+        const intent = (freshEv.players||[]).find(p => p.draftPickIntent && p.draftPickIntent.turn === currentTurn);
+        if(intent) {
+          // Clear the intent from local event before applying (saveData will persist the clear)
+          const idx2 = events.findIndex(e => e.id === eventId);
+          if(idx2 !== -1) {
+            events[idx2] = freshEv;
+            const pi = (events[idx2].players||[]).find(p => p.id === intent.id);
+            if(pi) delete pi.draftPickIntent;
+          }
+          await draftPickPlayer(eventId, intent.draftPickIntent.playerId);
+          return;
+        }
+      }
+
       const localEv = events.find(e => e.id === eventId);
       if(!localEv || freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status || freshEv.draftPaused !== localEv.draftPaused || freshEv.timerEnd !== localEv.timerEnd) {
         const idx = events.findIndex(e => e.id === eventId);
@@ -7779,6 +7797,26 @@ async function draftPickPlayer(eventId, playerId) {
   const teamIdx = order[turn];
   const playerIdx = (ev.draftPool||[]).findIndex(p => p.id === playerId);
   if(playerIdx === -1) return;
+
+  // Captain without admin/events token: submit pick intent via /event-signup (no auth needed)
+  // Admin's startDraftPolling will detect the intent and apply it with admin auth.
+  const hasAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
+  if(!hasAuth && workerUrl && discordUser) {
+    try {
+      const basePlayer = (ev.players||[]).find(p=>p.id===discordUser.id) || {};
+      await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ eventId, player: {
+          ...basePlayer, id: discordUser.id, name: discordUser.name,
+          discordTag: discordUser.discordTag, avatar: discordUser.avatar,
+          draftPickIntent: { playerId, turn }
+        }})
+      });
+      showToast('📤 Pick wysłany — czekaj na potwierdzenie...', 'info');
+    } catch(e) { showToast('❌ Błąd wysyłania picka', 'error'); }
+    return;
+  }
 
   const player = ev.draftPool[playerIdx];
   ev.teams[teamIdx].players.push(player);
