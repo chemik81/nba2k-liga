@@ -7774,6 +7774,7 @@ function renderDraftView(eventId) {
         <button onclick="copyDraftWatchLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">🔗 Link</button>
         ${discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `<button onclick="openGMPanel('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">🎮 Panel GM</button>` : ''}
         ${isAdmin && !isDone && !notStarted ? `<button onclick="${isPaused ? 'draftPlay' : 'draftPause'}('${eventId}')" style="background:${isPaused ? '#4ade80' : 'rgba(245,197,24,.15)'};border:1px solid ${isPaused ? '#4ade80' : 'rgba(245,197,24,.4)'};color:${isPaused ? '#000' : '#f5c518'};border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">${isPaused ? '&#9654; Start' : '&#9646;&#9646; Pauza'}</button>` : ''}
+        ${isAdmin && !isDone && !notStarted && turn > 0 ? `<button onclick="draftUndoPick('${eventId}')" style="background:#10131a;border:1px solid rgba(248,113,113,.4);color:#f87171;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem" title="Cofnij ostatni pick">&#8617; Cofnij</button>` : ''}
         ${isAdmin && !isDone ? `<button onclick="openCaptainNotifModal('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#f5c518;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">&#128226; Powiadom</button>` : ''}
         <button onclick="stopDraftPolling();document.getElementById('draft-overlay').style.display='none';openEventDetail('${eventId}')" style="background:#10131a;border:1px solid rgba(255,255,255,.1);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit">&#x2715; Zamknij</button>
       </div>
@@ -7853,6 +7854,27 @@ async function adminPickFor(eventId) {
   if(!ev || !ev.draftPool?.length) return;
   // Auto-pick first available player
   await draftPickPlayer(eventId, ev.draftPool[0].id);
+}
+
+async function draftUndoPick(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !ev.draftTurn) return;
+  const turn = ev.draftTurn - 1;
+  const teamIdx = (ev.draftOrder || [])[turn];
+  const team = ev.teams?.[teamIdx];
+  if(!team) return;
+  // team.players[0] is the captain — picks start at index 1
+  if(team.players.length <= 1) return;
+  const [undonePlayer] = team.players.splice(team.players.length - 1, 1);
+  ev.draftPool.unshift(undonePlayer);
+  ev.draftTurn = turn;
+  ev.lastPick = null;
+  ev.timerEnd = ev.timerSecs && !ev.draftPaused
+    ? new Date(Date.now() + ev.timerSecs * 1000).toISOString() : null;
+  await saveData();
+  renderDraftView(eventId);
+  if(ev.timerEnd) startDraftTimer(ev.timerEnd, eventId);
+  showToast(`↩ Cofnięto pick: ${undonePlayer.name}`, 'info');
 }
 
 async function draftPlay(eventId) {
