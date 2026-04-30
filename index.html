@@ -7570,24 +7570,6 @@ function startDraftPolling(eventId) {
       if(!freshEvents) return;
       const freshEv = freshEvents.find(e => e.id === eventId);
       if(!freshEv) return;
-      // Detect pick intent from a captain (submitted via /event-signup, no auth needed)
-      const hasAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
-      if(hasAuth && freshEv.status === 'draft') {
-        const currentTurn = freshEv.draftTurn || 0;
-        const intent = (freshEv.players||[]).find(p => p.draftPickIntent && p.draftPickIntent.turn === currentTurn);
-        if(intent) {
-          // Clear the intent from local event before applying (saveData will persist the clear)
-          const idx2 = events.findIndex(e => e.id === eventId);
-          if(idx2 !== -1) {
-            events[idx2] = freshEv;
-            const pi = (events[idx2].players||[]).find(p => p.id === intent.id);
-            if(pi) delete pi.draftPickIntent;
-          }
-          await draftPickPlayer(eventId, intent.draftPickIntent.playerId);
-          return;
-        }
-      }
-
       const localEv = events.find(e => e.id === eventId);
       if(!localEv || freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status || freshEv.draftPaused !== localEv.draftPaused || freshEv.timerEnd !== localEv.timerEnd) {
         const idx = events.findIndex(e => e.id === eventId);
@@ -7809,6 +7791,7 @@ function renderDraftView(eventId) {
       ${!isDone && (ev.teams||[]).length ? `<span style="font-size:.75rem;color:#6b7080">GM: <b style="color:${(ev.gmOnline||[]).length>=(ev.teams||[]).length?'#4ade80':'#f5c518'}">${(ev.gmOnline||[]).length}/${(ev.teams||[]).length}</b> online</span>` : ''}
       <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
         <button onclick="copyDraftWatchLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">🔗 Link</button>
+        ${isAdmin ? `<button onclick="copyGmLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#f5c518;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem" title="Kopiuj link GM z tokenem dla kapitanów">🎮 Link GM</button>` : ''}
         ${discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `<button onclick="openGMPanel('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">🎮 Panel GM</button>` : ''}
         ${isAdmin && !isDone && !notStarted ? `<button onclick="${isPaused ? 'draftPlay' : 'draftPause'}('${eventId}')" style="background:${isPaused ? '#4ade80' : 'rgba(245,197,24,.15)'};border:1px solid ${isPaused ? '#4ade80' : 'rgba(245,197,24,.4)'};color:${isPaused ? '#000' : '#f5c518'};border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">${isPaused ? '&#9654; Start' : '&#9646;&#9646; Pauza'}</button>` : ''}
         ${isAdmin && !isDone && !notStarted && turn > 0 ? `<button onclick="draftUndoPick('${eventId}')" style="background:#10131a;border:1px solid rgba(248,113,113,.4);color:#f87171;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem" title="Cofnij ostatni pick">&#8617; Cofnij</button>` : ''}
@@ -7836,23 +7819,9 @@ async function draftPickPlayer(eventId, playerId) {
   const playerIdx = (ev.draftPool||[]).findIndex(p => p.id === playerId);
   if(playerIdx === -1) return;
 
-  // Captain without admin/events token: submit pick intent via /event-signup (no auth needed)
-  // Admin's startDraftPolling will detect the intent and apply it with admin auth.
   const hasAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
-  if(!hasAuth && workerUrl && discordUser) {
-    try {
-      const basePlayer = (ev.players||[]).find(p=>p.id===discordUser.id) || {};
-      await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ eventId, player: {
-          ...basePlayer, id: discordUser.id, name: discordUser.name,
-          discordTag: discordUser.discordTag, avatar: discordUser.avatar,
-          draftPickIntent: { playerId, turn }
-        }})
-      });
-      showToast('📤 Pick wysłany — czekaj na potwierdzenie...', 'info');
-    } catch(e) { showToast('❌ Błąd wysyłania picka', 'error'); }
+  if(!hasAuth) {
+    showToast('🔐 Podaj hasło draftu w Panelu GM aby pickować', 'error');
     return;
   }
 
@@ -7891,6 +7860,29 @@ async function adminPickFor(eventId) {
   if(!ev || !ev.draftPool?.length) return;
   // Auto-pick first available player
   await draftPickPlayer(eventId, ev.draftPool[0].id);
+}
+
+async function _gmSetDraftPwd(eventId) {
+  const val = document.getElementById('gm-draft-pwd')?.value?.trim();
+  if(!val) return;
+  if(workerUrl) {
+    try {
+      const res = await fetch(workerUrl.replace(/\/$/,'') + '/auth', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ token: val, site: 'events' })
+      });
+      const data = await res.json();
+      if(data.ok) {
+        localStorage.setItem('nba2k_events_token_hash', val);
+        localStorage.setItem('nba2k_events_auth', 'ok');
+        showToast('✅ Dostęp przyznany — możesz teraz pickować!', 'success');
+        // Re-open GM panel to persist online status with auth
+        await openGMPanel(eventId);
+      } else {
+        showToast('❌ Nieprawidłowe hasło draftu', 'error');
+      }
+    } catch(e) { showToast('❌ Błąd połączenia', 'error'); }
+  }
 }
 
 async function dvPollCaptains(btn, eventId) {
@@ -8048,6 +8040,17 @@ function renderGMPanel(eventId) {
     return '<span style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:2px"><svg width="20" height="13" viewBox="0 0 60 30" style="border-radius:2px;border:1px solid rgba(0,0,0,.2)" xmlns="http://www.w3.org/2000/svg"><clipPath id="gmuf"><path d="M0 0v30h60V0z"/></clipPath><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#gmuf)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></svg></span>';
   }
 
+  const hasPickAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
+  const authBanner = !hasPickAuth ? `
+    <div style="background:rgba(245,197,24,.07);border:1.5px solid rgba(245,197,24,.4);border-radius:10px;padding:.85rem 1rem;margin-bottom:1.1rem">
+      <div style="font-size:.78rem;font-weight:700;color:#f5c518;margin-bottom:.5rem">🔐 Wymagane hasło draftu do pickowania</div>
+      <div style="font-size:.75rem;color:#9ca3af;margin-bottom:.6rem">Poproś admina o hasło lub kliknij link GM z Discorda.</div>
+      <div style="display:flex;gap:.5rem">
+        <input type="password" id="gm-draft-pwd" placeholder="Hasło draftu..." style="flex:1;background:#0f1117;border:1px solid rgba(245,197,24,.3);color:#e8eaf0;border-radius:6px;padding:.4rem .7rem;font-size:.82rem;font-family:inherit">
+        <button onclick="_gmSetDraftPwd('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .85rem;font-weight:700;cursor:pointer;font-family:inherit;font-size:.82rem;white-space:nowrap">Zatwierdź</button>
+      </div>
+    </div>` : '';
+
   let statusCard = '';
   if(ev.draftPaused && isDraftActive) {
     statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
@@ -8080,6 +8083,7 @@ function renderGMPanel(eventId) {
         <div style="font-size:.78rem;color:#6b7080">Kapitan: ${myTeam.captain?.name}</div>
       </div>
     </div>
+    ${authBanner}
     ${statusCard}
     <div style="display:grid;grid-template-columns:1fr 360px;gap:1.25rem;margin-top:.75rem;align-items:start">
       <!-- LEFT: Available Players table -->
@@ -8270,6 +8274,15 @@ async function finishDraft(eventId) {
   showToast('🏆 Draft zakończony! Drużyny gotowe.', 'success');
 }
 
+
+function copyGmLink(eventId) {
+  const wu = localStorage.getItem('nba2k_worker_url') || workerUrl || '';
+  const tok = localStorage.getItem('nba2k_events_token_hash') || '';
+  const base = `${location.origin}${location.pathname}`;
+  if(!wu) { showToast('❌ Brak Worker URL — skonfiguruj go w ustawieniach', 'error'); return; }
+  const url = `${base}?w=${encodeURIComponent(wu)}&event=${eventId}${tok ? '&ev_tok=' + encodeURIComponent(tok) : ''}#gm`;
+  navigator.clipboard?.writeText(url).then(() => showToast('✅ Link GM skopiowany! Wyślij go kapitanom.', 'success'));
+}
 
 function copyDraftWatchLink(eventId) {
   const base = window.location.href.split('?')[0].split('#')[0];
