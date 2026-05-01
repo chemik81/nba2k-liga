@@ -8185,7 +8185,8 @@ function renderGMPanel(eventId) {
       <div style="flex:1;min-width:0">
         <div style="font-size:.68rem;color:#f5c518;font-weight:700;letter-spacing:.5px;margin-bottom:.2rem">POTWIERDZENIE PICKA</div>
         <div style="font-size:1rem;font-weight:900;color:#e8eaf0">${confirmPlayer.name}${confirmPlayer.speaksEnglish ? gmFlag() : ''}</div>
-        <div style="font-size:.78rem;color:#6b7080">${confirmPlayer.primaryPos || (confirmPlayer.positions||[]).join('·') || '—'} · OVR ${confirmPlayer.ovr || '—'} · ${confirmPlayer.ppg||'—'} PPG / ${confirmPlayer.rpg||'—'} RPG</div>
+        <div style="font-size:.78rem;color:#6b7080">${confirmPlayer.primaryPos || (confirmPlayer.positions||[]).join('·') || '—'} · OVR ${confirmPlayer.ovr || '—'} · ${confirmPlayer.ppg||'—'} PPG / ${confirmPlayer.rpg||'—'} RPG / ${confirmPlayer.apg||'—'} APG</div>
+        <div style="font-size:.75rem;color:#6b7080;margin-top:.1rem">${confirmPlayer.fgpct!=null?'FG '+confirmPlayer.fgpct+'%':'—'} · ${confirmPlayer.tppct!=null?'3PT '+confirmPlayer.tppct+'%':'—'} · ${confirmPlayer.spg!=null&&confirmPlayer.gp?confirmPlayer.spg+' SPG':'—'} · ${confirmPlayer.bpg!=null&&confirmPlayer.gp?confirmPlayer.bpg+' BPG':'—'}</div>
       </div>
       <div style="display:flex;gap:.5rem;flex-shrink:0">
         <button onclick="window._gmConfirmPickId=null;draftPickPlayer('${eventId}','${confirmPlayer.id}')" style="background:#f5c518;border:none;color:#000;border-radius:8px;padding:.5rem 1.1rem;font-weight:900;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.9rem">✓ Potwierdź</button>
@@ -8249,6 +8250,10 @@ function renderGMPanel(eventId) {
       <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-weight:700;font-size:.8rem">${p.ppg||'—'}</td>
       <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-size:.8rem">${p.rpg||'—'}</td>
       <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-size:.8rem">${p.apg||'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#a78bfa;font-size:.78rem">${p.gp&&p.spg!=null?p.spg:'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#60a5fa;font-size:.78rem">${p.gp&&p.bpg!=null?p.bpg:'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;font-size:.78rem;font-weight:600;color:${p.fgpct!=null?(p.fgpct>=50?'#4ade80':p.fgpct>=40?'#e8eaf0':'#f87171'):'#6b7080'}">${p.fgpct!=null?p.fgpct+'%':'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;font-size:.78rem;font-weight:600;color:${p.tppct!=null?(p.tppct>=40?'#4ade80':p.tppct>=33?'#e8eaf0':'#f87171'):'#6b7080'}">${p.tppct!=null?p.tppct+'%':'—'}</td>
       <td style="text-align:center;padding:.4rem .3rem">
         ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;display:inline-block">${p.ovr}</span>` : '<span style="color:#6b7080">—</span>'}
       </td>
@@ -8301,8 +8306,8 @@ function renderGMPanel(eventId) {
             oninput="window._gmSearchQuery=this.value;renderGMPanel('${eventId}')"
             style="margin-left:auto;background:#161922;border:1px solid rgba(245,197,24,.2);color:#e8eaf0;border-radius:6px;padding:.22rem .5rem;font-size:.78rem;width:112px;font-family:inherit">
         </div>
-        <div style="overflow-y:auto;max-height:500px">
-          <table style="width:100%;border-collapse:collapse">
+        <div style="overflow-x:auto;overflow-y:auto;max-height:500px">
+          <table style="width:100%;border-collapse:collapse;min-width:720px">
             <thead style="position:sticky;top:0;background:#0f1117;z-index:1">
               <tr style="border-bottom:1px solid rgba(245,197,24,.2)">
                 ${sTh('name','GRACZ','left')}
@@ -8311,6 +8316,10 @@ function renderGMPanel(eventId) {
                 ${sTh('ppg','PPG')}
                 ${sTh('rpg','RPG')}
                 ${sTh('apg','APG')}
+                ${sTh('spg','SPG')}
+                ${sTh('bpg','BPG')}
+                ${sTh('fgpct','FG%')}
+                ${sTh('tppct','3PT%')}
                 ${sTh('ovr','OVR')}
                 <th style="text-align:center;padding:.35rem .2rem;color:#6b7080;font-size:.68rem;width:20px" title="Obserwuj">★</th>
                 <th style="text-align:center;padding:.35rem .2rem;color:#6b7080;font-size:.68rem;width:20px" title="Kolejka">Q</th>
@@ -13538,17 +13547,18 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
     ) : [];
     const gp = pm.length;
     if (!gp) return {...p, pos, ppg:0,rpg:0,apg:0,spg:0,bpg:0,tpg:0,gp:0,per:0,cs:0,ovr:40,
-      ingameName:iname||null, matchMethod:resolved?.method||'none'};
+      fgpct:null,tppct:null, ingameName:iname||null, matchMethod:resolved?.method||'none'};
     const tot = pm.reduce((acc,m)=>{
       const pl=[...(m.team1.players||[]),...(m.team2.players||[])].find(x=>
         x.name===iname && (posFromHistory ? x.pos===pos : true)
       );
       if(pl){acc.pts+=pl.pts||0;acc.reb+=pl.reb||0;acc.ast+=pl.ast||0;
               acc.stl+=pl.stl||0;acc.blk+=pl.blk||0;acc.to+=pl.to||0;
-              acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
+              acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.tpm+=pl.tpm||0;acc.tpa+=pl.tpa||0;
+              acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
               acc.gs+=gradeToNum(pl.grade||'B');acc.gc++;}
       return acc;
-    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,ftm:0,fta:0,gs:0,gc:0});
+    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gs:0,gc:0});
     const ppg=+(tot.pts/gp).toFixed(1),rpg=+(tot.reb/gp).toFixed(1),apg=+(tot.ast/gp).toFixed(1);
     const spg=+(tot.stl/gp).toFixed(1),bpg=+(tot.blk/gp).toFixed(1),tpg=+(tot.to/gp).toFixed(1);
     const totObj = {gp, pts:tot.pts, reb:tot.reb, ast:tot.ast, stl:tot.stl, blk:tot.blk,
@@ -13569,7 +13579,9 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
                (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
                (Math.min(apg/15,1)*100)*0.12) * mat).toFixed(1);
     }
-    return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,ingameName:iname,matchMethod:resolved?.method};
+    const fgpct = tot.fga > 0 ? Math.round(tot.fgm / tot.fga * 100) : null;
+    const tppct = tot.tpa > 0 ? Math.round(tot.tpm / tot.tpa * 100) : null;
+    return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,fgpct,tppct,ingameName:iname,matchMethod:resolved?.method};
   });
 
   // ── Skalowanie OVR ────────────────────────────────────────────
