@@ -8032,23 +8032,6 @@ async function openGMPanel(eventId) {
     return;
   }
 
-  // Validate events token (admin token is always trusted locally)
-  if(!adminTok && evtTok && workerUrl) {
-    try {
-      const vr = await fetch(workerUrl.replace(/\/$/,'') + '/auth', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: evtTok, site: 'events' })
-      });
-      const vd = await vr.json();
-      if(!vd.ok) {
-        localStorage.removeItem('nba2k_events_token_hash');
-        localStorage.removeItem('nba2k_events_auth');
-        _showGMAuthPrompt(eventId, '⚠️ Hasło draftu wygasło lub jest nieprawidłowe. Podaj je ponownie.');
-        return;
-      }
-    } catch(e) { /* network error — proceed optimistically */ }
-  }
-
   await _openGMPanelCore(eventId);
 }
 
@@ -8057,7 +8040,17 @@ async function _openGMPanelCore(eventId) {
   if(!ev || !discordUser) return;
   if(!ev.gmOnline) ev.gmOnline = [];
   if(!ev.gmOnline.includes(discordUser.id)) ev.gmOnline.push(discordUser.id);
-  await saveData(true);
+
+  const saved = await saveData(true);
+  if(saved === false && !localStorage.getItem('nba2k_admin_token_hash')) {
+    // Token rejected by Worker — clear it and ask again
+    ev.gmOnline = (ev.gmOnline||[]).filter(id => id !== discordUser.id);
+    localStorage.removeItem('nba2k_events_token_hash');
+    localStorage.removeItem('nba2k_events_auth');
+    _showGMAuthPrompt(eventId, '⚠️ Hasło draftu nieprawidłowe lub wygasło. Podaj je ponownie.');
+    return;
+  }
+
   window._gmPanelEventId = eventId;
   renderGMPanel(eventId);
   document.getElementById('gm-panel-modal').classList.add('open');
@@ -8359,10 +8352,11 @@ async function finishDraft(eventId) {
 
 function copyGmLink(eventId) {
   const wu = localStorage.getItem('nba2k_worker_url') || workerUrl || '';
-  const tok = localStorage.getItem('nba2k_events_token_hash') || '';
+  const tok = localStorage.getItem('nba2k_events_token_hash') || localStorage.getItem('nba2k_admin_token_hash') || '';
   const base = `${location.origin}${location.pathname}`;
   if(!wu) { showToast('❌ Brak Worker URL — skonfiguruj go w ustawieniach', 'error'); return; }
-  const url = `${base}?w=${encodeURIComponent(wu)}&event=${eventId}${tok ? '&ev_tok=' + encodeURIComponent(tok) : ''}#gm`;
+  if(!tok) { showToast('❌ Brak tokenu — zaloguj się jako admin', 'error'); return; }
+  const url = `${base}?w=${encodeURIComponent(wu)}&event=${eventId}&ev_tok=${encodeURIComponent(tok)}#gm`;
   navigator.clipboard?.writeText(url).then(() => showToast('✅ Link GM skopiowany! Wyślij go kapitanom.', 'success'));
 }
 
@@ -10432,7 +10426,7 @@ function openCaptainNotifModal(eventId) {
   const hasWebhook = !!discordWebhookUrl;
 
   const _notifWu = localStorage.getItem('nba2k_worker_url') || '';
-  const _notifTok = localStorage.getItem('nba2k_events_token_hash') || '';
+  const _notifTok = localStorage.getItem('nba2k_events_token_hash') || localStorage.getItem('nba2k_admin_token_hash') || '';
   const _notifBase = `${location.origin}${location.pathname}`;
   const _notifGmUrl = _notifWu
     ? `${_notifBase}?w=${encodeURIComponent(_notifWu)}&event=${ev.id}${_notifTok ? '&ev_tok=' + encodeURIComponent(_notifTok) : ''}#gm`
@@ -13885,10 +13879,10 @@ function _dsS5(ev) {
     </div>`;
   }).join('');
   const wu=localStorage.getItem('nba2k_worker_url')||'';
-  const _evTokStored=localStorage.getItem('nba2k_events_token_hash')||'';
+  const _evTokStored=localStorage.getItem('nba2k_events_token_hash')||localStorage.getItem('nba2k_admin_token_hash')||'';
   const base=`${location.origin}${location.pathname}`;
   const boardUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}#board`:'';
-  const gmUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}${_evTokStored?'&ev_tok='+encodeURIComponent(_evTokStored):''}#gm`:'';
+  const gmUrl=wu&&_evTokStored?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}&ev_tok=${encodeURIComponent(_evTokStored)}#gm`:'';
   const copyBtn=(label,url)=>url
     ?`<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem">
         <span style="font-size:.75rem;color:var(--muted)">${label}:</span>
