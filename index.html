@@ -8356,17 +8356,13 @@ async function finishDraft(eventId) {
 
 function copyGmLink(eventId) {
   const wu = localStorage.getItem('nba2k_worker_url') || workerUrl || '';
-  const tok = localStorage.getItem('nba2k_events_token_hash') || '';
   const base = `${location.origin}${location.pathname}`;
   if(!wu) { showToast('❌ Brak Worker URL — skonfiguruj go w ustawieniach', 'error'); return; }
-  if(!tok) {
-    showToast('❌ Zaloguj się jako Menedżer Eventów (hasło events) — dopiero potem skopiuj link GM', 'error');
-    // Open events login modal
-    document.getElementById('events-auth-modal')?.classList.add('open');
-    return;
-  }
-  const url = `${base}?w=${encodeURIComponent(wu)}&event=${eventId}&ev_tok=${encodeURIComponent(tok)}#gm`;
-  navigator.clipboard?.writeText(url).then(() => showToast('✅ Link GM skopiowany! Wyślij go kapitanom.', 'success'));
+  // Token is embedded in event data — no ev_tok needed in the URL
+  const url = `${base}?w=${encodeURIComponent(wu)}&event=${eventId}#gm`;
+  navigator.clipboard?.writeText(url)
+    .then(() => showToast('✅ Link GM skopiowany! Wyślij go kapitanom.', 'success'))
+    .catch(() => { prompt('Skopiuj link GM:', url); });
 }
 
 function copyDraftWatchLink(eventId) {
@@ -10432,14 +10428,13 @@ function openCaptainNotifModal(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev || !(ev.teams||[]).length) { showToast('❌ Brak przypisanych kapitanów', 'error'); return; }
 
-  const hasWebhook = !!discordWebhookUrl;
+  // Worker sends via DISCORD_WEBHOOK_NBA secret — no need for discordWebhookUrl in localStorage
+  const hasWebhook = !!(discordWebhookUrl || workerUrl);
 
   const _notifWu = localStorage.getItem('nba2k_worker_url') || '';
-  const _notifTok = localStorage.getItem('nba2k_events_token_hash') || '';
   const _notifBase = `${location.origin}${location.pathname}`;
-  const _notifGmUrl = _notifWu
-    ? `${_notifBase}?w=${encodeURIComponent(_notifWu)}&event=${ev.id}${_notifTok ? '&ev_tok=' + encodeURIComponent(_notifTok) : ''}#gm`
-    : '';
+  // Token is in event data — no ev_tok needed in the link
+  const _notifGmUrl = _notifWu ? `${_notifBase}?w=${encodeURIComponent(_notifWu)}&event=${ev.id}#gm` : '';
   const defaultMsg = `📣 **${ev.title}** — przydzielono kapitanów!\n\n` +
     ev.teams.map(team => {
       const c = team.captain;
@@ -10484,8 +10479,10 @@ function openCaptainNotifModal(eventId) {
     </div>
 
     ${!hasWebhook ? `<div style="background:rgba(255,165,0,.1);border:1px solid rgba(255,165,0,.3);border-radius:8px;padding:.75rem;margin-bottom:1rem;font-size:.85rem;color:#f39c12">
-      ⚠️ Brak skonfigurowanego Discord Webhook URL. Skonfiguruj go w ustawieniach ligi.
-    </div>` : ''}
+      ⚠️ Brak Worker URL ani Discord Webhook URL. Skonfiguruj Worker URL w ustawieniach.
+    </div>` : (workerUrl && !discordWebhookUrl ? `<div style="background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:.5rem .75rem;margin-bottom:1rem;font-size:.8rem;color:#4ade80">
+      ✅ Webhook przez Worker (sekret DISCORD_WEBHOOK_NBA)
+    </div>` : '')}
 
     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
       <button id="cn-send-btn" class="btn btn-primary" style="background:#7289da;border-color:#7289da;flex:1;justify-content:center;${!hasWebhook?'opacity:.5;pointer-events:none':''}"
