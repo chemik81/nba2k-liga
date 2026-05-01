@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎯 NBA 2K Liga — Draft Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold:   #f5c518;
+  --gold2:  #c9a012;
+  --dark:   #0a0c10;
+  --dark2:  #10131a;
+  --dark3:  #161922;
+  --dark4:  #1d2130;
+  --border: rgba(245,197,24,.15);
+  --text:   #e8eaf0;
+  --muted:  #6b7080;
+  --green:  #4ade80;
+  --red:    #f87171;
+  --orange: #fb923c;
+  --purple: #a78bfa;
+  --blue:   #60a5fa;
+  --r:      8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background: var(--bg, var(--dark));
+  color: var(--text);
+  font-family:'Barlow',sans-serif;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+}
+
+/* ── TOP BAR ── */
+.topbar{
+  background:var(--dark2);
+  border-bottom:2px solid var(--gold);
+  padding:8px 20px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-shrink:0;
+}
+.live-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--green);
+  animation:pulse 1.4s infinite;
+  flex-shrink:0;
+}
+.topbar-title{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:18px;font-weight:900;
+  color:var(--gold);letter-spacing:.06em;
+}
+.topbar-status{
+  font-size:11px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.1em;
+}
+.topbar-last{
+  margin-left:auto;
+  display:flex;align-items:center;gap:8px;
+}
+.last-badge{
+  background:rgba(74,222,128,.08);
+  border:1px solid rgba(74,222,128,.22);
+  border-radius:var(--r);
+  padding:4px 12px;
+  font-size:12px;
+}
+.last-badge .lb-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.last-badge .lb-name{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:900;color:var(--green);line-height:1}
+.last-badge .lb-team{font-size:10px;color:var(--muted)}
+
+/* ── MAIN LAYOUT ── */
+.main{
+  flex:1;
+  display:grid;
+  grid-template-columns:320px 1fr 260px;
+  gap:14px;
+  padding:14px;
+  min-height:0;
+}
+
+/* ── OTC PANEL ── */
+.otc-panel{
+  display:flex;flex-direction:column;gap:10px;
+}
+.otc-card{
+  background:var(--dark2);
+  border:2px solid var(--gold);
+  border-radius:var(--r);
+  padding:16px;
+  box-shadow:0 0 24px rgba(245,197,24,.12);
+}
+.otc-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px}
+.otc-logo{
+  width:56px;height:56px;border-radius:50%;
+  background:var(--dark4);border:2px solid rgba(245,197,24,.3);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--gold);
+  overflow:hidden;flex-shrink:0;
+}
+.otc-logo img{width:100%;height:100%;object-fit:cover}
+.otc-team{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:30px;font-weight:900;color:var(--gold);
+  line-height:1;margin-top:8px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.otc-captain{font-size:12px;color:var(--muted);margin-top:3px}
+.otc-pick{
+  font-size:11px;color:var(--muted);
+  margin-top:6px;
+  padding-top:6px;border-top:1px solid var(--border);
+}
+
+.timer-card{
+  background:var(--dark2);
+  border:2px solid var(--gold);
+  border-radius:var(--r);
+  padding:14px 16px;
+  text-align:center;
+}
+.timer-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
+.timer-val{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:64px;font-weight:900;color:var(--gold);
+  line-height:1;transition:color .3s;
+}
+.timer-val.urgent{color:var(--red);animation:urgentPulse .5s infinite alternate}
+.timer-val.warning{color:var(--orange)}
+
+.order-card{
+  background:var(--dark2);border:1px solid var(--border);border-radius:var(--r);
+  padding:10px 12px;flex:1;overflow:hidden;
+}
+.order-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px}
+.order-item{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);
+  font-size:12px;
+}
+.order-item:last-child{border-bottom:none}
+.order-num{min-width:28px;color:var(--muted);font-size:10px}
+.order-now{color:var(--gold);font-weight:700}
+.order-done{opacity:.35}
+
+/* ── POOL TABLE ── */
+.pool-panel{
+  background:var(--dark2);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;display:flex;flex-direction:column;
+}
+.pool-header{
+  background:var(--dark3);
+  padding:8px 12px;
+  border-bottom:1px solid var(--border);
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;font-size:11px;letter-spacing:1px;color:var(--muted);
+  display:flex;align-items:center;gap:8px;
+}
+.pool-table-wrap{overflow-y:auto;flex:1}
+table.pool{width:100%;border-collapse:collapse;font-size:12px}
+table.pool thead{position:sticky;top:0;background:var(--dark3);z-index:1}
+table.pool th{
+  padding:5px 6px;color:var(--muted);font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;
+  cursor:pointer;user-select:none;white-space:nowrap;
+}
+table.pool th:hover{color:var(--text)}
+table.pool th.sort-active{color:var(--gold)}
+table.pool td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.04)}
+table.pool tbody tr:hover{background:rgba(245,197,24,.04)}
+.pool-name{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:14px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:160px;
+}
+.pos-chip{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800;font-size:10px;
+  padding:1px 5px;border-radius:3px;
+  display:inline-block;
+}
+.pos-chip.pri{background:rgba(245,197,24,.15);color:var(--gold)}
+.pos-chip.sec{background:rgba(245,197,24,.06);color:rgba(245,197,24,.45);font-size:9px}
+.fg-pct{font-weight:600}
+.fg-hi{color:#4ade80}.fg-mid{color:var(--text)}.fg-lo{color:var(--red)}
+.tp-hi{color:#4ade80}.tp-mid{color:var(--text)}.tp-lo{color:var(--red)}
+.ovr-badge{
+  background:#facc15;color:rgba(0,0,0,.82);
+  border-radius:4px;padding:1px 5px;
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:11px;
+  display:inline-block;
+}
+
+/* ── BOARD PANEL ── */
+.board-panel{
+  display:flex;flex-direction:column;gap:8px;overflow-y:auto;
+}
+.team-card{
+  background:var(--dark2);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;flex-shrink:0;
+}
+.team-card.otc{border-color:var(--gold);box-shadow:0 0 12px rgba(245,197,24,.18)}
+.team-card-head{
+  background:var(--dark3);
+  padding:7px 10px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;
+}
+.team-logo-xs{
+  width:26px;height:26px;border-radius:50%;
+  background:var(--dark4);border:1.5px solid rgba(245,197,24,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:11px;color:var(--gold);
+  overflow:hidden;flex-shrink:0;
+}
+.team-logo-xs img{width:100%;height:100%;object-fit:cover}
+.team-card-name{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:14px;font-weight:900;flex:1;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.otc-tag{
+  font-size:9px;font-weight:700;font-family:'Barlow Condensed',sans-serif;
+  color:var(--gold);background:rgba(245,197,24,.12);
+  border:1px solid rgba(245,197,24,.3);border-radius:3px;
+  padding:1px 6px;letter-spacing:.06em;flex-shrink:0;
+}
+.pick-row{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 10px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  font-size:11px;
+}
+.pick-row:last-child{border-bottom:none}
+.pick-row.empty{opacity:.35}
+.pick-idx{min-width:20px;font-size:9px;color:var(--muted)}
+.pick-player{
+  flex:1;
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:13px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.pick-ovr{
+  font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:10px;
+  background:#facc15;color:rgba(0,0,0,.8);border-radius:3px;padding:0 4px;
+  flex-shrink:0;
+}
+.pick-pos{font-size:9px;color:var(--gold);flex-shrink:0}
+
+/* ── PAUSED / DONE STATES ── */
+.state-banner{
+  background:var(--dark2);border:2px solid var(--gold);border-radius:var(--r);
+  padding:20px;text-align:center;
+}
+.state-banner h2{
+  font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;color:var(--gold);
+}
+
+/* ── WAITING ── */
+.waiting{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+}
+.waiting h2{font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:900;color:var(--muted)}
+
+/* ── SORT ARROWS ── */
+.arr{font-size:9px;margin-left:2px}
+
+/* ── ANIMATIONS ── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes urgentPulse{from{opacity:1}to{opacity:.5}}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.new-item{animation:slideIn .35s ease}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="live-dot" id="live-dot"></div>
+  <div class="topbar-title" id="draft-title">NBA 2K Liga — Draft</div>
+  <div class="topbar-status" id="status-txt">Łączenie...</div>
+  <div class="topbar-last" id="last-pick-wrap" style="display:none">
+    <div class="last-badge">
+      <div class="lb-lbl">Ostatni pick</div>
+      <div class="lb-name" id="last-pick-name">—</div>
+      <div class="lb-team" id="last-pick-team"></div>
+    </div>
+  </div>
+</div>
+
+<div id="main-area" style="flex:1;display:flex;align-items:center;justify-content:center">
+  <div class="waiting">
+    <div style="font-size:3rem">🎯</div>
+    <h2>Ładowanie draftu...</h2>
+    <p style="color:var(--muted);font-size:.85rem">Upewnij się że URL zawiera <code>?w=WORKER_URL&amp;event=EVENT_ID</code></p>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const params      = new URLSearchParams(location.search);
+const WORKER_URL  = (params.get('w') || '').replace(/\/+$/, '');
+const EVENT_ID    = params.get('event') || '';
+const POLL_MS     = 2500;
+const TRANSPARENT = params.get('bg') === 'transparent';
+
+if (TRANSPARENT) {
+  document.body.style.background = 'transparent';
+}
+
+let evData       = null;
+let fullData     = null; // full record with matches
+let prevTurn     = -1;
+let timerInterval = null;
+let sortCol      = 'ovr';
+let sortDir      = 'desc';
+
+// ═══════════════════════════════════════════════════════
+// OVR ENGINE (ported)
+// ═══════════════════════════════════════════════════════
+function gradeToNum(g) {
+  return {'A+':13,'A':12,'A-':11,'B+':10,'B':9,'B-':8,'C+':7,'C':6,'C-':5,'D+':4,'D':3,'D-':2,'F':1}[(g||'').toUpperCase()] || 0;
+}
+function calcPER(p) {
+  const gp = Math.max(p.gp, 1);
+  return ((p.pts+p.reb+p.ast+p.stl+p.blk-(p.fga-p.fgm)-(p.fta-p.ftm)-p.to)/gp);
+}
+function calcCS(p, method, pos) {
+  const gp = Math.max(p.gp,1), mat = gp/(gp+5);
+  const ppg=p.pts/gp, rpg=p.reb/gp, apg=p.ast/gp, spg=p.stl/gp, bpg=p.blk/gp;
+  if (method === 'positional') {
+    const w = ({PG:[.30,.20,.10,.10,.20,.10],SG:[.28,.22,.12,.10,.18,.10],SF:[.22,.22,.18,.18,.10,.10],PF:[.17,.18,.25,.22,.08,.10],C:[.13,.14,.30,.28,.05,.10]}[pos]||[.22,.22,.18,.18,.10,.10]);
+    return (Math.min(ppg/50,1)*100*w[0]+(Math.min(spg/3,1)*100)*w[1]+(Math.min(bpg/3,1)*100)*w[2]+(Math.min(rpg/20,1)*100)*w[3]+(Math.min(apg/15,1)*100)*w[4]+(p.gradeSum/gp)*w[5]);
+  }
+  return (Math.min(ppg/50,1)*100*.25 + Math.min(spg/4,1)*100*.20 + Math.min(bpg/3,1)*100*.18 + Math.min(rpg/20,1)*100*.15 + Math.min(apg/15,1)*100*.12) * mat;
+}
+
+function buildRanking(matches, method, overrides) {
+  const sm = {};
+  (matches||[]).forEach(m => {
+    [...(m.team1?.players||[]),...(m.team2?.players||[])].forEach(pl => {
+      if (!pl.name) return;
+      const pos = pl.pos || 'SF';
+      const key = pl.name + '\x00' + pos;
+      if (!sm[key]) sm[key] = {name:pl.name,pos,gp:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gradeSum:0};
+      const s = sm[key];
+      s.gp++; s.pts+=pl.pts||0; s.reb+=pl.reb||0; s.ast+=pl.ast||0;
+      s.stl+=pl.stl||0; s.blk+=pl.blk||0; s.to+=pl.to||0;
+      s.fgm+=pl.fgm||0; s.fga+=pl.fga||0; s.tpm+=pl.tpm||0; s.tpa+=pl.tpa||0;
+      s.ftm+=pl.ftm||0; s.fta+=pl.fta||0;
+      s.gradeSum+=gradeToNum(pl.grade||'B');
+    });
+  });
+  const players = Object.values(sm).map(s => {
+    const per = calcPER(s);
+    const cs  = calcCS(s, method, s.pos);
+    return {...s, per, cs};
+  });
+  const m = method || 'top98';
+  if (m === 'top98') {
+    const byPos = {};
+    players.forEach(p => { (byPos[p.pos]||(byPos[p.pos]=[])).push(p); });
+    const comp = p => (p.per*.6+p.cs*.4) * (.5+.5*p.gp/(p.gp+5));
+    return players.map(p => {
+      const grp = byPos[p.pos]||[p];
+      const mx = Math.max(...grp.map(comp), .01);
+      const ovr = Math.max(40, Math.min(98, Math.round(40+comp(p)/mx*58)));
+      return {...p, ovr: (overrides||{})[p.name] ?? ovr};
+    }).sort((a,b)=>b.ovr-a.ovr);
+  }
+  const sP = players.map(p=>p.per).sort((a,b)=>a-b);
+  const sC = players.map(p=>p.cs).sort((a,b)=>a-b);
+  const pct = (arr,v) => arr.length<=1?50:arr.filter(x=>x<v).length/(arr.length-1)*100;
+  return players.map(p => {
+    const raw = pct(sP,p.per)*.45+pct(sC,p.cs)*.35+Math.min(p.gp*2,10)*.05;
+    const ovr = Math.max(40, Math.min(99, Math.round(raw*.59+40)));
+    return {...p, ovr: (overrides||{})[p.name] ?? ovr};
+  }).sort((a,b)=>b.ovr-a.ovr);
+}
+
+// Simple name-based lookup (no fuzzy needed for overlay)
+let _rankMap = {}; // name → {ovr, ppg, rpg, apg, spg, bpg, fgpct, tppct, gp, pos}
+function buildRankMap(ranking) {
+  _rankMap = {};
+  ranking.forEach(r => {
+    if (!_rankMap[r.name]) _rankMap[r.name] = r;
+  });
+}
+
+function resolvePlayer(player) {
+  // Exact match
+  const nm = player.name || '';
+  if (_rankMap[nm]) return _rankMap[nm];
+  // Case-insensitive
+  const lo = nm.toLowerCase();
+  const found = Object.keys(_rankMap).find(k => k.toLowerCase() === lo);
+  if (found) return _rankMap[found];
+  return null;
+}
+
+function getOvr(player) {
+  if (player.ovr) return player.ovr;
+  return resolvePlayer(player)?.ovr || null;
+}
+
+function enrichPool(pool) {
+  return pool.map(p => {
+    const r = resolvePlayer(p);
+    if (!r) return {...p, ovr: getOvr(p), ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, gp: 0, fgpct: null, tppct: null};
+    const gp = r.gp || 0;
+    const fgpct = r.fga > 0 ? Math.round(r.fgm/r.fga*100) : null;
+    const tppct = r.tpa > 0 ? Math.round(r.tpm/r.tpa*100) : null;
+    return {
+      ...p,
+      ovr:   p.ovr || r.ovr,
+      ppg:   gp ? +(r.pts/gp).toFixed(1) : 0,
+      rpg:   gp ? +(r.reb/gp).toFixed(1) : 0,
+      apg:   gp ? +(r.ast/gp).toFixed(1) : 0,
+      spg:   gp ? +(r.stl/gp).toFixed(1) : 0,
+      bpg:   gp ? +(r.blk/gp).toFixed(1) : 0,
+      gp,    fgpct, tppct,
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// FETCH
+// ═══════════════════════════════════════════════════════
+async function fetchData() {
+  if (!WORKER_URL) return null;
+  try {
+    const res = await fetch(WORKER_URL + '/data');
+    if (!res.ok) return null;
+    const d = await res.json();
+    const rec = d.record || d;
+    fullData = rec;
+    const matches  = rec.matches || [];
+    const method   = rec.ovrMethod || 'top98';
+    const overrides = rec.ovrOverrides || {};
+    if (matches.length) {
+      const ranking = buildRanking(matches, method, overrides);
+      buildRankMap(ranking);
+    }
+    return (rec.events || []).find(e => e.id === EVENT_ID) || null;
+  } catch(e) { return null; }
+}
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function ovrColor(ovr) {
+  if (ovr >= 90) return '#4ade80';
+  if (ovr >= 80) return '#a3e635';
+  if (ovr >= 70) return '#facc15';
+  if (ovr >= 60) return '#fb923c';
+  return '#f87171';
+}
+function ovrBadge(ovr) {
+  if (!ovr) return '';
+  const bg = ovrColor(ovr);
+  return `<span class="ovr-badge" style="background:${bg}">${ovr}</span>`;
+}
+function posBadges(player) {
+  const all = player.positions?.length ? player.positions
+    : (player.primaryPos ? [player.primaryPos] : (player.pos ? [player.pos] : []));
+  if (!all.length) return '<span style="color:var(--muted)">—</span>';
+  const primary = player.primaryPos || all[0];
+  return all.map(pos =>
+    `<span class="pos-chip ${pos===primary?'pri':'sec'}">${pos}</span>`
+  ).join(' ');
+}
+function fgColor(pct, hi, lo) {
+  return pct >= hi ? 'fg-hi' : pct >= lo ? 'fg-mid' : 'fg-lo';
+}
+function getRound(turn, order, teams) {
+  return !teams.length ? 1 : Math.floor(turn / teams.length) + 1;
+}
+
+// ═══════════════════════════════════════════════════════
+// TIMER
+// ═══════════════════════════════════════════════════════
+function startTimer(endsAt) {
+  clearInterval(timerInterval);
+  const el = document.getElementById('timer-val');
+  if (!el || !endsAt) return;
+  timerInterval = setInterval(() => {
+    const left = Math.max(0, Math.round((new Date(endsAt) - Date.now()) / 1000));
+    const mm = String(Math.floor(left/60)).padStart(2,'0');
+    const ss = String(left%60).padStart(2,'0');
+    el.textContent = mm + ':' + ss;
+    el.className = 'timer-val' + (left<=10?' urgent':left<=30?' warning':'');
+    if (left === 0) clearInterval(timerInterval);
+  }, 500);
+}
+function stopTimer() {
+  clearInterval(timerInterval);
+  const el = document.getElementById('timer-val');
+  if (el) el.textContent = '—';
+}
+
+// ═══════════════════════════════════════════════════════
+// SORT POOL
+// ═══════════════════════════════════════════════════════
+function sortPool(pool) {
+  return [...pool].sort((a, b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (sortCol === 'name') { av = (a.name||'').toLowerCase(); bv = (b.name||'').toLowerCase(); }
+    if (av == null) av = sortDir === 'desc' ? -Infinity : Infinity;
+    if (bv == null) bv = sortDir === 'desc' ? -Infinity : Infinity;
+    return sortDir === 'desc' ? (bv > av ? 1 : bv < av ? -1 : 0) : (av > bv ? 1 : av < bv ? -1 : 0);
+  });
+}
+function setSortCol(col) {
+  if (sortCol === col) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+  else { sortCol = col; sortDir = 'desc'; }
+  if (evData) render(evData);
+}
+function thSortClass(col) { return sortCol===col?'sort-active':''; }
+function thArrow(col) { return sortCol===col?`<span class="arr">${sortDir==='desc'?'▼':'▲'}</span>`:''; }
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function render(ev) {
+  const status = ev.status;
+  const isDone  = !['draft','closed'].includes(status);
+  const isDraft = status === 'draft';
+  const turn    = ev.draftTurn || 0;
+  const order   = ev.draftOrder || [];
+  const teams   = ev.teams || [];
+  const rawPool = ev.draftPool || [];
+  const pool    = sortPool(enrichPool(rawPool));
+
+  const currentTeamIdx = isDraft && turn < order.length ? order[turn] : -1;
+  const currentTeam    = currentTeamIdx >= 0 ? teams[currentTeamIdx] : null;
+  const lastPick       = ev.lastPick || null;
+  const isNewTurn      = turn !== prevTurn;
+  const isPaused       = ev.draftPaused && isDraft;
+
+  // ── Topbar
+  document.getElementById('draft-title').textContent = '🎯 ' + (ev.title || 'Draft');
+  document.getElementById('status-txt').textContent  = isDone ? 'ZAKOŃCZONY' : (isPaused ? 'WSTRZYMANY' : (isDraft ? 'LIVE' : 'OCZEKIWANIE'));
+  document.getElementById('live-dot').style.background = isDraft && !isPaused ? 'var(--green)' : (isPaused ? 'var(--orange)' : 'var(--muted)');
+
+  if (lastPick) {
+    document.getElementById('last-pick-wrap').style.display = '';
+    document.getElementById('last-pick-name').textContent = lastPick.playerName || '—';
+    document.getElementById('last-pick-team').textContent = `${lastPick.teamName || ''} · Pick #${lastPick.pickNum || ''}`;
+  }
+
+  const perTeam = teams.length ? Math.round(order.length / teams.length) : 0;
+
+  // ── Build main area
+  let html = `<div class="main">`;
+
+  // ── LEFT: OTC + Timer + Next picks
+  html += `<div class="otc-panel">`;
+
+  if (isDone) {
+    html += `<div class="state-banner"><div style="font-size:2.5rem">🏆</div><h2 style="margin-top:8px">DRAFT ZAKOŃCZONY!</h2></div>`;
+  } else if (isPaused) {
+    html += `<div class="state-banner"><div style="font-size:2rem;margin-bottom:6px">⏸️</div><h2 style="font-size:1.4rem">DRAFT WSTRZYMANY</h2><p style="color:var(--muted);font-size:.8rem;margin-top:4px">Admin wstrzymał draft</p></div>`;
+  } else if (status === 'closed') {
+    html += `<div class="state-banner" style="border-color:var(--muted)"><h2 style="color:var(--muted);font-size:1.4rem">OCZEKIWANIE NA START</h2></div>`;
+  }
+
+  if (currentTeam && isDraft && !isPaused) {
+    const logo = currentTeam.logoB64 ? `<img src="${currentTeam.logoB64}">` : (currentTeam.name||'?')[0];
+    html += `<div class="otc-card">
+      <div class="otc-label">⏰ On the Clock</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div class="otc-logo">${logo}</div>
+        <div style="flex:1;min-width:0">
+          <div class="otc-team">${currentTeam.name}</div>
+          <div class="otc-captain">kpt: ${currentTeam.captain?.name || '—'}</div>
+        </div>
+      </div>
+      <div class="otc-pick">Pick <b style="color:var(--gold)">${turn+1}</b> z ${order.length} · Runda <b style="color:var(--gold)">${getRound(turn, order, teams)}</b></div>
+    </div>`;
+
+    html += `<div class="timer-card">
+      <div class="timer-lbl">Czas na pick</div>
+      <div class="timer-val" id="timer-val">${ev.timerEnd ? '—' : '∞'}</div>
+    </div>`;
+  } else if (!isDone && !isPaused) {
+    html += `<div class="timer-card"><div class="timer-lbl">Timer</div><div class="timer-val" id="timer-val">—</div></div>`;
+  }
+
+  // Next picks in order
+  if (isDraft && !isPaused && order.length > turn) {
+    const showNext = Math.min(8, order.length - turn);
+    html += `<div class="order-card">
+      <div class="order-lbl">Kolejność picków</div>`;
+    for (let i = 0; i < showNext; i++) {
+      const ti = order[turn + i];
+      const t  = teams[ti];
+      const isNow = i === 0;
+      html += `<div class="order-item ${isNow ? 'order-now' : ''}">
+        <span class="order-num">${isNow ? '▶' : '#'+(turn+i+1)}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t?.name || '—'}</span>
+        ${isNow ? `<span style="font-size:9px;color:var(--gold);background:rgba(245,197,24,.1);border-radius:3px;padding:1px 4px">NOW</span>` : ''}
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`; // end otc-panel
+
+  // ── CENTER: Pool table
+  html += `<div class="pool-panel">
+    <div class="pool-header">
+      <span>DOSTĘPNI GRACZE</span>
+      <span style="background:rgba(245,197,24,.12);color:var(--gold);border-radius:3px;padding:1px 7px;font-size:10px">${pool.length}</span>
+    </div>
+    <div class="pool-table-wrap">
+      <table class="pool">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th onclick="setSortCol('name')" class="${thSortClass('name')}" style="text-align:left;min-width:130px">GRACZ${thArrow('name')}</th>
+            <th style="text-align:left">POS</th>
+            <th onclick="setSortCol('gp')" class="${thSortClass('gp')}" style="text-align:center">GP${thArrow('gp')}</th>
+            <th onclick="setSortCol('ppg')" class="${thSortClass('ppg')}" style="text-align:center">PPG${thArrow('ppg')}</th>
+            <th onclick="setSortCol('rpg')" class="${thSortClass('rpg')}" style="text-align:center">RPG${thArrow('rpg')}</th>
+            <th onclick="setSortCol('apg')" class="${thSortClass('apg')}" style="text-align:center">APG${thArrow('apg')}</th>
+            <th onclick="setSortCol('spg')" class="${thSortClass('spg')}" style="text-align:center;color:var(--purple)">SPG${thArrow('spg')}</th>
+            <th onclick="setSortCol('bpg')" class="${thSortClass('bpg')}" style="text-align:center;color:var(--blue)">BPG${thArrow('bpg')}</th>
+            <th onclick="setSortCol('fgpct')" class="${thSortClass('fgpct')}" style="text-align:center">FG%${thArrow('fgpct')}</th>
+            <th onclick="setSortCol('tppct')" class="${thSortClass('tppct')}" style="text-align:center">3PT%${thArrow('tppct')}</th>
+            <th onclick="setSortCol('ovr')" class="${thSortClass('ovr')}" style="text-align:center">OVR${thArrow('ovr')}</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  if (!pool.length) {
+    html += `<tr><td colspan="11" style="text-align:center;padding:1.5rem;color:var(--muted)">Wszyscy gracze zostali wybrani</td></tr>`;
+  }
+  pool.forEach(p => {
+    const ovr = p.ovr || getOvr(p);
+    const fgC = p.fgpct != null ? fgColor(p.fgpct, 50, 40) : '';
+    const tpC = p.tppct != null ? fgColor(p.tppct, 40, 33) : '';
+    html += `<tr>
+      <td><div class="pool-name" title="${p.name}">${p.name}</div></td>
+      <td style="white-space:nowrap">${posBadges(p)}</td>
+      <td style="text-align:center;color:var(--muted)">${p.gp || '—'}</td>
+      <td style="text-align:center;font-weight:700">${p.ppg || '—'}</td>
+      <td style="text-align:center">${p.rpg || '—'}</td>
+      <td style="text-align:center">${p.apg || '—'}</td>
+      <td style="text-align:center;color:var(--purple)">${p.gp && p.spg ? p.spg : '—'}</td>
+      <td style="text-align:center;color:var(--blue)">${p.gp && p.bpg ? p.bpg : '—'}</td>
+      <td style="text-align:center" class="fg-pct ${fgC}">${p.fgpct != null ? p.fgpct+'%' : '—'}</td>
+      <td style="text-align:center" class="fg-pct ${tpC}">${p.tppct != null ? p.tppct+'%' : '—'}</td>
+      <td style="text-align:center">${ovrBadge(ovr)}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div></div>`; // end pool-panel
+
+  // ── RIGHT: Teams board
+  html += `<div class="board-panel">`;
+  teams.forEach((t, ti) => {
+    const isOtc   = isDraft && !isPaused && ti === currentTeamIdx;
+    const picked  = (t.players||[]).filter(p => p.id !== t.captain?.id);
+    const logo    = t.logoB64 ? `<img src="${t.logoB64}">` : (t.name||'?')[0];
+    const captOvr = getOvr(t.captain || {});
+
+    html += `<div class="team-card ${isOtc ? 'otc' : ''}">
+      <div class="team-card-head">
+        <div class="team-logo-xs">${logo}</div>
+        <div style="flex:1;min-width:0">
+          <div class="team-card-name">${t.name}</div>
+        </div>
+        ${isOtc ? '<span class="otc-tag">ON CLOCK</span>' : ''}
+      </div>
+      <div class="pick-row">
+        <span class="pick-idx" style="color:var(--gold)">★</span>
+        <span class="pick-player" style="color:var(--gold)">${t.captain?.name || '—'}</span>
+        ${captOvr ? `<span class="pick-ovr" style="background:${ovrColor(captOvr)}">${captOvr}</span>` : ''}
+        <span class="pick-pos">${t.captain?.primaryPos || ''}</span>
+      </div>`;
+
+    for (let i = 0; i < perTeam; i++) {
+      const p = picked[i];
+      if (p) {
+        const pOvr = p.ovr || getOvr(p);
+        const pos  = p.primaryPos || (p.positions||[])[0] || '';
+        html += `<div class="pick-row new-item">
+          <span class="pick-idx">#${i+1}</span>
+          <span class="pick-player">${p.name}</span>
+          ${pOvr ? `<span class="pick-ovr" style="background:${ovrColor(pOvr)}">${pOvr}</span>` : ''}
+          ${pos ? `<span class="pick-pos">${pos}</span>` : ''}
+        </div>`;
+      } else {
+        html += `<div class="pick-row empty">
+          <span class="pick-idx">#${i+1}</span>
+          <span class="pick-player" style="color:var(--muted)">—</span>
+        </div>`;
+      }
+    }
+    html += `</div>`; // end team-card
+  });
+  html += `</div>`; // end board-panel
+
+  html += `</div>`; // end main
+  document.getElementById('main-area').innerHTML = html;
+  document.getElementById('main-area').style = 'flex:1;display:block';
+
+  // Timer
+  if (isNewTurn && ev.timerEnd && isDraft && !isPaused) {
+    startTimer(ev.timerEnd);
+  } else if (!isDraft || isPaused) {
+    stopTimer();
+  }
+
+  prevTurn = turn;
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+async function init() {
+  if (!WORKER_URL || !EVENT_ID) {
+    document.getElementById('main-area').innerHTML = `<div class="waiting">
+      <div style="font-size:3rem">⚠️</div>
+      <h2>Brak parametrów URL</h2>
+      <p style="color:var(--muted);text-align:center;font-size:.85rem">
+        Dodaj do URL: <code>?w=WORKER_URL&amp;event=EVENT_ID</code><br>
+        Opcjonalnie: <code>&amp;bg=transparent</code> dla przezroczystego tła
+      </p>
+    </div>`;
+    return;
+  }
+
+  const ev = await fetchData();
+  if (ev) { evData = ev; render(ev); }
+  else { document.getElementById('status-txt').textContent = 'Oczekiwanie...'; }
+
+  setInterval(async () => {
+    const fresh = await fetchData();
+    if (!fresh) return;
+    const changed = !evData
+      || fresh.draftTurn   !== evData.draftTurn
+      || fresh.status      !== evData.status
+      || fresh.timerEnd    !== evData.timerEnd
+      || fresh.draftPaused !== evData.draftPaused
+      || (fresh.draftPool||[]).length !== (evData.draftPool||[]).length;
+    evData = fresh;
+    if (changed) render(fresh);
+  }, POLL_MS);
+}
+
+init();
+</script>
+</body>
+</html>

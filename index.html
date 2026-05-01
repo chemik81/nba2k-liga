@@ -8244,7 +8244,15 @@ function renderGMPanel(eventId) {
         ${isNextQueue ? '<span style="flex-shrink:0;font-size:.62rem;color:#f5c518;background:rgba(245,197,24,.15);border-radius:3px;padding:.05rem .2rem;margin-left:.2rem">NEXT</span>' : ''}
       </td>
       <td style="text-align:center;padding:.4rem .3rem">
-        ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:3px;padding:.1rem .3rem;font-size:.72rem">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="color:#6b7080;font-size:.72rem">${p.positions[0]}</span>` : '<span style="color:#6b7080">—</span>')}
+        ${(() => {
+          const allPos = p.positions?.length ? p.positions : (p.primaryPos ? [p.primaryPos] : (p.pos ? [p.pos] : []));
+          const primary = p.primaryPos || (allPos[0] || '');
+          if (!allPos.length) return '<span style="color:#6b7080">—</span>';
+          return allPos.map(pos => {
+            const isPri = pos === primary;
+            return `<span style="font-weight:${isPri?900:700};color:${isPri?'#f5c518':'rgba(245,197,24,.45)'};background:${isPri?'rgba(245,197,24,.15)':'rgba(245,197,24,.05)'};border-radius:3px;padding:.1rem .28rem;font-size:${isPri?'.72':'.65'}rem;display:inline-block;margin:0 .5px;line-height:1.5">${pos}</span>`;
+          }).join('');
+        })()}
       </td>
       <td style="text-align:center;padding:.4rem .3rem;color:#6b7080;font-size:.8rem">${p.gp||'—'}</td>
       <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-weight:700;font-size:.8rem">${p.ppg||'—'}</td>
