@@ -8352,10 +8352,15 @@ async function finishDraft(eventId) {
 
 function copyGmLink(eventId) {
   const wu = localStorage.getItem('nba2k_worker_url') || workerUrl || '';
-  const tok = localStorage.getItem('nba2k_events_token_hash') || localStorage.getItem('nba2k_admin_token_hash') || '';
+  const tok = localStorage.getItem('nba2k_events_token_hash') || '';
   const base = `${location.origin}${location.pathname}`;
   if(!wu) { showToast('❌ Brak Worker URL — skonfiguruj go w ustawieniach', 'error'); return; }
-  if(!tok) { showToast('❌ Brak tokenu — zaloguj się jako admin', 'error'); return; }
+  if(!tok) {
+    showToast('❌ Zaloguj się jako Menedżer Eventów (hasło events) — dopiero potem skopiuj link GM', 'error');
+    // Open events login modal
+    document.getElementById('events-auth-modal')?.classList.add('open');
+    return;
+  }
   const url = `${base}?w=${encodeURIComponent(wu)}&event=${eventId}&ev_tok=${encodeURIComponent(tok)}#gm`;
   navigator.clipboard?.writeText(url).then(() => showToast('✅ Link GM skopiowany! Wyślij go kapitanom.', 'success'));
 }
@@ -10426,7 +10431,7 @@ function openCaptainNotifModal(eventId) {
   const hasWebhook = !!discordWebhookUrl;
 
   const _notifWu = localStorage.getItem('nba2k_worker_url') || '';
-  const _notifTok = localStorage.getItem('nba2k_events_token_hash') || localStorage.getItem('nba2k_admin_token_hash') || '';
+  const _notifTok = localStorage.getItem('nba2k_events_token_hash') || '';
   const _notifBase = `${location.origin}${location.pathname}`;
   const _notifGmUrl = _notifWu
     ? `${_notifBase}?w=${encodeURIComponent(_notifWu)}&event=${ev.id}${_notifTok ? '&ev_tok=' + encodeURIComponent(_notifTok) : ''}#gm`
@@ -13879,7 +13884,7 @@ function _dsS5(ev) {
     </div>`;
   }).join('');
   const wu=localStorage.getItem('nba2k_worker_url')||'';
-  const _evTokStored=localStorage.getItem('nba2k_events_token_hash')||localStorage.getItem('nba2k_admin_token_hash')||'';
+  const _evTokStored=localStorage.getItem('nba2k_events_token_hash')||'';
   const base=`${location.origin}${location.pathname}`;
   const boardUrl=wu?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}#board`:'';
   const gmUrl=wu&&_evTokStored?`${base}?w=${encodeURIComponent(wu)}&event=${ev.id}&ev_tok=${encodeURIComponent(_evTokStored)}#gm`:'';
