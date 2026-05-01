@@ -7570,10 +7570,24 @@ function startDraftPolling(eventId) {
       if(!freshEvents) return;
       const freshEv = freshEvents.find(e => e.id === eventId);
       if(!freshEv) return;
-      const localEv = events.find(e => e.id === eventId);
-      if(!localEv || freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status || freshEv.draftPaused !== localEv.draftPaused || freshEv.timerEnd !== localEv.timerEnd) {
-        const idx = events.findIndex(e => e.id === eventId);
-        if(idx !== -1) events[idx] = freshEv;
+      const idx = events.findIndex(e => e.id === eventId);
+      const localEv = idx !== -1 ? events[idx] : null;
+      if(!localEv) return;
+
+      // Always sync gmOnline from server and update dots without full re-render
+      if(freshEv.gmOnline !== undefined) {
+        localEv.gmOnline = freshEv.gmOnline;
+        (freshEv.teams||[]).forEach((t, i) => {
+          const isOn = (freshEv.gmOnline||[]).includes(t.captain?.id);
+          const dot = document.getElementById('dv-dot-'+i);
+          const lbl = document.getElementById('dv-dotlbl-'+i);
+          if(dot) { dot.style.background = isOn?'#4ade80':'#4b5563'; dot.style.boxShadow = isOn?'0 0 5px #4ade80':'none'; }
+          if(lbl) { lbl.textContent = isOn?'Online':'Offline'; lbl.style.color = isOn?'#4ade80':'#6b7080'; }
+        });
+      }
+
+      if(freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status || freshEv.draftPaused !== localEv.draftPaused || freshEv.timerEnd !== localEv.timerEnd) {
+        events[idx] = freshEv;
         renderDraftView(eventId);
         if(freshEv.timerEnd && !freshEv.draftPaused) startDraftTimer(freshEv.timerEnd, eventId);
         else if(!freshEv.timerEnd && _draftTimerInterval) clearInterval(_draftTimerInterval);
@@ -7821,33 +7835,50 @@ async function draftPickPlayer(eventId, playerId) {
 
   const hasAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
   if(!hasAuth) {
-    showToast('🔐 Podaj hasło draftu w Panelu GM aby pickować', 'error');
+    _showGMAuthPrompt(eventId, 'Sesja wygasła. Podaj hasło draftu aby wybrać zawodnika.');
     return;
   }
 
   const player = ev.draftPool[playerIdx];
+  const prevLastPick = ev.lastPick;
+  const prevTimerEnd = ev.timerEnd;
+
+  // Optimistic update
   ev.teams[teamIdx].players.push(player);
   ev.draftPool.splice(playerIdx, 1);
   ev.draftTurn = turn + 1;
   ev.lastPick = { playerName: player.name, teamName: ev.teams[teamIdx].name, pickNum: turn + 1, ts: new Date().toISOString() };
-  // Reset timer for next pick
-  if(ev.timerSecs && ev.draftTurn < (ev.draftOrder||[]).length && !ev.draftPaused) {
+  if(ev.timerSecs && ev.draftTurn < order.length && !ev.draftPaused) {
     ev.timerEnd = new Date(Date.now() + ev.timerSecs * 1000).toISOString();
   } else {
     ev.timerEnd = null;
   }
 
   const saved = await saveData();
-  // Update _dataLoadedAt so next stale check doesn't false-positive
-  if(saved !== false) window._dataLoadedAt = Date.now();
+  if(saved === false) {
+    // Rollback — pick didn't save
+    ev.draftPool.splice(playerIdx, 0, player);
+    ev.teams[teamIdx].players.pop();
+    ev.draftTurn = turn;
+    ev.lastPick = prevLastPick;
+    ev.timerEnd = prevTimerEnd;
+    // Clear stale events token and force re-auth
+    if(!localStorage.getItem('nba2k_admin_token_hash')) {
+      localStorage.removeItem('nba2k_events_token_hash');
+      localStorage.removeItem('nba2k_events_auth');
+    }
+    renderGMPanel(eventId);
+    _showGMAuthPrompt(eventId, '🔐 Sesja wygasła. Podaj hasło draftu ponownie aby kontynuować.');
+    return;
+  }
+
+  window._dataLoadedAt = Date.now();
   renderDraftView(eventId);
   renderEvents();
-  // Re-render GM panel if it's open (captain just made a pick)
   const gmModal = document.getElementById('gm-panel-modal');
   if(gmModal?.classList.contains('open') && window._gmPanelEventId === eventId) {
     renderGMPanel(eventId);
   }
-  // Start timer for next pick
   if(ev.timerEnd) {
     startDraftTimer(ev.timerEnd, eventId);
   } else if(_draftTimerInterval) {
@@ -7862,27 +7893,57 @@ async function adminPickFor(eventId) {
   await draftPickPlayer(eventId, ev.draftPool[0].id);
 }
 
-async function _gmSetDraftPwd(eventId) {
-  const val = document.getElementById('gm-draft-pwd')?.value?.trim();
+function _showGMAuthPrompt(eventId, message) {
+  const msg = message || 'Potrzebujesz hasła draftu aby pickować. Poproś admina o link GM lub wpisz hasło poniżej.';
+  document.getElementById('gm-auth-overlay')?.remove();
+  const div = document.createElement('div');
+  div.id = 'gm-auth-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:20000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  div.innerHTML = `<div style="background:#0f1117;border:1.5px solid rgba(245,197,24,.5);border-radius:14px;padding:1.5rem 1.75rem;max-width:400px;width:100%;box-shadow:0 0 40px rgba(245,197,24,.12)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:#f5c518;margin-bottom:.5rem">🔐 Hasło draftu</div>
+    <div style="font-size:.83rem;color:#9ca3af;margin-bottom:1.1rem;line-height:1.5">${msg}</div>
+    <input type="password" id="gm-auth-pwd-input" placeholder="Wpisz hasło draftu..." autocomplete="current-password"
+      style="width:100%;box-sizing:border-box;background:#161922;border:1px solid rgba(245,197,24,.35);color:#e8eaf0;border-radius:8px;padding:.6rem .85rem;font-size:1rem;font-family:inherit;margin-bottom:.75rem;outline:none"
+      onkeydown="if(event.key==='Enter')_submitGMAuth('${eventId}')">
+    <div style="display:flex;gap:.5rem">
+      <button id="gm-auth-submit-btn" onclick="_submitGMAuth('${eventId}')" style="flex:1;background:#f5c518;border:none;color:#000;border-radius:8px;padding:.65rem;font-weight:900;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;letter-spacing:.5px">ZATWIERDŹ</button>
+      <button onclick="document.getElementById('gm-auth-overlay').remove()" style="background:#1a1e2a;border:1px solid rgba(255,255,255,.12);color:#6b7080;border-radius:8px;padding:.65rem 1rem;cursor:pointer;font-family:inherit;font-size:.9rem">Anuluj</button>
+    </div>
+    <div id="gm-auth-error" style="color:#f87171;font-size:.8rem;margin-top:.55rem;display:none"></div>
+  </div>`;
+  document.body.appendChild(div);
+  setTimeout(() => div.querySelector('input')?.focus(), 60);
+}
+
+async function _submitGMAuth(eventId) {
+  const val = document.getElementById('gm-auth-pwd-input')?.value?.trim();
   if(!val) return;
-  if(workerUrl) {
-    try {
-      const res = await fetch(workerUrl.replace(/\/$/,'') + '/auth', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ token: val, site: 'events' })
-      });
-      const data = await res.json();
-      if(data.ok) {
-        localStorage.setItem('nba2k_events_token_hash', val);
-        localStorage.setItem('nba2k_events_auth', 'ok');
-        showToast('✅ Dostęp przyznany — możesz teraz pickować!', 'success');
-        // Re-open GM panel to persist online status with auth
-        await openGMPanel(eventId);
-      } else {
-        showToast('❌ Nieprawidłowe hasło draftu', 'error');
-      }
-    } catch(e) { showToast('❌ Błąd połączenia', 'error'); }
+  const errEl = document.getElementById('gm-auth-error');
+  const btn = document.getElementById('gm-auth-submit-btn');
+  if(btn) { btn.textContent = '⏳ Sprawdzam...'; btn.disabled = true; }
+  try {
+    const res = await fetch(workerUrl.replace(/\/$/,'') + '/auth', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: val, site: 'events' })
+    });
+    const data = await res.json();
+    if(data.ok) {
+      localStorage.setItem('nba2k_events_token_hash', val);
+      localStorage.setItem('nba2k_events_auth', 'ok');
+      document.getElementById('gm-auth-overlay')?.remove();
+      await _openGMPanelCore(eventId);
+    } else {
+      if(errEl) { errEl.textContent = '❌ Nieprawidłowe hasło. Spróbuj ponownie.'; errEl.style.display = 'block'; }
+      if(btn) { btn.textContent = 'ZATWIERDŹ'; btn.disabled = false; }
+    }
+  } catch(e) {
+    if(errEl) { errEl.textContent = '❌ Błąd połączenia. Sprawdź internet.'; errEl.style.display = 'block'; }
+    if(btn) { btn.textContent = 'ZATWIERDŹ'; btn.disabled = false; }
   }
+}
+
+async function _gmSetDraftPwd(eventId) {
+  await _showGMAuthPrompt(eventId, null);
 }
 
 async function dvPollCaptains(btn, eventId) {
@@ -7961,25 +8022,42 @@ async function openGMPanel(eventId) {
   if(!ev || !discordUser) return;
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
   if(!myTeam) { showToast('❌ Nie jesteś kapitanem w tym drafcie', 'error'); return; }
-  // Allow 'open' status when teams are already assigned (wizard step 5 pre-launch check-in)
   if(!['open','closed','draft','active'].includes(ev.status)) { showToast('❌ Draft jeszcze nie jest gotowy', 'error'); return; }
-  // Mark GM as online
+
+  const adminTok = localStorage.getItem('nba2k_admin_token_hash') || '';
+  const evtTok   = localStorage.getItem('nba2k_events_token_hash') || '';
+
+  if(!adminTok && !evtTok) {
+    _showGMAuthPrompt(eventId, 'Potrzebujesz hasła draftu aby pickować i być widocznym jako Online. Poproś admina o link GM lub wpisz hasło poniżej.');
+    return;
+  }
+
+  // Validate events token (admin token is always trusted locally)
+  if(!adminTok && evtTok && workerUrl) {
+    try {
+      const vr = await fetch(workerUrl.replace(/\/$/,'') + '/auth', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: evtTok, site: 'events' })
+      });
+      const vd = await vr.json();
+      if(!vd.ok) {
+        localStorage.removeItem('nba2k_events_token_hash');
+        localStorage.removeItem('nba2k_events_auth');
+        _showGMAuthPrompt(eventId, '⚠️ Hasło draftu wygasło lub jest nieprawidłowe. Podaj je ponownie.');
+        return;
+      }
+    } catch(e) { /* network error — proceed optimistically */ }
+  }
+
+  await _openGMPanelCore(eventId);
+}
+
+async function _openGMPanelCore(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !discordUser) return;
   if(!ev.gmOnline) ev.gmOnline = [];
   if(!ev.gmOnline.includes(discordUser.id)) ev.gmOnline.push(discordUser.id);
-  // Attempt to persist online status — try admin saveData first, then captain ping fallback
-  const adminToken = localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash') || '';
-  if(adminToken && workerUrl) {
-    try { await saveData(true); } catch(e) {}
-  } else if(workerUrl && discordUser) {
-    // Non-admin captain: send a lightweight ping via event-signup update so admin poll detects it
-    try {
-      const pingPlayer = { ...(ev.players||[]).find(p=>p.id===discordUser.id)||{}, id: discordUser.id, name: discordUser.name, discordTag: discordUser.discordTag, avatar: discordUser.avatar, gmOnlineAt: Date.now() };
-      await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId, player: pingPlayer })
-      });
-    } catch(e) {}
-  }
+  await saveData(true);
   window._gmPanelEventId = eventId;
   renderGMPanel(eventId);
   document.getElementById('gm-panel-modal').classList.add('open');
@@ -8040,16 +8118,7 @@ function renderGMPanel(eventId) {
     return '<span style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:2px"><svg width="20" height="13" viewBox="0 0 60 30" style="border-radius:2px;border:1px solid rgba(0,0,0,.2)" xmlns="http://www.w3.org/2000/svg"><clipPath id="gmuf"><path d="M0 0v30h60V0z"/></clipPath><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#gmuf)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></svg></span>';
   }
 
-  const hasPickAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
-  const authBanner = !hasPickAuth ? `
-    <div style="background:rgba(245,197,24,.07);border:1.5px solid rgba(245,197,24,.4);border-radius:10px;padding:.85rem 1rem;margin-bottom:1.1rem">
-      <div style="font-size:.78rem;font-weight:700;color:#f5c518;margin-bottom:.5rem">🔐 Wymagane hasło draftu do pickowania</div>
-      <div style="font-size:.75rem;color:#9ca3af;margin-bottom:.6rem">Poproś admina o hasło lub kliknij link GM z Discorda.</div>
-      <div style="display:flex;gap:.5rem">
-        <input type="password" id="gm-draft-pwd" placeholder="Hasło draftu..." style="flex:1;background:#0f1117;border:1px solid rgba(245,197,24,.3);color:#e8eaf0;border-radius:6px;padding:.4rem .7rem;font-size:.82rem;font-family:inherit">
-        <button onclick="_gmSetDraftPwd('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .85rem;font-weight:700;cursor:pointer;font-family:inherit;font-size:.82rem;white-space:nowrap">Zatwierdź</button>
-      </div>
-    </div>` : '';
+  const authBanner = '';
 
   let statusCard = '';
   if(ev.draftPaused && isDraftActive) {
@@ -8216,12 +8285,12 @@ function startGMTimer(endsAt, eventId) {
 
 // Poll for GM panel updates
 let _gmPollInterval = null;
+let _gmOnlineKeepaliveAt = 0;
 function startGMPolling(eventId) {
   clearInterval(_gmPollInterval);
   if(!workerUrl) return;
   _gmPollInterval = setInterval(async () => {
     const modal = document.getElementById('gm-panel-modal');
-    // Stop polling only if modal was explicitly closed by user (X button)
     if(!modal?.classList.contains('open')) { clearInterval(_gmPollInterval); return; }
     try {
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
@@ -8237,8 +8306,21 @@ function startGMPolling(eventId) {
         const prevTimer  = events[idx].timerEnd;
         const prevPaused = events[idx].draftPaused;
         events[idx] = freshEv;
-        // Update _dataLoadedAt so stale check doesn't false-positive after polling
         window._dataLoadedAt = freshEv._savedAt || Date.now();
+
+        // Keepalive: if server lost this captain from gmOnline (race condition with admin save),
+        // re-add and resave — throttled to at most every 30 seconds
+        if(discordUser && !(freshEv.gmOnline||[]).includes(discordUser.id) && Date.now() - _gmOnlineKeepaliveAt > 30000) {
+          const hasTok = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
+          if(hasTok) {
+            _gmOnlineKeepaliveAt = Date.now();
+            const ev2 = events[idx];
+            if(!ev2.gmOnline) ev2.gmOnline = [];
+            if(!ev2.gmOnline.includes(discordUser.id)) ev2.gmOnline.push(discordUser.id);
+            saveData(true);
+          }
+        }
+
         const changed = freshEv.draftTurn !== prevTurn
                      || freshEv.status    !== prevStatus
                      || freshEv.timerEnd  !== prevTimer
