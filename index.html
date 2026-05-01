@@ -7574,17 +7574,26 @@ function startDraftPolling(eventId) {
       const localEv = idx !== -1 ? events[idx] : null;
       if(!localEv) return;
 
-      // Always sync gmOnline from server and update dots without full re-render
-      if(freshEv.gmOnline !== undefined) {
-        localEv.gmOnline = freshEv.gmOnline;
-        (freshEv.teams||[]).forEach((t, i) => {
-          const isOn = (freshEv.gmOnline||[]).includes(t.captain?.id);
-          const dot = document.getElementById('dv-dot-'+i);
-          const lbl = document.getElementById('dv-dotlbl-'+i);
-          if(dot) { dot.style.background = isOn?'#4ade80':'#4b5563'; dot.style.boxShadow = isOn?'0 0 5px #4ade80':'none'; }
-          if(lbl) { lbl.textContent = isOn?'Online':'Offline'; lbl.style.color = isOn?'#4ade80':'#6b7080'; }
-        });
-      }
+      // Fetch /gm-presence (no auth) and update captain dots in real time
+      try {
+        const pr = await fetch(workerUrl.replace(/\/$/,'') + '/gm-presence', { cache: 'no-store' });
+        if(pr.ok) {
+          const presence = await pr.json();
+          const now = Date.now();
+          if(!localEv.gmOnline) localEv.gmOnline = [];
+          (freshEv.teams||[]).forEach((t, i) => {
+            const captId = t.captain?.id;
+            const p = presence[captId] || null;
+            const isOn = !!(p && (now - p.ts) < 30000);
+            if(isOn && !localEv.gmOnline.includes(captId)) localEv.gmOnline.push(captId);
+            else if(!isOn) localEv.gmOnline = localEv.gmOnline.filter(id => id !== captId);
+            const dot = document.getElementById('dv-dot-'+i);
+            const lbl = document.getElementById('dv-dotlbl-'+i);
+            if(dot) { dot.style.background = isOn?'#4ade80':'#4b5563'; dot.style.boxShadow = isOn?'0 0 5px #4ade80':'none'; }
+            if(lbl) { lbl.textContent = isOn?'Online':'Offline'; lbl.style.color = isOn?'#4ade80':'#6b7080'; }
+          });
+        }
+      } catch(e) {}
 
       if(freshEv.draftTurn !== localEv.draftTurn || freshEv.status !== localEv.status || freshEv.draftPaused !== localEv.draftPaused || freshEv.timerEnd !== localEv.timerEnd) {
         events[idx] = freshEv;
@@ -7946,32 +7955,46 @@ async function _gmSetDraftPwd(eventId) {
   await _showGMAuthPrompt(eventId, null);
 }
 
+async function pingGmPresence(teamId) {
+  if(!discordUser || !workerUrl) return;
+  try {
+    await fetch(workerUrl.replace(/\/$/,'') + '/gm-presence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamId: teamId || discordUser.id, discordId: discordUser.id,
+        name: discordUser.username || discordUser.name || '', ts: Date.now() })
+    });
+  } catch(e) {}
+}
+
+async function fetchGmPresence() {
+  if(!workerUrl) return {};
+  try {
+    const r = await fetch(workerUrl.replace(/\/$/,'') + '/gm-presence', { cache: 'no-store' });
+    if(r.ok) return await r.json();
+  } catch(e) {}
+  return {};
+}
+
 async function dvPollCaptains(btn, eventId) {
   if(btn) { btn.textContent='⏳'; btn.disabled=true; }
+  const ev = events.find(e=>e.id===eventId);
+  if(!ev) { if(btn){btn.textContent='🔄 Odśwież';btn.disabled=false;} return; }
   try {
-    const wu = localStorage.getItem('nba2k_worker_url');
-    if(wu) {
-      const r = await fetch(wu.replace(/\/$/,'') + '/data');
-      if(r.ok) {
-        const d = await r.json();
-        const freshEv = (d.record?.events||d.events||[]).find(e=>e.id===eventId);
-        if(freshEv) {
-          const ev = events.find(e=>e.id===eventId);
-          if(ev) {
-            const pingIds = (freshEv.players||[]).filter(p=>p.gmOnlineAt&&Date.now()-p.gmOnlineAt<120000).map(p=>p.id);
-            const gmOnline = [...new Set([...(freshEv.gmOnline||[]),...pingIds])];
-            ev.gmOnline = gmOnline;
-            (ev.teams||[]).forEach((t,i)=>{
-              const on = gmOnline.includes(t.captain?.id);
-              const dot = document.getElementById('dv-dot-'+i);
-              const lbl = document.getElementById('dv-dotlbl-'+i);
-              if(dot){ dot.style.background=on?'#4ade80':'#4b5563'; dot.style.boxShadow=on?'0 0 5px #4ade80':'none'; }
-              if(lbl){ lbl.textContent=on?'Online':'Offline'; lbl.style.color=on?'#4ade80':'#6b7080'; }
-            });
-          }
-        }
-      }
-    }
+    const presence = await fetchGmPresence();
+    const now = Date.now();
+    if(!ev.gmOnline) ev.gmOnline = [];
+    (ev.teams||[]).forEach((t,i)=>{
+      const captId = t.captain?.id;
+      const p = presence[captId] || null;
+      const isOn = !!(p && (now - p.ts) < 30000);
+      if(isOn && !ev.gmOnline.includes(captId)) ev.gmOnline.push(captId);
+      else if(!isOn) ev.gmOnline = ev.gmOnline.filter(id => id !== captId);
+      const dot = document.getElementById('dv-dot-'+i);
+      const lbl = document.getElementById('dv-dotlbl-'+i);
+      if(dot){ dot.style.background=isOn?'#4ade80':'#4b5563'; dot.style.boxShadow=isOn?'0 0 5px #4ade80':'none'; }
+      if(lbl){ lbl.textContent=isOn?'Online':'Offline'; lbl.style.color=isOn?'#4ade80':'#6b7080'; }
+    });
   } catch(e) {}
   if(btn) { btn.textContent='🔄 Odśwież'; btn.disabled=false; }
 }
@@ -8023,52 +8046,27 @@ async function openGMPanel(eventId) {
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
   if(!myTeam) { showToast('❌ Nie jesteś kapitanem w tym drafcie', 'error'); return; }
   if(!['open','closed','draft','active'].includes(ev.status)) { showToast('❌ Draft jeszcze nie jest gotowy', 'error'); return; }
-
-  const adminTok = localStorage.getItem('nba2k_admin_token_hash') || '';
-  const evtTok   = localStorage.getItem('nba2k_events_token_hash') || '';
-
-  if(!adminTok && !evtTok) {
-    _showGMAuthPrompt(eventId, 'Potrzebujesz hasła draftu aby pickować i być widocznym jako Online. Poproś admina o link GM lub wpisz hasło poniżej.');
-    return;
-  }
-
   await _openGMPanelCore(eventId);
 }
 
 async function _openGMPanelCore(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev || !discordUser) return;
-  if(!ev.gmOnline) ev.gmOnline = [];
-  if(!ev.gmOnline.includes(discordUser.id)) ev.gmOnline.push(discordUser.id);
-
-  const saved = await saveData(true);
-  if(saved === false && !localStorage.getItem('nba2k_admin_token_hash')) {
-    // Token rejected by Worker — clear it and ask again
-    ev.gmOnline = (ev.gmOnline||[]).filter(id => id !== discordUser.id);
-    localStorage.removeItem('nba2k_events_token_hash');
-    localStorage.removeItem('nba2k_events_auth');
-    _showGMAuthPrompt(eventId, '⚠️ Hasło draftu nieprawidłowe lub wygasło. Podaj je ponownie.');
-    return;
-  }
-
+  const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
+  // Ping presence immediately — no token needed
+  pingGmPresence(myTeam?.id || discordUser.id);
   window._gmPanelEventId = eventId;
   renderGMPanel(eventId);
   document.getElementById('gm-panel-modal').classList.add('open');
   startGMPolling(eventId);
 }
 
-async function closeGMPanel(eventId) {
+function closeGMPanel(eventId) {
   document.getElementById('gm-panel-modal').classList.remove('open');
   clearInterval(_gmPollInterval);
-  // Reset modal style to app defaults
   const modalEl = document.querySelector('#gm-panel-modal .modal');
   if(modalEl) { modalEl.style.background = ''; modalEl.style.border = ''; modalEl.style.color = ''; }
-  // Mark GM as offline
-  if(!discordUser) return;
-  const ev = events.find(e => e.id === eventId);
-  if(!ev) return;
-  ev.gmOnline = (ev.gmOnline||[]).filter(id => id !== discordUser.id);
-  try { await saveData(true); } catch(e) {}
+  // Presence expires naturally after 30s — no token-dependent save needed
 }
 
 function renderGMPanel(eventId) {
@@ -8127,9 +8125,11 @@ function renderGMPanel(eventId) {
       <div style="font-size:.82rem;color:#6b7080;margin-top:.3rem">Admin zaraz uruchomi draft. Jesteś zalogowany — admin to widzi.</div>
     </div>`;
   } else if(isMyTurn) {
+    const hasPickAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
     statusCard = `<div style="background:rgba(245,197,24,.08);border:2px solid #f5c518;border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;color:#f5c518">⏰ TWOJA KOLEJ! Pick ${turn + 1} z ${order.length}</div>
       ${timerLeft !== null ? `<div id="gm-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:2.5rem;font-weight:900;color:${timerLeft <= 15 ? '#f87171' : timerLeft <= 30 ? '#fb923c' : '#f5c518'}">${String(Math.floor(timerLeft/60)).padStart(2,'0')}:${String(timerLeft%60).padStart(2,'0')}</div>` : ''}
+      ${!hasPickAuth ? `<div style="margin-top:.6rem"><button onclick="_showGMAuthPrompt('${eventId}',null)" style="background:#f5c518;border:none;color:#000;border-radius:8px;padding:.45rem 1.2rem;font-weight:900;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.95rem;letter-spacing:.5px">🔐 Podaj hasło aby pickować</button></div>` : ''}
     </div>`;
   } else {
     statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:10px;padding:.75rem 1rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem">
@@ -8278,13 +8278,20 @@ function startGMTimer(endsAt, eventId) {
 
 // Poll for GM panel updates
 let _gmPollInterval = null;
-let _gmOnlineKeepaliveAt = 0;
+let _gmPresencePingedAt = 0;
 function startGMPolling(eventId) {
   clearInterval(_gmPollInterval);
   if(!workerUrl) return;
   _gmPollInterval = setInterval(async () => {
     const modal = document.getElementById('gm-panel-modal');
     if(!modal?.classList.contains('open')) { clearInterval(_gmPollInterval); return; }
+    // Ping presence every 20s — no token needed
+    if(Date.now() - _gmPresencePingedAt > 20000) {
+      _gmPresencePingedAt = Date.now();
+      const _pingEv = events.find(e=>e.id===eventId);
+      const _pingTeam = _pingEv && discordUser ? (_pingEv.teams||[]).find(t=>t.captain?.id===discordUser.id) : null;
+      pingGmPresence(_pingTeam?.id || discordUser?.id);
+    }
     try {
       const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
       if(!res.ok) return;
@@ -8300,19 +8307,6 @@ function startGMPolling(eventId) {
         const prevPaused = events[idx].draftPaused;
         events[idx] = freshEv;
         window._dataLoadedAt = freshEv._savedAt || Date.now();
-
-        // Keepalive: if server lost this captain from gmOnline (race condition with admin save),
-        // re-add and resave — throttled to at most every 30 seconds
-        if(discordUser && !(freshEv.gmOnline||[]).includes(discordUser.id) && Date.now() - _gmOnlineKeepaliveAt > 30000) {
-          const hasTok = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
-          if(hasTok) {
-            _gmOnlineKeepaliveAt = Date.now();
-            const ev2 = events[idx];
-            if(!ev2.gmOnline) ev2.gmOnline = [];
-            if(!ev2.gmOnline.includes(discordUser.id)) ev2.gmOnline.push(discordUser.id);
-            saveData(true);
-          }
-        }
 
         const changed = freshEv.draftTurn !== prevTurn
                      || freshEv.status    !== prevStatus
