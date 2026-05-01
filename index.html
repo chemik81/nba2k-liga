@@ -14003,8 +14003,8 @@ async function _dsLaunch() {
   ev.status='draft';
   ev.draftPaused=true;
   ev.timerEnd=null;
-  // Embed events token so captains can auto-authenticate without entering a password
-  const _launchEvTok = localStorage.getItem('nba2k_events_token_hash') || '';
+  // Embed events token (or admin token as fallback) so captains can auto-authenticate
+  const _launchEvTok = localStorage.getItem('nba2k_events_token_hash') || localStorage.getItem('nba2k_admin_token_hash') || '';
   if(_launchEvTok) ev.eventsToken = _launchEvTok;
   await saveData();
   if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId=null; }
