@@ -7842,9 +7842,14 @@ async function draftPickPlayer(eventId, playerId) {
   const playerIdx = (ev.draftPool||[]).findIndex(p => p.id === playerId);
   if(playerIdx === -1) return;
 
+  // Auto-apply events token from event data if not already set
+  if(!localStorage.getItem('nba2k_admin_token_hash') && !localStorage.getItem('nba2k_events_token_hash') && ev.eventsToken) {
+    localStorage.setItem('nba2k_events_token_hash', ev.eventsToken);
+    localStorage.setItem('nba2k_events_auth', 'ok');
+  }
   const hasAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
   if(!hasAuth) {
-    _showGMAuthPrompt(eventId, 'Sesja wygasła. Podaj hasło draftu aby wybrać zawodnika.');
+    _showGMAuthPrompt(eventId, 'Poproś admina o uruchomienie draftu — token nie jest jeszcze dostępny.');
     return;
   }
 
@@ -8053,6 +8058,11 @@ async function _openGMPanelCore(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev || !discordUser) return;
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
+  // Auto-apply events token from event data so captains can pick without entering a password
+  if(!localStorage.getItem('nba2k_admin_token_hash') && !localStorage.getItem('nba2k_events_token_hash') && ev.eventsToken) {
+    localStorage.setItem('nba2k_events_token_hash', ev.eventsToken);
+    localStorage.setItem('nba2k_events_auth', 'ok');
+  }
   // Ping presence immediately — no token needed
   pingGmPresence(myTeam?.id || discordUser.id);
   window._gmPanelEventId = eventId;
@@ -13993,6 +14003,9 @@ async function _dsLaunch() {
   ev.status='draft';
   ev.draftPaused=true;
   ev.timerEnd=null;
+  // Embed events token so captains can auto-authenticate without entering a password
+  const _launchEvTok = localStorage.getItem('nba2k_events_token_hash') || '';
+  if(_launchEvTok) ev.eventsToken = _launchEvTok;
   await saveData();
   if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId=null; }
   document.getElementById('draft-setup-modal').classList.remove('open');
