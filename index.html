@@ -7814,6 +7814,7 @@ function renderDraftView(eventId) {
       ${!isDone && (ev.teams||[]).length ? `<span style="font-size:.75rem;color:#6b7080">GM: <b style="color:${(ev.gmOnline||[]).length>=(ev.teams||[]).length?'#4ade80':'#f5c518'}">${(ev.gmOnline||[]).length}/${(ev.teams||[]).length}</b> online</span>` : ''}
       <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
         <button onclick="copyDraftWatchLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#6b7080;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem">🔗 Link</button>
+        ${isAdmin ? `<button onclick="copyDraftOverlayLink('${eventId}')" style="background:#10131a;border:1px solid rgba(167,139,250,.35);color:#a78bfa;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem" title="Kopiuj link do overlaya Twitch/OBS">📺 Overlay</button>` : ''}
         ${isAdmin ? `<button onclick="copyGmLink('${eventId}')" style="background:#10131a;border:1px solid rgba(245,197,24,.3);color:#f5c518;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem" title="Kopiuj link GM z tokenem dla kapitanów">🎮 Link GM</button>` : ''}
         ${discordUser && (ev.teams||[]).some(t => t.captain?.id === discordUser.id) ? `<button onclick="openGMPanel('${eventId}')" style="background:#f5c518;border:none;color:#000;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">🎮 Panel GM</button>` : ''}
         ${isAdmin && !isDone && !notStarted ? `<button onclick="${isPaused ? 'draftPlay' : 'draftPause'}('${eventId}')" style="background:${isPaused ? '#4ade80' : 'rgba(245,197,24,.15)'};border:1px solid ${isPaused ? '#4ade80' : 'rgba(245,197,24,.4)'};color:${isPaused ? '#000' : '#f5c518'};border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:700">${isPaused ? '&#9654; Start' : '&#9646;&#9646; Pauza'}</button>` : ''}
@@ -8535,20 +8536,26 @@ function copyGmLink(eventId) {
 function copyDraftWatchLink(eventId) {
   const base = window.location.href.split('?')[0].split('#')[0];
   const baseDir = base.substring(0, base.lastIndexOf('/') + 1);
-  // Link do dedykowanej strony widoku draftu
   const link = baseDir + 'draft-watch.html?w=' + encodeURIComponent(workerUrl.replace(/\/$/, '')) + '&event=' + eventId;
   navigator.clipboard.writeText(link).then(() => {
     showToast('🔗 Link skopiowany do schowka!', 'success');
   }).catch(() => {
-    // fallback
     const ta = document.createElement('textarea');
-    ta.value = link;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
+    ta.value = link; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
     showToast('🔗 Link skopiowany!', 'success');
   });
+}
+
+function copyDraftOverlayLink(eventId) {
+  const wu = localStorage.getItem('nba2k_worker_url') || workerUrl || '';
+  if(!wu) { showToast('❌ Brak Worker URL — skonfiguruj go w ustawieniach', 'error'); return; }
+  const base    = window.location.href.split('?')[0].split('#')[0];
+  const baseDir = base.substring(0, base.lastIndexOf('/') + 1);
+  const link    = baseDir + 'draft-overlay.html?w=' + encodeURIComponent(wu.replace(/\/$/, '')) + '&event=' + eventId;
+  navigator.clipboard?.writeText(link)
+    .then(() => showToast('📺 Link do overlaya skopiowany! Wklej jako Browser Source w OBS.', 'success'))
+    .catch(() => { prompt('Skopiuj link do overlaya Twitch/OBS:', link); });
 }
 
 function checkDraftWatchParam() {
