@@ -8085,165 +8085,294 @@ function renderGMPanel(eventId) {
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
   if(!myTeam) return;
 
-  // Apply dark gold theme to the modal
   const modalEl = document.querySelector('#gm-panel-modal .modal');
   if(modalEl) { modalEl.style.background = '#0f1117'; modalEl.style.border = '1.5px solid rgba(245,197,24,.3)'; modalEl.style.color = '#e8eaf0'; }
   const closeBtn = document.getElementById('gm-panel-close-btn');
   if(closeBtn) closeBtn.style.color = '#6b7080';
 
-  const order = ev.draftOrder || [];
-  // Enrich pool players with full league stats for table display
+  // State
+  const _posF      = window._gmPosFilter || 'ALL';
+  const _srchQ     = (window._gmSearchQuery||'').toLowerCase().trim();
+  const _sortCol   = window._gmSortCol || 'ovr';
+  const _sortDir   = window._gmSortDir || 'desc';
+  const _view      = window._gmView || 'pool';
+  const _confirmId = window._gmConfirmPickId || null;
+  const _watchList = JSON.parse(localStorage.getItem('nba2k_gm_watch_' + eventId) || '[]');
+  const _watchSet  = new Set(_watchList);
+  const _pickQueue = JSON.parse(localStorage.getItem('nba2k_gm_queue_' + eventId) || '[]');
+
+  // Enrich pool
   const _gmAllForEnrich = [...(ev.draftPool||[]), ...(ev.teams||[]).flatMap(t=>t.players||[])];
   const _gmStatsMap = {};
   _dsComputeOvr(_gmAllForEnrich, {}).forEach(p => { _gmStatsMap[p.id] = p; });
   const _eGM = p => p ? {...p, ..._gmStatsMap[p.id]} : p;
-  const pool = (ev.draftPool||[]).map(_eGM).sort((a,b)=>(b.ovr||0)-(a.ovr||0));
-  const _posF = window._gmPosFilter || 'ALL';
-  const _srchQ = (window._gmSearchQuery||'').toLowerCase().trim();
-  const filteredPool = pool.filter(p => {
-    const okPos = _posF==='ALL' || p.primaryPos===_posF || (p.positions||[]).includes(_posF);
+
+  // Sort
+  const allPool = (ev.draftPool||[]).map(_eGM).sort((a, b) => {
+    let av = _sortCol === 'name' ? (a.name||'').toLowerCase() : (a[_sortCol] ?? (_sortDir==='desc' ? -Infinity : Infinity));
+    let bv = _sortCol === 'name' ? (b.name||'').toLowerCase() : (b[_sortCol] ?? (_sortDir==='desc' ? -Infinity : Infinity));
+    if(av == null) av = _sortDir==='desc' ? -Infinity : Infinity;
+    if(bv == null) bv = _sortDir==='desc' ? -Infinity : Infinity;
+    return _sortDir === 'desc' ? (bv > av ? 1 : bv < av ? -1 : 0) : (av > bv ? 1 : av < bv ? -1 : 0);
+  });
+
+  // Filter
+  const filteredPool = allPool.filter(p => {
+    const okPos  = _posF==='ALL' || p.primaryPos===_posF || (p.positions||[]).includes(_posF);
     const okSrch = !_srchQ || p.name.toLowerCase().includes(_srchQ);
     return okPos && okSrch;
   });
-  const turn = ev.draftTurn || 0;
-  const isDraftActive = ev.status === 'draft';
-  const isDone = !isDraftActive || turn >= order.length;
-  const currentTeamIdx = isDone ? -1 : order[turn];
-  const isMyTurn = isDraftActive && !isDone && ev.teams[currentTeamIdx]?.captain?.id === discordUser.id;
-  const timerLeft = ev.timerEnd ? Math.max(0, Math.round((new Date(ev.timerEnd) - Date.now()) / 1000)) : null;
 
-  const myPicks = (myTeam.players || []).filter(p => p.id !== myTeam.captain?.id);
-  const perTeam = Math.round(order.length / ev.teams.length);
+  // View-specific list
+  let viewPool;
+  if(_view === 'watch') {
+    viewPool = filteredPool.filter(p => _watchSet.has(p.id));
+  } else if(_view === 'queue') {
+    viewPool = _pickQueue.map(id => allPool.find(p => p.id === id)).filter(Boolean);
+  } else {
+    viewPool = filteredPool;
+  }
+
+  // Draft state
+  const order          = ev.draftOrder || [];
+  const turn           = ev.draftTurn || 0;
+  const isDraftActive  = ev.status === 'draft';
+  const isDone         = !isDraftActive || turn >= order.length;
+  const currentTeamIdx = isDone ? -1 : order[turn];
+  const isMyTurn       = isDraftActive && !isDone && ev.teams[currentTeamIdx]?.captain?.id === discordUser.id;
+  const timerLeft      = ev.timerEnd ? Math.max(0, Math.round((new Date(ev.timerEnd) - Date.now()) / 1000)) : null;
+  const myPicks        = (myTeam.players || []).filter(p => p.id !== myTeam.captain?.id);
+  const perTeam        = Math.round(order.length / ev.teams.length);
+
+  const firstQueuedId  = _pickQueue.find(id => allPool.find(p => p.id === id));
 
   function gmFlag() {
     return '<span style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:2px"><svg width="20" height="13" viewBox="0 0 60 30" style="border-radius:2px;border:1px solid rgba(0,0,0,.2)" xmlns="http://www.w3.org/2000/svg"><clipPath id="gmuf"><path d="M0 0v30h60V0z"/></clipPath><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#gmuf)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></svg></span>';
   }
 
-  const authBanner = '';
-
+  // Status card
   let statusCard = '';
   if(ev.draftPaused && isDraftActive) {
-    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
+    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.3);border-radius:10px;padding:1rem;margin-bottom:1rem;text-align:center">
       <div style="font-size:1.5rem;margin-bottom:.4rem">⏸️</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:#f5c518">Draft wstrzymany</div>
       <div style="font-size:.82rem;color:#6b7080;margin-top:.3rem">Admin wstrzymał draft. Poczekaj na wznowienie.</div>
     </div>`;
   } else if(ev.status === 'closed') {
-    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
+    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:1rem;margin-bottom:1rem;text-align:center">
       <div style="font-size:1.5rem;margin-bottom:.4rem">⏳</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem;color:#6b7080">Oczekiwanie na start draftu</div>
       <div style="font-size:.82rem;color:#6b7080;margin-top:.3rem">Admin zaraz uruchomi draft. Jesteś zalogowany — admin to widzi.</div>
     </div>`;
   } else if(isMyTurn) {
     const hasPickAuth = !!(localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash'));
-    statusCard = `<div style="background:rgba(245,197,24,.08);border:2px solid #f5c518;border-radius:10px;padding:1rem;margin-bottom:1.25rem;text-align:center">
+    statusCard = `<div style="background:rgba(245,197,24,.08);border:2px solid #f5c518;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem;text-align:center">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;color:#f5c518">⏰ TWOJA KOLEJ! Pick ${turn + 1} z ${order.length}</div>
       ${timerLeft !== null ? `<div id="gm-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:2.5rem;font-weight:900;color:${timerLeft <= 15 ? '#f87171' : timerLeft <= 30 ? '#fb923c' : '#f5c518'}">${String(Math.floor(timerLeft/60)).padStart(2,'0')}:${String(timerLeft%60).padStart(2,'0')}</div>` : ''}
       ${!hasPickAuth ? `<div style="margin-top:.6rem"><button onclick="_showGMAuthPrompt('${eventId}',null)" style="background:#f5c518;border:none;color:#000;border-radius:8px;padding:.45rem 1.2rem;font-weight:900;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.95rem;letter-spacing:.5px">🔐 Podaj hasło aby pickować</button></div>` : ''}
     </div>`;
   } else {
-    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:10px;padding:.75rem 1rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem">
+    statusCard = `<div style="background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:10px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem">
       <div style="color:#6b7080;font-size:.9rem">${isDone ? '🏆 Draft zakończony' : `Teraz wybiera: <b style="color:#e8eaf0">${ev.teams[currentTeamIdx]?.name || '—'}</b> · Pick ${turn + 1}/${order.length}`}</div>
       ${timerLeft !== null && !isDone ? `<div id="gm-timer-display" style="font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;color:${timerLeft <= 10 ? '#f87171' : timerLeft <= 30 ? '#fb923c' : '#e8eaf0'}">${String(Math.floor(timerLeft/60)).padStart(2,'0')}:${String(timerLeft%60).padStart(2,'0')}</div>` : ''}
     </div>`;
   }
 
+  // Pick confirmation card
+  const confirmPlayer = _confirmId ? allPool.find(p => p.id === _confirmId) : null;
+  const confirmCard = confirmPlayer ? `
+    <div style="background:rgba(245,197,24,.1);border:2px solid #f5c518;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.68rem;color:#f5c518;font-weight:700;letter-spacing:.5px;margin-bottom:.2rem">POTWIERDZENIE PICKA</div>
+        <div style="font-size:1rem;font-weight:900;color:#e8eaf0">${confirmPlayer.name}${confirmPlayer.speaksEnglish ? gmFlag() : ''}</div>
+        <div style="font-size:.78rem;color:#6b7080">${confirmPlayer.primaryPos || (confirmPlayer.positions||[]).join('·') || '—'} · OVR ${confirmPlayer.ovr || '—'} · ${confirmPlayer.ppg||'—'} PPG / ${confirmPlayer.rpg||'—'} RPG / ${confirmPlayer.apg||'—'} APG</div>
+        <div style="font-size:.75rem;color:#6b7080;margin-top:.1rem">${confirmPlayer.fgpct!=null?'FG '+confirmPlayer.fgpct+'%':'—'} · ${confirmPlayer.tppct!=null?'3PT '+confirmPlayer.tppct+'%':'—'} · ${confirmPlayer.spg!=null&&confirmPlayer.gp?confirmPlayer.spg+' SPG':'—'} · ${confirmPlayer.bpg!=null&&confirmPlayer.gp?confirmPlayer.bpg+' BPG':'—'}</div>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-shrink:0">
+        <button onclick="window._gmConfirmPickId=null;draftPickPlayer('${eventId}','${confirmPlayer.id}')" style="background:#f5c518;border:none;color:#000;border-radius:8px;padding:.5rem 1.1rem;font-weight:900;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.9rem">✓ Potwierdź</button>
+        <button onclick="window._gmConfirmPickId=null;renderGMPanel('${eventId}')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#e8eaf0;border-radius:8px;padding:.5rem .9rem;font-weight:700;cursor:pointer;font-size:.9rem">✗ Anuluj</button>
+      </div>
+    </div>` : '';
+
+  // View tabs
+  const watchCount = allPool.filter(p => _watchSet.has(p.id)).length;
+  const queueCount = _pickQueue.filter(id => allPool.find(p => p.id === id)).length;
+  const viewTabs = [
+    {v:'pool',  label:`DOSTĘPNI (${filteredPool.length})`},
+    {v:'watch', label:`OBSERWOWANI (${watchCount})`},
+    {v:'queue', label:`KOLEJKA (${queueCount})`},
+  ].map(({v, label}) => {
+    const active = _view === v;
+    return `<button onclick="window._gmView='${v}';renderGMPanel('${eventId}')" style="background:${active?'#f5c518':'rgba(245,197,24,.1)'};color:${active?'#000':'#f5c518'};border:none;border-radius:6px;padding:.28rem .65rem;cursor:pointer;font-size:.72rem;font-weight:700;font-family:inherit">${label}</button>`;
+  }).join('');
+
+  // Sort header helper — returns <th> HTML
+  function sTh(col, label, align) {
+    const active  = _sortCol === col;
+    const newDir  = active && _sortDir === 'desc' ? 'asc' : 'desc';
+    const arrow   = active ? (_sortDir === 'desc' ? ' ▼' : ' ▲') : '';
+    const ta      = align || 'center';
+    return `<th onclick="window._gmSortCol='${col}';window._gmSortDir='${newDir}';renderGMPanel('${eventId}')" style="text-align:${ta};padding:.35rem .3rem;color:${active?'#f5c518':'#6b7080'};font-size:.7rem;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap">${label}${arrow}</th>`;
+  }
+
+  // Table rows
+  const tableRows = viewPool.map(p => {
+    const isConfirm   = p.id === _confirmId;
+    const isWatched   = _watchSet.has(p.id);
+    const queuePos    = _pickQueue.indexOf(p.id);
+    const inQueue     = queuePos !== -1;
+    const isNextQueue = isMyTurn && p.id === firstQueuedId;
+
+    let bgBase = isConfirm ? 'rgba(245,197,24,.08)' : (isNextQueue ? 'rgba(245,197,24,.04)' : '');
+    const trStyle = `border-bottom:1px solid rgba(255,255,255,.04);${bgBase?'background:'+bgBase+';':''}`;
+
+    let clickAttr = '';
+    if(isMyTurn) {
+      if(isConfirm) {
+        clickAttr = `onclick="window._gmConfirmPickId=null;renderGMPanel('${eventId}')" style="${trStyle}cursor:pointer" onmouseover="this.style.background='rgba(245,197,24,.12)'" onmouseout="this.style.background='${bgBase}'"`;
+      } else {
+        clickAttr = `onclick="window._gmConfirmPickId='${p.id}';renderGMPanel('${eventId}')" style="${trStyle}cursor:pointer" onmouseover="this.style.background='rgba(245,197,24,.06)'" onmouseout="this.style.background='${bgBase}'"`;
+      }
+    } else {
+      clickAttr = `style="${trStyle}opacity:.75"`;
+    }
+
+    return `<tr ${clickAttr}>
+      <td style="padding:.4rem .4rem;display:flex;align-items:center;gap:.4rem;min-width:0">
+        ${p.avatar ? `<img src="${p.avatar}" style="width:22px;height:22px;border-radius:50%;flex-shrink:0">` : '<div style="width:22px;height:22px;border-radius:50%;background:#1d2130;flex-shrink:0"></div>'}
+        <span style="font-weight:600;font-size:.83rem;color:${isConfirm?'#f5c518':'#e8eaf0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${p.speaksEnglish ? gmFlag() : ''}</span>
+        ${isNextQueue ? '<span style="flex-shrink:0;font-size:.62rem;color:#f5c518;background:rgba(245,197,24,.15);border-radius:3px;padding:.05rem .2rem;margin-left:.2rem">NEXT</span>' : ''}
+      </td>
+      <td style="text-align:center;padding:.4rem .3rem">
+        ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:3px;padding:.1rem .3rem;font-size:.72rem">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="color:#6b7080;font-size:.72rem">${p.positions[0]}</span>` : '<span style="color:#6b7080">—</span>')}
+      </td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#6b7080;font-size:.8rem">${p.gp||'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-weight:700;font-size:.8rem">${p.ppg||'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-size:.8rem">${p.rpg||'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#e8eaf0;font-size:.8rem">${p.apg||'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#a78bfa;font-size:.78rem">${p.gp&&p.spg!=null?p.spg:'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;color:#60a5fa;font-size:.78rem">${p.gp&&p.bpg!=null?p.bpg:'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;font-size:.78rem;font-weight:600;color:${p.fgpct!=null?(p.fgpct>=50?'#4ade80':p.fgpct>=40?'#e8eaf0':'#f87171'):'#6b7080'}">${p.fgpct!=null?p.fgpct+'%':'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem;font-size:.78rem;font-weight:600;color:${p.tppct!=null?(p.tppct>=40?'#4ade80':p.tppct>=33?'#e8eaf0':'#f87171'):'#6b7080'}">${p.tppct!=null?p.tppct+'%':'—'}</td>
+      <td style="text-align:center;padding:.4rem .3rem">
+        ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;display:inline-block">${p.ovr}</span>` : '<span style="color:#6b7080">—</span>'}
+      </td>
+      <td style="text-align:center;padding:.35rem .2rem" onclick="event.stopPropagation();_gmToggleWatch('${eventId}','${p.id}')">
+        <span style="cursor:pointer;font-size:.9rem;opacity:${isWatched?1:.3};user-select:none" title="${isWatched?'Usuń z obserwowanych':'Obserwuj'}">${isWatched?'★':'☆'}</span>
+      </td>
+      <td style="text-align:center;padding:.35rem .2rem" onclick="event.stopPropagation();_gmToggleQueue('${eventId}','${p.id}')">
+        <span style="cursor:pointer;font-size:.75rem;font-weight:900;color:${inQueue?'#f5c518':'#6b7080'};background:${inQueue?'rgba(245,197,24,.15)':'rgba(255,255,255,.05)'};border-radius:3px;padding:.1rem .3rem;user-select:none" title="${inQueue?'Usuń z kolejki (poz. '+(queuePos+1)+')':'Dodaj do kolejki'}">${inQueue ? queuePos+1 : '+'}</span>
+      </td>
+      ${isMyTurn ? `<td style="text-align:center;padding:.35rem .2rem"><span style="color:${isConfirm?'#f87171':'#f5c518'};font-size:.72rem;font-weight:700;white-space:nowrap">${isConfirm?'✗ anuluj':'+ Pick'}</span></td>` : ''}
+    </tr>`;
+  }).join('');
+
+  // Pick queue right panel
+  const queueItems = _pickQueue.map((id, i) => {
+    const p = allPool.find(pl => pl.id === id);
+    if(!p) return '';
+    return `<div style="display:flex;align-items:center;gap:.35rem;background:#161922;border:1px solid rgba(245,197,24,.15);border-radius:6px;padding:.32rem .55rem;margin-bottom:.18rem">
+      <span style="font-size:.68rem;color:#6b7080;min-width:1rem;flex-shrink:0">${i+1}</span>
+      <div style="flex:1;min-width:0;font-size:.78rem;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+      ${p.primaryPos ? `<span style="font-size:.66rem;color:#f5c518;flex-shrink:0">${p.primaryPos}</span>` : ''}
+      ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:3px;padding:.03rem .22rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.7rem;flex-shrink:0">${p.ovr}</span>` : ''}
+      <span onclick="_gmMoveQueue('${eventId}','${id}',-1)" style="cursor:pointer;color:#6b7080;font-size:.75rem;padding:0 .1rem;flex-shrink:0;user-select:none" title="W górę">▲</span>
+      <span onclick="_gmMoveQueue('${eventId}','${id}',1)" style="cursor:pointer;color:#6b7080;font-size:.75rem;padding:0 .1rem;flex-shrink:0;user-select:none" title="W dół">▼</span>
+      <span onclick="_gmToggleQueue('${eventId}','${id}')" style="cursor:pointer;color:#f87171;font-size:.8rem;flex-shrink:0;user-select:none" title="Usuń">✕</span>
+    </div>`;
+  }).filter(Boolean).join('');
+
   document.getElementById('gm-panel-content').innerHTML = `
-    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem;flex-wrap:wrap">
       <div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;color:#f5c518">🎮 PANEL GM — ${myTeam.name}</div>
         <div style="font-size:.78rem;color:#6b7080">Kapitan: ${myTeam.captain?.name}</div>
       </div>
     </div>
-    ${authBanner}
     ${statusCard}
-    <div style="display:grid;grid-template-columns:1fr 360px;gap:1.25rem;margin-top:.75rem;align-items:start">
-      <!-- LEFT: Available Players table -->
+    ${confirmCard}
+    <div style="display:grid;grid-template-columns:1fr 300px;gap:1.1rem;align-items:start">
+      <!-- LEFT: Players table -->
       <div>
-        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;color:#6b7080">DOSTĘPNI GRACZE (${filteredPool.length}/${pool.length})</div>
-          <div style="display:flex;gap:.2rem;flex-shrink:0">
-            ${['ALL','PG','SG','SF','PF','C'].map(pos => `<button onclick="window._gmPosFilter='${pos}';renderGMPanel('${eventId}')" style="background:${'${_posF}'===pos?'#f5c518':'rgba(245,197,24,.1)'};color:${'${_posF}'===pos?'#000':'#f5c518'};border:none;border-radius:4px;padding:.2rem .4rem;cursor:pointer;font-size:.72rem;font-weight:700;font-family:inherit">${pos}</button>`).join('')}
+        <div style="display:flex;align-items:center;gap:.3rem;margin-bottom:.45rem;flex-wrap:wrap">
+          <div style="display:flex;gap:.2rem;flex-shrink:0">${viewTabs}</div>
+          <div style="display:flex;gap:.2rem;flex-shrink:0;margin-left:.25rem">
+            ${['ALL','PG','SG','SF','PF','C'].map(pos => {
+              const active = _posF === pos;
+              return `<button onclick="window._gmPosFilter='${pos}';renderGMPanel('${eventId}')" style="background:${active?'rgba(245,197,24,.28)':'rgba(245,197,24,.06)'};color:${active?'#f5c518':'#6b7080'};border:1px solid ${active?'rgba(245,197,24,.45)':'transparent'};border-radius:4px;padding:.2rem .38rem;cursor:pointer;font-size:.7rem;font-weight:700;font-family:inherit">${pos}</button>`;
+            }).join('')}
           </div>
           <input type="text" placeholder="Szukaj..." value="${_srchQ}"
             oninput="window._gmSearchQuery=this.value;renderGMPanel('${eventId}')"
-            style="margin-left:auto;background:#161922;border:1px solid rgba(245,197,24,.2);color:#e8eaf0;border-radius:6px;padding:.25rem .55rem;font-size:.8rem;width:130px;font-family:inherit">
+            style="margin-left:auto;background:#161922;border:1px solid rgba(245,197,24,.2);color:#e8eaf0;border-radius:6px;padding:.22rem .5rem;font-size:.78rem;width:112px;font-family:inherit">
         </div>
-        <div style="overflow-y:auto;max-height:480px">
-          <table style="width:100%;border-collapse:collapse">
-            <thead style="position:sticky;top:0;background:#0f1117">
+        <div style="overflow-x:auto;overflow-y:auto;max-height:500px">
+          <table style="width:100%;border-collapse:collapse;min-width:720px">
+            <thead style="position:sticky;top:0;background:#0f1117;z-index:1">
               <tr style="border-bottom:1px solid rgba(245,197,24,.2)">
-                <th style="text-align:left;padding:.35rem .4rem;color:#6b7080;font-size:.7rem;font-weight:700;letter-spacing:.07em">GRACZ</th>
+                ${sTh('name','GRACZ','left')}
                 <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">POS</th>
-                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">GP</th>
-                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">PPG</th>
-                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">RPG</th>
-                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">APG</th>
-                <th style="text-align:center;padding:.35rem .3rem;color:#6b7080;font-size:.7rem;font-weight:700">OVR</th>
-                ${isMyTurn ? '<th style="width:52px"></th>' : ''}
+                ${sTh('gp','GP')}
+                ${sTh('ppg','PPG')}
+                ${sTh('rpg','RPG')}
+                ${sTh('apg','APG')}
+                ${sTh('spg','SPG')}
+                ${sTh('bpg','BPG')}
+                ${sTh('fgpct','FG%')}
+                ${sTh('tppct','3PT%')}
+                ${sTh('ovr','OVR')}
+                <th style="text-align:center;padding:.35rem .2rem;color:#6b7080;font-size:.68rem;width:20px" title="Obserwuj">★</th>
+                <th style="text-align:center;padding:.35rem .2rem;color:#6b7080;font-size:.68rem;width:20px" title="Kolejka">Q</th>
+                ${isMyTurn ? '<th style="width:48px"></th>' : ''}
               </tr>
             </thead>
-            <tbody>
-              ${filteredPool.map(p => `<tr style="border-bottom:1px solid rgba(255,255,255,.04);${isMyTurn?'cursor:pointer':''}" ${isMyTurn ? `onclick="draftPickPlayer('${eventId}','${p.id}')" onmouseover="this.style.background='rgba(245,197,24,.05)'" onmouseout="this.style.background=''"` : 'style="opacity:.7"'}>
-                <td style="padding:.4rem;display:flex;align-items:center;gap:.4rem">
-                  ${p.avatar ? `<img src="${p.avatar}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0">` : '<div style="width:24px;height:24px;border-radius:50%;background:#1d2130;flex-shrink:0"></div>'}
-                  <span style="font-weight:600;font-size:.85rem;color:#e8eaf0;white-space:nowrap">${p.name}${p.speaksEnglish ? gmFlag() : ''}</span>
-                </td>
-                <td style="text-align:center;padding:.4rem">
-                  ${p.primaryPos ? `<span style="font-weight:900;color:#f5c518;background:rgba(245,197,24,.15);border-radius:3px;padding:.1rem .3rem;font-size:.75rem">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="color:#6b7080;font-size:.75rem">${p.positions[0]}</span>` : '<span style="color:#6b7080">—</span>')}
-                </td>
-                <td style="text-align:center;padding:.4rem;color:#6b7080;font-size:.82rem">${p.gp||'—'}</td>
-                <td style="text-align:center;padding:.4rem;color:#e8eaf0;font-weight:700;font-size:.82rem">${p.ppg||'—'}</td>
-                <td style="text-align:center;padding:.4rem;color:#e8eaf0;font-size:.82rem">${p.rpg||'—'}</td>
-                <td style="text-align:center;padding:.4rem;color:#e8eaf0;font-size:.82rem">${p.apg||'—'}</td>
-                <td style="text-align:center;padding:.4rem">
-                  ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.85rem;display:inline-block">${p.ovr}</span>` : '<span style="color:#6b7080">—</span>'}
-                </td>
-                ${isMyTurn ? `<td style="text-align:center;padding:.4rem"><span style="color:#f5c518;font-size:.75rem;font-weight:700">+ Pick</span></td>` : ''}
-              </tr>`).join('')}
-            </tbody>
+            <tbody>${tableRows}</tbody>
           </table>
-          ${filteredPool.length===0 ? '<div style="color:#6b7080;text-align:center;padding:1.5rem;font-size:.85rem">' + (pool.length===0 ? 'Wszyscy gracze zostali wybrani' : 'Brak graczy dla wybranego filtra') + '</div>' : ''}
+          ${viewPool.length===0 ? `<div style="color:#6b7080;text-align:center;padding:1.5rem;font-size:.85rem">${_view==='watch'?'Brak obserwowanych graczy':_view==='queue'?'Kolejka jest pusta':'Brak graczy dla wybranego filtra'}</div>` : ''}
         </div>
       </div>
-      <!-- RIGHT: My team + all teams -->
+      <!-- RIGHT: Queue + My team + All teams -->
       <div>
+        ${queueItems ? `<div style="margin-bottom:.9rem">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:1px;margin-bottom:.35rem;color:#6b7080">KOLEJKA PICKÓW (${queueCount})</div>
+          ${queueItems}
+        </div>` : ''}
         <!-- My team -->
-        <div style="margin-bottom:1rem">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;margin-bottom:.4rem;color:#6b7080">MÓJ SKŁAD (${myPicks.length+1}/${perTeam+1})</div>
-          <div style="display:flex;align-items:center;gap:.5rem;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.35);border-radius:8px;padding:.45rem .7rem;margin-bottom:.2rem">
-            <span style="font-size:.7rem;font-weight:900;color:#f5c518;min-width:1.8rem">KPT</span>
+        <div style="margin-bottom:.9rem">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:1px;margin-bottom:.35rem;color:#6b7080">MÓJ SKŁAD (${myPicks.length+1}/${perTeam+1})</div>
+          <div style="display:flex;align-items:center;gap:.45rem;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.35);border-radius:8px;padding:.4rem .65rem;margin-bottom:.18rem">
+            <span style="font-size:.68rem;font-weight:900;color:#f5c518;min-width:1.7rem">KPT</span>
             <div style="flex:1;min-width:0">
-              <div style="font-size:.85rem;font-weight:700;color:#f5c518;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${myTeam.captain?.name}</div>
-              ${(_eGM(myTeam.captain||{})).primaryPos ? `<span style="font-size:.7rem;color:rgba(245,197,24,.6)">${(_eGM(myTeam.captain||{})).primaryPos}</span>` : ''}
+              <div style="font-size:.83rem;font-weight:700;color:#f5c518;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${myTeam.captain?.name}</div>
+              ${(_eGM(myTeam.captain||{})).primaryPos ? `<span style="font-size:.68rem;color:rgba(245,197,24,.6)">${(_eGM(myTeam.captain||{})).primaryPos}</span>` : ''}
             </div>
-            ${(_eGM(myTeam.captain||{})).ovr ? `<span style="background:${_dsOvrColor((_eGM(myTeam.captain||{})).ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;flex-shrink:0">${(_eGM(myTeam.captain||{})).ovr}</span>` : (myTeam.captain?.ovr ? `<span style="background:${_dsOvrColor(myTeam.captain.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;flex-shrink:0">${myTeam.captain.ovr}</span>` : '')}
+            ${(_eGM(myTeam.captain||{})).ovr ? `<span style="background:${_dsOvrColor((_eGM(myTeam.captain||{})).ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.1rem .32rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.8rem;flex-shrink:0">${(_eGM(myTeam.captain||{})).ovr}</span>` : (myTeam.captain?.ovr ? `<span style="background:${_dsOvrColor(myTeam.captain.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.1rem .32rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.8rem;flex-shrink:0">${myTeam.captain.ovr}</span>` : '')}
           </div>
-          ${myPicks.map((p,i) => `<div style="display:flex;align-items:center;gap:.5rem;background:#161922;border:1px solid rgba(245,197,24,.1);border-radius:8px;padding:.45rem .7rem;margin-bottom:.2rem">
-            <span style="font-size:.7rem;color:#6b7080;min-width:1.8rem">#${i+1}</span>
+          ${myPicks.map((p,i) => `<div style="display:flex;align-items:center;gap:.45rem;background:#161922;border:1px solid rgba(245,197,24,.1);border-radius:8px;padding:.4rem .65rem;margin-bottom:.18rem">
+            <span style="font-size:.68rem;color:#6b7080;min-width:1.7rem">#${i+1}</span>
             <div style="flex:1;min-width:0">
-              <div style="font-size:.83rem;font-weight:600;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
-              ${p.primaryPos ? `<span style="font-size:.7rem;color:#f5c518">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="font-size:.7rem;color:#6b7080">${p.positions.join('·')}</span>` : '')}
+              <div style="font-size:.8rem;font-weight:600;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+              ${p.primaryPos ? `<span style="font-size:.68rem;color:#f5c518">${p.primaryPos}</span>` : (p.positions?.length ? `<span style="font-size:.68rem;color:#6b7080">${p.positions.join('·')}</span>` : '')}
             </div>
-            ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.12rem .35rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.82rem;flex-shrink:0">${p.ovr}</span>` : ''}
+            ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:4px;padding:.1rem .32rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.8rem;flex-shrink:0">${p.ovr}</span>` : ''}
           </div>`).join('')}
-          ${Array.from({length:Math.max(0,perTeam-myPicks.length)},()=>'<div style="background:#161922;border:1px dashed rgba(245,197,24,.1);border-radius:8px;padding:.45rem .7rem;margin-bottom:.2rem;opacity:.4"><div style="font-size:.78rem;color:#6b7080">— wolny slot</div></div>').join('')}
+          ${Array.from({length:Math.max(0,perTeam-myPicks.length)},()=>'<div style="background:#161922;border:1px dashed rgba(245,197,24,.1);border-radius:8px;padding:.4rem .65rem;margin-bottom:.18rem;opacity:.4"><div style="font-size:.75rem;color:#6b7080">— wolny slot</div></div>').join('')}
         </div>
         <!-- All teams -->
         <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;margin-bottom:.4rem;color:#6b7080">WSZYSTKIE DRUŻYNY</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:1px;margin-bottom:.35rem;color:#6b7080">WSZYSTKIE DRUŻYNY</div>
           ${(ev.teams||[]).map(t => {
             const isMe = t.captain?.id === discordUser?.id;
             const tAll = [t.captain, ...(t.players||[]).filter(p=>p.id!==t.captain?.id)].filter(Boolean);
-            return `<div style="background:#161922;border-radius:8px;padding:.5rem .7rem;border:1px solid ${isMe?'rgba(245,197,24,.5)':'rgba(245,197,24,.1)'};margin-bottom:.25rem">
-              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.82rem;margin-bottom:.25rem;color:${isMe?'#f5c518':'#e8eaf0'}">${t.name}${isMe?' ★':''}</div>
-              ${tAll.map((p,i) => `<div style="display:flex;align-items:center;gap:.35rem;padding:.15rem 0;${i>0?'border-top:1px solid rgba(255,255,255,.04)':''}">
-                <span style="font-size:.68rem;min-width:1.5rem;color:${i===0?'#f5c518':'#6b7080'}">${i===0?'★':'#'+i}</span>
-                <span style="flex:1;font-size:.78rem;color:${i===0?'#f5c518':'#e8eaf0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</span>
-                ${(p.primaryPos||p.positions?.length) ? `<span style="font-size:.68rem;color:#6b7080;flex-shrink:0">${p.primaryPos||p.positions[0]}</span>` : ''}
-                ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:3px;padding:.05rem .25rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.72rem;flex-shrink:0">${p.ovr}</span>` : ''}
+            return `<div style="background:#161922;border-radius:8px;padding:.45rem .65rem;border:1px solid ${isMe?'rgba(245,197,24,.5)':'rgba(245,197,24,.1)'};margin-bottom:.22rem">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-bottom:.22rem;color:${isMe?'#f5c518':'#e8eaf0'}">${t.name}${isMe?' ★':''}</div>
+              ${tAll.map((p,i) => `<div style="display:flex;align-items:center;gap:.3rem;padding:.12rem 0;${i>0?'border-top:1px solid rgba(255,255,255,.04)':''}">
+                <span style="font-size:.66rem;min-width:1.4rem;color:${i===0?'#f5c518':'#6b7080'}">${i===0?'★':'#'+i}</span>
+                <span style="flex:1;font-size:.76rem;color:${i===0?'#f5c518':'#e8eaf0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</span>
+                ${(p.primaryPos||p.positions?.length) ? `<span style="font-size:.66rem;color:#6b7080;flex-shrink:0">${p.primaryPos||p.positions[0]}</span>` : ''}
+                ${p.ovr ? `<span style="background:${_dsOvrColor(p.ovr)};color:rgba(0,0,0,.82);border-radius:3px;padding:.03rem .22rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.7rem;flex-shrink:0">${p.ovr}</span>` : ''}
               </div>`).join('')}
-              ${Array.from({length:Math.max(0,perTeam+1-tAll.length)},()=>'<div style="font-size:.7rem;color:#6b7080;opacity:.35;padding:.15rem 0">— slot</div>').join('')}
+              ${Array.from({length:Math.max(0,perTeam+1-tAll.length)},()=>'<div style="font-size:.68rem;color:#6b7080;opacity:.32;padding:.12rem 0">— slot</div>').join('')}
             </div>`;
           }).join('')}
         </div>
@@ -8252,6 +8381,36 @@ function renderGMPanel(eventId) {
     `;
 
   if(ev.timerEnd && isDraftActive && !isDone) startGMTimer(ev.timerEnd, eventId);
+}
+
+function _gmToggleWatch(eventId, playerId) {
+  const key  = 'nba2k_gm_watch_' + eventId;
+  const list = JSON.parse(localStorage.getItem(key) || '[]');
+  const idx  = list.indexOf(playerId);
+  if(idx === -1) list.push(playerId); else list.splice(idx, 1);
+  localStorage.setItem(key, JSON.stringify(list));
+  renderGMPanel(eventId);
+}
+
+function _gmToggleQueue(eventId, playerId) {
+  const key  = 'nba2k_gm_queue_' + eventId;
+  const list = JSON.parse(localStorage.getItem(key) || '[]');
+  const idx  = list.indexOf(playerId);
+  if(idx === -1) list.push(playerId); else list.splice(idx, 1);
+  localStorage.setItem(key, JSON.stringify(list));
+  renderGMPanel(eventId);
+}
+
+function _gmMoveQueue(eventId, playerId, dir) {
+  const key    = 'nba2k_gm_queue_' + eventId;
+  const list   = JSON.parse(localStorage.getItem(key) || '[]');
+  const idx    = list.indexOf(playerId);
+  if(idx === -1) return;
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= list.length) return;
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+  localStorage.setItem(key, JSON.stringify(list));
+  renderGMPanel(eventId);
 }
 
 let _gmTimerInterval = null;
@@ -13388,17 +13547,18 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
     ) : [];
     const gp = pm.length;
     if (!gp) return {...p, pos, ppg:0,rpg:0,apg:0,spg:0,bpg:0,tpg:0,gp:0,per:0,cs:0,ovr:40,
-      ingameName:iname||null, matchMethod:resolved?.method||'none'};
+      fgpct:null,tppct:null, ingameName:iname||null, matchMethod:resolved?.method||'none'};
     const tot = pm.reduce((acc,m)=>{
       const pl=[...(m.team1.players||[]),...(m.team2.players||[])].find(x=>
         x.name===iname && (posFromHistory ? x.pos===pos : true)
       );
       if(pl){acc.pts+=pl.pts||0;acc.reb+=pl.reb||0;acc.ast+=pl.ast||0;
               acc.stl+=pl.stl||0;acc.blk+=pl.blk||0;acc.to+=pl.to||0;
-              acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
+              acc.fgm+=pl.fgm||0;acc.fga+=pl.fga||0;acc.tpm+=pl.tpm||0;acc.tpa+=pl.tpa||0;
+              acc.ftm+=pl.ftm||0;acc.fta+=pl.fta||0;
               acc.gs+=gradeToNum(pl.grade||'B');acc.gc++;}
       return acc;
-    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,ftm:0,fta:0,gs:0,gc:0});
+    },{pts:0,reb:0,ast:0,stl:0,blk:0,to:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,gs:0,gc:0});
     const ppg=+(tot.pts/gp).toFixed(1),rpg=+(tot.reb/gp).toFixed(1),apg=+(tot.ast/gp).toFixed(1);
     const spg=+(tot.stl/gp).toFixed(1),bpg=+(tot.blk/gp).toFixed(1),tpg=+(tot.to/gp).toFixed(1);
     const totObj = {gp, pts:tot.pts, reb:tot.reb, ast:tot.ast, stl:tot.stl, blk:tot.blk,
@@ -13419,7 +13579,9 @@ function _dsComputeOvr(playerList, nameMap={}, useMethod=null) {
                (Math.min(bpg/3,1)*100)*0.18+(Math.min(rpg/20,1)*100)*0.15+
                (Math.min(apg/15,1)*100)*0.12) * mat).toFixed(1);
     }
-    return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,ingameName:iname,matchMethod:resolved?.method};
+    const fgpct = tot.fga > 0 ? Math.round(tot.fgm / tot.fga * 100) : null;
+    const tppct = tot.tpa > 0 ? Math.round(tot.tpm / tot.tpa * 100) : null;
+    return {...p,pos,ppg,rpg,apg,spg,bpg,tpg,gp,per,cs,fgpct,tppct,ingameName:iname,matchMethod:resolved?.method};
   });
 
   // ── Skalowanie OVR ────────────────────────────────────────────
