@@ -5755,11 +5755,19 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${m.team2?.score>m.team1?.score?'var(--accent)':'var(--text)'}">${m.team2?.score??'—'}</div>
           </div>
         </div>
-        ${isAdmin ? `<div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem" onclick="event.stopPropagation()">
-          <button onclick="openEditEventMatch('${id}',${i})"
-            style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">✏️ Edytuj</button>
-          <button onclick="deleteEventMatch('${id}',${i})"
-            style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">🗑 Usuń</button>
+        ${isAdmin ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.5rem" onclick="event.stopPropagation()">
+          <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.75rem;color:var(--muted);user-select:none" title="Zaznacz do połączenia">
+            <input type="checkbox" id="ev-merge-cb-${id}-${i}" value="${i}"
+              onchange="evMergeToggle('${id}',${i},this.checked)"
+              style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+            Zaznacz
+          </label>
+          <div style="display:flex;gap:.5rem">
+            <button onclick="openEditEventMatch('${id}',${i})"
+              style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">✏️ Edytuj</button>
+            <button onclick="deleteEventMatch('${id}',${i})"
+              style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">🗑 Usuń</button>
+          </div>
         </div>
         <        <div id="ev-match-edit-${id}-${i}" style="display:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
           <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">
@@ -5803,6 +5811,10 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
     : '<div style="color:var(--muted);text-align:center;padding:2rem">Brak meczów — dodaj pierwszy screen poniżej</div>';
 
     tabContent = `
+      ${isAdmin && evMatches.length ? `<div id="ev-merge-bar-${id}" style="display:none;position:sticky;top:0;z-index:10;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:.6rem 1rem;margin-bottom:.75rem;display:none;align-items:center;justify-content:space-between;gap:.75rem">
+        <span style="font-size:.85rem;font-weight:700;color:var(--accent)" id="ev-merge-info-${id}">Zaznacz dokładnie 2 mecze</span>
+        <button onclick="mergeEventMatches('${id}')" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .9rem" id="ev-merge-btn-${id}" disabled>🔗 Połącz mecze</button>
+      </div>` : ''}
       <div style="margin-bottom:1rem">${matchCards}</div>
       ${isAdmin && evMatches.length ? `
         <div id="ev-name-fix-${id}" style="margin-bottom:.75rem"></div>
@@ -6307,6 +6319,110 @@ function evSkipMatch(eventId) {
     _evParseQueue = [];
     renderEventDetailTab(eventId, 'matches');
   }
+}
+
+// ── Merge event matches ──────────────────────────────────────────────────────
+const _evMergeSelected = {}; // { eventId: Set of matchIdx }
+
+function evMergeToggle(eventId, matchIdx, checked) {
+  if(!_evMergeSelected[eventId]) _evMergeSelected[eventId] = new Set();
+  const sel = _evMergeSelected[eventId];
+  if(checked) sel.add(matchIdx); else sel.delete(matchIdx);
+
+  const bar = document.getElementById('ev-merge-bar-' + eventId);
+  const info = document.getElementById('ev-merge-info-' + eventId);
+  const btn  = document.getElementById('ev-merge-btn-' + eventId);
+  if(!bar) return;
+
+  if(sel.size === 0) {
+    bar.style.display = 'none';
+  } else {
+    bar.style.display = 'flex';
+    if(sel.size === 1) {
+      if(info) info.textContent = 'Zaznacz jeszcze 1 mecz do połączenia';
+      if(btn)  btn.disabled = true;
+    } else if(sel.size === 2) {
+      if(info) info.textContent = '2 mecze zaznaczone — gotowe do połączenia';
+      if(btn)  btn.disabled = false;
+    } else {
+      if(info) info.textContent = `Zaznaczono ${sel.size} meczów — maksimum 2`;
+      if(btn)  btn.disabled = true;
+    }
+  }
+}
+
+async function mergeEventMatches(eventId) {
+  const sel = _evMergeSelected[eventId];
+  if(!sel || sel.size !== 2) { showToast('❌ Zaznacz dokładnie 2 mecze', 'error'); return; }
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !ev.matches) return;
+
+  const [idxA, idxB] = [...sel].sort((a,b)=>a-b);
+  const mA = ev.matches[idxA];
+  const mB = ev.matches[idxB];
+  if(!mA || !mB) return;
+
+  // Validate same teams (case-insensitive)
+  const norm = s => (s||'').trim().toLowerCase();
+  const sameTeams =
+    (norm(mA.team1?.name) === norm(mB.team1?.name) && norm(mA.team2?.name) === norm(mB.team2?.name)) ||
+    (norm(mA.team1?.name) === norm(mB.team2?.name) && norm(mA.team2?.name) === norm(mB.team1?.name));
+
+  if(!sameTeams) {
+    showToast('❌ Mecze mają różne drużyny — nie można połączyć', 'error');
+    return;
+  }
+
+  // Determine if mB teams are swapped relative to mA
+  const swapped = norm(mA.team1?.name) === norm(mB.team2?.name);
+  const bT1 = swapped ? mB.team2 : mB.team1;
+  const bT2 = swapped ? mB.team1 : mB.team2;
+
+  // Merge scores
+  const merged = JSON.parse(JSON.stringify(mA));
+  merged.team1.score = (mA.team1?.score||0) + (bT1?.score||0);
+  merged.team2.score = (mA.team2?.score||0) + (bT2?.score||0);
+
+  // Merge quarters
+  const mergeQuarters = (qA, qB) => {
+    const len = Math.max((qA||[]).length, (qB||[]).length);
+    return Array.from({length: len}, (_,i) => (qA?.[i]||0) + (qB?.[i]||0));
+  };
+  merged.team1.quarters = mergeQuarters(mA.team1?.quarters, bT1?.quarters);
+  merged.team2.quarters = mergeQuarters(mA.team2?.quarters, bT2?.quarters);
+
+  // Merge player stats
+  const MERGE_STATS = ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+  const mergePlayers = (playersA, playersB) => {
+    const result = JSON.parse(JSON.stringify(playersA||[]));
+    (playersB||[]).forEach(pb => {
+      const existing = result.find(pa => norm(pa.name) === norm(pb.name));
+      if(existing) {
+        MERGE_STATS.forEach(s => { existing[s] = (existing[s]||0) + (pb[s]||0); });
+        // Keep better grade (use the one from mA, unless mB has one and mA doesn't)
+        if(!existing.grade && pb.grade) existing.grade = pb.grade;
+      } else {
+        // Player only in B — add them
+        result.push(JSON.parse(JSON.stringify(pb)));
+      }
+    });
+    return result;
+  };
+
+  merged.team1.players = mergePlayers(mA.team1?.players, bT1?.players);
+  merged.team2.players = mergePlayers(mA.team2?.players, bT2?.players);
+  merged._mergedFrom = [idxA, idxB];
+
+  // Replace first match with merged, remove second
+  ev.matches[idxA] = merged;
+  ev.matches.splice(idxB, 1);
+
+  // Reset selection
+  _evMergeSelected[eventId] = new Set();
+
+  await saveData();
+  renderEventDetailTab(eventId, 'matches');
+  showToast('✅ Mecze połączone! Statystyki zsumowane.', 'success');
 }
 
 async function deleteEventMatch(eventId, matchIdx) {
