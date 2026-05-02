@@ -4922,12 +4922,21 @@ function renderEventRatings() {
     return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 9;
   })();
 
-  const perf = (ppg, rpg, apg, spg, bpg) =>
-    ppg*0.28 + spg*0.24 + bpg*0.22 + rpg*0.15 + apg*0.11;
+  const PERF_WEIGHTS = {
+    PG: {pts:0.28, stl:0.24, blk:0.22, reb:0.15, ast:0.11},
+    SG: {pts:0.28, stl:0.24, blk:0.22, reb:0.15, ast:0.11},
+    SF: {pts:0.20, stl:0.28, blk:0.18, reb:0.24, ast:0.10},
+    PF: {pts:0.16, stl:0.30, blk:0.20, reb:0.28, ast:0.06},
+    C:  {pts:0.16, stl:0.28, blk:0.22, reb:0.28, ast:0.06},
+  };
+  const perf = (ppg, rpg, apg, spg, bpg, pos) => {
+    const w = PERF_WEIGHTS[pos] || PERF_WEIGHTS.PG;
+    return ppg*w.pts + spg*w.stl + bpg*w.blk + rpg*w.reb + apg*w.ast;
+  };
 
-  const calcDelta = (evPerf, baseline, winBonus) => {
+  const calcDelta = (evPerf, baseline, winBonus, pos) => {
     if(!baseline || baseline.ppg + baseline.rpg + baseline.apg + baseline.spg + baseline.bpg === 0) return null;
-    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg);
+    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg, pos || 'PG');
     if(basePerf <= 0) return null;
     const pct = (evPerf - basePerf) / basePerf;
     return Math.round(Math.max(-8, Math.min(8, pct * 11 + winBonus)));
@@ -4944,11 +4953,11 @@ function renderEventRatings() {
     const avgGrade = numToGrade(s.gs/gp);
     const hist     = histByName[s.name] || null;
     const preOvr   = chainedPreOvr[s.name] ?? hist?.ovr ?? 40;
-    const evPerf   = perf(ppg, rpg, apg, spg, bpg);
+    const evPos    = getEvPos(s);
+    const evPerf   = perf(ppg, rpg, apg, spg, bpg, evPos || 'PG');
     const wins     = s.wins;
     const losses   = gp - wins;
     const winBonus = gp > 0 ? (wins/gp - 0.5) * 10 : 0;
-    const evPos    = getEvPos(s);
     const histPos  = getHistPos(s.name);
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
 
@@ -4962,7 +4971,7 @@ function renderEventRatings() {
       const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
       delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
     } else {
-      delta = calcDelta(evPerf, hist, winBonus);
+      delta = calcDelta(evPerf, hist, winBonus, evPos || histPos || 'PG');
     }
 
     const postOvr = Math.max(40, Math.min(99, preOvr + (delta ?? 0)));
