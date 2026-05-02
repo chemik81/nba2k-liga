@@ -5761,15 +5761,40 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
           <button onclick="deleteEventMatch('${id}',${i})"
             style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">🗑 Usuń</button>
         </div>
-        <div id="ev-match-edit-${id}-${i}" style="display:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
-          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <        <div id="ev-match-edit-${id}-${i}" style="display:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
+          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">
             <input id="em-t1n-${id}-${i}" value="${(m.team1?.name||'').replace(/"/g,'&quot;')}" style="flex:1 1 110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700">
             <input id="em-t1s-${id}-${i}" type="number" value="${m.team1?.score??''}" style="width:56px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:900;text-align:center">
             <span style="color:var(--muted);font-weight:700">—</span>
             <input id="em-t2s-${id}-${i}" type="number" value="${m.team2?.score??''}" style="width:56px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:900;text-align:center">
             <input id="em-t2n-${id}-${i}" value="${(m.team2?.name||'').replace(/"/g,'&quot;')}" style="flex:1 1 110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700">
           </div>
-          <div style="display:flex;gap:.5rem">
+          ${(()=>{
+            const EV_STATS=['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+            const EV_LABELS=['PTS','REB','AST','STL','BLK','TO','PF','FGM','FGA','3PM','3PA','FTM','FTA'];
+            const mkRows=(team,tid)=>(team?.players||[]).map((p,pi)=>`
+              <tr>
+                <td style="padding:.2rem .3rem"><input type="text" value="${(p.name||''). replace(/"/g,'&quot;')}" id="em-${id}-${i}-${tid}-${pi}-name" style="width:96px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.12rem .25rem;font-size:.76rem;font-family:inherit"></td>
+                <td style="padding:.2rem .25rem"><select id="em-${id}-${i}-${tid}-${pi}-pos" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .1rem;font-size:.72rem;font-family:inherit">${['PG','SG','SF','PF','C'].map(pos=>`<option${(p.pos||'')=== pos?' selected':''}>${pos}</option>`).join('')}</select></td>
+                <td style="padding:.2rem .25rem"><select id="em-${id}-${i}-${tid}-${pi}-grade" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .1rem;font-size:.72rem;font-family:inherit">${['A+','A','A-','B+','B','B-','C+','C','C-','D'].map(g=>`<option${p.grade===g?' selected':''}>${g}</option>`).join('')}</select></td>
+                ${EV_STATS.map(s=>`<td style="padding:.18rem .2rem"><input type="number" min="0" max="99" value="${p[s]||0}" id="em-${id}-${i}-${tid}-${pi}-${s}" style="width:36px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .15rem;font-size:.76rem;text-align:center;font-family:inherit"></td>`).join('')}
+              </tr>`).join('');
+            const mkTable=(team,tid)=>(team?.players||[]).length?`
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;margin:.5rem 0 .25rem;color:var(--accent)">${team.name}</div>
+              <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:.5rem">
+                <table style="border-collapse:collapse;font-size:.76rem;white-space:nowrap">
+                  <thead><tr>
+                    <th style="text-align:left;padding:.2rem .3rem;color:var(--muted);font-weight:600">Gracz</th>
+                    <th style="padding:.2rem .25rem;color:var(--muted);font-weight:600">Poz</th>
+                    <th style="padding:.2rem .25rem;color:var(--muted);font-weight:600">GRD</th>
+                    ${EV_LABELS.map(l=>`<th style="padding:.18rem .2rem;color:var(--muted);font-weight:600">${l}</th>`).join('')}
+                  </tr></thead>
+                  <tbody>${mkRows(team,tid)}</tbody>
+                </table>
+              </div>`:''
+            return mkTable(m.team1,'t1')+mkTable(m.team2,'t2');
+          })()}
+          <div style="display:flex;gap:.5rem;margin-top:.5rem">
             <button onclick="saveEditEventMatch('${id}',${i})" class="btn btn-primary" style="font-size:.8rem;padding:.35rem .8rem">💾 Zapisz</button>
             <button onclick="document.getElementById('ev-match-edit-${id}-${i}').style.display='none'" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem">Anuluj</button>
           </div>
@@ -6313,6 +6338,26 @@ async function saveEditEventMatch(eventId, matchIdx) {
   if(t1s) m.team1.score = parseInt(t1s.value) || m.team1.score;
   if(t2n) m.team2.name  = t2n.value.trim() || m.team2.name;
   if(t2s) m.team2.score = parseInt(t2s.value) || m.team2.score;
+
+  // Save player stats
+  const EV_STATS = ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+  const saveTeamPlayers = (team, tid) => {
+    (team?.players||[]).forEach((p, pi) => {
+      const nameEl = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-name`);
+      const posEl  = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-pos`);
+      const grdEl  = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-grade`);
+      if(nameEl) p.name  = nameEl.value.trim() || p.name;
+      if(posEl)  p.pos   = posEl.value;
+      if(grdEl)  p.grade = grdEl.value;
+      EV_STATS.forEach(s => {
+        const el = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-${s}`);
+        if(el) p[s] = parseInt(el.value) || 0;
+      });
+    });
+  };
+  saveTeamPlayers(m.team1, 't1');
+  saveTeamPlayers(m.team2, 't2');
+
   await saveData();
   renderEventDetailTab(eventId, 'matches');
   showToast('✅ Mecz zaktualizowany!', 'success');
