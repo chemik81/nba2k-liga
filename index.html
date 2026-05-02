@@ -6191,41 +6191,102 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     if(firstBrace === -1 || lastBrace <= firstBrace)
       throw new Error('AI nie zwróciło JSON. Odpowiedź: ' + text.slice(0,300));
     let jsonStr = text.slice(firstBrace, lastBrace + 1);
+
     const tryParse = s => { try { return JSON.parse(s); } catch(e) { return null; } };
-    // Próba 1: normalizacja + trailing commas + brakujące przecinki między obiektami
-    let cleaned = jsonStr
-      .replace(/\ufeff/g,'')
-      .replace(/[\u201c\u201d]/g,'"')
-      .replace(/[\u2018\u2019]/g,"'")
-      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'')
-      .replace(/,\s*([}\]])/g,'$1')
-      .replace(/\/\/[^\n]*/g,'')
-      .replace(/}\s*\{/g,'},{')
-      .replace(/]\s*\[/g,'],[');
-    // Próba 2: znak-po-znaku escapuj literal newline/tab wewnątrz stringów JSON
+
+    // ── Robust JSON cleanup (shared logic with parseScreenshot) ──────────────
+    const robustClean = s => s
+      .replace(/\ufeff/g, '')
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // Fix numbers with comma as thousands separator: 1,234 → 1234 (only when between digits)
+      .replace(/(\d),(?=\d{3}(?:[^\d]|$))/g, '$1')
+      // Trailing commas before ] or }
+      .replace(/,\s*([\]}])/g, '$1')
+      // Missing comma between objects/arrays: } { → }, {
+      .replace(/}\s*\{/g, '},{')
+      .replace(/]\s*\[/g, '],[')
+      // Python/JS literals
+      .replace(/\bNone\b/g, 'null')
+      .replace(/\bTrue\b/g, 'true')
+      .replace(/\bFalse\b/g, 'false')
+      // Ellipsis placeholders inside arrays
+      .replace(/\.\.\.\s*(?=[,\]])/g, '');
+
+    // Escape literal newlines/tabs inside JSON string values
     const escapeInsideStrings = s => {
       let out = '', inStr = false, esc = false;
       for(const ch of s) {
-        if(esc)        { out += ch; esc = false; continue; }
-        if(ch==='\\')  { out += ch; esc = true;  continue; }
-        if(ch==='"')   { inStr = !inStr; out += ch; continue; }
+        if(esc)       { out += ch; esc = false; continue; }
+        if(ch==='\\') { out += ch; esc = true;  continue; }
+        if(ch==='"')  { inStr = !inStr; out += ch; continue; }
         if(inStr && (ch==='\n'||ch==='\r'||ch==='\t')) { out += ' '; continue; }
         out += ch;
       }
       return out;
     };
-    // 4 próby, coraz bardziej agresywne
+
+    // Attempt to auto-close a truncated JSON (e.g. cut off mid-array by token limit)
+    const autoClose = s => {
+      let depth = 0, inStr = false, esc = false;
+      for(const ch of s) {
+        if(esc)       { esc = false; continue; }
+        if(ch==='\\') { esc = true; continue; }
+        if(ch==='"')  { inStr = !inStr; continue; }
+        if(!inStr) { if(ch==='{') depth++; else if(ch==='}') depth--; }
+      }
+      // Remove any trailing incomplete property (e.g. "key": <nothing>)
+      let fixed = s.replace(/,?\s*"[^"]*"\s*:\s*$/, '');
+      // Remove trailing comma before we close
+      fixed = fixed.replace(/,\s*$/, '');
+      // Close open braces/brackets
+      let open = 0, opStr = false, opEsc = false;
+      const stack = [];
+      for(const ch of fixed) {
+        if(opEsc)      { opEsc = false; continue; }
+        if(ch==='\\')  { opEsc = true; continue; }
+        if(ch==='"')   { opStr = !opStr; continue; }
+        if(!opStr) {
+          if(ch==='{') stack.push('}');
+          else if(ch==='[') stack.push(']');
+          else if(ch==='}' || ch===']') stack.pop();
+        }
+      }
+      return fixed + stack.reverse().join('');
+    };
+
+    const cleaned = robustClean(jsonStr);
+    const cleanedEsc = escapeInsideStrings(cleaned);
+
+    // 6 attempts: increasingly aggressive
     let parsed = tryParse(cleaned)
-      ?? tryParse(escapeInsideStrings(cleaned))
-      ?? tryParse(cleaned.replace(/[\r\n\t]+/g,' '))
-      ?? tryParse(escapeInsideStrings(cleaned).replace(/[\r\n\t]+/g,' '));
+      ?? tryParse(cleanedEsc)
+      ?? tryParse(cleanedEsc.replace(/[\r\n\t]+/g, ' '))
+      ?? tryParse(robustClean(autoClose(jsonStr)))
+      ?? tryParse(escapeInsideStrings(robustClean(autoClose(jsonStr))))
+      ?? tryParse(escapeInsideStrings(robustClean(autoClose(jsonStr))).replace(/[\r\n\t]+/g, ' '));
+
     if(!parsed) {
-      const finalAttempt = escapeInsideStrings(cleaned).replace(/[\r\n\t]+/g,' ');
       let parseErr = '';
-      try { JSON.parse(finalAttempt); } catch(e) { parseErr = e.message; }
-      console.error('[evParse] all 4 attempts failed.\nError:', parseErr, '\nExtracted JSON:', jsonStr.slice(0,800));
-      throw new Error('B\u0142\u0105d parsowania JSON: ' + parseErr + '\n\nFragment JSON:\n' + jsonStr.slice(0,300));
+      try { JSON.parse(cleanedEsc); } catch(e) { parseErr = e.message; }
+      console.error('[evParse] all attempts failed. Error:', parseErr, '\nJSON:', jsonStr.slice(0, 800));
+      throw new Error('Błąd parsowania JSON: ' + parseErr + '\n\nFragment JSON:\n' + jsonStr.slice(0, 300));
     }
+
+    // Normalize field names (fouls → fol, etc.)
+    const normalizePlayers = players => (players||[]).map(p => {
+      if(p.fouls !== undefined && p.fol === undefined) { p.fol = p.fouls; delete p.fouls; }
+      ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'].forEach(k => {
+        if(p[k] === undefined) p[k] = 0;
+      });
+      return p;
+    });
+    if(parsed.team1?.players) parsed.team1.players = normalizePlayers(parsed.team1.players);
+    if(parsed.team2?.players) parsed.team2.players = normalizePlayers(parsed.team2.players);
+
     _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
 
     statusEl.style.background = 'rgba(46,204,113,.1)';
