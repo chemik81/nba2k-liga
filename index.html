@@ -4923,7 +4923,7 @@ function renderEventRatings() {
   })();
 
   const perf = (ppg, rpg, apg, spg, bpg) =>
-    ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
+    ppg*0.28 + spg*0.24 + bpg*0.22 + rpg*0.15 + apg*0.11;
 
   const calcDelta = (evPerf, baseline, winBonus) => {
     if(!baseline || baseline.ppg + baseline.rpg + baseline.apg + baseline.spg + baseline.bpg === 0) return null;
