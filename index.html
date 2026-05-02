@@ -666,6 +666,7 @@
   .rivalry-fill{height:100%;background:linear-gradient(90deg,var(--accent),#e05c2a);border-radius:4px}
   .rivalry-count{font-size:.8rem;color:var(--muted);min-width:30px;text-align:right}
 </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -4847,6 +4848,174 @@ function renderRoundComparisonRows() {
 
 let _evRatingsShowHist = false;
 
+async function shareEventRatings() {
+  // Find the active event for title/date/match count
+  const ev = events.filter(e => (e.matches||[]).length > 0)
+    .sort((a,b) => new Date(b.date||0) - new Date(a.date||0))[0];
+  if(!ev) { showToast('Brak danych do eksportu', 'error'); return; }
+
+  const matchCount = (ev.matches||[]).length;
+  const playerCount = (() => {
+    const names = new Set();
+    (ev.matches||[]).forEach(m => {
+      [...(m.team1?.players||[]), ...(m.team2?.players||[])].forEach(p => { if(p.name) names.add(p.name); });
+    });
+    return names.size;
+  })();
+
+  // Build a self-contained canvas-friendly div
+  const wrap = document.getElementById('event-ratings-wrap');
+  if(!wrap) return;
+
+  const table = wrap.querySelector('table');
+  if(!table) { showToast('Brak tabeli do eksportu', 'error'); return; }
+
+  const ACCENT = '#f5c518';
+  const BG     = '#0f1117';
+  const SURF   = '#1a1d27';
+  const BORDER = '#2a2d3a';
+  const TEXT   = '#e8eaf0';
+  const MUTED  = '#6b7280';
+
+  // Collect rows from the rendered table
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+  // Build export div
+  const exp = document.createElement('div');
+  exp.style.cssText = `position:fixed;left:-9999px;top:-9999px;width:780px;background:${BG};font-family:'Barlow Condensed',sans-serif;padding:0;border-radius:12px;overflow:hidden`;
+
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText = `background:${SURF};border-bottom:2px solid ${ACCENT};padding:16px 20px;display:flex;align-items:center;justify-content:space-between`;
+  header.innerHTML = `
+    <div>
+      <div style="font-size:1.3rem;font-weight:900;letter-spacing:2px;color:${TEXT}">🎯 RANKINGI GRACZY</div>
+      <div style="font-size:.85rem;color:${ACCENT};font-weight:700;margin-top:2px">${ev.title}</div>
+    </div>
+    <div style="text-align:right;font-size:.78rem;color:${MUTED}">
+      <div>${matchCount} mecz${matchCount===1?'':'e'} · ${playerCount} graczy</div>
+    </div>`;
+  exp.appendChild(header);
+
+  // Table
+  const tbl = document.createElement('table');
+  tbl.style.cssText = `width:100%;border-collapse:collapse`;
+
+  // Header row
+  const thead = document.createElement('thead');
+  const thRow = document.createElement('tr');
+  thRow.style.cssText = `background:${SURF};border-bottom:1px solid ${BORDER}`;
+  ['#','GRACZ','OVR','PPG','RPG','APG','SPG','BPG','FG%','W-L'].forEach((h,i) => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    th.style.cssText = `padding:8px ${i===1?'8px':'10px'};font-size:.7rem;color:${MUTED};font-weight:700;letter-spacing:.05em;text-align:${i<=1?'left':'center'}`;
+    thRow.appendChild(th);
+  });
+  thead.appendChild(thRow);
+  tbl.appendChild(thead);
+
+  // Data rows — scrape from rendered DOM
+  const tbody = document.createElement('tbody');
+  rows.forEach((tr, ri) => {
+    const tds = tr.querySelectorAll('td');
+    if(!tds.length) return;
+    const newTr = document.createElement('tr');
+    newTr.style.cssText = `border-bottom:1px solid ${BORDER};background:${ri%2===0?BG:SURF}`;
+
+    // Scrape cells: rank, name+pos, ovr, ppg, rpg, apg, spg, bpg, fg%, wl
+    const rank = tds[0]?.textContent?.trim() || (ri+1);
+    const nameTd = tds[1];
+    const nameText = nameTd?.querySelector('span')?.textContent?.trim() || nameTd?.textContent?.trim() || '';
+    const posEl = nameTd?.querySelector('[style*="font-size:.7rem"]') || nameTd?.querySelectorAll('span')[1];
+    const posText = posEl?.textContent?.trim() || '';
+
+    // OVR badge — get number and color
+    const ovrBadge = tds[2]?.querySelector('span[style*="background"]');
+    const ovrNum = ovrBadge?.textContent?.trim() || tds[2]?.textContent?.trim() || '';
+    const ovrBg = ovrBadge?.style?.background || ACCENT;
+    const deltaEl = tds[2]?.querySelector('span:last-child');
+    const deltaText = deltaEl && deltaEl !== ovrBadge ? deltaEl?.textContent?.trim() : '';
+    const deltaColor = deltaEl?.style?.color || TEXT;
+
+    // Stats
+    const statCells = Array.from(tds).slice(3);
+    const statVals = statCells.map(td => {
+      const hi = td.querySelector('span[style*="var(--accent)"]') || td.querySelector('span');
+      return { val: hi?.textContent?.trim() || td?.textContent?.trim() || '—', hi: !!td.querySelector('span[style*="var(--accent)"]') };
+    });
+
+    // Build cells
+    const mkTd = (html, align='center', bold=false) => {
+      const td = document.createElement('td');
+      td.innerHTML = html;
+      td.style.cssText = `padding:9px 10px;font-size:.85rem;color:${TEXT};text-align:${align};font-weight:${bold?'700':'500'}`;
+      return td;
+    };
+
+    // Rank
+    newTr.appendChild(mkTd(`<span style="color:${MUTED};font-size:.78rem">${rank}</span>`));
+    // Name
+    const nameTdNew = document.createElement('td');
+    nameTdNew.style.cssText = `padding:9px 8px;text-align:left`;
+    nameTdNew.innerHTML = `<span style="font-weight:700;font-size:.9rem;color:${TEXT}">${nameText}</span>${posText?`<span style="font-size:.68rem;color:${MUTED};margin-left:6px">${posText}</span>`:''}`;
+    newTr.appendChild(nameTdNew);
+    // OVR
+    newTr.appendChild(mkTd(`<span style="background:${ovrBg};color:rgba(0,0,0,.85);border-radius:4px;padding:2px 7px;font-weight:900;font-size:.9rem">${ovrNum}</span>${deltaText?`<span style="font-size:.7rem;color:${deltaColor};margin-left:3px">${deltaText}</span>`:''}`));
+    // Stats
+    statVals.forEach(({val, hi}) => {
+      newTr.appendChild(mkTd(`<span style="color:${hi?ACCENT:TEXT};font-weight:${hi?'800':'500'}">${val}</span>`));
+    });
+
+    tbody.appendChild(newTr);
+  });
+  tbl.appendChild(tbody);
+  exp.appendChild(tbl);
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.style.cssText = `background:${SURF};border-top:1px solid ${BORDER};padding:10px 20px;display:flex;justify-content:space-between;align-items:center`;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pl-PL', {day:'2-digit',month:'2-digit',year:'numeric'});
+  footer.innerHTML = `
+    <span style="font-size:.72rem;color:${MUTED}">2K Pro-Am Ekstraklasa</span>
+    <span style="font-size:.72rem;color:${MUTED}">${dateStr}</span>`;
+  exp.appendChild(footer);
+
+  document.body.appendChild(exp);
+
+  try {
+    showToast('📋 Generuję obrazek...', 'info');
+    const canvas = await html2canvas(exp, {
+      backgroundColor: BG,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    document.body.removeChild(exp);
+
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        showToast('✅ Skopiowano do schowka! Wklej na Discordzie (Ctrl+V)', 'success');
+      } catch(e) {
+        // Fallback — download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `ranking-${ev.title.replace(/\s+/g,'-')}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('📥 Pobrano jako PNG (schowek niedostępny)', 'info');
+      }
+    }, 'image/png');
+  } catch(e) {
+    if(document.body.contains(exp)) document.body.removeChild(exp);
+    showToast('❌ Błąd eksportu: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
 function renderEventRatings() {
   const wrap = document.getElementById('event-ratings-wrap');
   if(!wrap) return;
@@ -5006,6 +5175,7 @@ function renderEventRatings() {
         <span style="font-size:.8rem;color:var(--muted)">${ev.title}</span>
         <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${evMatchList.length} mecze · ${rows.length} graczy</span>
         <button onclick="_evRatingsShowHist=!_evRatingsShowHist;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${showHist?'var(--accent)':'transparent'};color:${showHist?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer">${showHist ? '📊 Hist.' : '🎮 Event'}</button>
+        <button onclick="shareEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer" title="Kopiuj obrazek do schowka">📋 Kopiuj</button>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
