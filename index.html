@@ -13999,9 +13999,9 @@ function _computeChainedOvrMap(stopBeforeEvId=null) {
   const cacheKey='v2|'+matches.length+'|'+events.map(e=>`${e.id}:${(e.matches||[]).length}`).join(',')+'|'+(stopBeforeEvId||'');
   if(_chainedOvrCache[cacheKey]) return _chainedOvrCache[cacheKey];
   const eventsInOrder=events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
-  // Use full enriched OVR (same as league ranking tab) as starting point
+  // Build initial OVR from league ranking using calcCompositeScore directly
+  // (cannot call _dsComputeOvr here — it may call _computeChainedOvrMap → circular)
   const leagueRanking = _dsLeagueRanking();
-  const enrichedRanking = _dsComputeOvr(leagueRanking);
   const histPosCount={};
   matches.forEach(m=>{[m.team1,m.team2].forEach(team=>{(team?.players||[]).forEach(p=>{
     if(!p.name||!p.pos) return;
@@ -14009,13 +14009,21 @@ function _computeChainedOvrMap(stopBeforeEvId=null) {
     histPosCount[p.name][p.pos]=(histPosCount[p.name][p.pos]||0)+1;
   });});});
   const getHistPos=name=>{const pm=histPosCount[name];return pm?Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0]:null;};
+  const ingameNamesForChained = _dsIngameNames();
   const initialOvrByName={},initialStatsByName={};
-  enrichedRanking.forEach(p=>{
-    // Index by ingameName (used in event stats) AND by p.name (discord name)
-    const keys = [p.ingameName, p.name].filter(Boolean);
+  leagueRanking.forEach(p=>{
+    // Use calcCompositeScore (no maturity penalty) as the true starting OVR
+    const totObj={gp:p.gp,pts:p.ppg*p.gp,reb:p.rpg*p.gp,ast:p.apg*p.gp,
+      stl:p.spg*p.gp,blk:p.bpg*p.gp,to:(p.tpg||0)*p.gp,
+      fgm:0,fga:0,ftm:0,fta:0,gradeSum:0};
+    const rawCs = p.gp>0 ? +calcCompositeScore(totObj).toFixed(1) : 40;
+    const ovr = Math.max(40, Math.min(99, Math.round(rawCs)));
+    // Index by ingameName AND league name
+    const resolved = _dsFindIngameName(p, ingameNamesForChained, {});
+    const keys = [resolved?.name, p.name].filter(Boolean);
     keys.forEach(k=>{
       if(!initialOvrByName[k]) {
-        initialOvrByName[k]=p.ovr;
+        initialOvrByName[k]=ovr;
         initialStatsByName[k]={ppg:p.ppg,rpg:p.rpg,apg:p.apg,spg:p.spg,bpg:p.bpg};
       }
     });
