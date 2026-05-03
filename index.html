@@ -5829,6 +5829,9 @@ function renderEventStats(ev, sortCol, sortDir) {
   const evMatches = ev.matches || [];
   if(!evMatches.length) return '<div style="color:var(--muted);text-align:center;padding:2rem 1rem">Brak meczów — dodaj screeny w zakładce Mecze</div>';
 
+  // Position filter state
+  const activePos = window._evStatsPos || 'ALL';
+
   // Build player map
   const playerMap = {};
   const teamWins = {}, teamGames = {};
@@ -5849,10 +5852,7 @@ function renderEventStats(ev, sortCol, sortDir) {
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
         s.ftm+=p.ftm||0; s.fta+=p.fta||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
-      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
-      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
-      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
-      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+        if(p.pos) { s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
       });
     });
   });
@@ -5866,6 +5866,9 @@ function renderEventStats(ev, sortCol, sortDir) {
     cs: calcCompositeScore(p),
     per: calcPER(p),
   }));
+
+  // Filter by position
+  if(activePos !== 'ALL') players = players.filter(p => p.pos === activePos);
 
   // Sort
   const strCols = ['name','team','pos'];
@@ -5907,8 +5910,18 @@ function renderEventStats(ev, sortCol, sortDir) {
       </table>
     </div>` : '';
 
-  // Sort header helper
+  // Position filter tab bar
   const evId = ev.id;
+  const PFILTER = ['ALL','PG','SG','SF','PF','C'];
+  const posTabBar = `<div style="display:flex;gap:0;margin-bottom:1rem;overflow-x:auto;border-bottom:1px solid var(--border)">${
+    PFILTER.map(pos => {
+      const active = pos === activePos;
+      return `<button onclick="window._evStatsPos='${pos}';renderEventDetailTab('${evId}','stats','${sortCol}',${sortDir})"
+        style="padding:.45rem .9rem;border:none;background:transparent;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};font-size:.82rem;letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${active?'var(--accent)':'transparent'};white-space:nowrap;transition:color .15s">${pos}</button>`;
+    }).join('')
+  }</div>`;
+
+  // Sort header helper
   const th = (col, label, style='') => {
     const active = col === sortCol;
     const nextDir = active ? sortDir * -1 : -1;
@@ -5943,8 +5956,35 @@ function renderEventStats(ev, sortCol, sortDir) {
     </tr>`;
   }).join('');
 
+  // "Nie grał" rows: players with match data in any event who sat out this one
+  const eventPlayerNames = new Set(Object.values(playerMap).map(p => p.name));
+  const leagueRanking = _dsLeagueRanking();
+  let nieGralList = leagueRanking.filter(p => !eventPlayerNames.has(p.name));
+  if(activePos !== 'ALL') nieGralList = nieGralList.filter(p => p.pos === activePos);
+  const nieGralRows = nieGralList.map(p => `
+    <tr style="border-bottom:1px solid var(--border);opacity:.5">
+      <td style="padding:.5rem .75rem;font-weight:500">${p.name}</td>
+      <td style="padding:.5rem .5rem;text-align:center"><span style="background:var(--surface2);color:var(--muted);padding:.1rem .35rem;border-radius:3px;font-size:.7rem;font-weight:600;letter-spacing:.3px">nie grał</span></td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted);font-size:.8rem">${p.pos||''}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.gp}</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--accent)">${p.cs}</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:#3498db">${p.per}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.ppg}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.rpg}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.apg}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.spg}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.bpg}</td>
+      <td style="padding:.5rem .5rem;text-align:center">${p.tpg}</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
+      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
+    </tr>`).join('');
+  const nieGralDivider = nieGralList.length ? `<tr style="background:var(--surface2)"><td colspan="16" style="padding:.35rem .75rem;font-size:.72rem;font-weight:700;letter-spacing:1px;color:var(--muted)">NIE GRALI W TYM EVENCIE</td></tr>` : '';
+
   return `
     ${standingsHtml}
+    ${posTabBar}
     <div class="card" style="padding:0;margin-bottom:0">
       <div class="stats-table-wrap">
         <table>
@@ -5966,7 +6006,11 @@ function renderEventStats(ev, sortCol, sortDir) {
             ${th('tppct','3P%')}
             ${th('ftpct','FT%')}
           </tr></thead>
-          <tbody>${rows || '<tr><td colspan="16" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>'}</tbody>
+          <tbody>
+            ${rows || '<tr><td colspan="16" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>'}
+            ${nieGralDivider}
+            ${nieGralRows}
+          </tbody>
         </table>
       </div>
     </div>`;
