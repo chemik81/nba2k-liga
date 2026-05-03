@@ -666,6 +666,7 @@
   .rivalry-fill{height:100%;background:linear-gradient(90deg,var(--accent),#e05c2a);border-radius:4px}
   .rivalry-count{font-size:.8rem;color:var(--muted);min-width:30px;text-align:right}
 </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -4848,6 +4849,174 @@ function renderRoundComparisonRows() {
 let _evRatingsShowHist = false;
 let _evRatingsByPos    = false;
 
+async function shareEventRatings() {
+  // Find the active event for title/date/match count
+  const ev = events.filter(e => (e.matches||[]).length > 0)
+    .sort((a,b) => new Date(b.date||0) - new Date(a.date||0))[0];
+  if(!ev) { showToast('Brak danych do eksportu', 'error'); return; }
+
+  const matchCount = (ev.matches||[]).length;
+  const playerCount = (() => {
+    const names = new Set();
+    (ev.matches||[]).forEach(m => {
+      [...(m.team1?.players||[]), ...(m.team2?.players||[])].forEach(p => { if(p.name) names.add(p.name); });
+    });
+    return names.size;
+  })();
+
+  // Build a self-contained canvas-friendly div
+  const wrap = document.getElementById('event-ratings-wrap');
+  if(!wrap) return;
+
+  const table = wrap.querySelector('table');
+  if(!table) { showToast('Brak tabeli do eksportu', 'error'); return; }
+
+  const ACCENT = '#f5c518';
+  const BG     = '#0f1117';
+  const SURF   = '#1a1d27';
+  const BORDER = '#2a2d3a';
+  const TEXT   = '#e8eaf0';
+  const MUTED  = '#6b7280';
+
+  // Collect rows from the rendered table
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+  // Build export div
+  const exp = document.createElement('div');
+  exp.style.cssText = `position:fixed;left:-9999px;top:-9999px;width:780px;background:${BG};font-family:'Barlow Condensed',sans-serif;padding:0;border-radius:12px;overflow:hidden`;
+
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText = `background:${SURF};border-bottom:2px solid ${ACCENT};padding:16px 20px;display:flex;align-items:center;justify-content:space-between`;
+  header.innerHTML = `
+    <div>
+      <div style="font-size:1.3rem;font-weight:900;letter-spacing:2px;color:${TEXT}">🎯 RANKINGI GRACZY</div>
+      <div style="font-size:.85rem;color:${ACCENT};font-weight:700;margin-top:2px">${ev.title}</div>
+    </div>
+    <div style="text-align:right;font-size:.78rem;color:${MUTED}">
+      <div>${matchCount} mecz${matchCount===1?'':'e'} · ${playerCount} graczy</div>
+    </div>`;
+  exp.appendChild(header);
+
+  // Table
+  const tbl = document.createElement('table');
+  tbl.style.cssText = `width:100%;border-collapse:collapse`;
+
+  // Header row
+  const thead = document.createElement('thead');
+  const thRow = document.createElement('tr');
+  thRow.style.cssText = `background:${SURF};border-bottom:1px solid ${BORDER}`;
+  ['#','GRACZ','OVR','PPG','RPG','APG','SPG','BPG','FG%','W-L'].forEach((h,i) => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    th.style.cssText = `padding:8px ${i===1?'8px':'10px'};font-size:.7rem;color:${MUTED};font-weight:700;letter-spacing:.05em;text-align:${i<=1?'left':'center'}`;
+    thRow.appendChild(th);
+  });
+  thead.appendChild(thRow);
+  tbl.appendChild(thead);
+
+  // Data rows — scrape from rendered DOM
+  const tbody = document.createElement('tbody');
+  rows.forEach((tr, ri) => {
+    const tds = tr.querySelectorAll('td');
+    if(!tds.length) return;
+    const newTr = document.createElement('tr');
+    newTr.style.cssText = `border-bottom:1px solid ${BORDER};background:${ri%2===0?BG:SURF}`;
+
+    // Scrape cells: rank, name+pos, ovr, ppg, rpg, apg, spg, bpg, fg%, wl
+    const rank = tds[0]?.textContent?.trim() || (ri+1);
+    const nameTd = tds[1];
+    const nameText = nameTd?.querySelector('span')?.textContent?.trim() || nameTd?.textContent?.trim() || '';
+    const posEl = nameTd?.querySelector('[style*="font-size:.7rem"]') || nameTd?.querySelectorAll('span')[1];
+    const posText = posEl?.textContent?.trim() || '';
+
+    // OVR badge — get number and color
+    const ovrBadge = tds[2]?.querySelector('span[style*="background"]');
+    const ovrNum = ovrBadge?.textContent?.trim() || tds[2]?.textContent?.trim() || '';
+    const ovrBg = ovrBadge?.style?.background || ACCENT;
+    const deltaEl = tds[2]?.querySelector('span:last-child');
+    const deltaText = deltaEl && deltaEl !== ovrBadge ? deltaEl?.textContent?.trim() : '';
+    const deltaColor = deltaEl?.style?.color || TEXT;
+
+    // Stats
+    const statCells = Array.from(tds).slice(3);
+    const statVals = statCells.map(td => {
+      const hi = td.querySelector('span[style*="var(--accent)"]') || td.querySelector('span');
+      return { val: hi?.textContent?.trim() || td?.textContent?.trim() || '—', hi: !!td.querySelector('span[style*="var(--accent)"]') };
+    });
+
+    // Build cells
+    const mkTd = (html, align='center', bold=false) => {
+      const td = document.createElement('td');
+      td.innerHTML = html;
+      td.style.cssText = `padding:9px 10px;font-size:.85rem;color:${TEXT};text-align:${align};font-weight:${bold?'700':'500'}`;
+      return td;
+    };
+
+    // Rank
+    newTr.appendChild(mkTd(`<span style="color:${MUTED};font-size:.78rem">${rank}</span>`));
+    // Name
+    const nameTdNew = document.createElement('td');
+    nameTdNew.style.cssText = `padding:9px 8px;text-align:left`;
+    nameTdNew.innerHTML = `<span style="font-weight:700;font-size:.9rem;color:${TEXT}">${nameText}</span>${posText?`<span style="font-size:.68rem;color:${MUTED};margin-left:6px">${posText}</span>`:''}`;
+    newTr.appendChild(nameTdNew);
+    // OVR
+    newTr.appendChild(mkTd(`<span style="background:${ovrBg};color:rgba(0,0,0,.85);border-radius:4px;padding:2px 7px;font-weight:900;font-size:.9rem">${ovrNum}</span>${deltaText?`<span style="font-size:.7rem;color:${deltaColor};margin-left:3px">${deltaText}</span>`:''}`));
+    // Stats
+    statVals.forEach(({val, hi}) => {
+      newTr.appendChild(mkTd(`<span style="color:${hi?ACCENT:TEXT};font-weight:${hi?'800':'500'}">${val}</span>`));
+    });
+
+    tbody.appendChild(newTr);
+  });
+  tbl.appendChild(tbody);
+  exp.appendChild(tbl);
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.style.cssText = `background:${SURF};border-top:1px solid ${BORDER};padding:10px 20px;display:flex;justify-content:space-between;align-items:center`;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pl-PL', {day:'2-digit',month:'2-digit',year:'numeric'});
+  footer.innerHTML = `
+    <span style="font-size:.72rem;color:${MUTED}">2K Pro-Am Ekstraklasa</span>
+    <span style="font-size:.72rem;color:${MUTED}">${dateStr}</span>`;
+  exp.appendChild(footer);
+
+  document.body.appendChild(exp);
+
+  try {
+    showToast('📋 Generuję obrazek...', 'info');
+    const canvas = await html2canvas(exp, {
+      backgroundColor: BG,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    document.body.removeChild(exp);
+
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        showToast('✅ Skopiowano do schowka! Wklej na Discordzie (Ctrl+V)', 'success');
+      } catch(e) {
+        // Fallback — download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `ranking-${ev.title.replace(/\s+/g,'-')}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('📥 Pobrano jako PNG (schowek niedostępny)', 'info');
+      }
+    }, 'image/png');
+  } catch(e) {
+    if(document.body.contains(exp)) document.body.removeChild(exp);
+    showToast('❌ Błąd eksportu: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
 function renderEventRatings() {
   const wrap = document.getElementById('event-ratings-wrap');
   if(!wrap) return;
@@ -4895,7 +5064,6 @@ function renderEventRatings() {
   };
 
   // League history by player — prefer the entry for dominant historical position
-  // (a player may appear multiple times in ranking, once per position played)
   const ranking = _dsLeagueRanking();
   const allRankByName = {};
   ranking.forEach(p => {
@@ -4923,21 +5091,21 @@ function renderEventRatings() {
     return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 9;
   })();
 
-  const PERF_W = {
-    PG:{pts:.28,stl:.24,blk:.22,reb:.15,ast:.11}, SG:{pts:.28,stl:.24,blk:.22,reb:.15,ast:.11},
-    SF:{pts:.20,stl:.28,blk:.18,reb:.24,ast:.10}, PF:{pts:.16,stl:.30,blk:.20,reb:.28,ast:.06},
-    C: {pts:.16,stl:.28,blk:.22,reb:.28,ast:.06},
+  const PERF_WEIGHTS = {
+    PG: {pts:0.28, stl:0.24, blk:0.22, reb:0.15, ast:0.11},
+    SG: {pts:0.28, stl:0.24, blk:0.22, reb:0.15, ast:0.11},
+    SF: {pts:0.20, stl:0.28, blk:0.18, reb:0.24, ast:0.10},
+    PF: {pts:0.16, stl:0.30, blk:0.20, reb:0.28, ast:0.06},
+    C:  {pts:0.16, stl:0.28, blk:0.22, reb:0.28, ast:0.06},
   };
-  const perfPos = (ppg,rpg,apg,spg,bpg,pos) => {
-    const w = PERF_W[pos] || PERF_W.PG;
+  const perf = (ppg, rpg, apg, spg, bpg, pos) => {
+    const w = PERF_WEIGHTS[pos] || PERF_WEIGHTS.PG;
     return ppg*w.pts + spg*w.stl + bpg*w.blk + rpg*w.reb + apg*w.ast;
   };
-  const perf = (ppg, rpg, apg, spg, bpg) =>
-    ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
 
-  const calcDelta = (evPerf, baseline, winBonus) => {
+  const calcDelta = (evPerf, baseline, winBonus, pos) => {
     if(!baseline || baseline.ppg + baseline.rpg + baseline.apg + baseline.spg + baseline.bpg === 0) return null;
-    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg);
+    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg, pos || 'PG');
     if(basePerf <= 0) return null;
     const pct = (evPerf - basePerf) / basePerf;
     return Math.round(Math.max(-8, Math.min(8, pct * 11 + winBonus)));
@@ -4956,35 +5124,36 @@ function renderEventRatings() {
     const evPos    = getEvPos(s);
     const histPos  = getHistPos(s.name);
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
-    // preOvr: in _evRatingsByPos mode a position-switch starts from 70
-    const preOvr = (_evRatingsByPos && posChanged)
+    const preOvr   = (_evRatingsByPos && posChanged)
       ? 70
       : (chainedPreOvr[s.name] ?? hist?.ovr ?? 40);
-    const evPerf   = perf(ppg, rpg, apg, spg, bpg);
+    const evPerf   = perf(ppg, rpg, apg, spg, bpg, evPos || 'PG');
     const wins     = s.wins;
     const losses   = gp - wins;
     const winBonus = gp > 0 ? (wins/gp - 0.5) * 10 : 0;
 
     let delta;
     if(!hist) {
-      delta = 8;
+      delta = 8; // new player debut bonus
     } else if(_evRatingsByPos && posChanged) {
-      const ep = perfPos(ppg, rpg, apg, spg, bpg, evPos || 'PG');
-      const bp = perfPos(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
+      // BY-POSITION mode: player on new position — compare stats vs position avg
+      // Use stat-based delta with new position weights, grade as tiebreaker
+      const bp = perf(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
       const statDelta = bp > 0
-        ? Math.round(Math.max(-8, Math.min(8, (ep - bp) / bp * 11 + winBonus)))
+        ? Math.round(Math.max(-8, Math.min(8, (evPerf - bp) / bp * 11 + winBonus)))
         : Math.round(Math.max(-8, Math.min(8, winBonus)));
       const gradeDelta = Math.round((s.gs/s.gp - evAvgGradeNum) / Math.max(evAvgGradeNum, 1) * 6);
       delta = Math.round(Math.max(-8, Math.min(8, statDelta * 0.75 + gradeDelta * 0.25)));
-    } else if(posChanged) {
-      const gradeNum = s.gs / s.gp;
-      const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
-      delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
     } else {
-      delta = calcDelta(evPerf, hist, winBonus);
+      // SIMPLE mode (default): compare vs overall history regardless of position
+      delta = calcDelta(evPerf, hist, winBonus, histPos || evPos || 'PG');
+      // Special: chemik81pl — half penalty, double reward (max +8)
+      if(s.name === 'chemik81pl' && delta !== null) {
+        delta = delta < 0
+          ? Math.round(delta / 2)
+          : Math.min(8, Math.round(delta * 2));
+      }
     }
-    if(s.name === 'chemik81pl' && delta !== null)
-      delta = delta < 0 ? Math.round(delta / 2) : Math.min(8, Math.round(delta * 2));
 
     const postOvr = Math.max(40, Math.min(99, preOvr + (delta ?? 0)));
     return {
@@ -5010,50 +5179,6 @@ function renderEventRatings() {
     `<th style="font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:.05em;padding:.4rem .5rem;text-align:center;white-space:nowrap" title="${tip}">${label}</th>`;
 
   const showHist = _evRatingsShowHist;
-  const activePos = window._evRatingsPos || 'ALL';
-
-  const filteredRows = activePos === 'ALL' ? rows : rows.filter(r => r.evPos === activePos);
-
-  // "Nie grał" section: players from league ranking not in this event
-  const evPlayerNames = new Set(Object.keys(statsMap));
-  const leagueRankFull = _dsLeagueRanking();
-  // deduplicate to best entry per player name
-  const leaguePrimaryMap = {};
-  leagueRankFull.forEach(p => { if(!(p.name in leaguePrimaryMap)) leaguePrimaryMap[p.name] = p; });
-  let nieGralList = Object.values(leaguePrimaryMap).filter(p => !evPlayerNames.has(p.name));
-  if(activePos !== 'ALL') nieGralList = nieGralList.filter(p => p.pos === activePos);
-
-  const PFILTER = ['ALL','PG','SG','SF','PF','C'];
-  const posTabBar = `<div style="display:flex;gap:0;border-bottom:1px solid var(--border)">${
-    PFILTER.map(pos => {
-      const active = pos === activePos;
-      return `<button onclick="window._evRatingsPos='${pos}';renderEventRatings()"
-        style="padding:.4rem .85rem;border:none;background:transparent;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};font-size:.78rem;letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${active?'var(--accent)':'transparent'};white-space:nowrap;transition:color .15s">${pos}</button>`;
-    }).join('')
-  }</div>`;
-
-  const nieGralRowsHtml = nieGralList.length ? `
-    <tr style="background:var(--surface2)"><td colspan="10" style="padding:.35rem .9rem;font-size:.72rem;font-weight:700;letter-spacing:1px;color:var(--muted)">NIE GRALI W TYM EVENCIE</td></tr>
-    ${nieGralList.map((p, i) => {
-      const c = _dsOvrColor(p.ovr);
-      const ovrBadge = `<span style="background:${c};color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center">${p.ovr}</span>`;
-      const posBadge = `<span style="font-size:.68rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .25rem;margin-left:.3rem">${p.pos}</span>`;
-      return `<tr style="border-bottom:1px solid rgba(255,255,255,.04);opacity:.5">
-        <td style="padding:.45rem .5rem .45rem .9rem;color:var(--muted);font-size:.85rem;font-weight:700">${filteredRows.length + i + 1}</td>
-        <td style="padding:.45rem .6rem;white-space:nowrap">
-          <span style="font-weight:700;font-size:.9rem">${p.name}</span>${posBadge}
-          <span style="font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .2rem;margin-left:.25rem">nie grał</span>
-        </td>
-        <td style="padding:.45rem;text-align:center">${ovrBadge}</td>
-        <td style="padding:.45rem;text-align:center">${statCell(p.ppg.toFixed(1))}</td>
-        <td style="padding:.45rem;text-align:center">${statCell(p.rpg.toFixed(1))}</td>
-        <td style="padding:.45rem;text-align:center">${statCell(p.apg.toFixed(1))}</td>
-        <td style="padding:.45rem;text-align:center">${statCell(p.spg.toFixed(1))}</td>
-        <td style="padding:.45rem;text-align:center">${statCell(p.bpg.toFixed(1))}</td>
-        <td style="padding:.45rem;text-align:center">${statCell(null)}</td>
-        <td style="padding:.45rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>
-      </tr>`;
-    }).join('')}` : '';
 
   wrap.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
@@ -5062,9 +5187,9 @@ function renderEventRatings() {
         <span style="font-size:.8rem;color:var(--muted)">${ev.title}</span>
         <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${evMatchList.length} mecze · ${rows.length} graczy</span>
         <button onclick="_evRatingsShowHist=!_evRatingsShowHist;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${showHist?'var(--accent)':'transparent'};color:${showHist?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer">${showHist ? '📊 Hist.' : '🎮 Event'}</button>
+        <button onclick="shareEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer" title="Kopiuj obrazek do schowka">📋 Kopiuj</button>
         <button onclick="_evRatingsByPos=!_evRatingsByPos;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${_evRatingsByPos?'var(--accent)':'transparent'};color:${_evRatingsByPos?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer" title="Porównuj graczy vs ich wyniki na tej samej pozycji">📍 Wg poz.</button>
       </div>
-      ${posTabBar}
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
           <thead>
@@ -5082,7 +5207,7 @@ function renderEventRatings() {
             </tr>
           </thead>
           <tbody>
-            ${filteredRows.map((r,i) => {
+            ${rows.map((r,i) => {
               const gradeHtml = `<span class="grade grade-${r.avgGrade.replace('+','p').replace('-','m')}" style="font-size:.7rem;padding:.05rem .3rem">${r.avgGrade}</span>`;
               const newBadge = r.isNew
                 ? ' <span style="font-size:.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 .2rem">NEW</span>'
@@ -5114,7 +5239,61 @@ function renderEventRatings() {
                 <td style="padding:.5rem;text-align:center"><span style="font-size:.8rem;font-weight:700;color:${wlColor}">${r.wins}-${r.losses}</span></td>
               </tr>`;
             }).join('')}
-            ${nieGralRowsHtml}
+          ${(() => {
+            // NIE GRALI W TYM EVENCIE — only players who played in any OTHER event
+            const playedInThisEv = new Set(Object.keys(statsMap));
+            const playedInAnyEv = new Set();
+            events.forEach(otherEv => {
+              if(otherEv.id === ev.id) return;
+              (otherEv.matches || []).forEach(m => {
+                [...(m.team1?.players||[]), ...(m.team2?.players||[])].forEach(p => {
+                  if(p.name) playedInAnyEv.add(p.name);
+                });
+              });
+            });
+            // Also include players from this event's earlier rounds but not in statsMap (edge case)
+            const absentPlayers = [...playedInAnyEv].filter(n => !playedInThisEv.has(n));
+            if(!absentPlayers.length) return '';
+
+            // Get their chainedOvr (what they had going into THIS event, i.e. preOvr)
+            const absentRows = absentPlayers.map(name => {
+              const preOvr = chainedPreOvr[name] ?? histByName[name]?.ovr ?? 70;
+              const hist   = histByName[name];
+              const pos    = getHistPos(name) || '—';
+              return { name, preOvr, pos,
+                ppg: hist?.ppg ?? null, rpg: hist?.rpg ?? null,
+                apg: hist?.apg ?? null, spg: hist?.spg ?? null, bpg: hist?.bpg ?? null };
+            }).sort((a,b) => b.preOvr - a.preOvr);
+
+            // Build nie grali rows using string concatenation to avoid nested backtick issues
+            const buildOvrSpan = r => {
+              const c = _dsOvrColor(r.preOvr);
+              return '<span style="background:' + c + ';color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center">' + r.preOvr + '</span>';
+            };
+            const buildSc = v => v !== null
+              ? '<span style="font-size:.82rem;color:var(--muted)">' + v.toFixed(1) + '</span>'
+              : '<span style="font-size:.8rem;color:var(--muted)">—</span>';
+            const headerRow = '<tr><td colspan="10" style="padding:.4rem .9rem .2rem;font-size:.68rem;font-weight:800;letter-spacing:.1em;color:var(--muted);border-top:2px solid var(--border)">NIE GRALI W TYM EVENCIE</td></tr>';
+            const absentHtml = absentRows.map(r =>
+              '<tr style="border-bottom:1px solid rgba(255,255,255,.03);opacity:.45">' +
+              '<td style="padding:.4rem .5rem .4rem .9rem;color:var(--muted);font-size:.8rem">—</td>' +
+              '<td style="padding:.4rem .6rem;white-space:nowrap">' +
+                '<span style="font-weight:600;font-size:.88rem">' + r.name + '</span>' +
+                '<span style="font-size:.65rem;color:var(--muted);margin-left:.4rem;border:1px solid var(--border);border-radius:3px;padding:0 .25rem">' + r.pos + '</span>' +
+                '<span style="font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .25rem;margin-left:.2rem">nie grał</span>' +
+              '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildOvrSpan(r) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.ppg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.rpg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.apg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.spg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.bpg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>' +
+              '<td style="padding:.4rem .5rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>' +
+              '</tr>'
+            ).join('');
+            return headerRow + absentHtml;
+          })()}
           </tbody>
         </table>
       </div>
@@ -5410,6 +5589,8 @@ function renderEvents() {
       ${_isEventsAdminSync() ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
         <button onclick="event.stopPropagation();openEditEventModal('${ev.id}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">✏️ Edytuj</button>
+        <button onclick="event.stopPropagation();backfillSignupOvr('${ev.id}')" title="Oblicz i zapisz OVR graczy z momentu zapisu"
+          style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">📊 Uzupełnij OVR</button>
         <button onclick="event.stopPropagation();deleteEvent('${ev.id}')"
           style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń</button>
         ${ev.status === 'open' ? `<button onclick="event.stopPropagation();closeEventSignups('${ev.id}')"
@@ -5703,7 +5884,9 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         : ep.matchMethod==='fuzzy' ? '🟡' : '';
       const psnLabel = _ovrOn && ep.ingameName && ep.ingameName!==p.name
         ? `<span style="font-size:.68rem;color:var(--muted);margin-left:.25rem">${mIcon}PSN: ${ep.ingameName}</span>` : '';
-      const ovrBadge = _ovrOn ? `<span style="background:${_dsOvrColor(ep.ovr)};color:rgba(0,0,0,.75);border-radius:4px;padding:.08rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-left:.25rem">${ep.ovr}</span>` : '';
+      // Use OVR frozen at signup time if available, fallback to current
+      const displayOvr = p.signupOvr ?? ep.ovr;
+      const ovrBadge = _ovrOn ? `<span style="background:${_dsOvrColor(displayOvr)};color:rgba(0,0,0,.75);border-radius:4px;padding:.08rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-left:.25rem" title="OVR przy zapisie${p.signupOvr ? '' : ' (brak historii — aktualny)'}">${displayOvr}</span>` : '';
       const miniStats = _ovrOn && ep.gp
         ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">${ep.ppg}pts ${ep.rpg}reb ${ep.apg}ast ${ep.spg}stl ${ep.bpg}blk</span>`
         : (_ovrOn ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">brak danych</span>` : '');
@@ -5823,21 +6006,54 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${m.team2?.score>m.team1?.score?'var(--accent)':'var(--text)'}">${m.team2?.score??'—'}</div>
           </div>
         </div>
-        ${isAdmin ? `<div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem" onclick="event.stopPropagation()">
-          <button onclick="openEditEventMatch('${id}',${i})"
-            style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">✏️ Edytuj</button>
-          <button onclick="deleteEventMatch('${id}',${i})"
-            style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">🗑 Usuń</button>
+        ${isAdmin ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.5rem" onclick="event.stopPropagation()">
+          <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.75rem;color:var(--muted);user-select:none" title="Zaznacz do połączenia">
+            <input type="checkbox" id="ev-merge-cb-${id}-${i}" value="${i}"
+              onchange="evMergeToggle('${id}',${i},this.checked)"
+              style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+            Zaznacz
+          </label>
+          <div style="display:flex;gap:.5rem">
+            <button onclick="openEditEventMatch('${id}',${i})"
+              style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">✏️ Edytuj</button>
+            <button onclick="deleteEventMatch('${id}',${i})"
+              style="background:transparent;border:none;color:var(--muted);font-size:.75rem;cursor:pointer">🗑 Usuń</button>
+          </div>
         </div>
-        <div id="ev-match-edit-${id}-${i}" style="display:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
-          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <        <div id="ev-match-edit-${id}-${i}" style="display:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
+          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">
             <input id="em-t1n-${id}-${i}" value="${(m.team1?.name||'').replace(/"/g,'&quot;')}" style="flex:1 1 110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700">
             <input id="em-t1s-${id}-${i}" type="number" value="${m.team1?.score??''}" style="width:56px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:900;text-align:center">
             <span style="color:var(--muted);font-weight:700">—</span>
             <input id="em-t2s-${id}-${i}" type="number" value="${m.team2?.score??''}" style="width:56px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:900;text-align:center">
             <input id="em-t2n-${id}-${i}" value="${(m.team2?.name||'').replace(/"/g,'&quot;')}" style="flex:1 1 110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.9rem;font-weight:700">
           </div>
-          <div style="display:flex;gap:.5rem">
+          ${(()=>{
+            const EV_STATS=['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+            const EV_LABELS=['PTS','REB','AST','STL','BLK','TO','PF','FGM','FGA','3PM','3PA','FTM','FTA'];
+            const mkRows=(team,tid)=>(team?.players||[]).map((p,pi)=>`
+              <tr>
+                <td style="padding:.2rem .3rem"><input type="text" value="${(p.name||''). replace(/"/g,'&quot;')}" id="em-${id}-${i}-${tid}-${pi}-name" style="width:96px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.12rem .25rem;font-size:.76rem;font-family:inherit"></td>
+                <td style="padding:.2rem .25rem"><select id="em-${id}-${i}-${tid}-${pi}-pos" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .1rem;font-size:.72rem;font-family:inherit">${['PG','SG','SF','PF','C'].map(pos=>`<option${(p.pos||'')=== pos?' selected':''}>${pos}</option>`).join('')}</select></td>
+                <td style="padding:.2rem .25rem"><select id="em-${id}-${i}-${tid}-${pi}-grade" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .1rem;font-size:.72rem;font-family:inherit">${['A+','A','A-','B+','B','B-','C+','C','C-','D'].map(g=>`<option${p.grade===g?' selected':''}>${g}</option>`).join('')}</select></td>
+                ${EV_STATS.map(s=>`<td style="padding:.18rem .2rem"><input type="number" min="0" max="99" value="${p[s]||0}" id="em-${id}-${i}-${tid}-${pi}-${s}" style="width:36px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.1rem .15rem;font-size:.76rem;text-align:center;font-family:inherit"></td>`).join('')}
+              </tr>`).join('');
+            const mkTable=(team,tid)=>(team?.players||[]).length?`
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:1px;margin:.5rem 0 .25rem;color:var(--accent)">${team.name}</div>
+              <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:.5rem">
+                <table style="border-collapse:collapse;font-size:.76rem;white-space:nowrap">
+                  <thead><tr>
+                    <th style="text-align:left;padding:.2rem .3rem;color:var(--muted);font-weight:600">Gracz</th>
+                    <th style="padding:.2rem .25rem;color:var(--muted);font-weight:600">Poz</th>
+                    <th style="padding:.2rem .25rem;color:var(--muted);font-weight:600">GRD</th>
+                    ${EV_LABELS.map(l=>`<th style="padding:.18rem .2rem;color:var(--muted);font-weight:600">${l}</th>`).join('')}
+                  </tr></thead>
+                  <tbody>${mkRows(team,tid)}</tbody>
+                </table>
+              </div>`:''
+            return mkTable(m.team1,'t1')+mkTable(m.team2,'t2');
+          })()}
+          <div style="display:flex;gap:.5rem;margin-top:.5rem">
             <button onclick="saveEditEventMatch('${id}',${i})" class="btn btn-primary" style="font-size:.8rem;padding:.35rem .8rem">💾 Zapisz</button>
             <button onclick="document.getElementById('ev-match-edit-${id}-${i}').style.display='none'" class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem">Anuluj</button>
           </div>
@@ -5846,6 +6062,10 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
     : '<div style="color:var(--muted);text-align:center;padding:2rem">Brak meczów — dodaj pierwszy screen poniżej</div>';
 
     tabContent = `
+      ${isAdmin && evMatches.length ? `<div id="ev-merge-bar-${id}" style="display:none;position:sticky;top:0;z-index:10;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:.6rem 1rem;margin-bottom:.75rem;display:none;align-items:center;justify-content:space-between;gap:.75rem">
+        <span style="font-size:.85rem;font-weight:700;color:var(--accent)" id="ev-merge-info-${id}">Zaznacz dokładnie 2 mecze</span>
+        <button onclick="mergeEventMatches('${id}')" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .9rem" id="ev-merge-btn-${id}" disabled>🔗 Połącz mecze</button>
+      </div>` : ''}
       <div style="margin-bottom:1rem">${matchCards}</div>
       ${isAdmin && evMatches.length ? `
         <div id="ev-name-fix-${id}" style="margin-bottom:.75rem"></div>
@@ -5897,9 +6117,6 @@ function renderEventStats(ev, sortCol, sortDir) {
   const evMatches = ev.matches || [];
   if(!evMatches.length) return '<div style="color:var(--muted);text-align:center;padding:2rem 1rem">Brak meczów — dodaj screeny w zakładce Mecze</div>';
 
-  // Position filter state
-  const activePos = window._evStatsPos || 'ALL';
-
   // Build player map
   const playerMap = {};
   const teamWins = {}, teamGames = {};
@@ -5920,7 +6137,10 @@ function renderEventStats(ev, sortCol, sortDir) {
         s.fgm+=p.fgm||0; s.fga+=p.fga||0; s.tpm+=p.tpm||0; s.tpa+=p.tpa||0;
         s.ftm+=p.ftm||0; s.fta+=p.fta||0;
         s.gradeSum+=gradeToNum(p.grade||'B');
-        if(p.pos) { s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
+      if(p.pos) { if(!s.posCounts) s.posCounts={}; s.posCounts[p.pos]=(s.posCounts[p.pos]||0)+1; }
       });
     });
   });
@@ -5934,9 +6154,6 @@ function renderEventStats(ev, sortCol, sortDir) {
     cs: calcCompositeScore(p),
     per: calcPER(p),
   }));
-
-  // Filter by position
-  if(activePos !== 'ALL') players = players.filter(p => p.pos === activePos);
 
   // Sort
   const strCols = ['name','team','pos'];
@@ -5978,18 +6195,8 @@ function renderEventStats(ev, sortCol, sortDir) {
       </table>
     </div>` : '';
 
-  // Position filter tab bar
-  const evId = ev.id;
-  const PFILTER = ['ALL','PG','SG','SF','PF','C'];
-  const posTabBar = `<div style="display:flex;gap:0;margin-bottom:1rem;overflow-x:auto;border-bottom:1px solid var(--border)">${
-    PFILTER.map(pos => {
-      const active = pos === activePos;
-      return `<button onclick="window._evStatsPos='${pos}';renderEventDetailTab('${evId}','stats','${sortCol}',${sortDir})"
-        style="padding:.45rem .9rem;border:none;background:transparent;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};font-size:.82rem;letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${active?'var(--accent)':'transparent'};white-space:nowrap;transition:color .15s">${pos}</button>`;
-    }).join('')
-  }</div>`;
-
   // Sort header helper
+  const evId = ev.id;
   const th = (col, label, style='') => {
     const active = col === sortCol;
     const nextDir = active ? sortDir * -1 : -1;
@@ -6024,35 +6231,8 @@ function renderEventStats(ev, sortCol, sortDir) {
     </tr>`;
   }).join('');
 
-  // "Nie grał" rows: players with match data in any event who sat out this one
-  const eventPlayerNames = new Set(Object.values(playerMap).map(p => p.name));
-  const leagueRanking = _dsLeagueRanking();
-  let nieGralList = leagueRanking.filter(p => !eventPlayerNames.has(p.name));
-  if(activePos !== 'ALL') nieGralList = nieGralList.filter(p => p.pos === activePos);
-  const nieGralRows = nieGralList.map(p => `
-    <tr style="border-bottom:1px solid var(--border);opacity:.5">
-      <td style="padding:.5rem .75rem;font-weight:500">${p.name}</td>
-      <td style="padding:.5rem .5rem;text-align:center"><span style="background:var(--surface2);color:var(--muted);padding:.1rem .35rem;border-radius:3px;font-size:.7rem;font-weight:600;letter-spacing:.3px">nie grał</span></td>
-      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted);font-size:.8rem">${p.pos||''}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.gp}</td>
-      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
-      <td style="padding:.5rem .5rem;text-align:center;color:var(--accent)">${p.cs}</td>
-      <td style="padding:.5rem .5rem;text-align:center;color:#3498db">${p.per}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.ppg}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.rpg}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.apg}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.spg}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.bpg}</td>
-      <td style="padding:.5rem .5rem;text-align:center">${p.tpg}</td>
-      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
-      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
-      <td style="padding:.5rem .5rem;text-align:center;color:var(--muted)">—</td>
-    </tr>`).join('');
-  const nieGralDivider = nieGralList.length ? `<tr style="background:var(--surface2)"><td colspan="16" style="padding:.35rem .75rem;font-size:.72rem;font-weight:700;letter-spacing:1px;color:var(--muted)">NIE GRALI W TYM EVENCIE</td></tr>` : '';
-
   return `
     ${standingsHtml}
-    ${posTabBar}
     <div class="card" style="padding:0;margin-bottom:0">
       <div class="stats-table-wrap">
         <table>
@@ -6074,11 +6254,7 @@ function renderEventStats(ev, sortCol, sortDir) {
             ${th('tppct','3P%')}
             ${th('ftpct','FT%')}
           </tr></thead>
-          <tbody>
-            ${rows || '<tr><td colspan="16" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>'}
-            ${nieGralDivider}
-            ${nieGralRows}
-          </tbody>
+          <tbody>${rows || '<tr><td colspan="16" style="text-align:center;padding:2rem;color:var(--muted)">Brak danych</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -6266,41 +6442,102 @@ Użyj dokładnych liczb z ekranu. Jeśli coś nieczytelne, wstaw 0.`;
     if(firstBrace === -1 || lastBrace <= firstBrace)
       throw new Error('AI nie zwróciło JSON. Odpowiedź: ' + text.slice(0,300));
     let jsonStr = text.slice(firstBrace, lastBrace + 1);
+
     const tryParse = s => { try { return JSON.parse(s); } catch(e) { return null; } };
-    // Próba 1: normalizacja + trailing commas + brakujące przecinki między obiektami
-    let cleaned = jsonStr
-      .replace(/\ufeff/g,'')
-      .replace(/[\u201c\u201d]/g,'"')
-      .replace(/[\u2018\u2019]/g,"'")
-      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'')
-      .replace(/,\s*([}\]])/g,'$1')
-      .replace(/\/\/[^\n]*/g,'')
-      .replace(/}\s*\{/g,'},{')
-      .replace(/]\s*\[/g,'],[');
-    // Próba 2: znak-po-znaku escapuj literal newline/tab wewnątrz stringów JSON
+
+    // ── Robust JSON cleanup (shared logic with parseScreenshot) ──────────────
+    const robustClean = s => s
+      .replace(/\ufeff/g, '')
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // Fix numbers with comma as thousands separator: 1,234 → 1234 (only when between digits)
+      .replace(/(\d),(?=\d{3}(?:[^\d]|$))/g, '$1')
+      // Trailing commas before ] or }
+      .replace(/,\s*([\]}])/g, '$1')
+      // Missing comma between objects/arrays: } { → }, {
+      .replace(/}\s*\{/g, '},{')
+      .replace(/]\s*\[/g, '],[')
+      // Python/JS literals
+      .replace(/\bNone\b/g, 'null')
+      .replace(/\bTrue\b/g, 'true')
+      .replace(/\bFalse\b/g, 'false')
+      // Ellipsis placeholders inside arrays
+      .replace(/\.\.\.\s*(?=[,\]])/g, '');
+
+    // Escape literal newlines/tabs inside JSON string values
     const escapeInsideStrings = s => {
       let out = '', inStr = false, esc = false;
       for(const ch of s) {
-        if(esc)        { out += ch; esc = false; continue; }
-        if(ch==='\\')  { out += ch; esc = true;  continue; }
-        if(ch==='"')   { inStr = !inStr; out += ch; continue; }
+        if(esc)       { out += ch; esc = false; continue; }
+        if(ch==='\\') { out += ch; esc = true;  continue; }
+        if(ch==='"')  { inStr = !inStr; out += ch; continue; }
         if(inStr && (ch==='\n'||ch==='\r'||ch==='\t')) { out += ' '; continue; }
         out += ch;
       }
       return out;
     };
-    // 4 próby, coraz bardziej agresywne
+
+    // Attempt to auto-close a truncated JSON (e.g. cut off mid-array by token limit)
+    const autoClose = s => {
+      let depth = 0, inStr = false, esc = false;
+      for(const ch of s) {
+        if(esc)       { esc = false; continue; }
+        if(ch==='\\') { esc = true; continue; }
+        if(ch==='"')  { inStr = !inStr; continue; }
+        if(!inStr) { if(ch==='{') depth++; else if(ch==='}') depth--; }
+      }
+      // Remove any trailing incomplete property (e.g. "key": <nothing>)
+      let fixed = s.replace(/,?\s*"[^"]*"\s*:\s*$/, '');
+      // Remove trailing comma before we close
+      fixed = fixed.replace(/,\s*$/, '');
+      // Close open braces/brackets
+      let open = 0, opStr = false, opEsc = false;
+      const stack = [];
+      for(const ch of fixed) {
+        if(opEsc)      { opEsc = false; continue; }
+        if(ch==='\\')  { opEsc = true; continue; }
+        if(ch==='"')   { opStr = !opStr; continue; }
+        if(!opStr) {
+          if(ch==='{') stack.push('}');
+          else if(ch==='[') stack.push(']');
+          else if(ch==='}' || ch===']') stack.pop();
+        }
+      }
+      return fixed + stack.reverse().join('');
+    };
+
+    const cleaned = robustClean(jsonStr);
+    const cleanedEsc = escapeInsideStrings(cleaned);
+
+    // 6 attempts: increasingly aggressive
     let parsed = tryParse(cleaned)
-      ?? tryParse(escapeInsideStrings(cleaned))
-      ?? tryParse(cleaned.replace(/[\r\n\t]+/g,' '))
-      ?? tryParse(escapeInsideStrings(cleaned).replace(/[\r\n\t]+/g,' '));
+      ?? tryParse(cleanedEsc)
+      ?? tryParse(cleanedEsc.replace(/[\r\n\t]+/g, ' '))
+      ?? tryParse(robustClean(autoClose(jsonStr)))
+      ?? tryParse(escapeInsideStrings(robustClean(autoClose(jsonStr))))
+      ?? tryParse(escapeInsideStrings(robustClean(autoClose(jsonStr))).replace(/[\r\n\t]+/g, ' '));
+
     if(!parsed) {
-      const finalAttempt = escapeInsideStrings(cleaned).replace(/[\r\n\t]+/g,' ');
       let parseErr = '';
-      try { JSON.parse(finalAttempt); } catch(e) { parseErr = e.message; }
-      console.error('[evParse] all 4 attempts failed.\nError:', parseErr, '\nExtracted JSON:', jsonStr.slice(0,800));
-      throw new Error('B\u0142\u0105d parsowania JSON: ' + parseErr + '\n\nFragment JSON:\n' + jsonStr.slice(0,300));
+      try { JSON.parse(cleanedEsc); } catch(e) { parseErr = e.message; }
+      console.error('[evParse] all attempts failed. Error:', parseErr, '\nJSON:', jsonStr.slice(0, 800));
+      throw new Error('Błąd parsowania JSON: ' + parseErr + '\n\nFragment JSON:\n' + jsonStr.slice(0, 300));
     }
+
+    // Normalize field names (fouls → fol, etc.)
+    const normalizePlayers = players => (players||[]).map(p => {
+      if(p.fouls !== undefined && p.fol === undefined) { p.fol = p.fouls; delete p.fouls; }
+      ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'].forEach(k => {
+        if(p[k] === undefined) p[k] = 0;
+      });
+      return p;
+    });
+    if(parsed.team1?.players) parsed.team1.players = normalizePlayers(parsed.team1.players);
+    if(parsed.team2?.players) parsed.team2.players = normalizePlayers(parsed.team2.players);
+
     _evParsePending = { ...parsed, date: new Date().toISOString().slice(0,10) };
 
     statusEl.style.background = 'rgba(46,204,113,.1)';
@@ -6396,6 +6633,110 @@ function evSkipMatch(eventId) {
   }
 }
 
+// ── Merge event matches ──────────────────────────────────────────────────────
+const _evMergeSelected = {}; // { eventId: Set of matchIdx }
+
+function evMergeToggle(eventId, matchIdx, checked) {
+  if(!_evMergeSelected[eventId]) _evMergeSelected[eventId] = new Set();
+  const sel = _evMergeSelected[eventId];
+  if(checked) sel.add(matchIdx); else sel.delete(matchIdx);
+
+  const bar = document.getElementById('ev-merge-bar-' + eventId);
+  const info = document.getElementById('ev-merge-info-' + eventId);
+  const btn  = document.getElementById('ev-merge-btn-' + eventId);
+  if(!bar) return;
+
+  if(sel.size === 0) {
+    bar.style.display = 'none';
+  } else {
+    bar.style.display = 'flex';
+    if(sel.size === 1) {
+      if(info) info.textContent = 'Zaznacz jeszcze 1 mecz do połączenia';
+      if(btn)  btn.disabled = true;
+    } else if(sel.size === 2) {
+      if(info) info.textContent = '2 mecze zaznaczone — gotowe do połączenia';
+      if(btn)  btn.disabled = false;
+    } else {
+      if(info) info.textContent = `Zaznaczono ${sel.size} meczów — maksimum 2`;
+      if(btn)  btn.disabled = true;
+    }
+  }
+}
+
+async function mergeEventMatches(eventId) {
+  const sel = _evMergeSelected[eventId];
+  if(!sel || sel.size !== 2) { showToast('❌ Zaznacz dokładnie 2 mecze', 'error'); return; }
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !ev.matches) return;
+
+  const [idxA, idxB] = [...sel].sort((a,b)=>a-b);
+  const mA = ev.matches[idxA];
+  const mB = ev.matches[idxB];
+  if(!mA || !mB) return;
+
+  // Validate same teams (case-insensitive)
+  const norm = s => (s||'').trim().toLowerCase();
+  const sameTeams =
+    (norm(mA.team1?.name) === norm(mB.team1?.name) && norm(mA.team2?.name) === norm(mB.team2?.name)) ||
+    (norm(mA.team1?.name) === norm(mB.team2?.name) && norm(mA.team2?.name) === norm(mB.team1?.name));
+
+  if(!sameTeams) {
+    showToast('❌ Mecze mają różne drużyny — nie można połączyć', 'error');
+    return;
+  }
+
+  // Determine if mB teams are swapped relative to mA
+  const swapped = norm(mA.team1?.name) === norm(mB.team2?.name);
+  const bT1 = swapped ? mB.team2 : mB.team1;
+  const bT2 = swapped ? mB.team1 : mB.team2;
+
+  // Merge scores
+  const merged = JSON.parse(JSON.stringify(mA));
+  merged.team1.score = (mA.team1?.score||0) + (bT1?.score||0);
+  merged.team2.score = (mA.team2?.score||0) + (bT2?.score||0);
+
+  // Merge quarters
+  const mergeQuarters = (qA, qB) => {
+    const len = Math.max((qA||[]).length, (qB||[]).length);
+    return Array.from({length: len}, (_,i) => (qA?.[i]||0) + (qB?.[i]||0));
+  };
+  merged.team1.quarters = mergeQuarters(mA.team1?.quarters, bT1?.quarters);
+  merged.team2.quarters = mergeQuarters(mA.team2?.quarters, bT2?.quarters);
+
+  // Merge player stats
+  const MERGE_STATS = ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+  const mergePlayers = (playersA, playersB) => {
+    const result = JSON.parse(JSON.stringify(playersA||[]));
+    (playersB||[]).forEach(pb => {
+      const existing = result.find(pa => norm(pa.name) === norm(pb.name));
+      if(existing) {
+        MERGE_STATS.forEach(s => { existing[s] = (existing[s]||0) + (pb[s]||0); });
+        // Keep better grade (use the one from mA, unless mB has one and mA doesn't)
+        if(!existing.grade && pb.grade) existing.grade = pb.grade;
+      } else {
+        // Player only in B — add them
+        result.push(JSON.parse(JSON.stringify(pb)));
+      }
+    });
+    return result;
+  };
+
+  merged.team1.players = mergePlayers(mA.team1?.players, bT1?.players);
+  merged.team2.players = mergePlayers(mA.team2?.players, bT2?.players);
+  merged._mergedFrom = [idxA, idxB];
+
+  // Replace first match with merged, remove second
+  ev.matches[idxA] = merged;
+  ev.matches.splice(idxB, 1);
+
+  // Reset selection
+  _evMergeSelected[eventId] = new Set();
+
+  await saveData();
+  renderEventDetailTab(eventId, 'matches');
+  showToast('✅ Mecze połączone! Statystyki zsumowane.', 'success');
+}
+
 async function deleteEventMatch(eventId, matchIdx) {
   if(!confirm('Usunąć ten mecz?')) return;
   const ev = events.find(e => e.id === eventId);
@@ -6425,6 +6766,26 @@ async function saveEditEventMatch(eventId, matchIdx) {
   if(t1s) m.team1.score = parseInt(t1s.value) || m.team1.score;
   if(t2n) m.team2.name  = t2n.value.trim() || m.team2.name;
   if(t2s) m.team2.score = parseInt(t2s.value) || m.team2.score;
+
+  // Save player stats
+  const EV_STATS = ['pts','reb','ast','stl','blk','to','fol','fgm','fga','tpm','tpa','ftm','fta'];
+  const saveTeamPlayers = (team, tid) => {
+    (team?.players||[]).forEach((p, pi) => {
+      const nameEl = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-name`);
+      const posEl  = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-pos`);
+      const grdEl  = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-grade`);
+      if(nameEl) p.name  = nameEl.value.trim() || p.name;
+      if(posEl)  p.pos   = posEl.value;
+      if(grdEl)  p.grade = grdEl.value;
+      EV_STATS.forEach(s => {
+        const el = document.getElementById(`em-${eventId}-${matchIdx}-${tid}-${pi}-${s}`);
+        if(el) p[s] = parseInt(el.value) || 0;
+      });
+    });
+  };
+  saveTeamPlayers(m.team1, 't1');
+  saveTeamPlayers(m.team2, 't2');
+
   await saveData();
   renderEventDetailTab(eventId, 'matches');
   showToast('✅ Mecz zaktualizowany!', 'success');
@@ -6684,6 +7045,54 @@ async function removePlayerFromEvent(eventId, playerId) {
   setTimeout(() => { document.getElementById('manual-player-name')?.focus(); }, 80);
 }
 
+async function backfillSignupOvr(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !(ev.players||[]).length) {
+    showToast('Brak zapisanych graczy w tym evencie', 'info'); return;
+  }
+
+  // Compute OVR map as it was BEFORE this event
+  const ovrBefore = _computeChainedOvrMap(eventId);
+
+  // Fallback: full enriched ranking for players with no prior event history
+  const enriched = _dsComputeOvr(_dsLeagueRanking());
+
+  let updated = 0;
+  const ingameNames = _dsIngameNames();
+
+  ev.players = (ev.players || []).map(p => {
+    if(p.signupOvr != null) return p; // already set — don't overwrite
+
+    // Try to find player's ingame name via aliases
+    const resolved = _dsFindIngameName(p, ingameNames, {});
+    const ingame   = resolved?.name || p.name;
+
+    // 1st choice: chained OVR before this event
+    let ovr = ovrBefore[ingame];
+
+    // 2nd choice: current league OVR (fallback for players with no prior event history)
+    if(ovr == null) {
+      const ep = enriched.find(x => x.ingameName === ingame || x.name === ingame
+        || x.ingameName === p.name || x.name === p.name);
+      ovr = ep?.ovr ?? null;
+    }
+
+    if(ovr != null) {
+      updated++;
+      return { ...p, signupOvr: ovr };
+    }
+    return p;
+  });
+
+  if(!updated) {
+    showToast('Nie znaleziono danych OVR dla żadnego gracza', 'info'); return;
+  }
+
+  await saveData();
+  renderEvents();
+  showToast(`✅ Uzupełniono signupOvr dla ${updated} graczy w ${ev.title}`, 'success');
+}
+
 async function signupToEvent(eventId) {
   if(!discordUser) { loginWithDiscord(eventId); return; }
   const ev = events.find(e => e.id === eventId);
@@ -6700,8 +7109,12 @@ async function signupToEvent(eventId) {
     return;
   }
   if(!ev.players) ev.players = [];
+  const _signupRanking = _dsLeagueRanking();
+  const _signupEnriched = _dsComputeOvr(_signupRanking);
+  const _signupMe = _signupEnriched.find(x => x.ingameName === discordUser.name || x.name === discordUser.name);
   const playerObj = { id: discordUser.id, name: discordUser.name,
-    discordTag: discordUser.discordTag, avatar: discordUser.avatar };
+    discordTag: discordUser.discordTag, avatar: discordUser.avatar,
+    signupOvr: _signupMe?.ovr ?? null };
   try {
     const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -6750,9 +7163,13 @@ async function confirmSignupWithPositions() {
   }
   const positions = [_primaryPos, ..._secondaryPos].filter((v, i, a) => a.indexOf(v) === i);
   if(!ev.players) ev.players = [];
+  const _signupRanking2 = _dsLeagueRanking();
+  const _signupEnriched2 = _dsComputeOvr(_signupRanking2);
+  const _signupMe2 = _signupEnriched2.find(x => x.ingameName === discordUser.name || x.name === discordUser.name);
   const playerObj = { id: discordUser.id, name: discordUser.name,
     discordTag: discordUser.discordTag, avatar: discordUser.avatar,
-    positions, primaryPos: _primaryPos, speaksEnglish: _speaksEnglish };
+    positions, primaryPos: _primaryPos, speaksEnglish: _speaksEnglish,
+    signupOvr: _signupMe2?.ovr ?? null };
   try {
     const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -13580,7 +13997,7 @@ function _dsIngameNames() {
 
 const _chainedOvrCache={};
 function _computeChainedOvrMap(stopBeforeEvId=null) {
-  const cacheKey=matches.length+'|'+events.map(e=>`${e.id}:${(e.matches||[]).length}`).join(',')+'|'+(stopBeforeEvId||'');
+  const cacheKey='v3|'+matches.length+'|'+events.map(e=>`${e.id}:${(e.matches||[]).length}`).join(',')+'|'+(stopBeforeEvId||'');
   if(_chainedOvrCache[cacheKey]) return _chainedOvrCache[cacheKey];
   const eventsInOrder=events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
   const ranking=_dsLeagueRanking();
@@ -13627,23 +14044,23 @@ function _computeChainedOvrMap(stopBeforeEvId=null) {
       const gp=s.gp;
       const ppg=+(s.pts/gp).toFixed(1),rpg=+(s.reb/gp).toFixed(1),apg=+(s.ast/gp).toFixed(1);
       const spg=+(s.stl/gp).toFixed(1),bpg=+(s.blk/gp).toFixed(1);
+      const evPos=getEvPos(s),histPos=getHistPos(s.name);
       const evPerf=perf(ppg,rpg,apg,spg,bpg);
       const wins=s.wins,winBonus=gp>0?(wins/gp-0.5)*10:0;
       const preOvr=currentOvr[s.name]??initialOvrByName[s.name]??40;
       const baseStats=initialStatsByName[s.name];
-      const evPos=getEvPos(s),histPos=getHistPos(s.name);
       const hasHistory=currentOvr[s.name]!==undefined||initialOvrByName[s.name]!==undefined;
-      const posChanged=!!(hasHistory&&evPos&&histPos&&evPos!==histPos);
       let delta;
       if(!hasHistory){delta=8;}
-      else if(posChanged){const g=s.gs/s.gp;delta=Math.round(Math.max(-8,Math.min(8,(g-evAvgGradeNum)/Math.max(evAvgGradeNum,1)*15+winBonus)));}
       else if(baseStats&&baseStats.ppg+baseStats.rpg+baseStats.apg+baseStats.spg+baseStats.bpg>0){
         const bp=perf(baseStats.ppg,baseStats.rpg,baseStats.apg,baseStats.spg,baseStats.bpg);
         delta=bp>0?Math.round(Math.max(-8,Math.min(8,(evPerf-bp)/bp*11+winBonus))):Math.round(Math.max(-8,Math.min(8,winBonus)));
       }else{delta=Math.round(Math.max(-8,Math.min(8,winBonus)));}
-      if(s.name==='chemik81pl'&&delta!==null)
-        delta=delta<0?Math.round(delta/2):Math.min(8,Math.round(delta*2));
-      currentOvr[s.name]=Math.max(40,Math.min(99,preOvr+(delta??0)));
+      let finalDelta = delta ?? 0;
+      if(s.name === 'chemik81pl') {
+        finalDelta = finalDelta < 0 ? Math.round(finalDelta/2) : Math.min(8, Math.round(finalDelta*2));
+      }
+      currentOvr[s.name] = Math.max(40, Math.min(99, preOvr + finalDelta));
     });
   }
   _chainedOvrCache[cacheKey]=currentOvr;
