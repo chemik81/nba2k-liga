@@ -5883,7 +5883,9 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
         : ep.matchMethod==='fuzzy' ? '🟡' : '';
       const psnLabel = _ovrOn && ep.ingameName && ep.ingameName!==p.name
         ? `<span style="font-size:.68rem;color:var(--muted);margin-left:.25rem">${mIcon}PSN: ${ep.ingameName}</span>` : '';
-      const ovrBadge = _ovrOn ? `<span style="background:${_dsOvrColor(ep.ovr)};color:rgba(0,0,0,.75);border-radius:4px;padding:.08rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-left:.25rem">${ep.ovr}</span>` : '';
+      // Use OVR frozen at signup time if available, fallback to current
+      const displayOvr = p.signupOvr ?? ep.ovr;
+      const ovrBadge = _ovrOn ? `<span style="background:${_dsOvrColor(displayOvr)};color:rgba(0,0,0,.75);border-radius:4px;padding:.08rem .4rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;margin-left:.25rem" title="OVR przy zapisie${p.signupOvr ? '' : ' (brak historii — aktualny)'}">${displayOvr}</span>` : '';
       const miniStats = _ovrOn && ep.gp
         ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">${ep.ppg}pts ${ep.rpg}reb ${ep.apg}ast ${ep.spg}stl ${ep.bpg}blk</span>`
         : (_ovrOn ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">brak danych</span>` : '');
@@ -7058,8 +7060,12 @@ async function signupToEvent(eventId) {
     return;
   }
   if(!ev.players) ev.players = [];
+  const _signupRanking = _dsLeagueRanking();
+  const _signupEnriched = _dsComputeOvr(_signupRanking);
+  const _signupMe = _signupEnriched.find(x => x.ingameName === discordUser.name || x.name === discordUser.name);
   const playerObj = { id: discordUser.id, name: discordUser.name,
-    discordTag: discordUser.discordTag, avatar: discordUser.avatar };
+    discordTag: discordUser.discordTag, avatar: discordUser.avatar,
+    signupOvr: _signupMe?.ovr ?? null };
   try {
     const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -7108,9 +7114,13 @@ async function confirmSignupWithPositions() {
   }
   const positions = [_primaryPos, ..._secondaryPos].filter((v, i, a) => a.indexOf(v) === i);
   if(!ev.players) ev.players = [];
+  const _signupRanking2 = _dsLeagueRanking();
+  const _signupEnriched2 = _dsComputeOvr(_signupRanking2);
+  const _signupMe2 = _signupEnriched2.find(x => x.ingameName === discordUser.name || x.name === discordUser.name);
   const playerObj = { id: discordUser.id, name: discordUser.name,
     discordTag: discordUser.discordTag, avatar: discordUser.avatar,
-    positions, primaryPos: _primaryPos, speaksEnglish: _speaksEnglish };
+    positions, primaryPos: _primaryPos, speaksEnglish: _speaksEnglish,
+    signupOvr: _signupMe2?.ovr ?? null };
   try {
     const res = await fetch(workerUrl.replace(/\/+$/, '') + '/event-signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
