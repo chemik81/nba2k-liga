@@ -4847,6 +4847,7 @@ function renderRoundComparisonRows() {
 // ═══════════════════════════════════════════════════════════════
 
 let _evRatingsShowHist = false;
+let _evRatingsByPos    = false;
 
 async function shareEventRatings() {
   // Find the active event for title/date/match count
@@ -5123,12 +5124,10 @@ function renderEventRatings() {
     const hist     = histByName[s.name] || null;
     const evPos    = getEvPos(s);
     const histPos  = getHistPos(s.name);
-    const evPosKey = s.name + '\x00' + (evPos||'');
-    // Position-split OVR: prefer position-specific key; new position → start at 70
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
-    const preOvr   = chainedPreOvr[evPosKey]
-      ?? chainedPreOvr[s.name]
-      ?? (posChanged ? 70 : (hist?.ovr ?? 40));
+    const preOvr   = (_evRatingsByPos && posChanged)
+      ? 70
+      : (chainedPreOvr[s.name] ?? hist?.ovr ?? 40);
     const evPerf   = perf(ppg, rpg, apg, spg, bpg, evPos || 'PG');
     const wins     = s.wins;
     const losses   = gp - wins;
@@ -5137,14 +5136,18 @@ function renderEventRatings() {
     let delta;
     if(!hist) {
       delta = 8; // new player debut bonus
-    } else if(posChanged) {
-      // Different position: use NBA2K grade as comparator (already position-aware)
-      // Grade A- (11) vs event avg B (9) → +3; Grade B- (8) vs avg B (9) → -1
-      const gradeNum = s.gs / s.gp;
-      const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
-      delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
+    } else if(_evRatingsByPos && posChanged) {
+      // BY-POSITION mode: player on new position — compare stats vs position avg
+      // Use stat-based delta with new position weights, grade as tiebreaker
+      const bp = perf(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
+      const statDelta = bp > 0
+        ? Math.round(Math.max(-8, Math.min(8, (evPerf - bp) / bp * 11 + winBonus)))
+        : Math.round(Math.max(-8, Math.min(8, winBonus)));
+      const gradeDelta = Math.round((s.gs/s.gp - evAvgGradeNum) / Math.max(evAvgGradeNum, 1) * 6);
+      delta = Math.round(Math.max(-8, Math.min(8, statDelta * 0.75 + gradeDelta * 0.25)));
     } else {
-      delta = calcDelta(evPerf, hist, winBonus, evPos || histPos || 'PG');
+      // SIMPLE mode (default): compare vs overall history regardless of position
+      delta = calcDelta(evPerf, hist, winBonus, histPos || evPos || 'PG');
       // Special: chemik81pl — half penalty, double reward (max +8)
       if(s.name === 'chemik81pl' && delta !== null) {
         delta = delta < 0
@@ -5186,6 +5189,7 @@ function renderEventRatings() {
         <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${evMatchList.length} mecze · ${rows.length} graczy</span>
         <button onclick="_evRatingsShowHist=!_evRatingsShowHist;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${showHist?'var(--accent)':'transparent'};color:${showHist?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer">${showHist ? '📊 Hist.' : '🎮 Event'}</button>
         <button onclick="shareEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer" title="Kopiuj obrazek do schowka">📋 Kopiuj</button>
+        <button onclick="_evRatingsByPos=!_evRatingsByPos;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${_evRatingsByPos?'var(--accent)':'transparent'};color:${_evRatingsByPos?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer" title="Porównuj graczy vs ich wyniki na tej samej pozycji">${_evRatingsByPos?'📍 Wg poz.':'📍 Wg poz.'}</button>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
@@ -13990,43 +13994,20 @@ function _computeChainedOvrMap(stopBeforeEvId=null) {
       const evPos=getEvPos(s),histPos=getHistPos(s.name);
       const evPerf=perf(ppg,rpg,apg,spg,bpg,evPos||histPos||'PG');
       const wins=s.wins,winBonus=gp>0?(wins/gp-0.5)*10:0;
-      const posKey = s.name + '\x00' + (evPos||'');
-      // Position-split OVR: each player×position tracked independently
-      // If player has a history at THIS position use it, else if new position start at 70
-      const hasThisPosHistory = currentOvr[posKey] !== undefined;
-      const hasAnyHistory     = currentOvr[posKey] !== undefined || initialOvrByName[s.name] !== undefined;
-      const posChanged = !!(hasAnyHistory && evPos && histPos && evPos !== histPos);
-      // preOvr: use position-specific key if available, else fall back
-      const preOvr = hasThisPosHistory
-        ? currentOvr[posKey]
-        : (posChanged
-            ? 70                                     // new position → start at 70
-            : (currentOvr[s.name] ?? initialOvrByName[s.name] ?? 40));
+      const preOvr=currentOvr[s.name]??initialOvrByName[s.name]??40;
       const baseStats=initialStatsByName[s.name];
-      const hasHistory = hasAnyHistory;
+      const hasHistory=currentOvr[s.name]!==undefined||initialOvrByName[s.name]!==undefined;
       let delta;
       if(!hasHistory){delta=8;}
-      else if(posChanged){
-        // Player changed position — evaluate using new position weights vs old baseline
-        const bp=baseStats?perf(baseStats.ppg,baseStats.rpg,baseStats.apg,baseStats.spg,baseStats.bpg,evPos||'PG'):0;
-        const statDelta=bp>0?Math.round(Math.max(-8,Math.min(8,(evPerf-bp)/bp*11+winBonus))):Math.round(Math.max(-8,Math.min(8,winBonus)));
-        const gradeDelta=Math.round((s.gs/s.gp-evAvgGradeNum)/Math.max(evAvgGradeNum,1)*6);
-        delta=Math.round(Math.max(-8,Math.min(8,(statDelta*0.75+gradeDelta*0.25))));
-      }
       else if(baseStats&&baseStats.ppg+baseStats.rpg+baseStats.apg+baseStats.spg+baseStats.bpg>0){
-        const bp=perf(baseStats.ppg,baseStats.rpg,baseStats.apg,baseStats.spg,baseStats.bpg,histPos||'PG');
+        const bp=perf(baseStats.ppg,baseStats.rpg,baseStats.apg,baseStats.spg,baseStats.bpg,histPos||evPos||'PG');
         delta=bp>0?Math.round(Math.max(-8,Math.min(8,(evPerf-bp)/bp*11+winBonus))):Math.round(Math.max(-8,Math.min(8,winBonus)));
       }else{delta=Math.round(Math.max(-8,Math.min(8,winBonus)));}
-      // Special player modifiers
       let finalDelta = delta ?? 0;
       if(s.name === 'chemik81pl') {
-        finalDelta = finalDelta < 0
-          ? Math.round(finalDelta / 2)           // falls half as much
-          : Math.min(8, Math.round(finalDelta * 2)); // rises twice as much, cap at +8
+        finalDelta = finalDelta < 0 ? Math.round(finalDelta/2) : Math.min(8, Math.round(finalDelta*2));
       }
-      const postOvrVal = Math.max(40, Math.min(99, preOvr + finalDelta));
-      currentOvr[posKey]  = postOvrVal;  // position-specific key
-      currentOvr[s.name]  = postOvrVal;  // also keep plain name for backwards compat
+      currentOvr[s.name] = Math.max(40, Math.min(99, preOvr + finalDelta));
     });
   }
   _chainedOvrCache[cacheKey]=currentOvr;
