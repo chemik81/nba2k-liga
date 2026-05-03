@@ -5098,14 +5098,18 @@ function renderEventRatings() {
     PF: {pts:0.16, stl:0.30, blk:0.20, reb:0.28, ast:0.06},
     C:  {pts:0.16, stl:0.28, blk:0.22, reb:0.28, ast:0.06},
   };
-  const perf = (ppg, rpg, apg, spg, bpg, pos) => {
+  // position-neutral — must match _computeChainedOvrMap exactly
+  const perf = (ppg, rpg, apg, spg, bpg) =>
+    ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
+  // position-weighted — only used in "Wg poz." mode
+  const perfPos = (ppg, rpg, apg, spg, bpg, pos) => {
     const w = PERF_WEIGHTS[pos] || PERF_WEIGHTS.PG;
     return ppg*w.pts + spg*w.stl + bpg*w.blk + rpg*w.reb + apg*w.ast;
   };
 
-  const calcDelta = (evPerf, baseline, winBonus, pos) => {
+  const calcDelta = (evPerf, baseline, winBonus) => {
     if(!baseline || baseline.ppg + baseline.rpg + baseline.apg + baseline.spg + baseline.bpg === 0) return null;
-    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg, pos || 'PG');
+    const basePerf = perf(baseline.ppg, baseline.rpg, baseline.apg, baseline.spg, baseline.bpg);
     if(basePerf <= 0) return null;
     const pct = (evPerf - basePerf) / basePerf;
     return Math.round(Math.max(-8, Math.min(8, pct * 11 + winBonus)));
@@ -5127,7 +5131,7 @@ function renderEventRatings() {
     const preOvr   = (_evRatingsByPos && posChanged)
       ? 70
       : (chainedPreOvr[s.name] ?? hist?.ovr ?? 40);
-    const evPerf   = perf(ppg, rpg, apg, spg, bpg, evPos || 'PG');
+    const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
     const winBonus = gp > 0 ? (wins/gp - 0.5) * 10 : 0;
@@ -5136,17 +5140,17 @@ function renderEventRatings() {
     if(!hist) {
       delta = 8; // new player debut bonus
     } else if(_evRatingsByPos && posChanged) {
-      // BY-POSITION mode: player on new position — compare stats vs position avg
-      // Use stat-based delta with new position weights, grade as tiebreaker
-      const bp = perf(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
+      // BY-POSITION mode: compare position-weighted stats vs history at new position
+      const evPerfPos = perfPos(ppg, rpg, apg, spg, bpg, evPos || 'PG');
+      const bp = perfPos(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
       const statDelta = bp > 0
-        ? Math.round(Math.max(-8, Math.min(8, (evPerf - bp) / bp * 11 + winBonus)))
+        ? Math.round(Math.max(-8, Math.min(8, (evPerfPos - bp) / bp * 11 + winBonus)))
         : Math.round(Math.max(-8, Math.min(8, winBonus)));
       const gradeDelta = Math.round((s.gs/s.gp - evAvgGradeNum) / Math.max(evAvgGradeNum, 1) * 6);
       delta = Math.round(Math.max(-8, Math.min(8, statDelta * 0.75 + gradeDelta * 0.25)));
     } else {
-      // SIMPLE mode (default): compare vs overall history regardless of position
-      delta = calcDelta(evPerf, hist, winBonus, histPos || evPos || 'PG');
+      // SIMPLE mode (default): position-neutral, matches _computeChainedOvrMap exactly
+      delta = calcDelta(evPerf, hist, winBonus);
       // Special: chemik81pl — half penalty, double reward (max +8)
       if(s.name === 'chemik81pl' && delta !== null) {
         delta = delta < 0
