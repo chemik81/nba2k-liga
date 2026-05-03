@@ -5063,19 +5063,17 @@ function renderEventRatings() {
     return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];
   };
 
-  // League history by player — prefer the entry for dominant historical position
-  // (a player may appear multiple times in ranking, once per position played)
+  // League history — use _dsComputeOvr for real OVR (same as league ranking tab)
   const ranking = _dsLeagueRanking();
-  const allRankByName = {};
-  ranking.forEach(p => {
-    if(!allRankByName[p.name]) allRankByName[p.name] = [];
-    allRankByName[p.name].push(p);
-  });
+  const enriched = _dsComputeOvr(ranking);
   const histByName = {};
-  Object.entries(allRankByName).forEach(([name, entries]) => {
-    const domPos = getHistPos(name);
-    const best = (domPos && entries.find(e => e.pos === domPos)) || entries[0];
-    histByName[name] = {ovr:best.ovr, ppg:best.ppg, rpg:best.rpg, apg:best.apg, spg:best.spg, bpg:best.bpg};
+  enriched.forEach(p => {
+    // Index by ingameName (used in events) AND discord name
+    [p.ingameName, p.name].filter(Boolean).forEach(k => {
+      if(!histByName[k]) {
+        histByName[k] = {ovr: p.ovr, ppg: p.ppg, rpg: p.rpg, apg: p.apg, spg: p.spg, bpg: p.bpg};
+      }
+    });
   });
   // Chained OVR: preOvr for this event = postOvr of all previous events
   const chainedPreOvr = _computeChainedOvrMap(ev.id);
@@ -7055,9 +7053,8 @@ async function backfillSignupOvr(eventId) {
   // Compute OVR map as it was BEFORE this event
   const ovrBefore = _computeChainedOvrMap(eventId);
 
-  // Also compute full league ranking for fallback (players with no event history)
-  const leagueRanking = _dsLeagueRanking();
-  const enriched      = _dsComputeOvr(leagueRanking);
+  // Fallback: full enriched ranking for players with no prior event history
+  const enriched = _dsComputeOvr(_dsLeagueRanking());
 
   let updated = 0;
   const ingameNames = _dsIngameNames();
@@ -13999,10 +13996,12 @@ function _dsIngameNames() {
 
 const _chainedOvrCache={};
 function _computeChainedOvrMap(stopBeforeEvId=null) {
-  const cacheKey=matches.length+'|'+events.map(e=>`${e.id}:${(e.matches||[]).length}`).join(',')+'|'+(stopBeforeEvId||'');
+  const cacheKey='v2|'+matches.length+'|'+events.map(e=>`${e.id}:${(e.matches||[]).length}`).join(',')+'|'+(stopBeforeEvId||'');
   if(_chainedOvrCache[cacheKey]) return _chainedOvrCache[cacheKey];
   const eventsInOrder=events.filter(e=>(e.matches||[]).length>0).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
-  const ranking=_dsLeagueRanking();
+  // Use full enriched OVR (same as league ranking tab) as starting point
+  const leagueRanking = _dsLeagueRanking();
+  const enrichedRanking = _dsComputeOvr(leagueRanking);
   const histPosCount={};
   matches.forEach(m=>{[m.team1,m.team2].forEach(team=>{(team?.players||[]).forEach(p=>{
     if(!p.name||!p.pos) return;
@@ -14010,14 +14009,16 @@ function _computeChainedOvrMap(stopBeforeEvId=null) {
     histPosCount[p.name][p.pos]=(histPosCount[p.name][p.pos]||0)+1;
   });});});
   const getHistPos=name=>{const pm=histPosCount[name];return pm?Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0]:null;};
-  const allRankByName={};
-  ranking.forEach(p=>{if(!allRankByName[p.name])allRankByName[p.name]=[];allRankByName[p.name].push(p);});
   const initialOvrByName={},initialStatsByName={};
-  Object.entries(allRankByName).forEach(([name,entries])=>{
-    const domPos=getHistPos(name);
-    const best=(domPos&&entries.find(e=>e.pos===domPos))||entries[0];
-    initialOvrByName[name]=best.ovr;
-    initialStatsByName[name]={ppg:best.ppg,rpg:best.rpg,apg:best.apg,spg:best.spg,bpg:best.bpg};
+  enrichedRanking.forEach(p=>{
+    // Index by ingameName (used in event stats) AND by p.name (discord name)
+    const keys = [p.ingameName, p.name].filter(Boolean);
+    keys.forEach(k=>{
+      if(!initialOvrByName[k]) {
+        initialOvrByName[k]=p.ovr;
+        initialStatsByName[k]={ppg:p.ppg,rpg:p.rpg,apg:p.apg,spg:p.spg,bpg:p.bpg};
+      }
+    });
   });
   const currentOvr={};
   const perf=(ppg,rpg,apg,spg,bpg,pos)=>{
