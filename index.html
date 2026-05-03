@@ -5188,7 +5188,7 @@ function renderEventRatings() {
         <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${evMatchList.length} mecze · ${rows.length} graczy</span>
         <button onclick="_evRatingsShowHist=!_evRatingsShowHist;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${showHist?'var(--accent)':'transparent'};color:${showHist?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer">${showHist ? '📊 Hist.' : '🎮 Event'}</button>
         <button onclick="shareEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer" title="Kopiuj obrazek do schowka">📋 Kopiuj</button>
-        <button onclick="_evRatingsByPos=!_evRatingsByPos;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${_evRatingsByPos?'var(--accent)':'transparent'};color:${_evRatingsByPos?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer" title="Porównuj graczy vs ich wyniki na tej samej pozycji">${_evRatingsByPos?'📍 Wg poz.':'📍 Wg poz.'}</button>
+        <button onclick="_evRatingsByPos=!_evRatingsByPos;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${_evRatingsByPos?'var(--accent)':'transparent'};color:${_evRatingsByPos?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer" title="Porównuj graczy vs ich wyniki na tej samej pozycji">📍 Wg poz.</button>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
