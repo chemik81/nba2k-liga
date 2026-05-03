@@ -5167,6 +5167,50 @@ function renderEventRatings() {
     `<th style="font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:.05em;padding:.4rem .5rem;text-align:center;white-space:nowrap" title="${tip}">${label}</th>`;
 
   const showHist = _evRatingsShowHist;
+  const activePos = window._evRatingsPos || 'ALL';
+
+  const filteredRows = activePos === 'ALL' ? rows : rows.filter(r => r.evPos === activePos);
+
+  // "Nie grał" section: players from league ranking not in this event
+  const evPlayerNames = new Set(Object.keys(statsMap));
+  const leagueRankFull = _dsLeagueRanking();
+  // deduplicate to best entry per player name
+  const leaguePrimaryMap = {};
+  leagueRankFull.forEach(p => { if(!(p.name in leaguePrimaryMap)) leaguePrimaryMap[p.name] = p; });
+  let nieGralList = Object.values(leaguePrimaryMap).filter(p => !evPlayerNames.has(p.name));
+  if(activePos !== 'ALL') nieGralList = nieGralList.filter(p => p.pos === activePos);
+
+  const PFILTER = ['ALL','PG','SG','SF','PF','C'];
+  const posTabBar = `<div style="display:flex;gap:0;border-bottom:1px solid var(--border)">${
+    PFILTER.map(pos => {
+      const active = pos === activePos;
+      return `<button onclick="window._evRatingsPos='${pos}';renderEventRatings()"
+        style="padding:.4rem .85rem;border:none;background:transparent;color:${active?'var(--accent)':'var(--muted)'};font-weight:${active?'700':'400'};font-size:.78rem;letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${active?'var(--accent)':'transparent'};white-space:nowrap;transition:color .15s">${pos}</button>`;
+    }).join('')
+  }</div>`;
+
+  const nieGralRowsHtml = nieGralList.length ? `
+    <tr style="background:var(--surface2)"><td colspan="10" style="padding:.35rem .9rem;font-size:.72rem;font-weight:700;letter-spacing:1px;color:var(--muted)">NIE GRALI W TYM EVENCIE</td></tr>
+    ${nieGralList.map((p, i) => {
+      const c = _dsOvrColor(p.ovr);
+      const ovrBadge = `<span style="background:${c};color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center">${p.ovr}</span>`;
+      const posBadge = `<span style="font-size:.68rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .25rem;margin-left:.3rem">${p.pos}</span>`;
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,.04);opacity:.5">
+        <td style="padding:.45rem .5rem .45rem .9rem;color:var(--muted);font-size:.85rem;font-weight:700">${filteredRows.length + i + 1}</td>
+        <td style="padding:.45rem .6rem;white-space:nowrap">
+          <span style="font-weight:700;font-size:.9rem">${p.name}</span>${posBadge}
+          <span style="font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .2rem;margin-left:.25rem">nie grał</span>
+        </td>
+        <td style="padding:.45rem;text-align:center">${ovrBadge}</td>
+        <td style="padding:.45rem;text-align:center">${statCell(p.ppg.toFixed(1))}</td>
+        <td style="padding:.45rem;text-align:center">${statCell(p.rpg.toFixed(1))}</td>
+        <td style="padding:.45rem;text-align:center">${statCell(p.apg.toFixed(1))}</td>
+        <td style="padding:.45rem;text-align:center">${statCell(p.spg.toFixed(1))}</td>
+        <td style="padding:.45rem;text-align:center">${statCell(p.bpg.toFixed(1))}</td>
+        <td style="padding:.45rem;text-align:center">${statCell(null)}</td>
+        <td style="padding:.45rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>
+      </tr>`;
+    }).join('')}` : '';
 
   wrap.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
@@ -5177,6 +5221,7 @@ function renderEventRatings() {
         <button onclick="_evRatingsShowHist=!_evRatingsShowHist;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${showHist?'var(--accent)':'transparent'};color:${showHist?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer">${showHist ? '📊 Hist.' : '🎮 Event'}</button>
         <button onclick="shareEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer" title="Kopiuj obrazek do schowka">📋 Kopiuj</button>
       </div>
+      ${posTabBar}
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
           <thead>
@@ -5194,7 +5239,7 @@ function renderEventRatings() {
             </tr>
           </thead>
           <tbody>
-            ${rows.map((r,i) => {
+            ${filteredRows.map((r,i) => {
               const gradeHtml = `<span class="grade grade-${r.avgGrade.replace('+','p').replace('-','m')}" style="font-size:.7rem;padding:.05rem .3rem">${r.avgGrade}</span>`;
               const newBadge = r.isNew
                 ? ' <span style="font-size:.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 .2rem">NEW</span>'
@@ -5226,6 +5271,7 @@ function renderEventRatings() {
                 <td style="padding:.5rem;text-align:center"><span style="font-size:.8rem;font-weight:700;color:${wlColor}">${r.wins}-${r.losses}</span></td>
               </tr>`;
             }).join('')}
+            ${nieGralRowsHtml}
           </tbody>
         </table>
       </div>
