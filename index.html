@@ -4846,6 +4846,7 @@ function renderRoundComparisonRows() {
 // ═══════════════════════════════════════════════════════════════
 
 let _evRatingsShowHist = false;
+let _evRatingsByPos    = false;
 
 function renderEventRatings() {
   const wrap = document.getElementById('event-ratings-wrap');
@@ -4922,6 +4923,15 @@ function renderEventRatings() {
     return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 9;
   })();
 
+  const PERF_W = {
+    PG:{pts:.28,stl:.24,blk:.22,reb:.15,ast:.11}, SG:{pts:.28,stl:.24,blk:.22,reb:.15,ast:.11},
+    SF:{pts:.20,stl:.28,blk:.18,reb:.24,ast:.10}, PF:{pts:.16,stl:.30,blk:.20,reb:.28,ast:.06},
+    C: {pts:.16,stl:.28,blk:.22,reb:.28,ast:.06},
+  };
+  const perfPos = (ppg,rpg,apg,spg,bpg,pos) => {
+    const w = PERF_W[pos] || PERF_W.PG;
+    return ppg*w.pts + spg*w.stl + bpg*w.blk + rpg*w.reb + apg*w.ast;
+  };
   const perf = (ppg, rpg, apg, spg, bpg) =>
     ppg*0.40 + spg*0.20 + bpg*0.18 + rpg*0.15 + apg*0.12;
 
@@ -4943,27 +4953,38 @@ function renderEventRatings() {
     const fgpct    = s.fga ? Math.round(s.fgm/s.fga*100) : null;
     const avgGrade = numToGrade(s.gs/gp);
     const hist     = histByName[s.name] || null;
-    const preOvr   = chainedPreOvr[s.name] ?? hist?.ovr ?? 40;
+    const evPos    = getEvPos(s);
+    const histPos  = getHistPos(s.name);
+    const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
+    // preOvr: in _evRatingsByPos mode a position-switch starts from 70
+    const preOvr = (_evRatingsByPos && posChanged)
+      ? 70
+      : (chainedPreOvr[s.name] ?? hist?.ovr ?? 40);
     const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
     const winBonus = gp > 0 ? (wins/gp - 0.5) * 10 : 0;
-    const evPos    = getEvPos(s);
-    const histPos  = getHistPos(s.name);
-    const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
 
     let delta;
     if(!hist) {
-      delta = 8; // new player debut bonus
+      delta = 8;
+    } else if(_evRatingsByPos && posChanged) {
+      const ep = perfPos(ppg, rpg, apg, spg, bpg, evPos || 'PG');
+      const bp = perfPos(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
+      const statDelta = bp > 0
+        ? Math.round(Math.max(-8, Math.min(8, (ep - bp) / bp * 11 + winBonus)))
+        : Math.round(Math.max(-8, Math.min(8, winBonus)));
+      const gradeDelta = Math.round((s.gs/s.gp - evAvgGradeNum) / Math.max(evAvgGradeNum, 1) * 6);
+      delta = Math.round(Math.max(-8, Math.min(8, statDelta * 0.75 + gradeDelta * 0.25)));
     } else if(posChanged) {
-      // Different position: use NBA2K grade as comparator (already position-aware)
-      // Grade A- (11) vs event avg B (9) → +3; Grade B- (8) vs avg B (9) → -1
       const gradeNum = s.gs / s.gp;
       const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
       delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
     } else {
       delta = calcDelta(evPerf, hist, winBonus);
     }
+    if(s.name === 'chemik81pl' && delta !== null)
+      delta = delta < 0 ? Math.round(delta / 2) : Math.min(8, Math.round(delta * 2));
 
     const postOvr = Math.max(40, Math.min(99, preOvr + (delta ?? 0)));
     return {
@@ -5041,6 +5062,7 @@ function renderEventRatings() {
         <span style="font-size:.8rem;color:var(--muted)">${ev.title}</span>
         <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${evMatchList.length} mecze · ${rows.length} graczy</span>
         <button onclick="_evRatingsShowHist=!_evRatingsShowHist;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${showHist?'var(--accent)':'transparent'};color:${showHist?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer">${showHist ? '📊 Hist.' : '🎮 Event'}</button>
+        <button onclick="_evRatingsByPos=!_evRatingsByPos;renderEventRatings()" style="font-size:.72rem;padding:.2rem .6rem;border-radius:4px;border:1px solid var(--border);background:${_evRatingsByPos?'var(--accent)':'transparent'};color:${_evRatingsByPos?'rgba(0,0,0,.85)':'var(--text)'};cursor:pointer" title="Porównuj graczy vs ich wyniki na tej samej pozycji">📍 Wg poz.</button>
       </div>
       ${posTabBar}
       <div style="overflow-x:auto">
@@ -13619,6 +13641,8 @@ function _computeChainedOvrMap(stopBeforeEvId=null) {
         const bp=perf(baseStats.ppg,baseStats.rpg,baseStats.apg,baseStats.spg,baseStats.bpg);
         delta=bp>0?Math.round(Math.max(-8,Math.min(8,(evPerf-bp)/bp*11+winBonus))):Math.round(Math.max(-8,Math.min(8,winBonus)));
       }else{delta=Math.round(Math.max(-8,Math.min(8,winBonus)));}
+      if(s.name==='chemik81pl'&&delta!==null)
+        delta=delta<0?Math.round(delta/2):Math.min(8,Math.round(delta*2));
       currentOvr[s.name]=Math.max(40,Math.min(99,preOvr+(delta??0)));
     });
   }
