@@ -5590,6 +5590,8 @@ function renderEvents() {
       ${_isEventsAdminSync() ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
         <button onclick="event.stopPropagation();openEditEventModal('${ev.id}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">✏️ Edytuj</button>
+        <button onclick="event.stopPropagation();backfillSignupOvr('${ev.id}')" title="Oblicz i zapisz OVR graczy z momentu zapisu"
+          style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">📊 Uzupełnij OVR</button>
         <button onclick="event.stopPropagation();deleteEvent('${ev.id}')"
           style="background:transparent;border:1px solid var(--border);color:var(--loss);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">🗑 Usuń</button>
         ${ev.status === 'open' ? `<button onclick="event.stopPropagation();closeEventSignups('${ev.id}')"
@@ -7042,6 +7044,55 @@ async function removePlayerFromEvent(eventId, playerId) {
   openEventDetail(eventId);
   // Re-focus manual input if visible
   setTimeout(() => { document.getElementById('manual-player-name')?.focus(); }, 80);
+}
+
+async function backfillSignupOvr(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !(ev.players||[]).length) {
+    showToast('Brak zapisanych graczy w tym evencie', 'info'); return;
+  }
+
+  // Compute OVR map as it was BEFORE this event
+  const ovrBefore = _computeChainedOvrMap(eventId);
+
+  // Also compute full league ranking for fallback (players with no event history)
+  const leagueRanking = _dsLeagueRanking();
+  const enriched      = _dsComputeOvr(leagueRanking);
+
+  let updated = 0;
+  const ingameNames = _dsIngameNames();
+
+  ev.players = (ev.players || []).map(p => {
+    if(p.signupOvr != null) return p; // already set — don't overwrite
+
+    // Try to find player's ingame name via aliases
+    const resolved = _dsFindIngameName(p, ingameNames, {});
+    const ingame   = resolved?.name || p.name;
+
+    // 1st choice: chained OVR before this event
+    let ovr = ovrBefore[ingame];
+
+    // 2nd choice: current league OVR (fallback for players with no prior event history)
+    if(ovr == null) {
+      const ep = enriched.find(x => x.ingameName === ingame || x.name === ingame
+        || x.ingameName === p.name || x.name === p.name);
+      ovr = ep?.ovr ?? null;
+    }
+
+    if(ovr != null) {
+      updated++;
+      return { ...p, signupOvr: ovr };
+    }
+    return p;
+  });
+
+  if(!updated) {
+    showToast('Nie znaleziono danych OVR dla żadnego gracza', 'info'); return;
+  }
+
+  await saveData();
+  renderEvents();
+  showToast(`✅ Uzupełniono signupOvr dla ${updated} graczy w ${ev.title}`, 'success');
 }
 
 async function signupToEvent(eventId) {
