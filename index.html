@@ -5262,28 +5262,34 @@ function renderEventRatings() {
                 apg: hist?.apg ?? null, spg: hist?.spg ?? null, bpg: hist?.bpg ?? null };
             }).sort((a,b) => b.preOvr - a.preOvr);
 
-            return `<tr><td colspan="10" style="padding:.4rem .9rem .2rem;font-size:.68rem;font-weight:800;letter-spacing:.1em;color:var(--muted);border-top:2px solid var(--border)">NIE GRALI W TYM EVENCIE</td></tr>
-              ${absentRows.map(r => {
-                const c = _dsOvrColor(r.preOvr);
-                const ovrHtml = \`<span style="background:\${c};color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center">\${r.preOvr}</span>\`;
-                const sc = v => v !== null ? \`<span style="font-size:.82rem;color:var(--muted)">\${v.toFixed(1)}</span>\` : \`<span style="font-size:.8rem;color:var(--muted)">—</span>\`;
-                return \`<tr style="border-bottom:1px solid rgba(255,255,255,.03);opacity:.45">
-                  <td style="padding:.4rem .5rem .4rem .9rem;color:var(--muted);font-size:.8rem">—</td>
-                  <td style="padding:.4rem .6rem;white-space:nowrap">
-                    <span style="font-weight:600;font-size:.88rem">\${r.name}</span>
-                    <span style="font-size:.65rem;color:var(--muted);margin-left:.4rem;border:1px solid var(--border);border-radius:3px;padding:0 .25rem">\${r.pos}</span>
-                    <span style="font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .25rem;margin-left:.2rem">nie grał</span>
-                  </td>
-                  <td style="padding:.4rem .5rem;text-align:center">\${ovrHtml}</td>
-                  <td style="padding:.4rem .5rem;text-align:center">\${sc(r.ppg)}</td>
-                  <td style="padding:.4rem .5rem;text-align:center">\${sc(r.rpg)}</td>
-                  <td style="padding:.4rem .5rem;text-align:center">\${sc(r.apg)}</td>
-                  <td style="padding:.4rem .5rem;text-align:center">\${sc(r.spg)}</td>
-                  <td style="padding:.4rem .5rem;text-align:center">\${sc(r.bpg)}</td>
-                  <td style="padding:.4rem .5rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>
-                  <td style="padding:.4rem .5rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>
-                </tr>\`;
-              }).join('')}`;
+            // Build nie grali rows using string concatenation to avoid nested backtick issues
+            const buildOvrSpan = r => {
+              const c = _dsOvrColor(r.preOvr);
+              return '<span style="background:' + c + ';color:rgba(0,0,0,.85);border-radius:5px;padding:.15rem .45rem;font-family:\'Barlow Condensed\',sans-serif;font-weight:900;font-size:.95rem;min-width:34px;display:inline-block;text-align:center">' + r.preOvr + '</span>';
+            };
+            const buildSc = v => v !== null
+              ? '<span style="font-size:.82rem;color:var(--muted)">' + v.toFixed(1) + '</span>'
+              : '<span style="font-size:.8rem;color:var(--muted)">—</span>';
+            const headerRow = '<tr><td colspan="10" style="padding:.4rem .9rem .2rem;font-size:.68rem;font-weight:800;letter-spacing:.1em;color:var(--muted);border-top:2px solid var(--border)">NIE GRALI W TYM EVENCIE</td></tr>';
+            const absentHtml = absentRows.map(r =>
+              '<tr style="border-bottom:1px solid rgba(255,255,255,.03);opacity:.45">' +
+              '<td style="padding:.4rem .5rem .4rem .9rem;color:var(--muted);font-size:.8rem">—</td>' +
+              '<td style="padding:.4rem .6rem;white-space:nowrap">' +
+                '<span style="font-weight:600;font-size:.88rem">' + r.name + '</span>' +
+                '<span style="font-size:.65rem;color:var(--muted);margin-left:.4rem;border:1px solid var(--border);border-radius:3px;padding:0 .25rem">' + r.pos + '</span>' +
+                '<span style="font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 .25rem;margin-left:.2rem">nie grał</span>' +
+              '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildOvrSpan(r) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.ppg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.rpg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.apg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.spg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center">' + buildSc(r.bpg) + '</td>' +
+              '<td style="padding:.4rem .5rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>' +
+              '<td style="padding:.4rem .5rem;text-align:center"><span style="font-size:.8rem;color:var(--muted)">—</span></td>' +
+              '</tr>'
+            ).join('');
+            return headerRow + absentHtml;
           })()}
           </tbody>
         </table>
