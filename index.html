@@ -5083,6 +5083,17 @@ function renderEventRatings() {
     return Object.entries(pm).sort((a,b)=>b[1]-a[1])[0][0];
   };
 
+  // signupOvr: OVR frozen at registration time (the correct preOvr)
+  const signupOvrByName = {};
+  if((ev.players||[]).length) {
+    const ingameNames = _dsIngameNames();
+    (ev.players||[]).forEach(p => {
+      if(p.signupOvr == null) return;
+      const resolved = _dsFindIngameName(p, ingameNames, {});
+      if(resolved?.name) signupOvrByName[resolved.name] = p.signupOvr;
+    });
+  }
+
   // Event average grade (position-neutral baseline for cross-position comparison)
   const evAvgGradeNum = (() => {
     const nums = Object.values(statsMap).map(s => s.gs / s.gp).filter(n => n > 0);
@@ -5128,7 +5139,7 @@ function renderEventRatings() {
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
     const preOvr   = (_evRatingsByPos && posChanged)
       ? 70
-      : (hist?.ovr ?? 40);
+      : (signupOvrByName[s.name] ?? hist?.ovr ?? 40);
     const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
