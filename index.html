@@ -5086,17 +5086,11 @@ function renderEventRatings() {
   // signupOvr: OVR frozen at registration time (the correct preOvr)
   const signupOvrByName = {};
   if((ev.players||[]).length) {
-    // Include event match names too — covers players not yet in global matches
-    const ingameNames = [...new Set([..._dsIngameNames(), ...Object.keys(statsMap)])];
+    const ingameNames = _dsIngameNames();
     (ev.players||[]).forEach(p => {
       if(p.signupOvr == null) return;
       const resolved = _dsFindIngameName(p, ingameNames, {});
       if(resolved?.name) signupOvrByName[resolved.name] = p.signupOvr;
-      else {
-        // Last-resort: case-insensitive direct match against event match names
-        const direct = Object.keys(statsMap).find(n => n.toLowerCase() === (p.name||'').toLowerCase());
-        if(direct) signupOvrByName[direct] = p.signupOvr;
-      }
     });
   }
 
@@ -5155,7 +5149,7 @@ function renderEventRatings() {
     if(!hist) {
       delta = 8; // new player debut bonus
     } else if(_evRatingsByPos && posChanged) {
-      // Wg poz. mode: compare position-weighted stats vs history at new position
+      // BY-POSITION mode: compare position-weighted stats vs history at new position
       const evPerfPos = perfPos(ppg, rpg, apg, spg, bpg, evPos || 'PG');
       const bp = perfPos(hist.ppg, hist.rpg, hist.apg, hist.spg, hist.bpg, evPos || 'PG');
       const statDelta = bp > 0
@@ -5163,14 +5157,10 @@ function renderEventRatings() {
         : Math.round(Math.max(-8, Math.min(8, winBonus)));
       const gradeDelta = Math.round((s.gs/s.gp - evAvgGradeNum) / Math.max(evAvgGradeNum, 1) * 6);
       delta = Math.round(Math.max(-8, Math.min(8, statDelta * 0.75 + gradeDelta * 0.25)));
-    } else if(posChanged) {
-      // Position switch in default mode: grade-based (grade vs event avg + winBonus)
-      const gradeNum = s.gs / s.gp;
-      const pct = (gradeNum - evAvgGradeNum) / Math.max(evAvgGradeNum, 1);
-      delta = Math.round(Math.max(-8, Math.min(8, pct * 15 + winBonus)));
     } else {
-      // Default: position-neutral stat comparison vs league baseline
+      // SIMPLE mode (default): position-neutral, matches _computeChainedOvrMap exactly
       delta = calcDelta(evPerf, hist, winBonus);
+      // Special: chemik81pl — half penalty, double reward (max +8)
       if(s.name === 'chemik81pl' && delta !== null) {
         delta = delta < 0
           ? Math.round(delta / 2)
