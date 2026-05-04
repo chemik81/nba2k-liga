@@ -5076,8 +5076,6 @@ function renderEventRatings() {
     const best = (domPos && entries.find(e => e.pos === domPos)) || entries[0];
     histByName[name] = {ovr:best.ovr, ppg:best.ppg, rpg:best.rpg, apg:best.apg, spg:best.spg, bpg:best.bpg};
   });
-  // Chained OVR: preOvr for this event = postOvr of all previous events
-  const chainedPreOvr = _computeChainedOvrMap(ev.id);
   const getEvPos = s => {
     if(!s.positions.length) return null;
     const pm = {};
@@ -5130,7 +5128,7 @@ function renderEventRatings() {
     const posChanged = !!(hist && evPos && histPos && evPos !== histPos);
     const preOvr   = (_evRatingsByPos && posChanged)
       ? 70
-      : (chainedPreOvr[s.name] ?? hist?.ovr ?? 40);
+      : (hist?.ovr ?? 40);
     const evPerf   = perf(ppg, rpg, apg, spg, bpg);
     const wins     = s.wins;
     const losses   = gp - wins;
@@ -5259,9 +5257,8 @@ function renderEventRatings() {
             const absentPlayers = [...playedInAnyEv].filter(n => !playedInThisEv.has(n));
             if(!absentPlayers.length) return '';
 
-            // Get their chainedOvr (what they had going into THIS event, i.e. preOvr)
             const absentRows = absentPlayers.map(name => {
-              const preOvr = chainedPreOvr[name] ?? histByName[name]?.ovr ?? 70;
+              const preOvr = histByName[name]?.ovr ?? 70;
               const hist   = histByName[name];
               const pos    = getHistPos(name) || '—';
               return { name, preOvr, pos,
