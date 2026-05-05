@@ -1199,6 +1199,26 @@
   </div>
 </div>
 
+<!-- NOTIFY DRAFT MODAL -->
+<div class="modal-overlay" id="notify-draft-modal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:1300">
+  <div class="modal" style="max-width:460px">
+    <button class="modal-close" onclick="document.getElementById('notify-draft-modal').classList.remove('open')">&#x2715;</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;letter-spacing:2px;margin-bottom:1rem">📨 POWIADOMIENIE O EVENCIE</div>
+    <input type="hidden" id="notify-event-id">
+    <div style="font-size:.75rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.35rem">Podgląd wiadomości DM</div>
+    <div id="notify-preview" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.85rem;font-size:.85rem;line-height:1.6;white-space:pre-wrap;margin-bottom:1rem;color:var(--text)"></div>
+    <div style="font-size:.75rem;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:.35rem">Własna wiadomość (opcjonalnie)</div>
+    <textarea id="notify-custom-msg" placeholder="Zostaw puste aby użyć domyślnej wiadomości..."
+      style="width:100%;min-height:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit;font-size:.85rem;resize:vertical;box-sizing:border-box;margin-bottom:1rem"
+      oninput="updateNotifyPreview()"></textarea>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:1rem">Bot wyśle DM do wszystkich memberów serwera. Osoby z wyłączonymi DM-ami zostaną pominięte.</div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="sendDraftNotification()">📨 Wyślij do wszystkich</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('notify-draft-modal').classList.remove('open')">Anuluj</button>
+    </div>
+  </div>
+</div>
+
 <!-- DELETE CONFIRM MODAL -->
 <div class="modal-overlay" id="delete-modal">
   <div class="modal" style="max-width:400px;text-align:center">
@@ -6007,6 +6027,15 @@ function renderEventDetailTab(id, tab, sortCol, sortDir) {
               <button onclick="document.getElementById('event-detail-modal').classList.remove('open');openDraftSetup('${id}')" class="btn btn-primary" style="font-size:1rem;padding:.8rem 1.75rem">⚙️ Setup Draftu</button>
             `}
           </div>
+        </div>` : ''}
+
+      ${isAdmin ? `
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;letter-spacing:1px;margin-bottom:.5rem">🔔 POWIADOMIENIA DISCORD</div>
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem">Wyślij DM do wszystkich memberów serwera z informacją o tym evencie.</div>
+          <button onclick="openNotifyModal('${id}')" class="btn btn-ghost" style="width:100%;justify-content:center;gap:.5rem">
+            📨 Wyślij powiadomienie o evencie
+          </button>
         </div>` : ''}`;
   }
 
@@ -7017,6 +7046,61 @@ function openEventMatchDetail(eventId, matchIdx) {
     <div id="ev-tab-t1" class="tab-content active">${buildPlayerTable(m.team1?.players||[], m.team1?.name||'')}</div>
     <div id="ev-tab-t2" class="tab-content">${buildPlayerTable(m.team2?.players||[], m.team2?.name||'')}</div>`;
   document.getElementById('match-modal').classList.add('open');
+}
+
+function openNotifyModal(eventId) {
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  document.getElementById('notify-event-id').value = eventId;
+  document.getElementById('notify-custom-msg').value = '';
+  updateNotifyPreview();
+  document.getElementById('notify-draft-modal').classList.add('open');
+}
+
+function updateNotifyPreview() {
+  const eventId = document.getElementById('notify-event-id').value;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev) return;
+  const custom = document.getElementById('notify-custom-msg').value.trim();
+  const dateStr = ev.date ? new Date(ev.date).toLocaleDateString('pl-PL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '—';
+  const signupUrl = window.location.href.split('?')[0];
+  const defaultMsg =
+    `🏀 **${ev.title}**\n\n` +
+    `📅 Data: **${dateStr}**\n` +
+    `${ev.description ? '📝 ' + ev.description + '\n' : ''}` +
+    `\nZapraszamy do zapisów!\n🔗 ${signupUrl}`;
+  document.getElementById('notify-preview').textContent = custom || defaultMsg;
+}
+
+async function sendDraftNotification() {
+  const eventId = document.getElementById('notify-event-id').value;
+  const ev = events.find(e => e.id === eventId);
+  if(!ev || !workerUrl) return;
+  const custom = document.getElementById('notify-custom-msg').value.trim();
+  const dateStr = ev.date ? new Date(ev.date).toLocaleDateString('pl-PL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '—';
+  const signupUrl = window.location.href.split('?')[0];
+  const defaultMsg =
+    `🏀 **${ev.title}**\n\n` +
+    `📅 Data: **${dateStr}**\n` +
+    `${ev.description ? '📝 ' + ev.description + '\n' : ''}` +
+    `\nZapraszamy do zapisów!\n🔗 ${signupUrl}`;
+  const message = custom || defaultMsg;
+
+  document.getElementById('notify-draft-modal').classList.remove('open');
+  showToast('⏳ Wysyłanie powiadomień...', 'info');
+
+  try {
+    const res = await fetch(workerUrl.replace(/\/+$/, '') + '/notify-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, title: ev.title, date: dateStr, message })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.error || res.status);
+    showToast(`✅ Powiadomienia wysłane (${data.sent ?? '?'} DM)`, 'success');
+  } catch(e) {
+    showToast('❌ Błąd wysyłania: ' + e.message, 'error');
+  }
 }
 
 async function addPlayerManually(eventId) {
