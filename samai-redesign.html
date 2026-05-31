@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAMAI – Studia Antiquitatis et Medii Aevi Incohantis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --parchment: #f5efe0;
+    --parchment-dark: #e8dfc8;
+    --ink: #1a1408;
+    --ink-light: #3d3420;
+    --sepia: #7a5c2e;
+    --sepia-light: #a07840;
+    --red-accent: #8b1a1a;
+    --gold: #c8972a;
+    --gold-light: #e0b94a;
+    --border: rgba(122, 92, 46, 0.3);
+    --shadow: rgba(26, 20, 8, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background-color: var(--parchment);
+    color: var(--ink);
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* Texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.5;
+  }
+
+  /* === TOP BAR === */
+  .topbar {
+    background: var(--ink);
+    color: var(--parchment-dark);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 8px 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--sepia);
+  }
+  .topbar a {
+    color: var(--sepia-light);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .topbar a:hover { color: var(--gold-light); }
+  .topbar-links { display: flex; gap: 24px; }
+
+  /* === HEADER === */
+  header {
+    background: var(--ink);
+    position: relative;
+    overflow: hidden;
+    padding: 60px 48px 50px;
+    text-align: center;
+  }
+
+  header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(122, 92, 46, 0.12) 0%, transparent 60%),
+      radial-gradient(ellipse at 70% 50%, rgba(139, 26, 26, 0.08) 0%, transparent 60%);
+  }
+
+  /* Decorative horizontal rules */
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--gold), var(--sepia), var(--gold), transparent);
+  }
+
+  .header-ornament {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    color: var(--sepia-light);
+    font-size: 14px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease forwards 0.1s;
+  }
+
+  .site-title {
+    font-family: 'IM Fell English SC', serif;
+    font-size: clamp(2.4rem, 5vw, 4.2rem);
+    color: var(--parchment);
+    letter-spacing: 0.08em;
+    line-height: 1.1;
+    position: relative;
+    z-index: 1;
+    opacity: 0;
+    animation: fadeUp 0.9s ease forwards 0.2s;
+  }
+
+  .site-title span {
+    color: var(--gold);
+  }
+
+  .site-subtitle {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 1.15rem;
+    color: var(--parchment-dark);
+    opacity: 0;
+    margin-top: 10px;
+    letter-spacing: 0.05em;
+    animation: fadeUp 1s ease forwards 0.35s;
+  }
+
+  .issn-badge {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 5px 20px;
+    border: 1px solid var(--sepia);
+    color: var(--sepia-light);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: fadeUp 1s ease forwards 0.5s;
+  }
+
+  /* === NAV === */
+  nav {
+    background: var(--parchment-dark);
+    border-bottom: 2px solid var(--sepia);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px var(--shadow);
+  }
+
+  .nav-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    align-items: stretch;
+    padding: 0 24px;
+  }
+
+  nav a {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    transition: all 0.25s;
+    position: relative;
+  }
+
+  nav a:hover {
+    color: var(--red-accent);
+    border-bottom-color: var(--red-accent);
+    background: rgba(139, 26, 26, 0.04);
+  }
+
+  nav a.active {
+    color: var(--red-accent);
+    border-bottom-color: var(--gold);
+  }
+
+  .nav-dropdown {
+    position: relative;
+  }
+
+  .nav-dropdown:hover .dropdown-menu {
+    display: block;
+  }
+
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 220px;
+    background: var(--parchment);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--gold);
+    box-shadow: 4px 4px 16px var(--shadow);
+    z-index: 200;
+  }
+
+  .dropdown-menu a {
+    display: block;
+    padding: 10px 20px;
+    font-size: 13px;
+    border-bottom: none;
+    border-left: 3px solid transparent;
+  }
+
+  .dropdown-menu a:hover {
+    border-left-color: var(--gold);
+    background: var(--parchment-dark);
+    border-bottom: none;
+  }
+
+  /* === MAIN === */
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* === HERO ANNOUNCEMENT === */
+  .announcement {
+    margin: 48px 0 0;
+    padding: 28px 40px;
+    background: var(--ink);
+    color: var(--parchment);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    animation: fadeUp 0.8s ease forwards 0.6s;
+    opacity: 0;
+  }
+
+  .announcement::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--gold), var(--red-accent));
+  }
+
+  .announcement-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 4px;
+  }
+
+  .announcement-title {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 1.4rem;
+    color: var(--parchment);
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 10px 28px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: all 0.25s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .btn-gold {
+    background: var(--gold);
+    color: var(--ink);
+    border: 1px solid var(--gold);
+  }
+  .btn-gold:hover {
+    background: var(--gold-light);
+    border-color: var(--gold-light);
+  }
+
+  .btn-outline {
+    border: 1px solid var(--sepia);
+    color: var(--sepia);
+    background: transparent;
+  }
+  .btn-outline:hover {
+    background: var(--sepia);
+    color: var(--parchment);
+  }
+
+  /* === SECTION DIVIDER === */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 56px 0 32px;
+  }
+
+  .section-divider h2 {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 1.5rem;
+    color: var(--ink-light);
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--sepia), transparent);
+  }
+
+  .section-divider::before {
+    content: '✦';
+    color: var(--gold);
+    font-size: 12px;
+    order: -1;
+  }
+
+  /* === ABOUT GRID === */
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    animation: fadeUp 0.8s ease forwards 0.2s;
+    opacity: 0;
+  }
+
+  .about-card {
+    padding: 36px 32px;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  .about-card:last-child { border-right: none; }
+
+  .about-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), var(--sepia));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+  }
+
+  .about-card:hover::before { transform: scaleX(1); }
+
+  .about-card-icon {
+    font-size: 2rem;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .about-card h3 {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 1.05rem;
+    color: var(--ink);
+    margin-bottom: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  .about-card p {
+    font-size: 16px;
+    color: var(--ink-light);
+    line-height: 1.65;
+  }
+
+  .about-card blockquote {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-left: 3px solid var(--gold);
+    background: rgba(200, 151, 42, 0.06);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--sepia);
+  }
+
+  /* === VOLUMES GRID === */
+  .volumes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    animation: fadeUp 0.8s ease forwards 0.2s;
+    opacity: 0;
+  }
+
+  .volume-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 12px;
+    border: 1px solid var(--border);
+    text-decoration: none;
+    color: var(--ink);
+    background: var(--parchment);
+    transition: all 0.25s;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .volume-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+    z-index: 0;
+  }
+
+  .volume-card:hover::before { transform: translateY(0); }
+
+  .volume-card:hover .vol-roman,
+  .volume-card:hover .vol-year {
+    color: var(--parchment);
+    position: relative;
+    z-index: 1;
+  }
+
+  .volume-card:hover .vol-label {
+    color: var(--gold);
+    position: relative;
+    z-index: 1;
+  }
+
+  .vol-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--sepia-light);
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
+    transition: color 0.3s;
+  }
+
+  .vol-roman {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 1.6rem;
+    color: var(--ink);
+    line-height: 1;
+    position: relative;
+    z-index: 1;
+    transition: color 0.3s;
+  }
+
+  .vol-year {
+    font-family: 'Crimson Pro', serif;
+    font-size: 13px;
+    color: var(--sepia);
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+    transition: color 0.3s;
+  }
+
+  .volume-card.new-issue {
+    border-color: var(--gold);
+    background: linear-gradient(135deg, var(--parchment) 0%, rgba(200, 151, 42, 0.08) 100%);
+  }
+
+  .new-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--red-accent);
+    color: white;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    font-family: 'Cormorant Garamond', serif;
+    z-index: 2;
+  }
+
+  /* === QUICK LINKS / CARDS === */
+  .cards-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    animation: fadeUp 0.8s ease forwards 0.2s;
+    opacity: 0;
+  }
+
+  .info-card {
+    padding: 28px 28px;
+    border: 1px solid var(--border);
+    background: var(--parchment);
+    text-decoration: none;
+    color: var(--ink);
+    display: block;
+    transition: all 0.25s;
+    position: relative;
+  }
+
+  .info-card:hover {
+    border-color: var(--gold);
+    box-shadow: 0 4px 20px var(--shadow);
+    transform: translateY(-2px);
+  }
+
+  .info-card-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .info-card-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .info-card h3 {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 1.15rem;
+    margin-bottom: 10px;
+    letter-spacing: 0.04em;
+  }
+
+  .info-card p {
+    font-size: 15px;
+    color: var(--ink-light);
+    line-height: 1.6;
+  }
+
+  /* === INDEXING STRIP === */
+  .indexing-strip {
+    margin: 56px 0;
+    padding: 28px 40px;
+    background: var(--parchment-dark);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .indexing-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--sepia);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .indexing-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .index-tags {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .index-tag {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: var(--ink-light);
+    padding: 4px 14px;
+    border: 1px solid var(--border);
+    background: var(--parchment);
+  }
+
+  .points-badge {
+    margin-left: auto;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .points-number {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 2.5rem;
+    color: var(--red-accent);
+    line-height: 1;
+    display: block;
+  }
+
+  .points-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--sepia);
+  }
+
+  /* === FOOTER === */
+  footer {
+    background: var(--ink);
+    color: var(--parchment-dark);
+    padding: 56px 48px 32px;
+    margin-top: 72px;
+    position: relative;
+  }
+
+  footer::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--red-accent), var(--gold), var(--sepia));
+  }
+
+  .footer-grid {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 48px;
+  }
+
+  .footer-brand {
+    font-family: 'IM Fell English SC', serif;
+    font-size: 1.4rem;
+    color: var(--parchment);
+    margin-bottom: 12px;
+  }
+
+  .footer-brand span { color: var(--gold); }
+
+  .footer-desc {
+    font-size: 14px;
+    color: rgba(245, 239, 224, 0.55);
+    line-height: 1.7;
+    font-style: italic;
+  }
+
+  .footer-col h4 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(200, 151, 42, 0.2);
+  }
+
+  .footer-col ul {
+    list-style: none;
+  }
+
+  .footer-col li {
+    margin-bottom: 8px;
+  }
+
+  .footer-col a {
+    font-size: 14px;
+    color: rgba(245, 239, 224, 0.6);
+    text-decoration: none;
+    transition: color 0.2s;
+    font-family: 'Crimson Pro', serif;
+  }
+
+  .footer-col a:hover { color: var(--parchment); }
+
+  .footer-contact p {
+    font-size: 14px;
+    color: rgba(245, 239, 224, 0.6);
+    margin-bottom: 6px;
+    font-family: 'Crimson Pro', serif;
+  }
+
+  .footer-contact a {
+    color: var(--gold);
+    text-decoration: none;
+  }
+
+  .footer-bottom {
+    max-width: 1100px;
+    margin: 40px auto 0;
+    padding-top: 20px;
+    border-top: 1px solid rgba(122, 92, 46, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: rgba(245, 239, 224, 0.35);
+    font-family: 'Cormorant Garamond', serif;
+    letter-spacing: 0.08em;
+  }
+
+  /* === ANIMATIONS === */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* === RESPONSIVE === */
+  @media (max-width: 900px) {
+    .topbar { padding: 8px 20px; }
+    header { padding: 40px 20px 36px; }
+    main { padding: 0 16px; }
+    .about-grid { grid-template-columns: 1fr; }
+    .about-card { border-right: none; border-bottom: 1px solid var(--border); }
+    .about-card:last-child { border-bottom: none; }
+    .cards-row { grid-template-columns: 1fr; }
+    .footer-grid { grid-template-columns: 1fr; }
+    .indexing-strip { flex-direction: column; align-items: flex-start; }
+    .points-badge { margin-left: 0; }
+    nav a { padding: 14px 12px; font-size: 12px; }
+    .announcement { flex-direction: column; align-items: flex-start; }
+  }
+
+  @media (max-width: 600px) {
+    .topbar-links { gap: 12px; }
+    .volumes-grid { grid-template-columns: repeat(3, 1fr); }
+    .site-title { font-size: 2rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <span>ISSN 2544-4379</span>
+  <div class="topbar-links">
+    <a href="#">English</a>
+    <a href="#">Polityka prywatności</a>
+    <a href="#">Recenzenci</a>
+    <a href="#">Punktacja i indeksacja</a>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-ornament">Instytut Historyczny · Universitas Wratislaviensis · MMXVI</div>
+  <h1 class="site-title"><span>S</span>AMAI</h1>
+  <p class="site-subtitle">Studia Antiquitatis et Medii Aevi Incohantis</p>
+  <div class="issn-badge">Czasopismo naukowe online · Nr ISSN 2544-4379</div>
+</header>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="active">Strona główna</a>
+    <div class="nav-dropdown">
+      <a href="#">Roczniki SAMAI ▾</a>
+      <div class="dropdown-menu">
+        <a href="#">SAMAI I 2016</a>
+        <a href="#">SAMAI II 2017</a>
+        <a href="#">SAMAI III 2018</a>
+        <a href="#">SAMAI IV 2019</a>
+        <a href="#">SAMAI V 2020</a>
+        <a href="#">SAMAI VI 2021</a>
+        <a href="#">SAMAI VII 2022</a>
+        <a href="#">SAMAI VIII 2023</a>
+        <a href="#">SAMAI IX 2024</a>
+        <a href="#" style="color:var(--red-accent);font-weight:600;">SAMAI X 2025 ✦ nowy</a>
+        <a href="#">SAMAI Suplement 1 2023</a>
+      </div>
+    </div>
+    <a href="#">Zasady wydawnicze</a>
+    <a href="#">Redakcja i rada naukowa</a>
+    <a href="#">Jubileusz prof. Łosia</a>
+    <a href="#">Konferencja KHS PTH 2021</a>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main>
+
+  <!-- ANNOUNCEMENT -->
+  <div class="announcement">
+    <div>
+      <div class="announcement-label">✦ Właśnie wydane</div>
+      <div class="announcement-title">SAMAI X · 2025 – Jubileuszowy numer dziesiąty</div>
+    </div>
+    <a href="#" class="btn btn-gold">Czytaj teraz</a>
+  </div>
+
+  <!-- ABOUT -->
+  <div class="section-divider fade-in"><h2>O Czasopiśmie</h2></div>
+
+  <div class="about-grid fade-in">
+    <div class="about-card">
+      <span class="about-card-icon">🏛</span>
+      <h3>Kim jesteśmy?</h3>
+      <p><strong>SAMAI</strong> jest polskim czasopismem naukowym on-line poświęconym dziejom <strong>starożytności i wczesnego średniowiecza</strong>, symbolicznie wskazując panowanie Karola Wielkiego jako swój <em>terminus ad quem</em>. Wydawane przez Instytut Historyczny Uniwersytetu Wrocławskiego, nawiązuje do tradycji serii <em>Antiquitas</em>.</p>
+      <blockquote>Zasadniczym profilem SAMAI jest historia starożytna — przede wszystkim Grecji i Rzymu.</blockquote>
+    </div>
+
+    <div class="about-card">
+      <span class="about-card-icon">📜</span>
+      <h3>Nasz cel</h3>
+      <p>Przyjmujemy <strong>oryginalne artykuły naukowe</strong> i recenzje w językach polskim i angielskim. Zapraszamy zwłaszcza <strong>młodych badaczy</strong>, dla których SAMAI może być pierwszym poważnym forum wypowiedzi naukowej — poddanej rzetelnej anonimowej recenzji.</p>
+      <blockquote>Przedmiotem oceny jest wyłącznie jakość złożonego artykułu, nie formalna afiliacja autora.</blockquote>
+    </div>
+
+    <div class="about-card">
+      <span class="about-card-icon">🔓</span>
+      <h3>Otwarty dostęp</h3>
+      <p>Wszystkie teksty publikowane są w <strong>otwartym dostępie</strong>, bez opłat i konieczności logowania. SAMAI udostępnia artykuły zgodnie z licencją <strong>Creative Commons CC BY-ND 4.0</strong>.</p>
+      <p style="margin-top:16px;font-size:15px;color:var(--ink-light);">Wszystkie teksty przechodzą <strong>double-blind peer review</strong> przez specjalistów z wielu ośrodków naukowych: historyków, filologów i archeologów.</p>
+    </div>
+  </div>
+
+  <!-- INDEXING -->
+  <div class="indexing-strip fade-in">
+    <span class="indexing-label">Indeksowanie i punktacja</span>
+    <div class="indexing-divider"></div>
+    <div class="index-tags">
+      <span class="index-tag">ERIH PLUS</span>
+      <span class="index-tag">DOAJ</span>
+      <span class="index-tag">Index Copernicus</span>
+      <span class="index-tag">CEEOL</span>
+      <span class="index-tag">CEJSH</span>
+    </div>
+    <div class="points-badge">
+      <span class="points-number">20</span>
+      <span class="points-label">pkt MEiN 2024</span>
+    </div>
+  </div>
+
+  <!-- VOLUMES -->
+  <div class="section-divider fade-in"><h2>Roczniki SAMAI</h2></div>
+
+  <div class="volumes-grid fade-in">
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">I</span>
+      <span class="vol-year">2016</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">II</span>
+      <span class="vol-year">2017</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">III</span>
+      <span class="vol-year">2018</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">IV</span>
+      <span class="vol-year">2019</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">V</span>
+      <span class="vol-year">2020</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">VI</span>
+      <span class="vol-year">2021</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">VII</span>
+      <span class="vol-year">2022</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">VIII</span>
+      <span class="vol-year">2023</span>
+    </a>
+    <a href="#" class="volume-card">
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">IX</span>
+      <span class="vol-year">2024</span>
+    </a>
+    <a href="#" class="volume-card new-issue">
+      <span class="new-badge">Nowy</span>
+      <span class="vol-label">SAMAI</span>
+      <span class="vol-roman">X</span>
+      <span class="vol-year">2025</span>
+    </a>
+    <a href="#" class="volume-card" style="grid-column: span 2; flex-direction:row; justify-content:center; gap:12px;">
+      <span class="vol-label" style="writing-mode:vertical-lr;transform:rotate(180deg);margin-right:0;">SAMAI</span>
+      <div style="text-align:center;">
+        <span class="vol-roman" style="font-size:1.1rem;">Suplement I</span>
+        <span class="vol-year">2023</span>
+      </div>
+    </a>
+  </div>
+
+  <!-- QUICK LINKS -->
+  <div class="section-divider fade-in"><h2>Dla autorów i czytelników</h2></div>
+
+  <div class="cards-row fade-in">
+    <a href="#" class="info-card">
+      <div class="info-card-label">Redakcja</div>
+      <h3>Zespół redakcyjny</h3>
+      <p>Poznaj redaktorów i radę naukową SAMAI. Specjaliści z wielu ośrodków akademickich w Polsce i za granicą.</p>
+    </a>
+    <a href="#" class="info-card">
+      <div class="info-card-label">Autorzy</div>
+      <h3>Zasady wydawnicze</h3>
+      <p>Szczegółowe wytyczne dotyczące składania artykułów, formatowania przypisów i wymagań językowych.</p>
+    </a>
+    <a href="#" class="info-card">
+      <div class="info-card-label">Recenzenci</div>
+      <h3>Recenzenci SAMAI</h3>
+      <p>Lista współpracujących recenzentów — historyków, filologów i archeologów, specjalistów w zakresie antyku i średniowiecza.</p>
+    </a>
+  </div>
+
+</main>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand"><span>S</span>AMAI</div>
+      <p class="footer-desc">Studia Antiquitatis et Medii Aevi Incohantis.<br>Czasopismo naukowe online poświęcone starożytności i wczesnemu średniowieczu.</p>
+      <p class="footer-desc" style="margin-top:12px;">ISSN 2544-4379 &nbsp;·&nbsp; CC BY-ND 4.0</p>
+    </div>
+
+    <div class="footer-col">
+      <h4>Roczniki</h4>
+      <ul>
+        <li><a href="#">SAMAI I 2016</a></li>
+        <li><a href="#">SAMAI II 2017</a></li>
+        <li><a href="#">SAMAI III 2018</a></li>
+        <li><a href="#">SAMAI IV 2019</a></li>
+        <li><a href="#">SAMAI V 2020</a></li>
+        <li><a href="#">SAMAI VI–X (2021–2025)</a></li>
+        <li><a href="#">Suplement 1 2023</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col footer-contact">
+      <h4>Kontakt</h4>
+      <p>Instytut Historyczny UWr<br>ul. Szewska 49<br>50-139 Wrocław</p>
+      <p style="margin-top:12px;">e-mail: <a href="mailto:samai@uwr.edu.pl">samai@uwr.edu.pl</a></p>
+      <p>tel: 798 648 465</p>
+      <p>tel: 713 752 530</p>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <span>© SAMAI – Instytut Historyczny Uniwersytetu Wrocławskiego</span>
+    <span>Produkcja: KOREKTURA</span>
+  </div>
+</footer>
+
+<script>
+  // Scroll-triggered fade-in
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
