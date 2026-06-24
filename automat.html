@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automatyzacja InsERT nexo — niech program pracuje za Ciebie</title>
+<style>
+:root{
+  --ink:#0E1B12;
+  --paper:#F7F8F3;
+  --paper-dim:#EFF1E8;
+  --line:#D8DCCB;
+  --moss:#27442F;
+  --moss-deep:#162B1B;
+  --signal:#B6FF3C;
+  --signal-deep:#7FCB12;
+  --amber:#FF9C3C;
+  --wire:#9AA68E;
+  --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+
+html{scroll-behavior:smooth;}
+
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  line-height:1.5;
+  overflow-x:hidden;
+}
+
+::selection{background:var(--signal);color:var(--moss-deep);}
+
+a{color:inherit;}
+
+.wrap{
+  max-width:1180px;
+  margin:0 auto;
+  padding:0 32px;
+}
+
+/* ===================== TOPBAR ===================== */
+
+.topbar{
+  position:sticky;
+  top:0;
+  z-index:50;
+  background:rgba(247,248,243,0.88);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+
+.topbar-inner{
+  max-width:1180px;
+  margin:0 auto;
+  padding:16px 32px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-family:var(--mono);
+  font-weight:600;
+  font-size:14px;
+  letter-spacing:0.02em;
+  white-space:nowrap;
+}
+
+.brand-dot{
+  width:9px;height:9px;border-radius:50%;
+  background:var(--signal);
+  box-shadow:0 0 0 3px rgba(182,255,60,0.25);
+  animation:pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 0 3px rgba(182,255,60,0.25);}
+  50%{box-shadow:0 0 0 7px rgba(182,255,60,0.12);}
+}
+
+.nav{
+  display:flex;
+  gap:28px;
+  font-size:14px;
+  font-weight:500;
+}
+
+.nav a{
+  text-decoration:none;
+  color:var(--moss);
+  position:relative;
+  padding-bottom:2px;
+}
+.nav a:hover{color:var(--ink);}
+
+.topbar-cta{
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:600;
+  background:var(--moss-deep);
+  color:var(--paper);
+  padding:9px 16px;
+  border-radius:3px;
+  text-decoration:none;
+  white-space:nowrap;
+}
+
+@media (max-width:780px){
+  .nav{display:none;}
+}
+
+/* ===================== HERO ===================== */
+
+.hero{
+  position:relative;
+  padding:96px 0 64px;
+  border-bottom:1px solid var(--line);
+  overflow:hidden;
+}
+
+.hero-grid{
+  position:absolute;
+  inset:0;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size:64px 64px;
+  opacity:0.35;
+  mask-image:linear-gradient(to bottom, black, transparent 85%);
+}
+
+.hero-inner{
+  position:relative;
+  display:grid;
+  grid-template-columns:1.05fr 0.95fr;
+  gap:56px;
+  align-items:center;
+}
+
+@media (max-width:920px){
+  .hero-inner{grid-template-columns:1fr;}
+}
+
+.eyebrow{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-family:var(--mono);
+  font-size:12.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--moss);
+  background:var(--paper-dim);
+  border:1px solid var(--line);
+  padding:6px 12px;
+  border-radius:100px;
+  margin-bottom:24px;
+}
+
+.hero h1{
+  font-family:var(--serif);
+  font-weight:600;
+  font-size:clamp(2.4rem, 4.6vw, 3.8rem);
+  line-height:1.04;
+  letter-spacing:-0.01em;
+  margin-bottom:24px;
+}
+
+.hero h1 em{
+  font-style:normal;
+  color:var(--moss);
+  position:relative;
+  white-space:nowrap;
+}
+.hero h1 .hl{
+  background:linear-gradient(180deg, transparent 62%, var(--signal) 62%);
+}
+
+.hero p.lead{
+  font-size:1.13rem;
+  color:#3A4339;
+  max-width:520px;
+  margin-bottom:32px;
+}
+
+.hero-ctas{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-bottom:40px;
+}
+
+.btn{
+  font-family:var(--mono);
+  font-weight:600;
+  font-size:14px;
+  padding:13px 22px;
+  border-radius:3px;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  transition:transform 0.15s ease;
+}
+.btn:hover{transform:translateY(-1px);}
+.btn-primary{
+  background:var(--moss-deep);
+  color:var(--paper);
+}
+.btn-ghost{
+  background:transparent;
+  color:var(--ink);
+  border:1px solid var(--ink);
+}
+
+.hero-stats{
+  display:flex;
+  gap:32px;
+  flex-wrap:wrap;
+}
+.stat{
+  font-family:var(--mono);
+}
+.stat-num{
+  font-size:1.5rem;
+  font-weight:600;
+  color:var(--moss-deep);
+}
+.stat-label{
+  font-size:12.5px;
+  color:#5C6657;
+  letter-spacing:0.02em;
+}
+
+/* ----- hero diagram (signature element) ----- */
+
+.diagram-card{
+  position:relative;
+  background:var(--moss-deep);
+  border-radius:10px;
+  padding:28px 24px 24px;
+  color:var(--paper);
+  box-shadow:0 30px 60px -20px rgba(14,27,18,0.35);
+}
+
+.diagram-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:18px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:#9FB89A;
+  letter-spacing:0.04em;
+}
+
+.diagram-head .live{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--signal);
+}
+.diagram-head .live::before{
+  content:'';
+  width:6px;height:6px;border-radius:50%;
+  background:var(--signal);
+  animation:pulse 1.8s ease-in-out infinite;
+}
+
+svg.flow{width:100%;height:auto;display:block;}
+
+.flow-node-label{
+  font-family:var(--mono);
+  font-size:11px;
+  fill:#C9D6C4;
+}
+.flow-node-title{
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:600;
+  fill:var(--paper);
+}
+
+.diagram-caption{
+  margin-top:16px;
+  font-size:12.5px;
+  color:#9FB89A;
+  font-family:var(--mono);
+  line-height:1.6;
+}
+.diagram-caption b{color:var(--signal);}
+
+/* ===================== SECTION GENERIC ===================== */
+
+section{
+  padding:88px 0;
+}
+.section-border{
+  border-bottom:1px solid var(--line);
+}
+
+.section-head{
+  max-width:680px;
+  margin-bottom:56px;
+}
+
+.section-kicker{
+  font-family:var(--mono);
+  font-size:12.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--moss);
+  margin-bottom:14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.section-kicker::before{
+  content:'';
+  width:18px;height:1px;
+  background:var(--moss);
+}
+
+.section-head h2{
+  font-family:var(--serif);
+  font-weight:600;
+  font-size:clamp(1.9rem, 3vw, 2.6rem);
+  line-height:1.1;
+  margin-bottom:16px;
+  letter-spacing:-0.01em;
+}
+
+.section-head p{
+  color:#3A4339;
+  font-size:1.05rem;
+}
+
+/* ===================== HOW IT WORKS ===================== */
+
+.how-grid{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:1px;
+  background:var(--line);
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+}
+
+@media (max-width:900px){
+  .how-grid{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:560px){
+  .how-grid{grid-template-columns:1fr;}
+}
+
+.how-step{
+  background:var(--paper);
+  padding:32px 26px;
+  position:relative;
+}
+
+.how-step .step-no{
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--wire);
+  margin-bottom:24px;
+  display:block;
+}
+
+.how-step h3{
+  font-family:var(--sans);
+  font-size:1.05rem;
+  font-weight:700;
+  margin-bottom:10px;
+}
+.how-step p{
+  font-size:0.92rem;
+  color:#4A5446;
+}
+
+.how-step.is-trigger{background:var(--paper-dim);}
+.how-step.is-action{
+  background:var(--moss-deep);
+  color:var(--paper);
+}
+.how-step.is-action .step-no{color:#7E9A78;}
+.how-step.is-action p{color:#C9D6C4;}
+
+/* ===================== MODULE CARDS / EXAMPLES ===================== */
+
+.module-tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:40px;
+}
+
+.tab-btn{
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:600;
+  padding:10px 18px;
+  border-radius:100px;
+  border:1px solid var(--line);
+  background:var(--paper);
+  color:var(--moss);
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.tab-btn:hover{border-color:var(--moss);}
+.tab-btn.active{
+  background:var(--moss-deep);
+  color:var(--paper);
+  border-color:var(--moss-deep);
+}
+
+.module-panels{position:relative;}
+.module-panel{display:none;}
+.module-panel.active{display:block; animation:fadein .25s ease;}
+
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+.module-intro{
+  display:flex;
+  gap:20px;
+  align-items:flex-start;
+  margin-bottom:32px;
+  padding-bottom:28px;
+  border-bottom:1px dashed var(--line);
+}
+.module-icon{
+  width:46px;height:46px;
+  flex-shrink:0;
+  border-radius:8px;
+  background:var(--moss-deep);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.module-icon svg{width:22px;height:22px;stroke:var(--signal);}
+
+.module-intro h3{
+  font-family:var(--serif);
+  font-size:1.5rem;
+  font-weight:600;
+  margin-bottom:6px;
+}
+.module-intro p{
+  color:#4A5446;
+  font-size:0.97rem;
+  max-width:600px;
+}
+
+.example-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:14px;
+}
+@media (max-width:760px){
+  .example-grid{grid-template-columns:1fr;}
+}
+
+.example-card{
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:18px 20px;
+  background:var(--paper);
+  display:flex;
+  gap:14px;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.example-card:hover{
+  border-color:var(--moss);
+  box-shadow:0 6px 18px -8px rgba(14,27,18,0.18);
+}
+
+.example-tag{
+  flex-shrink:0;
+  width:34px;height:34px;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--paper-dim);
+  border:1px solid var(--line);
+}
+.example-tag svg{width:16px;height:16px;stroke:var(--moss-deep);}
+
+.example-body p.ex-title{
+  font-weight:600;
+  font-size:0.93rem;
+  margin-bottom:4px;
+  line-height:1.35;
+}
+.example-body p.ex-flow{
+  font-family:var(--mono);
+  font-size:11.5px;
+  color:#6B7566;
+  letter-spacing:0.01em;
+}
+.example-body p.ex-flow .arrow{color:var(--signal-deep); padding:0 3px;}
+
+/* ===================== USE-CASE BANNER ===================== */
+
+.banner{
+  background:var(--moss-deep);
+  color:var(--paper);
+  border-radius:14px;
+  padding:48px 44px;
+  display:grid;
+  grid-template-columns:1.1fr 0.9fr;
+  gap:40px;
+  align-items:center;
+}
+@media (max-width:860px){
+  .banner{grid-template-columns:1fr; padding:36px 26px;}
+}
+
+.banner h3{
+  font-family:var(--serif);
+  font-size:1.7rem;
+  font-weight:600;
+  margin-bottom:14px;
+  line-height:1.2;
+}
+.banner p{
+  color:#C9D6C4;
+  font-size:0.98rem;
+}
+
+.banner-list{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.banner-item{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  font-size:0.92rem;
+  color:#E5ECE2;
+}
+.banner-item .chk{
+  flex-shrink:0;
+  width:20px;height:20px;
+  border-radius:50%;
+  background:var(--signal);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:1px;
+}
+.banner-item .chk svg{width:11px;height:11px;stroke:var(--moss-deep);stroke-width:3;}
+
+/* ===================== TIMELINE / WHAT YOU CAN DO ===================== */
+
+.benefits{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:24px;
+}
+@media (max-width:860px){
+  .benefits{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:560px){
+  .benefits{grid-template-columns:1fr;}
+}
+
+.benefit-card{
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:26px 24px;
+  background:var(--paper);
+}
+.benefit-num{
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--wire);
+  display:block;
+  margin-bottom:18px;
+}
+.benefit-card h4{
+  font-size:1.02rem;
+  font-weight:700;
+  margin-bottom:8px;
+}
+.benefit-card p{
+  font-size:0.9rem;
+  color:#4A5446;
+}
+
+/* ===================== PRICING ===================== */
+
+.pricing-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+}
+@media (max-width:860px){
+  .pricing-grid{grid-template-columns:1fr;}
+}
+
+.price-card{
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:32px 28px;
+  background:var(--paper);
+  position:relative;
+}
+.price-card.featured{
+  border-color:var(--moss-deep);
+  background:var(--paper-dim);
+}
+.price-card.featured::before{
+  content:'1 miesiąc gratis';
+  position:absolute;
+  top:-12px;
+  left:28px;
+  background:var(--signal);
+  color:var(--moss-deep);
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:700;
+  padding:4px 10px;
+  border-radius:100px;
+}
+.price-period{
+  font-family:var(--mono);
+  font-size:13px;
+  color:#5C6657;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  margin-bottom:14px;
+}
+.price-amount{
+  font-family:var(--serif);
+  font-size:2.6rem;
+  font-weight:600;
+  margin-bottom:4px;
+}
+.price-amount sup{font-size:1rem; font-weight:500;}
+.price-note{
+  font-size:0.82rem;
+  color:#6B7566;
+  margin-bottom:20px;
+}
+.price-feature{
+  font-size:0.88rem;
+  color:#3A4339;
+  padding-top:14px;
+  border-top:1px dashed var(--line);
+}
+
+.price-fineprint{
+  font-size:0.8rem;
+  color:#6B7566;
+  margin-top:20px;
+  text-align:center;
+}
+
+/* ===================== FAQ ===================== */
+
+.faq-item{
+  border-bottom:1px solid var(--line);
+}
+.faq-q{
+  padding:22px 0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  cursor:pointer;
+  font-weight:600;
+  font-size:1rem;
+}
+.faq-q .plus{
+  font-family:var(--mono);
+  font-size:18px;
+  color:var(--moss);
+  transition:transform .2s ease;
+  flex-shrink:0;
+  margin-left:20px;
+}
+.faq-item.open .faq-q .plus{transform:rotate(45deg);}
+.faq-a{
+  max-height:0;
+  overflow:hidden;
+  transition:max-height .25s ease;
+  color:#4A5446;
+  font-size:0.94rem;
+}
+.faq-item.open .faq-a{max-height:220px;}
+.faq-a-inner{padding-bottom:22px; max-width:680px;}
+
+/* ===================== FINAL CTA ===================== */
+
+.final-cta{
+  text-align:center;
+  padding:96px 0;
+}
+.final-cta h2{
+  font-family:var(--serif);
+  font-size:clamp(2rem,4vw,3rem);
+  font-weight:600;
+  max-width:700px;
+  margin:0 auto 20px;
+  line-height:1.1;
+}
+.final-cta p{
+  color:#3A4339;
+  max-width:520px;
+  margin:0 auto 36px;
+  font-size:1.05rem;
+}
+.final-cta .hero-ctas{justify-content:center;}
+
+/* ===================== FOOTER ===================== */
+
+footer{
+  border-top:1px solid var(--line);
+  padding:36px 0;
+  font-family:var(--mono);
+  font-size:12.5px;
+  color:#6B7566;
+  display:flex;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:12px;
+}
+footer a{text-decoration:none;color:#6B7566;}
+footer a:hover{color:var(--moss-deep);}
+
+/* ===================== UTILS ===================== */
+
+.reveal{
+  opacity:0;
+  transform:translateY(16px);
+  transition:opacity .6s ease, transform .6s ease;
+}
+.reveal.in{opacity:1;transform:translateY(0);}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none !important; transition:none !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>MODUŁ AUTOMATYZACJA · INSERT NEXO</div>
+    <nav class="nav">
+      <a href="#jak-to-dziala">Jak to działa</a>
+      <a href="#przykady">Przykłady</a>
+      <a href="#korzysci">Korzyści</a>
+      <a href="#cennik">Cennik</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="topbar-cta" href="#cennik">Aktywuj moduł →</a>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="hero-grid"></div>
+  <div class="wrap hero-inner">
+    <div>
+      <div class="eyebrow">⚙ Dla Subiekta, Gestora, Gratyfikanta, Rachmistrza i Rewizora nexo</div>
+      <h1>Niech program <span class="hl">sam zareaguje</span>,<br>zanim Ty zdążysz <em>kliknąć</em>.</h1>
+      <p class="lead">Moduł Automatyzacja wykonuje powtarzalne czynności za Ciebie: wysyła SMS-y i maile, oznacza dokumenty flagami, generuje raporty i tworzy kolejne dokumenty — dokładnie wtedy, gdy spełnią się warunki, które Ty ustalisz.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#cennik">Sprawdź cennik modułu</a>
+        <a class="btn btn-ghost" href="#przykady">Zobacz 40+ przykładów</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="stat-num">5</div><div class="stat-label">programów linii nexo</div></div>
+        <div class="stat"><div class="stat-num">40+</div><div class="stat-label">gotowych scenariuszy</div></div>
+        <div class="stat"><div class="stat-num">29 zł</div><div class="stat-label">netto / miesiąc</div></div>
+      </div>
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-head">
+        <span>AUTOMAT_001 · zamówienie_zrealizowane</span>
+        <span class="live">aktywny</span>
+      </div>
+      <svg class="flow" viewBox="0 0 460 300" id="flow-svg">
+        <!-- connecting wires -->
+        <path d="M 70 60 L 70 130" stroke="#3C5444" stroke-width="2" fill="none" stroke-dasharray="4 4"/>
+        <path d="M 70 170 L 70 240" stroke="#3C5444" stroke-width="2" fill="none" stroke-dasharray="4 4"/>
+        <path id="wire1" d="M 70 60 L 70 130" stroke="var(--signal)" stroke-width="2" fill="none" stroke-dasharray="6 6" stroke-dashoffset="0" opacity="0"/>
+        <path id="wire2" d="M 70 170 L 70 240" stroke="var(--signal)" stroke-width="2" fill="none" stroke-dasharray="6 6" stroke-dashoffset="0" opacity="0"/>
+
+        <!-- node 1: trigger -->
+        <rect x="10" y="20" width="120" height="40" rx="6" fill="#1E3725" stroke="#3C5444"/>
+        <text x="70" y="36" text-anchor="middle" class="flow-node-label">ZDARZENIE</text>
+        <text x="70" y="51" text-anchor="middle" class="flow-node-title">Zamówienie zrealizowane</text>
+
+        <!-- node 2: condition -->
+        <rect x="10" y="130" width="120" height="40" rx="6" fill="#1E3725" stroke="#3C5444"/>
+        <text x="70" y="146" text-anchor="middle" class="flow-node-label">WARUNEK</text>
+        <text x="70" y="161" text-anchor="middle" class="flow-node-title">Wartość &gt; 0 zł</text>
+
+        <!-- node 3: action -->
+        <rect x="10" y="240" width="120" height="40" rx="6" fill="#274430" stroke="var(--signal-deep)"/>
+        <text x="70" y="256" text-anchor="middle" class="flow-node-label" fill="#9FE860">CZYNNOŚĆ</text>
+        <text x="70" y="271" text-anchor="middle" class="flow-node-title">Wyślij SMS klientowi</text>
+
+        <!-- right column: more examples, decorative -->
+        <g opacity="0.55">
+          <rect x="280" y="20" width="170" height="34" rx="6" fill="none" stroke="#2E4A37"/>
+          <text x="295" y="42" class="flow-node-label" font-size="10.5">e-mail · raport tygodniowy</text>
+
+          <rect x="280" y="68" width="170" height="34" rx="6" fill="none" stroke="#2E4A37"/>
+          <text x="295" y="90" class="flow-node-label" font-size="10.5">flaga · niski stan magazynu</text>
+
+          <rect x="280" y="116" width="170" height="34" rx="6" fill="none" stroke="#2E4A37"/>
+          <text x="295" y="138" class="flow-node-label" font-size="10.5">dokument · faktura z ZK</text>
+
+          <rect x="280" y="164" width="170" height="34" rx="6" fill="none" stroke="#2E4A37"/>
+          <text x="295" y="186" class="flow-node-label" font-size="10.5">działanie · nowe zlecenie</text>
+
+          <rect x="280" y="212" width="170" height="34" rx="6" fill="none" stroke="#2E4A37"/>
+          <text x="295" y="234" class="flow-node-label" font-size="10.5">powiadomienie · menedżer</text>
+
+          <rect x="280" y="260" width="170" height="34" rx="6" fill="none" stroke="#2E4A37"/>
+          <text x="295" y="282" class="flow-node-label" font-size="10.5">PIT-11 · koniec roku</text>
+        </g>
+      </svg>
+      <div class="diagram-caption">Tak działa każdy automat: <b>zdarzenie</b> w programie uruchamia sprawdzenie <b>warunku</b>, a gdy ten się potwierdzi — program sam wykonuje <b>czynność</b>.</div>
+    </div>
+  </div>
+</header>
+
+<section id="jak-to-dziala" class="section-border">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">Mechanika</div>
+      <h2>Cztery kroki, żadnego programowania</h2>
+      <p>Automat to reguła „jeśli–to”, którą definiujesz raz, a program wykonuje ją bez Twojego udziału — od tej pory i bez ograniczeń w czasie.</p>
+    </div>
+
+    <div class="how-grid">
+      <div class="how-step is-trigger">
+        <span class="step-no">01 — ZDARZENIE</span>
+        <h3>Znajdź czynność do zautomatyzowania</h3>
+        <p>Wskazujesz powtarzalną sytuację: nowy dokument, zmiana statusu zamówienia, zatwierdzenie listy płac, edycja umowy.</p>
+      </div>
+      <div class="how-step">
+        <span class="step-no">02 — WARUNEK</span>
+        <h3>Określ, kiedy automat ma zadziałać</h3>
+        <p>Dodajesz warunki — np. kategoria dokumentu, próg wartości, marża minimalna — i łączysz je wyrażeniami logicznymi.</p>
+      </div>
+      <div class="how-step">
+        <span class="step-no">03 — HARMONOGRAM</span>
+        <h3>Ustal moment uruchomienia</h3>
+        <p>Automat zadziała natychmiast po zapisaniu obiektu, o wybranej godzinie albo z opóźnieniem od spełnienia warunków.</p>
+      </div>
+      <div class="how-step is-action">
+        <span class="step-no">04 — CZYNNOŚĆ</span>
+        <h3>Program działa za Ciebie</h3>
+        <p>SMS, e-mail z załącznikiem, nowy dokument, flaga, raport własny zapisany na dysku — wszystko bez Twojej obsługi.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="przykady" class="section-border">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">Biblioteka scenariuszy</div>
+      <h2>Ponad 40 gotowych automatów — moduł po module</h2>
+      <p>Po aktywacji usługi te scenariusze są dostępne od ręki. Wystarczy uzupełnić treść maila lub SMS-a i włączyć automat.</p>
+    </div>
+
+    <div class="module-tabs" id="moduleTabs">
+      <button class="tab-btn active" data-target="panel-subiekt">Subiekt nexo</button>
+      <button class="tab-btn" data-target="panel-gestor">Gestor nexo</button>
+      <button class="tab-btn" data-target="panel-gratyfikant">Gratyfikant nexo</button>
+      <button class="tab-btn" data-target="panel-rewizor">Rachmistrz / Rewizor nexo</button>
+      <button class="tab-btn" data-target="panel-nexo">Cały system nexo</button>
+    </div>
+
+    <div class="module-panels">
+
+      <!-- SUBIEKT -->
+      <div class="module-panel active" id="panel-subiekt">
+        <div class="module-intro">
+          <div class="module-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          </div>
+          <div>
+            <h3>Subiekt nexo — sprzedaż i magazyn</h3>
+            <p>Automaty pilnują realizacji zamówień, stanów magazynowych, marży i poprawności dokumentów handlowych — i informują o tym właściwe osoby.</p>
+          </div>
+        </div>
+        <div class="example-grid">
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie SMS do klienta, gdy zamówienie zmieni status na „zrealizowane”</p>
+              <p class="ex-flow">zamówienie → zrealizowane<span class="arrow">→</span>SMS do klienta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Oznaczanie paragonu flagą, gdy nie wydał on towaru</p>
+              <p class="ex-flow">paragon zapisany<span class="arrow">→</span>towar niewydany<span class="arrow">→</span>flaga</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/><path d="M14 4v6h6"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Oznaczanie faktury flagą, gdy nie wydała ona towaru</p>
+              <p class="ex-flow">faktura zapisana<span class="arrow">→</span>towar niewydany<span class="arrow">→</span>flaga</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie magazynu o nowym zamówieniu od klienta</p>
+              <p class="ex-flow">nowe zamówienie<span class="arrow">→</span>e-mail do magazynu</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie kontrahenta o wystawieniu noty korygującej</p>
+              <p class="ex-flow">nota korygująca<span class="arrow">→</span>e-mail do kontrahenta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie magazynu o edycji pozycji w istniejącym zamówieniu</p>
+              <p class="ex-flow">edycja pozycji<span class="arrow">→</span>e-mail do magazynu</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie, gdy zostanie usunięta FS powstała na podstawie ZK</p>
+              <p class="ex-flow">usunięcie FS z ZK<span class="arrow">→</span>powiadomienie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Wiadomość e-mail o sprzedaży poniżej minimalnej marży</p>
+              <p class="ex-flow">sprzedaż &lt; marża min.<span class="arrow">→</span>e-mail do menedżera</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Raport tygodniowy „Rentowność zamówień według ceny sprzedaży” na e-mail</p>
+              <p class="ex-flow">co tydzień<span class="arrow">→</span>raport własny<span class="arrow">→</span>e-mail</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Flaga i powiadomienie o niskim stanie magazynowym towaru</p>
+              <p class="ex-flow">stan &lt; minimum<span class="arrow">→</span>flaga + powiadomienie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Komentarz dodawany automatycznie po zmianie terminu realizacji zamówienia</p>
+              <p class="ex-flow">zmiana terminu<span class="arrow">→</span>komentarz na dokumencie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Alert e-mail, gdy dodano fakturę sprzedaży z niepoprawnym numerem NIP</p>
+              <p class="ex-flow">faktura z błędnym NIP<span class="arrow">→</span>e-mail alert</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie klienta, gdy zamówienie zostanie przetworzone na zlecenie do dostawcy</p>
+              <p class="ex-flow">zamówienie → zlecenie<span class="arrow">→</span>e-mail do klienta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v4H4zM4 12h16v8H4z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automatyczne tworzenie raportów dobowych z urządzeń fiskalnych</p>
+              <p class="ex-flow">koniec doby<span class="arrow">→</span>raport dobowy</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1v4M7 1v4M3 9h18"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Wykorzystanie automatyzacji w obsłudze KSeF</p>
+              <p class="ex-flow">zdarzenie KSeF<span class="arrow">→</span>czynność w programie</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- GESTOR -->
+      <div class="module-panel" id="panel-gestor">
+        <div class="module-intro">
+          <div class="module-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div>
+            <h3>Gestor nexo — CRM i obsługa klienta</h3>
+            <p>Automaty pilnują ofert, umów, działań i relacji z klientem — od pierwszego kontaktu po przypomnienie dla opiekuna.</p>
+          </div>
+        </div>
+        <div class="example-grid">
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automatyczne tworzenie faktury pro forma do oferty</p>
+              <p class="ex-flow">oferta zaakceptowana<span class="arrow">→</span>faktura pro forma</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v4H4zM4 12h16v8H4z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie e-mail dla wykonawcy, gdy dodano nowe działanie</p>
+              <p class="ex-flow">nowe działanie<span class="arrow">→</span>e-mail do wykonawcy</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 15 8.66-5-8.66-5-8.66 5z"/><path d="m3.34 13.5 8.66 5 8.66-5"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Zielona flaga (gwiazdka), gdy działanie zakończy się sukcesem</p>
+              <p class="ex-flow">działanie zakończone<span class="arrow">→</span>zielona flaga</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/><path d="M14 4v6h6"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie klienta, gdy jego umowa zostanie aneksowana</p>
+              <p class="ex-flow">aneks do umowy<span class="arrow">→</span>e-mail do klienta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Wysyłka raportu własnego na podstawie harmonogramu</p>
+              <p class="ex-flow">harmonogram<span class="arrow">→</span>raport własny<span class="arrow">→</span>e-mail</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 15 8.66-5-8.66-5-8.66 5z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Generowanie faktury po zakończeniu działania sukcesem</p>
+              <p class="ex-flow">działanie → sukces<span class="arrow">→</span>faktura</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie e-mail o odrzuceniu zlecenia serwisowego online</p>
+              <p class="ex-flow">zlecenie odrzucone<span class="arrow">→</span>e-mail</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automat generujący zamówienie od klienta do oferty</p>
+              <p class="ex-flow">oferta zaakceptowana<span class="arrow">→</span>zamówienie od klienta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automat generujący fakturę sprzedaży do zamówienia od klienta</p>
+              <p class="ex-flow">zamówienie skompletowane<span class="arrow">→</span>faktura sprzedaży</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie klienta o zmianie opiekuna umowy</p>
+              <p class="ex-flow">zmiana opiekuna<span class="arrow">→</span>e-mail do klienta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie twórcy umowy z klientem o jej edycji</p>
+              <p class="ex-flow">edycja umowy<span class="arrow">→</span>e-mail do twórcy</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- GRATYFIKANT -->
+      <div class="module-panel" id="panel-gratyfikant">
+        <div class="module-intro">
+          <div class="module-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
+          <div>
+            <h3>Gratyfikant nexo — kadry i płace</h3>
+            <p>Automaty wspierają proces naliczania wynagrodzeń, obsługę urlopów i deklaracji oraz komunikację z pracownikami.</p>
+          </div>
+        </div>
+        <div class="example-grid">
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automat generujący deklaracje PIT-11 dla pracowników</p>
+              <p class="ex-flow">koniec roku<span class="arrow">→</span>deklaracje PIT-11</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie pracownika o zatwierdzeniu absencji urlopowej</p>
+              <p class="ex-flow">urlop zatwierdzony<span class="arrow">→</span>powiadomienie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie pracownika o odrzuceniu urlopu</p>
+              <p class="ex-flow">urlop odrzucony<span class="arrow">→</span>powiadomienie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automatyczne zatwierdzenie list płac i rachunków</p>
+              <p class="ex-flow">harmonogram<span class="arrow">→</span>zatwierdzenie list płac</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie e-mail o ręcznej edycji wynagrodzenia</p>
+              <p class="ex-flow">edycja wynagrodzenia<span class="arrow">→</span>e-mail alert</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automatyczna aktualizacja Portalu pracownika</p>
+              <p class="ex-flow">zmiana danych<span class="arrow">→</span>aktualizacja portalu</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Flaga na dyspozycji bankowej, gdy w tytule jest słowo „Wynagrodzenie”</p>
+              <p class="ex-flow">tytuł zawiera „Wynagrodzenie”<span class="arrow">→</span>flaga</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie e-mail/SMS pracownika o przelanym wynagrodzeniu</p>
+              <p class="ex-flow">przelew wynagrodzenia<span class="arrow">→</span>e-mail / SMS</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Dodanie umowy pracowniczej do biblioteki załączników po zapisaniu</p>
+              <p class="ex-flow">umowa zapisana/edytowana<span class="arrow">→</span>biblioteka załączników</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RACHMISTRZ / REWIZOR -->
+      <div class="module-panel" id="panel-rewizor">
+        <div class="module-intro">
+          <div class="module-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4"/><path d="M9 7h6v14H9z"/><path d="M15 11h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4"/></svg>
+          </div>
+          <div>
+            <h3>Rachmistrz / Rewizor nexo — księgowość i finanse</h3>
+            <p>Automaty dbają o dekretację, ewidencje VAT, rozliczenia pojazdów i terminowe deklaracje — codziennie i bez przypominania.</p>
+          </div>
+        </div>
+        <div class="example-grid">
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Flaga na pliku JPK, gdy jego zawartość zostanie edytowana</p>
+              <p class="ex-flow">edycja pliku JPK<span class="arrow">→</span>flaga</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Naliczanie składek ZUS wspólników co miesiąc</p>
+              <p class="ex-flow">co miesiąc<span class="arrow">→</span>składki ZUS<span class="arrow">→</span>powiadomienie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Dekretacja faktur VAT sprzedaży na koniec miesiąca</p>
+              <p class="ex-flow">koniec miesiąca<span class="arrow">→</span>dekretacja FS</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Dzienne zestawienie sprzedaży na podstawie zapisów w Ewidencji VAT</p>
+              <p class="ex-flow">codziennie<span class="arrow">→</span>zestawienie sprzedaży VAT</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Miesięczne rozliczenie pojazdu na podstawie zapisów eksploatacji</p>
+              <p class="ex-flow">co miesiąc<span class="arrow">→</span>dokument rozliczenia pojazdu</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie e-mail dla wspólnika o wyliczeniu zaliczki PIT</p>
+              <p class="ex-flow">zaliczka PIT wyliczona<span class="arrow">→</span>e-mail do wspólnika</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Dekretacja dokumentów wyciąg bankowy po ich zapisaniu</p>
+              <p class="ex-flow">wyciąg bankowy zapisany<span class="arrow">→</span>dekretacja</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automatyczne tworzenie wyciągu bankowego na koniec miesiąca</p>
+              <p class="ex-flow">koniec miesiąca<span class="arrow">→</span>wyciąg bankowy</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M2 11h20"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Raport kasowy tworzony automatycznie na koniec miesiąca</p>
+              <p class="ex-flow">koniec miesiąca<span class="arrow">→</span>raport kasowy</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="13" rx="2"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Dekretacja dokumentów Raport kasowy po ich zapisaniu</p>
+              <p class="ex-flow">raport kasowy zapisany<span class="arrow">→</span>dekretacja</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- INSERT NEXO (cały system) -->
+      <div class="module-panel" id="panel-nexo">
+        <div class="module-intro">
+          <div class="module-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+          <div>
+            <h3>Cały system InsERT nexo — konfiguracja i administracja</h3>
+            <p>Te scenariusze działają niezależnie od konkretnego modułu sprzedażowego czy księgowego — porządkują samą pracę z Automatyzacją.</p>
+          </div>
+        </div>
+        <div class="example-grid">
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Powiadomienie o planowanym wyłączeniu programu dla wszystkich użytkowników</p>
+              <p class="ex-flow">harmonogram<span class="arrow">→</span>prośba o wylogowanie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Przypomnienie o wygenerowaniu pliku JPK dla księgowości</p>
+              <p class="ex-flow">termin JPK<span class="arrow">→</span>przypomnienie</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Wyrażenia logiczne — automat zadziała, gdy spełni się część warunków</p>
+              <p class="ex-flow">np. 2 z 3 warunków<span class="arrow">→</span>czynność</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Eksport gotowego automatu do pliku — do przeniesienia na inne stanowisko</p>
+              <p class="ex-flow">automat<span class="arrow">→</span>plik eksportu</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Import automatu przygotowanego wcześniej lub przez innego użytkownika</p>
+              <p class="ex-flow">plik automatu<span class="arrow">→</span>import do bazy</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="6" cy="6" r="1.4" fill="var(--moss-deep)"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Zmiana kolejności wykonywania automatów, gdy działa ich kilka naraz</p>
+              <p class="ex-flow">automat A<span class="arrow">→</span>automat B<span class="arrow">→</span>...</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Etykietowanie kontaktów na podstawie ich aktywności lub atrybutów</p>
+              <p class="ex-flow">warunek na kontakcie<span class="arrow">→</span>etykieta</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Uwarunkowanie automatu od konkretnego klienta znajdującego się na dokumencie</p>
+              <p class="ex-flow">klient = X<span class="arrow">→</span>czynność dedykowana</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Zapisanie wyniku raportu własnego jako plik na dysku</p>
+              <p class="ex-flow">harmonogram<span class="arrow">→</span>raport własny<span class="arrow">→</span>plik na dysku</p>
+            </div>
+          </div>
+
+          <div class="example-card">
+            <div class="example-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+            <div class="example-body">
+              <p class="ex-title">Automaty kontekstowe — uruchamiane wprost z konkretnego modułu programu</p>
+              <p class="ex-flow">moduł / lista<span class="arrow">→</span>uruchom automat</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="section-border">
+  <div class="wrap">
+    <div class="banner">
+      <div>
+        <h3>Sello NX: automatyzacja idzie też w stronę e-commerce</h3>
+        <p>Moduł Automatyzacja obejmuje również sprzedaż wysyłkową — od etykiet po komunikację z kupującym, bez ręcznego klikania w panelu zamówień.</p>
+      </div>
+      <div class="banner-list">
+        <div class="banner-item">
+          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="black"><polyline points="20 6 9 17 4 12"/></svg></span>
+          Drukowanie etykiety w reakcji na zmianę w zamówieniu wysyłkowym
+        </div>
+        <div class="banner-item">
+          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="black"><polyline points="20 6 9 17 4 12"/></svg></span>
+          Informowanie kupującego o statusie „wysłane” lub przewidywanym opóźnieniu
+        </div>
+        <div class="banner-item">
+          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="black"><polyline points="20 6 9 17 4 12"/></svg></span>
+          Wysyłka zmian do wskazanego serwisu zewnętrznego — całość lub wybrane typy
+        </div>
+        <div class="banner-item">
+          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="black"><polyline points="20 6 9 17 4 12"/></svg></span>
+          Wyzwalanie dwóch zależnych automatów dla bardziej złożonych scenariuszy
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="korzysci" class="section-border">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">Korzyści</div>
+      <h2>Co realnie zyskujesz, włączając automaty</h2>
+      <p>To nie jest dodatek „bo można”. To godziny pracy odzyskane co tydzień i mniej spraw, o których trzeba pamiętać samodzielnie.</p>
+    </div>
+
+    <div class="benefits">
+      <div class="benefit-card">
+        <span class="benefit-num">→ KOMUNIKACJA</span>
+        <h4>Nic nie zginie w skrzynce</h4>
+        <p>Nowe zamówienie, faktura czy działanie automatycznie trafia do zainteresowanej osoby — bez przekazywania „na słowo”.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="benefit-num">→ KLIENCI</span>
+        <h4>Klient wie, na czym stoi</h4>
+        <p>Mail z wydrukiem dokumentu, SMS o realizacji zamówienia czy informacja o wystawionej deklaracji wysyłają się same.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="benefit-num">→ RAPORTY</span>
+        <h4>Raporty przychodzą do Ciebie</h4>
+        <p>Zaplanowany raport własny zostanie wyliczony i wysłany na wskazany adres — codziennie, tygodniowo albo miesięcznie.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="benefit-num">→ KONTROLA</span>
+        <h4>Wiesz, gdy coś się zmienia</h4>
+        <p>Edycja pliku JPK, ręczna zmiana wynagrodzenia czy sprzedaż poniżej marży minimalnej — dostajesz sygnał od razu.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="benefit-num">→ START</span>
+        <h4>Gotowe scenariusze od ręki</h4>
+        <p>Po aktywacji modułu masz dostęp do przykładowych automatów — wystarczy uzupełnić szablon SMS-a lub e-maila.</p>
+      </div>
+      <div class="benefit-card">
+        <span class="benefit-num">→ PRO</span>
+        <h4>Sfera dla zaawansowanych</h4>
+        <p>W liniach InsERT nexo PRO za pomocą Sfery zaprogramujesz znacznie bardziej złożone, indywidualne scenariusze.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cennik" class="section-border">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">Cennik</div>
+      <h2>Jedna cena, niezależnie od liczby automatów</h2>
+      <p>Płacisz za dostęp do modułu, nie za poszczególne scenariusze. Pierwszy miesiąc po aktywacji jest gratis.</p>
+    </div>
+
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-period">1 miesiąc</div>
+        <div class="price-amount">29<sup> zł</sup></div>
+        <div class="price-note">netto / miesiąc</div>
+        <div class="price-feature">Elastyczny start — sprawdzasz moduł bez długiego zobowiązania.</div>
+      </div>
+      <div class="price-card featured">
+        <div class="price-period">3 miesiące</div>
+        <div class="price-amount">49<sup> zł</sup></div>
+        <div class="price-note">netto za cały okres</div>
+        <div class="price-feature">Najczęściej wybierany wariant na sezonowe wdrożenie automatów.</div>
+      </div>
+      <div class="price-card">
+        <div class="price-period">12 miesięcy</div>
+        <div class="price-amount">189<sup> zł</sup></div>
+        <div class="price-note">netto za cały rok</div>
+        <div class="price-feature">Najniższy koszt miesięczny — dla automatów pracujących na stałe.</div>
+      </div>
+    </div>
+    <p class="price-fineprint">Ceny netto. Niniejsza strona nie stanowi oferty handlowej w rozumieniu art. 66 § 1 Kodeksu Cywilnego.</p>
+  </div>
+</section>
+
+<section id="faq" class="section-border">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">Pytania i odpowiedzi</div>
+      <h2>Zanim aktywujesz moduł</h2>
+    </div>
+
+    <div class="faq-list">
+
+      <div class="faq-item open">
+        <div class="faq-q"><span>Czy muszę umieć programować, żeby zbudować automat?</span><span class="plus">+</span></div>
+        <div class="faq-a"><div class="faq-a-inner">Nie. Automat tworzysz w prostym formularzu: wybierasz zdarzenie, warunki i czynność z list rozwijanych. Programowanie potrzebne jest tylko w bardziej złożonych scenariuszach budowanych przez Sferę w liniach PRO.</div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q"><span>Co się stanie, jeśli kupię moduł, a nic nie skonfiguruję?</span><span class="plus">+</span></div>
+        <div class="faq-a"><div class="faq-a-inner">Po aktywacji w bazie pojawiają się gotowe, przykładowe automaty — wystarczy je aktywować i ewentualnie uzupełnić treść maila lub SMS-a. Nie musisz budować niczego od zera.</div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q"><span>Czy automaty mogą działać razem, jeden po drugim?</span><span class="plus">+</span></div>
+        <div class="faq-a"><div class="faq-a-inner">Tak. Automaty można uzależnić od siebie, a kolejność ich wykonywania da się dowolnie zmienić, gdy dla jednego zdarzenia uruchamia się ich kilka.</div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q"><span>Czy moduł działa też przy sprzedaży internetowej?</span><span class="plus">+</span></div>
+        <div class="faq-a"><div class="faq-a-inner">Tak — w Sello NX automatyzacja obejmuje m.in. etykiety wysyłkowe, komunikację z kupującym oraz wysyłkę zmian do zewnętrznych serwisów.</div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q"><span>Czy przykładowe automaty trzeba wdrażać bez zmian?</span><span class="plus">+</span></div>
+        <div class="faq-a"><div class="faq-a-inner">Nie — to proponowana forma wykorzystania modułu. Przed wdrożeniem warto dopasować je do własnych potrzeb i okresowo weryfikować poprawność działania, m.in. ze względu na zmiany przepisów.</div></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <div class="wrap">
+    <h2>Powtarzalna praca już dziś może dziać się bez Ciebie.</h2>
+    <p>Aktywuj moduł Automatyzacja i zacznij od jednego z ponad 40 gotowych scenariuszy — dla sprzedaży, CRM, kadr i księgowości.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="https://konto.insert.com.pl/" target="_blank" rel="noopener">Aktywuj w Koncie InsERT</a>
+      <a class="btn btn-ghost" href="https://www.insert.com.pl/dla_uzytkownikow/e-pomoc_techniczna.html?category=177" target="_blank" rel="noopener">Przeglądaj e-Pomoc →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; width:100%;">
+    <span>Moduł Automatyzacja — InsERT nexo</span>
+    <span>Treść oparta na materiałach e-Pomocy technicznej InsERT</span>
+  </div>
+</footer>
+
+<script>
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.module-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.target).classList.add('active');
+  });
+});
+
+// FAQ accordion
+document.querySelectorAll('.faq-q').forEach(q=>{
+  q.addEventListener('click', ()=>{
+    const item = q.closest('.faq-item');
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i=>i.classList.remove('open'));
+    if(!wasOpen) item.classList.add('open');
+  });
+});
+
+// Scroll reveal
+const revealEls = document.querySelectorAll('.how-step, .benefit-card, .example-card, .price-card');
+revealEls.forEach(el=>el.classList.add('reveal'));
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+  });
+},{threshold:0.1});
+revealEls.forEach(el=>io.observe(el));
+
+// Hero flow animation: pulse the wires + nodes in sequence
+(function(){
+  const wire1 = document.getElementById('wire1');
+  const wire2 = document.getElementById('wire2');
+  function pulseFlow(){
+    [wire1, wire2].forEach((w,i)=>{
+      setTimeout(()=>{
+        w.style.transition = 'opacity 0.4s ease';
+        w.style.opacity = '1';
+        setTimeout(()=>{ w.style.opacity = '0'; }, 700);
+      }, i*500);
+    });
+  }
+  pulseFlow();
+  setInterval(pulseFlow, 3200);
+})();
+</script>
+
+</body>
+</html>
