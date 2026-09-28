@@ -793,6 +793,7 @@
     </div>
     <div id="events-dashboard-wrap"></div>
     <div id="event-ratings-wrap" style="margin-bottom:1.5rem"></div>
+    <div id="team-registrations-wrap" style="margin-bottom:1.5rem"></div>
 
     <div id="playoff-dashboard-wrap"></div>
 
@@ -1783,6 +1784,7 @@ let seasons = [];
 let playoffs = []; // array of playoff objects per season
 let discordPsnMap = {}; // { discordName: psnName } — trwałe mapowania Discord→PSN
 let ovrOverrides = {}; // { psnIngameName: overrideOvr } — ręczne nadpisania OVR przez admina
+let teamRegistrations = []; // { id, seasonId, teamName, logo, captain, players[], registeredAt, status }
 let ovrMethod = localStorage.getItem('nba2k_ovr_method') || 'classic'; // 'classic' | 'positional' | 'kw5' | 'top98'
 let currentSeasonId = null;
 // Public read credentials (embedded for all visitors)
@@ -1976,7 +1978,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides,
+      ovrMethod, ovrOverrides, teamRegistrations,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2108,6 +2110,7 @@ async function loadData() {
     playoffs = record.playoffs || [];;
     discordPsnMap = record.discordPsnMap || {};
     ovrOverrides = record.ovrOverrides || {};
+    teamRegistrations = record.teamRegistrations || [];
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
     // Fix playoffs with missing startDate — use createdAt date as fallback
     playoffs.forEach(po => {
@@ -3980,6 +3983,7 @@ function renderDashboard() {
   renderMilestoneBanner();
   renderRoundComparison();
   renderEventRatings();
+  renderTeamRegistrations();
 }
 
 function getHotPlayers() {
@@ -5335,6 +5339,273 @@ function renderEventRatings() {
 // ═══════════════════════════════════════════════════════════════
 // DISCORD SCREENSHOT QUEUE
 // ═══════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEAM REGISTRATION — NBA 2K27
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _teamRegLogo = null; // base64 string
+
+function openTeamRegModal() {
+  const modal = document.getElementById('team-reg-modal');
+  modal.style.display = 'flex';
+
+  // Populate season selector
+  const sel = document.getElementById('team-reg-season');
+  if(sel) {
+    sel.innerHTML = '<option value="">— wybierz sezon —</option>'
+      + seasons.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    if(currentSeasonId) sel.value = currentSeasonId;
+  }
+
+  if(!discordUser) {
+    document.getElementById('team-reg-login-wall').style.display = 'block';
+    document.getElementById('team-reg-form-wrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('team-reg-login-wall').style.display = 'none';
+  document.getElementById('team-reg-form-wrap').style.display = 'block';
+
+  // Captain info
+  const av = document.getElementById('team-reg-captain-avatar');
+  if(av && discordUser.avatar) { av.src = discordUser.avatar; av.style.display = 'block'; }
+  const cn = document.getElementById('team-reg-captain-name');
+  if(cn) cn.textContent = discordUser.name + (discordUser.discordTag ? ' (' + discordUser.discordTag + ')' : '');
+
+  // Reset form
+  document.getElementById('team-reg-name').value = '';
+  _teamRegLogo = null;
+  const prev = document.getElementById('team-reg-logo-preview');
+  if(prev) prev.innerHTML = '🏀';
+  document.getElementById('team-reg-players').innerHTML = '';
+  teamRegUpdateCount();
+
+  // Add 5 empty player rows by default
+  for(let i=0;i<5;i++) teamRegAddPlayer();
+}
+
+function teamRegLogoChange(input) {
+  const file = input.files[0];
+  if(!file) return;
+  if(file.size > 300*1024) { showToast('❌ Plik za duży — max 300 KB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    _teamRegLogo = e.target.result;
+    const prev = document.getElementById('team-reg-logo-preview');
+    if(prev) prev.innerHTML = `<img src="${_teamRegLogo}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function teamRegAddPlayer() {
+  const container = document.getElementById('team-reg-players');
+  const rows = container.querySelectorAll('.team-reg-player-row');
+  if(rows.length >= 10) { showToast('Maksymalnie 10 zawodników', 'info'); return; }
+  const idx = rows.length;
+  const div = document.createElement('div');
+  div.className = 'team-reg-player-row';
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 90px 110px 28px;gap:.4rem;align-items:center;background:var(--surface2);border-radius:7px;padding:.45rem .6rem';
+  div.innerHTML = `
+    <input type="text" placeholder="Gamertag (PSN/Xbox)" maxlength="32"
+      style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.35rem .55rem;font-family:inherit;font-size:.83rem;width:100%;box-sizing:border-box"
+      oninput="teamRegUpdateCount()">
+    <select style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.3rem .3rem;font-family:inherit;font-size:.78rem">
+      <option value="psn">PSN</option>
+      <option value="xbox">Xbox</option>
+    </select>
+    <select style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.3rem .3rem;font-family:inherit;font-size:.78rem" title="Doświadczenie w NBA 2K">
+      <option value="">Doświadczenie</option>
+      <option value="beginner">🌱 Początkujący</option>
+      <option value="intermediate">⚡ Średniozaawansowany</option>
+      <option value="advanced">🔥 Zaawansowany</option>
+      <option value="pro">👑 Pro / Weteran</option>
+    </select>
+    <button onclick="this.closest('.team-reg-player-row').remove();teamRegUpdateCount()"
+      style="background:transparent;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0;line-height:1" title="Usuń">×</button>
+  `;
+  container.appendChild(div);
+  teamRegUpdateCount();
+}
+
+function teamRegUpdateCount() {
+  const rows = document.querySelectorAll('.team-reg-player-row');
+  const filled = [...rows].filter(r => r.querySelector('input')?.value?.trim()).length;
+  const cnt = document.getElementById('team-reg-count');
+  if(cnt) cnt.textContent = `${filled}/${rows.length} (min 5)`;
+  const addBtn = document.getElementById('team-reg-add-btn');
+  if(addBtn) addBtn.disabled = rows.length >= 10;
+}
+
+const _expLabels = { beginner:'🌱 Początkujący', intermediate:'⚡ Średnio-zaawansowany', advanced:'🔥 Zaawansowany', pro:'👑 Pro / Weteran' };
+
+async function submitTeamRegistration() {
+  if(!discordUser) { showToast('❌ Zaloguj się przez Discord', 'error'); return; }
+
+  const teamName = document.getElementById('team-reg-name')?.value?.trim();
+  if(!teamName) { showToast('❌ Podaj nazwę drużyny', 'error'); return; }
+
+  const seasonId = document.getElementById('team-reg-season')?.value || null;
+
+  const rows = document.querySelectorAll('.team-reg-player-row');
+  const players = [...rows].map(r => ({
+    gamertag: r.querySelector('input')?.value?.trim() || '',
+    platform: r.querySelectorAll('select')[0]?.value || 'psn',
+    experience: r.querySelectorAll('select')[1]?.value || ''
+  })).filter(p => p.gamertag);
+
+  if(players.length < 5) { showToast('❌ Minimum 5 zawodników', 'error'); return; }
+
+  // Check for duplicate team name in this season
+  const dup = teamRegistrations.find(r =>
+    r.teamName.toLowerCase() === teamName.toLowerCase() &&
+    (!seasonId || r.seasonId === seasonId) &&
+    r.status !== 'rejected'
+  );
+  if(dup) { showToast('❌ Drużyna o tej nazwie już jest zgłoszona', 'error'); return; }
+
+  const reg = {
+    id: 'treg_' + Date.now(),
+    seasonId: seasonId || null,
+    teamName,
+    logo: _teamRegLogo || null,
+    captain: {
+      id: discordUser.id,
+      name: discordUser.name,
+      discordTag: discordUser.discordTag || '',
+      avatar: discordUser.avatar || ''
+    },
+    players,
+    registeredAt: new Date().toISOString(),
+    status: 'pending' // pending | approved | rejected
+  };
+
+  teamRegistrations.push(reg);
+  await saveData();
+
+  document.getElementById('team-reg-modal').style.display = 'none';
+  showToast('✅ Drużyna zgłoszona! Czeka na weryfikację.', 'success');
+  renderTeamRegistrations();
+
+  // Discord notification
+  const seasonName = seasonId ? (seasons.find(s=>s.id===seasonId)?.name || seasonId) : 'brak sezonu';
+  const playerLines = players.map((p,i) =>
+    `${i+1}. **${p.gamertag}** [${p.platform.toUpperCase()}]${p.experience ? ' · ' + _expLabels[p.experience] : ''}`
+  ).join('\n');
+  const embed = {
+    title: '🏀 Nowe zgłoszenie drużyny — NBA 2K27',
+    color: 0xf5c518,
+    fields: [
+      { name: 'Drużyna', value: teamName, inline: true },
+      { name: 'Sezon', value: seasonName, inline: true },
+      { name: 'Kapitan', value: `${reg.captain.name}${reg.captain.discordTag ? ' (@' + reg.captain.discordTag + ')' : ''}`, inline: true },
+      { name: `Skład (${players.length} graczy)`, value: playerLines, inline: false }
+    ],
+    footer: { text: 'NBA 2K Pro-Am Ekstraklasa · ' + new Date().toLocaleDateString('pl-PL') },
+    timestamp: new Date().toISOString()
+  };
+  if(_teamRegLogo) embed.thumbnail = { url: _teamRegLogo };
+  try { await _discordNotify({ embeds: [embed] }); } catch(e) { console.warn('Discord notify failed', e); }
+}
+
+function renderTeamRegistrations() {
+  const wrap = document.getElementById('team-registrations-wrap');
+  if(!wrap) return;
+  if(!teamRegistrations || !teamRegistrations.length) { wrap.innerHTML = ''; return; }
+
+  // Group by season
+  const grouped = {};
+  teamRegistrations.forEach(r => {
+    const key = r.seasonId || '__none__';
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(r);
+  });
+
+  const statusBadge = s => {
+    if(s==='approved') return '<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">✅ ZATWIERDZONA</span>';
+    if(s==='rejected') return '<span style="background:#dc2626;color:#fff;border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">❌ ODRZUCONA</span>';
+    return '<span style="background:var(--accent);color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">⏳ OCZEKUJE</span>';
+  };
+
+  const isAdmin = !!localStorage.getItem('nba2k_admin_token_hash');
+  const isMyTeam = r => discordUser && r.captain?.id === discordUser.id;
+
+  const cards = teamRegistrations
+    .filter(r => r.status !== 'rejected' || isAdmin)
+    .map(r => {
+      const sName = r.seasonId ? (seasons.find(s=>s.id===r.seasonId)?.name||r.seasonId) : '';
+      const logoHtml = r.logo
+        ? `<img src="${r.logo}" style="width:48px;height:48px;border-radius:8px;object-fit:cover;border:1px solid var(--border)">`
+        : `<div style="width:48px;height:48px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.4rem">🏀</div>`;
+      const adminBtns = isAdmin ? `
+        <div style="display:flex;gap:.35rem;margin-top:.6rem">
+          <button onclick="teamRegSetStatus('${r.id}','approved')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--win)">✅ Zatwierdź</button>
+          <button onclick="teamRegSetStatus('${r.id}','rejected')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--loss)">❌ Odrzuć</button>
+          <button onclick="teamRegDelete('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">🗑 Usuń</button>
+        </div>` : '';
+      const playerPills = (r.players||[]).map(p =>
+        `<span style="display:inline-flex;align-items:center;gap:.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.15rem .45rem;font-size:.75rem;white-space:nowrap">
+          <span style="font-size:.65rem;color:var(--muted)">${p.platform==='xbox'?'🎮':'🎯'}</span>
+          <span>${p.gamertag}</span>
+          ${p.experience ? `<span style="font-size:.62rem;color:var(--muted)">${_expLabels[p.experience]?.split(' ')[0]||''}</span>` : ''}
+        </span>`
+      ).join('');
+      return `
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem">
+          <div style="display:flex;align-items:flex-start;gap:.85rem">
+            ${logoHtml}
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.25rem">
+                <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.05rem;letter-spacing:.5px">${r.teamName}</span>
+                ${statusBadge(r.status)}
+                ${sName ? `<span style="font-size:.72rem;color:var(--accent);font-weight:700">${sName}</span>` : ''}
+              </div>
+              <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">
+                👤 Kapitan: <b style="color:var(--text)">${r.captain?.name||'?'}</b>
+                · ${r.players?.length||0} graczy
+                · ${new Date(r.registeredAt).toLocaleDateString('pl-PL')}
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:.3rem">${playerPills}</div>
+              ${adminBtns}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+      <div class="section-title" style="margin-bottom:0">🏀 ZAPISY DO LIGI — NBA 2K27</div>
+      <button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>
+    </div>
+    ${cards || '<div style="color:var(--muted);font-size:.9rem;padding:.5rem 0">Brak zgłoszeń.</div>'}
+  `;
+}
+
+async function teamRegSetStatus(id, status) {
+  const reg = teamRegistrations.find(r => r.id === id);
+  if(!reg) return;
+  reg.status = status;
+  await saveData();
+  renderTeamRegistrations();
+  showToast(status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona', 'success');
+  // Notify Discord
+  const embed = {
+    title: status === 'approved' ? '✅ Drużyna zatwierdzona' : '❌ Drużyna odrzucona',
+    description: `**${reg.teamName}** (kapitan: ${reg.captain?.name||'?'})`,
+    color: status === 'approved' ? 0x16a34a : 0xdc2626,
+    footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
+    timestamp: new Date().toISOString()
+  };
+  try { await _discordNotify({ embeds: [embed] }); } catch(e) {}
+}
+
+async function teamRegDelete(id) {
+  if(!confirm('Usunąć zgłoszenie?')) return;
+  teamRegistrations = teamRegistrations.filter(r => r.id !== id);
+  await saveData();
+  renderTeamRegistrations();
+  showToast('🗑 Usunięto zgłoszenie', 'info');
+}
 
 function renderDiscordQueue() {
   const el = document.getElementById('discord-queue-panel');
