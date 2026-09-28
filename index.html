@@ -5511,7 +5511,6 @@ async function submitTeamRegistration() {
 function renderTeamRegistrations() {
   const wrap = document.getElementById('team-registrations-wrap');
   if(!wrap) return;
-  if(!teamRegistrations || !teamRegistrations.length) { wrap.innerHTML = ''; return; }
 
   // Group by season
   const grouped = {};
@@ -5577,7 +5576,11 @@ function renderTeamRegistrations() {
       <div class="section-title" style="margin-bottom:0">🏀 ZAPISY DO LIGI — NBA 2K27</div>
       <button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>
     </div>
-    ${cards || '<div style="color:var(--muted);font-size:.9rem;padding:.5rem 0">Brak zgłoszeń.</div>'}
+    ${cards || `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted)">
+      <div style="font-size:2rem;margin-bottom:.5rem">🏀</div>
+      <div style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">Brak zgłoszonych drużyn</div>
+      <div style="font-size:.8rem">Bądź pierwszy — zgłoś swoją drużynę do sezonu NBA 2K27!</div>
+    </div>`}
   `;
 }
 
