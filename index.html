@@ -1166,6 +1166,11 @@
       </div>
       <div id="team-reg-players" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:1.25rem"></div>
 
+      <label id="team-reg-rules-wrap" style="display:flex;align-items:flex-start;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .8rem;margin-bottom:1.25rem;cursor:pointer;font-size:.85rem;line-height:1.4">
+        <input type="checkbox" id="team-reg-rules" onchange="document.getElementById('team-reg-rules-wrap').style.borderColor='var(--border)'" style="accent-color:var(--accent);width:16px;height:16px;margin-top:.1rem;flex-shrink:0;cursor:pointer">
+        <span>Przeczytałem i akceptuję regulamin, który znajduje się na <a href="https://discord.gg/EQ87cFkuW" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">discordzie 2K Pro Am Ekstraklasa</a> <span style="color:var(--loss)">*</span></span>
+      </label>
+
       <div style="display:flex;gap:.5rem;justify-content:flex-end">
         <button class="btn btn-ghost" onclick="closeTeamRegModal()">Anuluj</button>
         <button class="btn btn-primary" onclick="submitTeamRegistration()">Zgłoś drużynę</button>
@@ -5556,6 +5561,10 @@ function openTeamRegModal() {
 
   // Reset form
   document.getElementById('team-reg-name').value = '';
+  const rules = document.getElementById('team-reg-rules');
+  if(rules) rules.checked = false;
+  const rulesWrap = document.getElementById('team-reg-rules-wrap');
+  if(rulesWrap) rulesWrap.style.borderColor = 'var(--border)';
   _teamRegLogo = null;
   const prev = document.getElementById('team-reg-logo-preview');
   if(prev) prev.innerHTML = '🏀';
@@ -5637,6 +5646,13 @@ async function submitTeamRegistration() {
 
   if(players.length < 5) { showToast('❌ Minimum 5 zawodników', 'error'); return; }
 
+  if(!document.getElementById('team-reg-rules')?.checked) {
+    const w = document.getElementById('team-reg-rules-wrap');
+    if(w) { w.style.borderColor = 'var(--loss)'; w.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    showToast('❌ Zaakceptuj regulamin', 'error');
+    return;
+  }
+
   // Check for duplicate team name in this season
   const dup = teamRegistrations.find(r =>
     r.teamName.toLowerCase() === teamName.toLowerCase() &&
@@ -5658,6 +5674,7 @@ async function submitTeamRegistration() {
     },
     players,
     registeredAt: new Date().toISOString(),
+    rulesAcceptedAt: new Date().toISOString(),
     status: 'pending' // pending | approved | rejected
   };
 
