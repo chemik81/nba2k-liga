@@ -791,9 +791,8 @@
         <div style="font-size:.8rem;color:rgba(255,255,255,0.6);margin-top:.25rem;letter-spacing:1px;">OFICJALNA PLATFORMA LIGOWA</div>
       </div>
     </div>
-    <div id="events-dashboard-wrap"></div>
-    <div id="event-ratings-wrap" style="margin-bottom:1.5rem"></div>
     <div id="team-registrations-wrap" style="margin-bottom:1.5rem"></div>
+    <div id="events-dashboard-wrap"></div>
 
     <div id="playoff-dashboard-wrap"></div>
 
@@ -836,6 +835,7 @@
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div id="milestone-banner" style="margin-bottom:1.5rem"></div>
     <div id="round-comparison-wrap" style="margin-bottom:1.5rem"></div>
+    <div id="event-ratings-wrap" style="margin-bottom:1.5rem"></div>
   </div>
 
   <!-- EVENTS -->
@@ -1119,6 +1119,57 @@
     <div id="events-login-error" class="login-error"></div>
     <button class="btn btn-primary" style="width:100%" onclick="checkEventsLogin()">Zaloguj się</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:.5rem" onclick="document.getElementById('events-auth-modal').classList.remove('open')">Anuluj</button>
+  </div>
+</div>
+
+<!-- TEAM REGISTRATION MODAL — NBA 2K27 -->
+<div class="modal-overlay" id="team-reg-modal" onclick="if(event.target===this)closeTeamRegModal()" style="z-index:1200">
+  <div class="modal" style="max-width:620px">
+    <button class="modal-close" onclick="closeTeamRegModal()">&#x2715;</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px;margin-bottom:1.25rem">🏀 Zgłoszenie drużyny — NBA 2K27</div>
+
+    <div id="team-reg-login-wall" style="display:none;text-align:center;padding:1.5rem 0">
+      <div style="font-size:2rem;margin-bottom:.5rem">🔒</div>
+      <div style="font-size:.9rem;margin-bottom:1rem">Zaloguj się przez Discord, aby zgłosić drużynę.</div>
+      <button class="btn btn-primary" onclick="loginWithDiscord()">Zaloguj przez Discord</button>
+    </div>
+
+    <div id="team-reg-form-wrap" style="display:none">
+      <div style="display:flex;align-items:center;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;margin-bottom:1rem">
+        <img id="team-reg-captain-avatar" alt="" style="display:none;width:32px;height:32px;border-radius:50%;object-fit:cover">
+        <div>
+          <div style="font-size:.65rem;color:var(--muted);letter-spacing:1px;font-weight:700">KAPITAN</div>
+          <div id="team-reg-captain-name" style="font-size:.88rem;font-weight:600"></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:72px 1fr;gap:1rem;align-items:end;margin-bottom:1rem">
+        <label style="cursor:pointer" title="Logo (max 300 KB)">
+          <div id="team-reg-logo-preview" style="width:72px;height:72px;border-radius:8px;background:var(--surface2);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:1.8rem;overflow:hidden">🏀</div>
+          <input type="file" accept="image/*" style="display:none" onchange="teamRegLogoChange(this)">
+        </label>
+        <div>
+          <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Nazwa drużyny</label>
+          <input type="text" id="team-reg-name" maxlength="40" placeholder="np. Warsaw Wolves" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.88rem;width:100%;box-sizing:border-box">
+        </div>
+      </div>
+
+      <div style="margin-bottom:1rem">
+        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Sezon</label>
+        <select id="team-reg-season" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.88rem;width:100%;box-sizing:border-box"></select>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem;margin-bottom:0">Skład <span id="team-reg-count" style="color:var(--accent);letter-spacing:0"></span></label>
+        <button id="team-reg-add-btn" class="btn btn-ghost" onclick="teamRegAddPlayer()" style="font-size:.75rem;padding:.25rem .6rem">+ Zawodnik</button>
+      </div>
+      <div id="team-reg-players" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:1.25rem"></div>
+
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeTeamRegModal()">Anuluj</button>
+        <button class="btn btn-primary" onclick="submitTeamRegistration()">Zgłoś drużynę</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5347,8 +5398,14 @@ function renderEventRatings() {
 
 let _teamRegLogo = null; // base64 string
 
+function closeTeamRegModal() {
+  const modal = document.getElementById('team-reg-modal');
+  if(modal) modal.style.display = 'none';
+}
+
 function openTeamRegModal() {
   const modal = document.getElementById('team-reg-modal');
+  if(!modal) { console.error('Brak #team-reg-modal'); return; }
   modal.style.display = 'flex';
 
   // Populate season selector
