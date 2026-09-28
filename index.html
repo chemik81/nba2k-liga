@@ -770,6 +770,7 @@
     <button id="baza-btn" class="btn btn-ghost" onclick="openSetupModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" title="Zmień konfigurację bazy danych">⚙ Baza</button>
     <button id="psn-map-btn" class="btn btn-ghost" onclick="openPsnMapModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" title="Powiązania Discord→PSN i metoda OVR">🔗 Powiązania</button>
     <button id="playoff-btn" class="btn btn-ghost" onclick="openPlayoffModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Playoff</button>
+    <button id="team-reg-admin-btn" class="btn btn-ghost" onclick="goToTeamRegistrations()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem">📋 Zgłoszenia <span id="team-reg-admin-badge" style="display:none;background:var(--accent);color:rgba(0,0,0,.85);border-radius:4px;padding:0 .35rem;margin-left:.25rem;font-weight:800"></span></button>
     <button id="season-btn" class="btn btn-ghost" onclick="openSeasonModal()" style="display:none;font-size:0.8rem;padding:0.35rem 0.8rem" data-i18n="seasons_btn">🏆 Sezony</button>
     <button id="events-login-btn" class="btn btn-ghost" onclick="document.getElementById('events-auth-modal').classList.add('open')" style="font-size:0.8rem;padding:0.35rem 0.8rem">🏆 Eventy admin</button>
     <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" title="Zmien motyw">&#9728;</button>
@@ -1850,6 +1851,7 @@ let workerUrl = localStorage.getItem('nba2k_worker_url') || 'https://kw5-elite-p
 const _storedModel = localStorage.getItem('nba2k_ai_model') || '';
 let aiModel = (_storedModel && _storedModel.includes('gemini') && _storedModel !== 'gemini-2.5-flash') ? 'gemini-2.5-flash' : (_storedModel || 'gemini-2.5-flash');
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
+let discordTeamRegWebhookUrl = ''; // osobny kanał dla zgłoszeń drużyn (zapisywany w danych ligi)
 let recapModel = localStorage.getItem('nba2k_recap_model') || 'claude-haiku-4-5-20251001';
 const MODEL_SCREENSHOT = () => aiModel;
 const MODEL_CHEAP = () => aiModel.includes('gemini') ? 'gemini-2.5-flash' : (aiModel === 'claude-sonnet-4-20250514' ? 'claude-haiku-4-5-20251001' : aiModel);
@@ -2029,7 +2031,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides, teamRegistrations,
+      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2162,6 +2164,7 @@ async function loadData() {
     discordPsnMap = record.discordPsnMap || {};
     ovrOverrides = record.ovrOverrides || {};
     teamRegistrations = record.teamRegistrations || [];
+    discordTeamRegWebhookUrl = record.discordTeamRegWebhookUrl || '';
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
     // Fix playoffs with missing startDate — use createdAt date as fallback
     playoffs.forEach(po => {
@@ -4388,6 +4391,8 @@ function updateAuthUI() {
     if(playoffBtn) playoffBtn.style.display = logged ? 'inline-flex' : 'none';
     const psnMapBtn = document.getElementById('psn-map-btn');
     if(psnMapBtn) psnMapBtn.style.display = logged ? 'inline-flex' : 'none';
+    const teamRegBtn = document.getElementById('team-reg-admin-btn');
+    if(teamRegBtn) teamRegBtn.style.display = logged ? 'inline-flex' : 'none';
     // Re-render matches to show/hide delete buttons
     if(document.getElementById('view-matches')?.classList.contains('active')) renderMatches();
     // Update events admin button
@@ -5399,6 +5404,124 @@ function renderEventRatings() {
 
 let _teamRegLogo = null; // base64 string
 
+// Wysyłka zgłoszeń na osobny webhook (multipart → logo jako załącznik).
+// Brak osobnego webhooka → fallback na główny kanał przez _discordNotify (bez logo).
+function _dataUrlToBlob(dataUrl) {
+  const [meta, b64] = dataUrl.split(',');
+  const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/png';
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+async function _teamRegDiscordSend(payload, logo, webhookOverride) {
+  const url = webhookOverride || discordTeamRegWebhookUrl;
+  const embed = payload.embeds?.[0];
+
+  if(!url) {
+    if(embed && logo && /^https?:/.test(logo)) embed.thumbnail = { url: logo };
+    return _discordNotify(payload);
+  }
+
+  const fd = new FormData();
+  if(embed && logo) {
+    if(/^data:image\//.test(logo)) {
+      const blob = _dataUrlToBlob(logo);
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+      const filename = 'logo.' + ext;
+      embed.thumbnail = { url: 'attachment://' + filename };
+      payload.attachments = [{ id: 0, filename }];
+      fd.append('files[0]', blob, filename);
+    } else if(/^https?:/.test(logo)) {
+      embed.thumbnail = { url: logo };
+    }
+  }
+  fd.append('payload_json', JSON.stringify(payload));
+  try {
+    const r = await fetch(url, { method: 'POST', body: fd });
+    if(r.ok || r.status === 204) return true;
+    console.warn('Team reg webhook returned', r.status, await r.text().catch(() => ''));
+  } catch(e) { console.warn('Team reg webhook error:', e); }
+  return false;
+}
+
+function openTeamRegWebhookModal() {
+  let m = document.getElementById('team-reg-webhook-modal');
+  if(!m) {
+    m = document.createElement('div');
+    m.id = 'team-reg-webhook-modal';
+    m.className = 'modal-overlay';
+    m.style.zIndex = '1250';
+    m.onclick = e => { if(e.target === m) m.classList.remove('open'); };
+    m.innerHTML = `
+      <div class="modal" style="max-width:520px">
+        <button class="modal-close" onclick="document.getElementById('team-reg-webhook-modal').classList.remove('open')">&#x2715;</button>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;margin-bottom:1rem">⚙ Kanał Discord — zgłoszenia drużyn</div>
+        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Webhook URL</label>
+        <input type="text" id="team-reg-webhook-input" placeholder="https://discord.com/api/webhooks/..." style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.85rem;width:100%;box-sizing:border-box">
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Puste = powiadomienia idą na główny kanał ligi (bez logo).</div>
+        <div id="team-reg-webhook-status" style="font-size:.8rem;margin-top:.6rem;min-height:1.1em"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+          <button class="btn btn-ghost" onclick="testTeamRegWebhook()">🧪 Testuj</button>
+          <button class="btn btn-primary" onclick="saveTeamRegWebhook()">💾 Zapisz</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+  }
+  document.getElementById('team-reg-webhook-input').value = discordTeamRegWebhookUrl || '';
+  document.getElementById('team-reg-webhook-status').textContent = '';
+  m.classList.add('open');
+}
+
+function _validTeamRegWebhook(url) {
+  return /^https:\/\/(canary\.|ptb\.)?(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+/.test(url);
+}
+
+async function testTeamRegWebhook() {
+  const url = document.getElementById('team-reg-webhook-input').value.trim();
+  const st = document.getElementById('team-reg-webhook-status');
+  if(!_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
+  st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłanie...';
+  const sample = teamRegistrations.find(r => r.logo);
+  const ok = await _teamRegDiscordSend({ embeds: [{
+    title: '🧪 Test — kanał zgłoszeń drużyn',
+    description: sample ? `Logo testowe: **${sample.teamName}**` : 'Webhook działa.',
+    color: 0xf5c518,
+    footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
+    timestamp: new Date().toISOString()
+  }] }, sample?.logo || null, url);
+  st.style.color = ok ? 'var(--win)' : 'var(--loss)';
+  st.textContent = ok ? '✅ Wysłano — sprawdź kanał' : '❌ Discord odrzucił wiadomość (szczegóły w konsoli)';
+}
+
+async function saveTeamRegWebhook() {
+  const url = document.getElementById('team-reg-webhook-input').value.trim();
+  const st = document.getElementById('team-reg-webhook-status');
+  if(url && !_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
+  const prev = discordTeamRegWebhookUrl;
+  discordTeamRegWebhookUrl = url;
+  const saved = await saveData();
+  if(!saved) { discordTeamRegWebhookUrl = prev; st.style.color = 'var(--loss)'; st.textContent = '❌ Błąd zapisu'; return; }
+  document.getElementById('team-reg-webhook-modal').classList.remove('open');
+  renderTeamRegistrations();
+  showToast(url ? '✅ Zapisano kanał zgłoszeń' : '✅ Zgłoszenia wrócą na główny kanał', 'success');
+}
+
+function goToTeamRegistrations() {
+  showView('dashboard');
+  renderTeamRegistrations();
+  setTimeout(() => {
+    const el = document.getElementById('team-registrations-wrap');
+    if(!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.style.transition = 'box-shadow .3s';
+    el.style.boxShadow = '0 0 0 2px var(--accent)';
+    el.style.borderRadius = '10px';
+    setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+  }, 50);
+}
+
 function closeTeamRegModal() {
   const modal = document.getElementById('team-reg-modal');
   if(modal) modal.style.display = 'none';
@@ -5567,9 +5690,7 @@ async function submitTeamRegistration() {
     footer: { text: 'NBA 2K Pro-Am Ekstraklasa · ' + new Date().toLocaleDateString('pl-PL') },
     timestamp: new Date().toISOString()
   };
-  // Discord nie przyjmuje data: URL w embedach (400) — logo tylko gdy jest publicznym linkiem
-  if(_teamRegLogo && /^https?:/.test(_teamRegLogo)) embed.thumbnail = { url: _teamRegLogo };
-  try { await _discordNotify({ embeds: [embed] }); } catch(e) { console.warn('Discord notify failed', e); }
+  try { await _teamRegDiscordSend({ embeds: [embed] }, reg.logo); } catch(e) { console.warn('Discord notify failed', e); }
 }
 
 function renderTeamRegistrations() {
@@ -5590,11 +5711,13 @@ function renderTeamRegistrations() {
     return '<span style="background:var(--accent);color:rgba(0,0,0,.8);border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">⏳ OCZEKUJE</span>';
   };
 
-  const isAdmin = !!localStorage.getItem('nba2k_admin_token_hash');
+  const isAdmin = _isLoggedInSync();
   const isMyTeam = r => discordUser && r.captain?.id === discordUser.id;
 
   const _stOrder = { pending: 0, approved: 1, rejected: 2 };
   const pendingCount = teamRegistrations.filter(r => r.status === 'pending').length;
+  const badge = document.getElementById('team-reg-admin-badge');
+  if(badge) { badge.textContent = pendingCount; badge.style.display = pendingCount ? 'inline' : 'none'; }
   const cards = [...teamRegistrations]
     .filter(r => r.status !== 'rejected' || isAdmin || isMyTeam(r))
     .sort((a,b) => isAdmin ? (_stOrder[a.status]??9) - (_stOrder[b.status]??9) : 0)
@@ -5646,7 +5769,10 @@ function renderTeamRegistrations() {
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
       <div class="section-title" style="margin-bottom:0">🏀 ZAPISY DO LIGI — NBA 2K27${isAdmin && pendingCount ? ` <span style="background:var(--accent);color:rgba(0,0,0,.85);border-radius:5px;padding:.05rem .45rem;font-size:.8rem;vertical-align:middle">⏳ ${pendingCount} do weryfikacji</span>` : ''}</div>
-      <button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>
+      <div style="display:flex;gap:.4rem">
+        ${isAdmin ? `<button onclick="openTeamRegWebhookModal()" class="btn btn-ghost" style="font-size:.78rem;padding:.35rem .7rem" title="Kanał Discord dla zgłoszeń">⚙ Kanał Discord${discordTeamRegWebhookUrl ? '' : ' <span style="color:var(--loss)">●</span>'}</button>` : ''}
+        <button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>
+      </div>
     </div>
     ${cards || `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted)">
       <div style="font-size:2rem;margin-bottom:.5rem">🏀</div>
@@ -5657,7 +5783,7 @@ function renderTeamRegistrations() {
 }
 
 async function teamRegSetStatus(id, status) {
-  if(!localStorage.getItem('nba2k_admin_token_hash')) { showToast('❌ Tylko admin', 'error'); return; }
+  if(!_isLoggedInSync()) { showToast('❌ Tylko admin', 'error'); return; }
   const reg = teamRegistrations.find(r => r.id === id);
   if(!reg) return;
 
@@ -5711,7 +5837,6 @@ async function teamRegSetStatus(id, status) {
     footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
     timestamp: new Date().toISOString()
   };
-  if(reg.logo && /^https?:/.test(reg.logo)) embed.thumbnail = { url: reg.logo };
 
   const payload = { embeds: [embed] };
   if(captainId) {
@@ -5719,7 +5844,7 @@ async function teamRegSetStatus(id, status) {
     payload.allowed_mentions = { users: [captainId] };
   }
   let sent = false;
-  try { sent = await _discordNotify(payload); } catch(e) { console.warn('Discord notify failed', e); }
+  try { sent = await _teamRegDiscordSend(payload, reg.logo); } catch(e) { console.warn('Discord notify failed', e); }
   showToast(
     (status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona') + (sent ? ' · wysłano na Discord' : ' · ⚠ Discord nie odpowiedział'),
     sent ? 'success' : 'info'
