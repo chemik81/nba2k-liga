@@ -4392,6 +4392,7 @@ function updateAuthUI() {
     if(document.getElementById('view-matches')?.classList.contains('active')) renderMatches();
     // Update events admin button
     updateEventsAuthUI();
+    renderTeamRegistrations();
   });
 }
 
@@ -5538,7 +5539,12 @@ async function submitTeamRegistration() {
   };
 
   teamRegistrations.push(reg);
-  await saveData();
+  const saved = await saveData();
+  if(!saved) {
+    teamRegistrations = teamRegistrations.filter(r => r.id !== reg.id);
+    showToast('❌ Nie udało się zapisać zgłoszenia', 'error');
+    return;
+  }
 
   document.getElementById('team-reg-modal').style.display = 'none';
   showToast('✅ Drużyna zgłoszona! Czeka na weryfikację.', 'success');
@@ -5561,7 +5567,8 @@ async function submitTeamRegistration() {
     footer: { text: 'NBA 2K Pro-Am Ekstraklasa · ' + new Date().toLocaleDateString('pl-PL') },
     timestamp: new Date().toISOString()
   };
-  if(_teamRegLogo) embed.thumbnail = { url: _teamRegLogo };
+  // Discord nie przyjmuje data: URL w embedach (400) — logo tylko gdy jest publicznym linkiem
+  if(_teamRegLogo && /^https?:/.test(_teamRegLogo)) embed.thumbnail = { url: _teamRegLogo };
   try { await _discordNotify({ embeds: [embed] }); } catch(e) { console.warn('Discord notify failed', e); }
 }
 
@@ -5586,19 +5593,26 @@ function renderTeamRegistrations() {
   const isAdmin = !!localStorage.getItem('nba2k_admin_token_hash');
   const isMyTeam = r => discordUser && r.captain?.id === discordUser.id;
 
-  const cards = teamRegistrations
-    .filter(r => r.status !== 'rejected' || isAdmin)
+  const _stOrder = { pending: 0, approved: 1, rejected: 2 };
+  const pendingCount = teamRegistrations.filter(r => r.status === 'pending').length;
+  const cards = [...teamRegistrations]
+    .filter(r => r.status !== 'rejected' || isAdmin || isMyTeam(r))
+    .sort((a,b) => isAdmin ? (_stOrder[a.status]??9) - (_stOrder[b.status]??9) : 0)
     .map(r => {
       const sName = r.seasonId ? (seasons.find(s=>s.id===r.seasonId)?.name||r.seasonId) : '';
       const logoHtml = r.logo
         ? `<img src="${r.logo}" style="width:48px;height:48px;border-radius:8px;object-fit:cover;border:1px solid var(--border)">`
         : `<div style="width:48px;height:48px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.4rem">🏀</div>`;
+      const btn = (st, label, color) => `<button onclick="teamRegSetStatus('${r.id}','${st}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:${color}">${label}</button>`;
       const adminBtns = isAdmin ? `
-        <div style="display:flex;gap:.35rem;margin-top:.6rem">
-          <button onclick="teamRegSetStatus('${r.id}','approved')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--win)">✅ Zatwierdź</button>
-          <button onclick="teamRegSetStatus('${r.id}','rejected')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--loss)">❌ Odrzuć</button>
+        <div style="display:flex;gap:.35rem;margin-top:.6rem;flex-wrap:wrap">
+          ${r.status !== 'approved' ? btn('approved','✅ Zatwierdź','var(--win)') : ''}
+          ${r.status !== 'rejected' ? btn('rejected','❌ Odrzuć','var(--loss)') : ''}
+          ${r.status !== 'pending'  ? btn('pending','↩ Cofnij do oczekujących','var(--muted)') : ''}
           <button onclick="teamRegDelete('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">🗑 Usuń</button>
         </div>` : '';
+      const rejectNote = (isAdmin || isMyTeam(r)) && r.status === 'rejected' && r.rejectReason
+        ? `<div style="font-size:.75rem;color:var(--loss);margin-top:.4rem">Powód: ${r.rejectReason}</div>` : '';
       const playerPills = (r.players||[]).map(p =>
         `<span style="display:inline-flex;align-items:center;gap:.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.15rem .45rem;font-size:.75rem;white-space:nowrap">
           <span style="font-size:.65rem;color:var(--muted)">${p.platform==='xbox'?'🎮':'🎯'}</span>
@@ -5622,6 +5636,7 @@ function renderTeamRegistrations() {
                 · ${new Date(r.registeredAt).toLocaleDateString('pl-PL')}
               </div>
               <div style="display:flex;flex-wrap:wrap;gap:.3rem">${playerPills}</div>
+              ${rejectNote}
               ${adminBtns}
             </div>
           </div>
@@ -5630,7 +5645,7 @@ function renderTeamRegistrations() {
 
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-      <div class="section-title" style="margin-bottom:0">🏀 ZAPISY DO LIGI — NBA 2K27</div>
+      <div class="section-title" style="margin-bottom:0">🏀 ZAPISY DO LIGI — NBA 2K27${isAdmin && pendingCount ? ` <span style="background:var(--accent);color:rgba(0,0,0,.85);border-radius:5px;padding:.05rem .45rem;font-size:.8rem;vertical-align:middle">⏳ ${pendingCount} do weryfikacji</span>` : ''}</div>
       <button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>
     </div>
     ${cards || `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted)">
@@ -5642,21 +5657,73 @@ function renderTeamRegistrations() {
 }
 
 async function teamRegSetStatus(id, status) {
+  if(!localStorage.getItem('nba2k_admin_token_hash')) { showToast('❌ Tylko admin', 'error'); return; }
   const reg = teamRegistrations.find(r => r.id === id);
   if(!reg) return;
+
+  let reason = '';
+  if(status === 'rejected') {
+    reason = prompt(`Powód odrzucenia drużyny "${reg.teamName}" (opcjonalnie):`, '');
+    if(reason === null) return; // anulowano
+    reason = reason.trim();
+  } else if(status === 'approved') {
+    if(!confirm(`Zatwierdzić drużynę "${reg.teamName}"?`)) return;
+  }
+
+  const prev = { status: reg.status, rejectReason: reg.rejectReason, reviewedAt: reg.reviewedAt };
   reg.status = status;
-  await saveData();
+  reg.reviewedAt = new Date().toISOString();
+  if(status === 'rejected') reg.rejectReason = reason; else delete reg.rejectReason;
+
+  const saved = await saveData();
+  if(!saved) {
+    Object.assign(reg, prev);
+    showToast('❌ Nie udało się zapisać zmiany statusu', 'error');
+    return;
+  }
   renderTeamRegistrations();
-  showToast(status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona', 'success');
-  // Notify Discord
-  const embed = {
-    title: status === 'approved' ? '✅ Drużyna zatwierdzona' : '❌ Drużyna odrzucona',
-    description: `**${reg.teamName}** (kapitan: ${reg.captain?.name||'?'})`,
-    color: status === 'approved' ? 0x16a34a : 0xdc2626,
+
+  if(status === 'pending') { showToast('↩ Przywrócono do oczekujących', 'info'); return; }
+
+  const seasonName = reg.seasonId ? (seasons.find(s => s.id === reg.seasonId)?.name || reg.seasonId) : '—';
+  const approvedCount = teamRegistrations.filter(r => r.status === 'approved' && r.seasonId === reg.seasonId).length;
+  const playerLines = (reg.players||[]).map((p,i) =>
+    `${i+1}. **${p.gamertag}** [${(p.platform||'psn').toUpperCase()}]${p.experience ? ' · ' + (_expLabels[p.experience]||'') : ''}`
+  ).join('\n') || '—';
+  const captainId = reg.captain?.id && /^\d+$/.test(String(reg.captain.id)) ? String(reg.captain.id) : null;
+
+  const embed = status === 'approved' ? {
+    title: `✅ ${reg.teamName} dołącza do ligi NBA 2K27!`,
+    color: 0x16a34a,
+    fields: [
+      { name: 'Sezon', value: seasonName, inline: true },
+      { name: 'Kapitan', value: captainId ? `<@${captainId}>` : (reg.captain?.name || '?'), inline: true },
+      { name: 'Zatwierdzone drużyny', value: String(approvedCount), inline: true },
+      { name: `Skład (${reg.players?.length||0})`, value: playerLines, inline: false }
+    ],
+    footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
+    timestamp: new Date().toISOString()
+  } : {
+    title: `❌ Zgłoszenie odrzucone — ${reg.teamName}`,
+    description: reason ? `**Powód:** ${reason}` : undefined,
+    color: 0xdc2626,
+    fields: [ { name: 'Kapitan', value: captainId ? `<@${captainId}>` : (reg.captain?.name || '?'), inline: true } ],
     footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
     timestamp: new Date().toISOString()
   };
-  try { await _discordNotify({ embeds: [embed] }); } catch(e) {}
+  if(reg.logo && /^https?:/.test(reg.logo)) embed.thumbnail = { url: reg.logo };
+
+  const payload = { embeds: [embed] };
+  if(captainId) {
+    payload.content = `<@${captainId}>`;
+    payload.allowed_mentions = { users: [captainId] };
+  }
+  let sent = false;
+  try { sent = await _discordNotify(payload); } catch(e) { console.warn('Discord notify failed', e); }
+  showToast(
+    (status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona') + (sent ? ' · wysłano na Discord' : ' · ⚠ Discord nie odpowiedział'),
+    sent ? 'success' : 'info'
+  );
 }
 
 async function teamRegDelete(id) {
