@@ -6119,7 +6119,7 @@ function renderSeasonSchedule() {
   const ctx = _ssCtx();
   const isRealAdmin = !ctx.demo && _isLoggedInSync();
 
-  if(!ctx.demo && !ctx.items.length && !isRealAdmin) { el.innerHTML = ''; return; }
+  const publicDemo = !ctx.demo && !isRealAdmin && !ctx.items.length;
 
   const btn = (onclick, label, primary) => `<button onclick="${onclick}" class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="font-size:.78rem;padding:.35rem .75rem">${label}</button>`;
   const formatBadge = ctx.fixture
@@ -6136,7 +6136,8 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true) : ''}
+          : isRealAdmin ? btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
 
@@ -6144,7 +6145,7 @@ function renderSeasonSchedule() {
     const roleBtn = (r, label) => `<button onclick="demoSetRole('${r}')" style="font-size:.75rem;padding:.25rem .6rem;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid ${_demo.role === r ? 'var(--accent)' : 'var(--border)'};background:${_demo.role === r ? 'var(--accent)' : 'transparent'};color:${_demo.role === r ? 'rgba(0,0,0,.88)' : 'var(--text)'}">${label}</button>`;
     return `
       <div style="background:rgba(245,197,24,.08);border:1px dashed var(--accent);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">
-        <div style="font-size:.8rem;font-weight:700;margin-bottom:.5rem">🧪 TRYB DEMO — przykładowe drużyny, nic nie jest zapisywane ani wysyłane na Discord</div>
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:.5rem">🧪 TRYB DEMO — to NIE jest prawdziwy terminarz. Przykładowe drużyny, nic nie jest zapisywane ani wysyłane na Discord.</div>
         <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;font-size:.75rem">
           <span style="color:var(--muted)">Widzisz jako:</span>
           ${roleBtn('admin', '👑 Admin')}
@@ -6154,6 +6155,15 @@ function renderSeasonSchedule() {
         </div>
       </div>`;
   })() : '';
+
+  if(publicDemo) {
+    el.innerHTML = header + `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1.25rem;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.5">
+        Terminarz pojawi się po zamknięciu zapisów. Kapitanowie wybiorą wtedy przy każdym meczu dzień priorytetowy i zapasowy (Pn / Śr / Nd), a kibice zagłosują, kto wygra.<br>
+        Kliknij <b>❓ Jak to działa?</b>, żeby przetestować to na przykładowych drużynach.
+      </div>`;
+    return;
+  }
 
   if(!ctx.items.length) {
     const teams = _ssApprovedTeams(ctx.seasonId);
@@ -6172,7 +6182,7 @@ function renderSeasonSchedule() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.5rem;margin-bottom:1rem">
       ${groups.map(g => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.6rem .8rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;letter-spacing:1px;color:var(--accent);margin-bottom:.3rem">${_h(g.name)}</div>
-        ${g.teams.map(t => `<div style="font-size:.8rem;padding:.1rem 0;${ctx.myTeam === t ? 'color:var(--accent);font-weight:700' : ''}">${_h(t)}</div>`).join('')}
+        ${g.teams.map(t => `<div style="font-size:.8rem;padding:.1rem 0;${ctx.myTeam === t ? 'color:var(--accent);font-weight:700' : ''}">${_ssTeamName(ctx, t)}</div>`).join('')}
       </div>`).join('')}
     </div>` : '';
 
@@ -6204,6 +6214,10 @@ function renderSeasonSchedule() {
     ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + (groupName(b.groupId) ? ' (' + groupName(b.groupId) + ')' : '')).join(', ')}</div>` : ''}`;
 }
 
+function _ssTeamName(ctx, t) {
+  return _h(t) + (ctx.demo ? ' <span style="font-size:.7em;font-weight:600;color:var(--muted);letter-spacing:0">(demo)</span>' : '');
+}
+
 function _ssCard(ctx, s, groupName) {
   const k = String(s.id);
   const res = _ssResult(ctx, s);
@@ -6216,7 +6230,7 @@ function _ssCard(ctx, s, groupName) {
   const mineSide = ctx.myTeam && [s.team1, s.team2].map(x => String(x).toLowerCase()).includes(ctx.myTeam.toLowerCase());
   const teamCol = (side, align) => `
     <div style="flex:1;min-width:0;text-align:${align}">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(s[side])}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_ssTeamName(ctx, s[side])}</div>
       ${_ssVoteBtn(ctx, s, side)}
     </div>`;
 
@@ -6602,7 +6616,7 @@ async function ssConfirmFixture() {
 
 // ── DEMO ──
 function startDemo() {
-  _demo = { teams: SS_DEMO_TEAMS.slice(0, 10), role: 'admin', captainTeam: SS_DEMO_TEAMS[0],
+  _demo = { teams: SS_DEMO_TEAMS.slice(0, 10), role: _isLoggedInSync() ? 'admin' : 'captain', captainTeam: SS_DEMO_TEAMS[0],
     fixture: null, items: [], picks: {}, counts: {}, myVotes: {}, results: {} };
   const groups = _ssDrawGroups(_demo.teams, 2);
   const startDate = _ssMondayOf(new Date().toISOString().slice(0, 10)); // Week 1 = ten tydzień (rozegrany), Week 2 = następny
