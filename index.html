@@ -1003,6 +1003,7 @@
       <div class="section-title" style="margin-bottom:0" data-i18n="schedule_title">📅 Harmonogram</div>
       <div id="schedule-admin-btn"></div>
     </div>
+    <div id="season-schedule-wrap" style="margin-bottom:2rem"></div>
     <div id="schedule-upcoming" style="margin-bottom:2rem"></div>
     <div id="schedule-played" style="margin-bottom:2rem"></div>
   </div>
@@ -1860,7 +1861,8 @@ let discordTeamRegWebhookUrl = '';
 let freeAgents = [];          // z Workera (osobny klucz KV)
 let discordFreeAgentsWebhookUrl = ''; // kanał wolnych agentów (ustawiany przez admina)
 let scheduleVoteCounts = {};  // { scheduleId: { team1, team2 } }
-let myVotes = {};             // { scheduleId: 'team1'|'team2' } — głosy zalogowanego użytkownika
+let myVotes = {};
+let scheduleDayPicks = {};     // { scheduleId: { team1:{primary,backup}, team2:{...} } }             // { scheduleId: 'team1'|'team2' } — głosy zalogowanego użytkownika
 let _regTab = 'teams';        // 'teams' | 'fa'
 let _faPosFilter = ''; // osobny kanał dla zgłoszeń drużyn (zapisywany w danych ligi)
 let recapModel = localStorage.getItem('nba2k_recap_model') || 'claude-haiku-4-5-20251001';
@@ -2179,6 +2181,7 @@ async function loadData() {
     freeAgents = record.freeAgents || [];
     discordFreeAgentsWebhookUrl = record.discordFreeAgentsWebhookUrl || '';
     scheduleVoteCounts = record.scheduleVoteCounts || {};
+    scheduleDayPicks = record.scheduleDayPicks || {};
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
     // Fix playoffs with missing startDate — use createdAt date as fallback
@@ -3836,8 +3839,9 @@ function renderSchedule() {
     ? `<button class="btn btn-primary" onclick="openScheduleAdd()">📅 Planowany mecz</button> <button class="btn btn-ghost" onclick="showView('add-match')" style="margin-left:.5rem">🏀 Dodaj wynik meczu</button>`
     : '';
 
-  const upcoming = schedule.filter(s => !s.played).sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00')));
-  const played   = schedule.filter(s =>  s.played).sort((a,b)=>new Date(b.date+'T'+(b.time||'00:00'))-new Date(a.date+'T'+(a.time||'00:00')));
+  renderSeasonSchedule();
+  const upcoming = schedule.filter(s => !s.played && !s.generated).sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00')));
+  const played   = schedule.filter(s =>  s.played && !s.generated).sort((a,b)=>new Date(b.date+'T'+(b.time||'00:00'))-new Date(a.date+'T'+(a.time||'00:00')));
 
   const renderCard = (s, showPlayed) => {
     const matchResult = s.matchId ? matches.find(m => Number(m.id) === Number(s.matchId)) : null;
@@ -3889,7 +3893,7 @@ function renderSchedule() {
           <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.1rem">${s.team2}</div>${_voteBtn(s,'team2')}</div>
         </div>
       </div>
-      ${_voteBar(s)}
+      ${_voteBar(s, matchResult)}
       ${resultBadge}
       ${adminActions}
     </div>`;
@@ -4023,7 +4027,7 @@ H2H: ${h2hText}`;
 function renderScheduleDashboard() {
   const el = document.getElementById('schedule-dashboard');
   if(!el) return;
-  const upcoming = schedule.filter(s=>!s.played).sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00'))).slice(0,3);
+  const upcoming = schedule.filter(s=>!s.played && s.date).sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00'))).slice(0,3);
   if(!upcoming.length) { el.style.display='none'; return; }
   el.style.display='block';
   el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
@@ -5666,6 +5670,7 @@ function renderFreeAgents(wrap) {
             </div>
             <div style="font-size:.75rem;color:var(--muted);margin-bottom:${f.description ? '.45rem' : '0'}">
               ${f.platform === 'xbox' ? '🎮' : '🎯'} <b style="color:var(--text)">${_h(f.gamertag)}</b> · ${(f.platform || 'psn').toUpperCase()}
+              ${f.experience && _expLabels[f.experience] ? ` · <span style="color:var(--text)">${_expLabels[f.experience]}</span>` : ''}
               · ${new Date(f.updatedAt || f.createdAt).toLocaleDateString('pl-PL')}
             </div>
             ${f.description ? `<div style="font-size:.84rem;line-height:1.45;white-space:pre-wrap;word-break:break-word">${_h(f.description)}</div>` : ''}
@@ -5766,8 +5771,12 @@ function openFreeAgentModal() {
         <select id="fa-platform" style="${inp}"><option value="psn">PSN</option><option value="xbox">Xbox</option></select></div>
     </div>
 
-    <div style="margin-bottom:.9rem"><label style="${lbl}">Sezon</label>
-      <select id="fa-season" style="${inp}">${seasonOpts}</select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.9rem">
+      <div><label style="${lbl}">Poziom <span style="color:var(--loss)">*</span></label>
+        <select id="fa-experience" style="${inp}"><option value="">— wybierz —</option>${Object.entries(_expLabels).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Sezon</label>
+        <select id="fa-season" style="${inp}">${seasonOpts}</select></div>
+    </div>
 
     <div style="margin-bottom:1rem">
       <label style="${lbl}">Opis <span id="fa-desc-count" style="letter-spacing:0;font-weight:400"></span></label>
@@ -5786,6 +5795,7 @@ function openFreeAgentModal() {
     </div>`;
 
   document.getElementById('fa-platform').value = mine?.platform || 'psn';
+  document.getElementById('fa-experience').value = mine?.experience || '';
   document.getElementById('fa-season').value = mine ? (mine.seasonId || '') : (currentSeasonId || '');
   document.getElementById('fa-desc-count').textContent = (mine?.description || '').length + '/500';
   m.classList.add('open');
@@ -5795,6 +5805,8 @@ async function submitFreeAgent() {
   if(!_faPos1) { showToast('❌ Wybierz pozycję preferowaną', 'error'); return; }
   const gamertag = document.getElementById('fa-gamertag').value.trim();
   if(!gamertag) { showToast('❌ Podaj gamertag', 'error'); return; }
+  const experience = document.getElementById('fa-experience').value;
+  if(!experience) { showToast('❌ Wybierz poziom', 'error'); return; }
   if(!document.getElementById('fa-rules').checked) {
     document.getElementById('fa-rules-wrap').style.borderColor = 'var(--loss)';
     showToast('❌ Zaakceptuj regulamin', 'error');
@@ -5807,6 +5819,7 @@ async function submitFreeAgent() {
   const res = await _api('/free-agent', 'POST', {
     pos1: _faPos1, pos2: _faPos2 || '', gamertag,
     platform: document.getElementById('fa-platform').value,
+    experience,
     seasonId: document.getElementById('fa-season').value || null,
     description: document.getElementById('fa-desc').value.trim(),
     rulesAccepted: true
@@ -5880,32 +5893,14 @@ function _voteBtn(s, side) {
     border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'transparent'};color:${on ? 'var(--accent)' : 'var(--muted)'}">👍${on ? ' Twój typ' : ''}</button>`;
 }
 
-function _voteBar(s) {
+function _voteBar(s, matchResult) {
   const k = String(s.id);
-  const c = scheduleVoteCounts[k] || { team1: 0, team2: 0 };
-  const total = (c.team1 || 0) + (c.team2 || 0);
-  const closed = _voteClosedClient(s);
-  const reveal = !!myVotes[k] || closed || _isLoggedInSync();
-  const note = txt => `<div style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:.6rem">${txt}</div>`;
-
-  if(!reveal) return note(total ? `🗳 ${total} ${_plVotes(total)} · zagłosuj 👍, aby zobaczyć wyniki` : '🗳 Kto wygra? Zagłosuj 👍');
-  if(!total) return closed ? '' : note('🗳 Brak głosów — bądź pierwszy');
-
-  const p1 = Math.round((c.team1 || 0) / total * 100), p2 = 100 - p1;
-  const lead = p1 === p2 ? 0 : (p1 > p2 ? 1 : 2);
-  const pct = (v, on) => `<span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${on ? 'var(--accent)' : 'var(--muted)'}">${v}%</span>`;
-  return `
-    <div style="margin-top:.7rem">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.25rem">
-        ${pct(p1, lead === 1)}
-        <span style="font-size:.68rem;color:var(--muted)">🗳 ${total} ${_plVotes(total)}${closed ? ' · głosowanie zakończone' : ''}</span>
-        ${pct(p2, lead === 2)}
-      </div>
-      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface2)">
-        <div style="width:${p1}%;background:var(--accent);transition:width .3s"></div>
-        <div style="width:${p2}%;background:#3b82f6;transition:width .3s"></div>
-      </div>
-    </div>`;
+  const closed = !!matchResult || _voteClosedClient(s);
+  return _voteBarHtml({
+    c: scheduleVoteCounts[k] || { team1: 0, team2: 0 }, mine: myVotes[k], closed,
+    reveal: !!myVotes[k] || closed || _isLoggedInSync(),
+    winnerSide: matchResult ? _ssMatchToResult(s, matchResult).winnerSide : null
+  });
 }
 
 async function voteSchedule(k, side) {
@@ -5930,6 +5925,746 @@ async function voteSchedule(k, side) {
   myVotes[k] = res.myPick;
   renderSchedule();
 }
+
+// ═══════════════════════════════════════════════════════════════
+// TERMINARZ SEZONU — generator (jedna grupa / grupy), wybór dnia przez kapitanów, demo
+// ═══════════════════════════════════════════════════════════════
+const SS_DAYS = {
+  mon: { label: 'Pn', full: 'Poniedziałek', off: 0 },
+  wed: { label: 'Śr', full: 'Środa',        off: 2 },
+  sun: { label: 'Nd', full: 'Niedziela',    off: 6 }
+};
+const SS_DEMO_TEAMS = ['Warsaw Wolves','Kraków Dragons','Gdańsk Sharks','Poznań Bulls','Wrocław Owls','Łódź Rhinos',
+  'Katowice Comets','Lublin Hawks','Szczecin Storm','Toruń Titans','Rzeszów Rockets','Opole Outlaws'];
+let _ssWeek = null;
+let _ssSeasonId = null;
+let _ssDraft = {};   // { scheduleId: { primary, backup } }
+let _ssGen = null;   // stan okna generatora
+let _demo = null;    // stan trybu demo (nic nie jest zapisywane)
+
+// ── daty ──
+function _ssAddDays(iso, n) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function _ssMondayOf(iso) { const d = new Date(iso + 'T12:00:00'); const wd = (d.getDay() + 6) % 7; return _ssAddDays(iso, -wd); }
+function _ssNextMonday() { const d = new Date(); d.setHours(12, 0, 0, 0); const add = ((8 - d.getDay()) % 7) || 7; d.setDate(d.getDate() + add); return d.toISOString().slice(0, 10); }
+function _ssFmt(iso) { return new Date(iso + 'T12:00:00').toLocaleDateString('pl-PL', { day: 'numeric', month: 'numeric' }); }
+function _ssDayDate(weekStart, day) { return _ssAddDays(weekStart, SS_DAYS[day].off); }
+function _ssDayChip(weekStart, day) { return `${SS_DAYS[day].label} ${_ssFmt(_ssDayDate(weekStart, day))}`; }
+
+// ── algorytm ──
+function _ssShuffle(a) { a = [...a]; for(let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function _ssRoundRobin(teams) {
+  const t = [...teams];
+  if(t.length % 2) t.push(null);
+  const n = t.length, rounds = [];
+  for(let r = 0; r < n - 1; r++) {
+    const pairs = [], byes = [];
+    for(let i = 0; i < n / 2; i++) {
+      const a = t[i], b = t[n - 1 - i];
+      if(a && b) pairs.push(((i === 0 ? r : r + i) % 2) ? [b, a] : [a, b]);
+      else byes.push(a || b);
+    }
+    rounds.push({ pairs, byes });
+    t.splice(1, 0, t.pop());
+  }
+  return rounds;
+}
+
+function _ssDrawGroups(teams, count) {
+  const gs = Array.from({ length: count }, (_, i) => ({ id: 'g' + (i + 1), name: 'Grupa ' + String.fromCharCode(65 + i), teams: [] }));
+  _ssShuffle(teams).forEach((t, i) => gs[i % count].teams.push(t));
+  return gs;
+}
+
+function _ssBuildFixture({ teams, format, groups, startDate, time, seasonId }) {
+  const gs = format === 'groups' ? groups : [{ id: 'all', name: '', teams }];
+  const items = [], byes = {};
+  let id = Date.now();
+  gs.forEach(g => {
+    _ssRoundRobin(g.teams).forEach((rd, r) => {
+      const week = r + 1, weekStart = _ssAddDays(startDate, r * 7);
+      rd.pairs.forEach(([a, b]) => items.push({
+        id: id++, generated: true, seasonId, week, weekStart, groupId: g.id,
+        team1: a, team2: b, date: '', time: '', defaultTime: time, streamUrl: '',
+        played: false, prediction: null, matchId: null
+      }));
+      rd.byes.forEach(x => (byes[week] = byes[week] || []).push({ team: x, groupId: g.id }));
+    });
+  });
+  return { items, byes };
+}
+
+function _ssSuggest(p) {
+  const a = p?.team1, b = p?.team2;
+  if(!a || !b) return null;
+  if(a.primary === b.primary) return { day: a.primary, kind: 'match' };
+  const aSet = [a.primary, a.backup], bSet = [b.primary, b.backup];
+  const cands = [];
+  if(bSet.includes(a.primary)) cands.push(a.primary);
+  if(aSet.includes(b.primary)) cands.push(b.primary);
+  if(cands.length) return { day: cands.sort((x, y) => SS_DAYS[x].off - SS_DAYS[y].off)[0], kind: 'partial' };
+  if(a.backup === b.backup) return { day: a.backup, kind: 'backup' };
+  return { day: null, kind: 'none' };
+}
+
+// ── kontekst (prawdziwe dane / demo) ──
+function _ssApprovedTeams(seasonId) {
+  return teamRegistrations
+    .filter(r => r.status === 'approved' && (!seasonId || !r.seasonId || r.seasonId === seasonId))
+    .map(r => r.teamName);
+}
+
+function _ssRealCtx() {
+  const withFixture = seasons.filter(x => x.fixture);
+  if(!_ssSeasonId || !seasons.find(x => x.id === _ssSeasonId)) {
+    _ssSeasonId = (seasons.find(x => x.id === currentSeasonId && x.fixture) || withFixture[withFixture.length - 1] || {}).id || currentSeasonId || null;
+  }
+  const season = seasons.find(x => x.id === _ssSeasonId) || null;
+  const items = schedule.filter(s => s.generated && (s.seasonId || null) === (_ssSeasonId || null));
+  const myTeam = discordUser
+    ? (teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id && (!_ssSeasonId || !r.seasonId || r.seasonId === _ssSeasonId))?.teamName || null)
+    : null;
+  return { demo: false, season, seasonId: _ssSeasonId, fixture: season?.fixture || null, items,
+    picks: scheduleDayPicks, counts: scheduleVoteCounts, myVotes, isAdmin: _isLoggedInSync(), myTeam,
+    seasonsWithFixture: withFixture };
+}
+
+function _ssDemoCtx() {
+  return { demo: true, season: { name: 'Sezon DEMO' }, seasonId: 'demo', fixture: _demo.fixture, items: _demo.items,
+    picks: _demo.picks, counts: _demo.counts, myVotes: _demo.myVotes,
+    isAdmin: _demo.role === 'admin', myTeam: _demo.role === 'captain' ? _demo.captainTeam : null, seasonsWithFixture: [] };
+}
+
+function _ssCtx() { return _demo ? _ssDemoCtx() : _ssRealCtx(); }
+function _ssItem(k) { return (_demo ? _demo.items : schedule).find(x => String(x.id) === String(k)); }
+
+function _ssResult(ctx, s) {
+  if(ctx.demo) {
+    const r = _demo.results[String(s.id)];
+    return r ? { s1: r.s1, s2: r.s2, winnerSide: r.s1 > r.s2 ? 'team1' : 'team2' } : null;
+  }
+  const m = s.matchId ? matches.find(x => Number(x.id) === Number(s.matchId)) : null;
+  return m ? _ssMatchToResult(s, m) : null;
+}
+
+function _ssMatchToResult(s, m) {
+  const swapped = m.team1.name === s.team2 || m.team2.name === s.team1;
+  const s1 = swapped ? m.team2.score : m.team1.score;
+  const s2 = swapped ? m.team1.score : m.team2.score;
+  return { s1, s2, winnerSide: s1 > s2 ? 'team1' : 'team2' };
+}
+
+// ── głosowanie (wspólny pasek dla Harmonogramu i terminarza sezonu) ──
+function _voteBarHtml({ c, mine, closed, reveal, winnerSide }) {
+  const total = (c.team1 || 0) + (c.team2 || 0);
+  const note = txt => `<div style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:.6rem">${txt}</div>`;
+  if(!reveal) return note(total ? `🗳 ${total} ${_plVotes(total)} · zagłosuj 👍, aby zobaczyć wyniki` : '🗳 Kto wygra? Zagłosuj 👍');
+  if(!total) return closed ? '' : note('🗳 Brak głosów — bądź pierwszy');
+
+  const p1 = Math.round((c.team1 || 0) / total * 100), p2 = 100 - p1;
+  const lead = p1 === p2 ? 0 : (p1 > p2 ? 1 : 2);
+  const pct = (v, on) => `<span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${on ? 'var(--accent)' : 'var(--muted)'}">${v}%</span>`;
+
+  let verdict = '';
+  if(winnerSide) {
+    const share = winnerSide === 'team1' ? p1 : p2;
+    verdict = lead === 0
+      ? '🤝 Kibice byli podzieleni po równo'
+      : (lead === 1) === (winnerSide === 'team1')
+        ? `🎯 Kibice trafili — ${share}% typowało zwycięzcę`
+        : `😮 Niespodzianka — tylko ${share}% typowało zwycięzcę`;
+    if(mine) verdict += mine === winnerSide ? ' · ✅ Twój typ trafiony' : ' · ❌ Twój typ nietrafiony';
+  }
+  return `
+    <div style="margin-top:.7rem">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.25rem">
+        ${pct(p1, lead === 1)}
+        <span style="font-size:.68rem;color:var(--muted)">🗳 ${total} ${_plVotes(total)}${closed && !winnerSide ? ' · głosowanie zakończone' : ''}</span>
+        ${pct(p2, lead === 2)}
+      </div>
+      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface2)">
+        <div style="width:${p1}%;background:var(--accent);transition:width .3s"></div>
+        <div style="width:${p2}%;background:#3b82f6;transition:width .3s"></div>
+      </div>
+      ${verdict ? `<div style="text-align:center;font-size:.75rem;margin-top:.4rem;font-weight:600">${verdict}</div>` : ''}
+    </div>`;
+}
+
+function _ssVoteClosed(ctx, s) { return !!_ssResult(ctx, s) || _voteClosedClient(s); }
+
+function _ssVoteBtn(ctx, s, side) {
+  if(_ssVoteClosed(ctx, s)) return '';
+  const k = String(s.id);
+  const on = ctx.myVotes[k] === side;
+  const fn = ctx.demo ? `demoVote('${k}','${side}')` : `voteSchedule('${k}','${side}')`;
+  return `<button onclick="event.stopPropagation();${fn}" title="Typuję, że wygra ${_h(s[side])}"
+    style="margin-top:.35rem;font-size:.75rem;padding:.2rem .65rem;border-radius:999px;cursor:pointer;font-family:inherit;
+    border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'transparent'};color:${on ? 'var(--accent)' : 'var(--muted)'}">👍${on ? ' Twój typ' : ''}</button>`;
+}
+
+function _ssVoteBar(ctx, s) {
+  const k = String(s.id);
+  const res = _ssResult(ctx, s);
+  const closed = _ssVoteClosed(ctx, s);
+  return _voteBarHtml({
+    c: ctx.counts[k] || { team1: 0, team2: 0 }, mine: ctx.myVotes[k],
+    closed, reveal: !!ctx.myVotes[k] || closed || ctx.isAdmin, winnerSide: res?.winnerSide || null
+  });
+}
+
+// ── render ──
+function renderSeasonSchedule() {
+  const el = document.getElementById('season-schedule-wrap');
+  if(!el) return;
+  const ctx = _ssCtx();
+  const isRealAdmin = !ctx.demo && _isLoggedInSync();
+
+  if(!ctx.demo && !ctx.items.length && !isRealAdmin) { el.innerHTML = ''; return; }
+
+  const btn = (onclick, label, primary) => `<button onclick="${onclick}" class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" style="font-size:.78rem;padding:.35rem .75rem">${label}</button>`;
+  const formatBadge = ctx.fixture
+    ? `<span style="font-size:.72rem;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:.05rem .45rem;vertical-align:middle">${ctx.fixture.format === 'groups' ? '👥 ' + ctx.fixture.groups.length + ' grupy' : '🏟 Jedna grupa'}</span>` : '';
+
+  const seasonSel = !ctx.demo && ctx.seasonsWithFixture.length > 1
+    ? `<select onchange="_ssSeasonId=this.value;_ssWeek=null;renderSeasonSchedule()" style="width:auto;max-width:220px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-family:inherit;font-size:.8rem">
+        ${ctx.seasonsWithFixture.map(x => `<option value="${_h(x.id)}" ${x.id === ctx.seasonId ? 'selected' : ''}>${_h(x.name)}</option>`).join('')}</select>` : '';
+
+  const header = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+      <div class="section-title" style="margin-bottom:0">🗓 Terminarz sezonu ${ctx.season ? '<span style="color:var(--muted);font-size:.8em">— ' + _h(ctx.season.name) + '</span>' : ''} ${formatBadge}</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+        ${seasonSel}
+        ${ctx.demo
+          ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
+          : isRealAdmin ? btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true) : ''}
+      </div>
+    </div>`;
+
+  const demoBar = ctx.demo ? (() => {
+    const roleBtn = (r, label) => `<button onclick="demoSetRole('${r}')" style="font-size:.75rem;padding:.25rem .6rem;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid ${_demo.role === r ? 'var(--accent)' : 'var(--border)'};background:${_demo.role === r ? 'var(--accent)' : 'transparent'};color:${_demo.role === r ? 'rgba(0,0,0,.88)' : 'var(--text)'}">${label}</button>`;
+    return `
+      <div style="background:rgba(245,197,24,.08);border:1px dashed var(--accent);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:.5rem">🧪 TRYB DEMO — przykładowe drużyny, nic nie jest zapisywane ani wysyłane na Discord</div>
+        <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;font-size:.75rem">
+          <span style="color:var(--muted)">Widzisz jako:</span>
+          ${roleBtn('admin', '👑 Admin')}
+          ${roleBtn('captain', '🏀 Kapitan')}
+          ${_demo.role === 'captain' ? `<select onchange="demoSetCaptain(this.value)" style="width:auto;max-width:220px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .4rem;font-family:inherit;font-size:.75rem">${_demo.teams.map(t => `<option ${t === _demo.captainTeam ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select>` : ''}
+          ${roleBtn('fan', '👤 Kibic')}
+        </div>
+      </div>`;
+  })() : '';
+
+  if(!ctx.items.length) {
+    const teams = _ssApprovedTeams(ctx.seasonId);
+    el.innerHTML = header + demoBar + `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1.5rem;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.5">
+        Brak terminarza dla tego sezonu. Zatwierdzone drużyny: <b style="color:var(--text)">${teams.length}</b>.<br>
+        Kliknij <b>⚙ Generuj terminarz</b>, gdy zapisy będą zamknięte, albo <b>🧪 Demo</b>, żeby zobaczyć, jak to działa.
+      </div>`;
+    return;
+  }
+
+  // grupy
+  const groups = ctx.fixture?.format === 'groups' ? ctx.fixture.groups : [];
+  const groupName = id => groups.find(g => g.id === id)?.name || '';
+  const groupsHtml = groups.length ? `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.5rem;margin-bottom:1rem">
+      ${groups.map(g => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.6rem .8rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;letter-spacing:1px;color:var(--accent);margin-bottom:.3rem">${_h(g.name)}</div>
+        ${g.teams.map(t => `<div style="font-size:.8rem;padding:.1rem 0;${ctx.myTeam === t ? 'color:var(--accent);font-weight:700' : ''}">${_h(t)}</div>`).join('')}
+      </div>`).join('')}
+    </div>` : '';
+
+  // tygodnie
+  const weeks = [...new Set(ctx.items.map(s => s.week))].sort((a, b) => a - b);
+  const weekDone = w => ctx.items.filter(s => s.week === w).every(s => _ssResult(ctx, s));
+  if(!weeks.includes(_ssWeek)) _ssWeek = weeks.find(w => !weekDone(w)) || weeks[weeks.length - 1];
+  const weekStart = w => ctx.items.find(s => s.week === w)?.weekStart;
+  const tabs = weeks.map(w => {
+    const on = w === _ssWeek, ws = weekStart(w);
+    return `<button onclick="_ssWeek=${w};renderSeasonSchedule()" style="flex-shrink:0;padding:.35rem .7rem;border-radius:8px;cursor:pointer;font-family:inherit;text-align:center;line-height:1.2;
+      border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'var(--surface2)'};color:${on ? 'rgba(0,0,0,.88)' : 'var(--text)'}">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem">${weekDone(w) ? '✓ ' : ''}Week ${w}</div>
+      ${ws ? `<div style="font-size:.62rem;opacity:.8">${_ssFmt(ws)}–${_ssFmt(_ssAddDays(ws, 6))}</div>` : ''}
+    </button>`;
+  }).join('');
+
+  const weekItems = ctx.items.filter(s => s.week === _ssWeek);
+  const byGroup = groups.length ? groups.map(g => ({ g, list: weekItems.filter(s => s.groupId === g.id) })) : [{ g: null, list: weekItems }];
+  const byes = (ctx.fixture?.byes?.[_ssWeek] || []);
+
+  el.innerHTML = header + demoBar + groupsHtml + `
+    <div style="display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.4rem;margin-bottom:.75rem">${tabs}</div>
+    ${byGroup.map(({ g, list }) => `
+      ${g ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.4rem 0 .4rem;text-transform:uppercase">${_h(g.name)}</div>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:.6rem;margin-bottom:.5rem">
+        ${list.map(s => _ssCard(ctx, s, groupName)).join('')}
+      </div>`).join('')}
+    ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + (groupName(b.groupId) ? ' (' + groupName(b.groupId) + ')' : '')).join(', ')}</div>` : ''}`;
+}
+
+function _ssCard(ctx, s, groupName) {
+  const k = String(s.id);
+  const res = _ssResult(ctx, s);
+  const isFinal = !!s.date;
+  const status = res
+    ? `<span style="color:var(--win);font-weight:700">✅ Rozegrany</span>`
+    : isFinal
+      ? `<span style="color:var(--win);font-weight:700">📅 ${new Date(s.date + 'T12:00:00').toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'numeric' })}${s.time ? ' · ' + s.time : ''}</span>`
+      : `<span style="color:var(--muted)">⏳ Termin do ustalenia</span>`;
+  const mineSide = ctx.myTeam && [s.team1, s.team2].map(x => String(x).toLowerCase()).includes(ctx.myTeam.toLowerCase());
+  const teamCol = (side, align) => `
+    <div style="flex:1;min-width:0;text-align:${align}">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(s[side])}</div>
+      ${_ssVoteBtn(ctx, s, side)}
+    </div>`;
+
+  return `
+    <div style="background:var(--surface);border:1px solid ${mineSide && !res ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:.85rem 1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.72rem;margin-bottom:.6rem;gap:.5rem">
+        <span style="color:var(--muted)">${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}</span>
+        ${status}
+      </div>
+      <div style="display:flex;align-items:center;gap:.6rem">
+        ${teamCol('team1', 'right')}
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${res ? '1.25rem' : '.95rem'};color:${res ? 'var(--text)' : 'var(--muted)'};min-width:56px;text-align:center">${res ? res.s1 + ' — ' + res.s2 : 'VS'}</div>
+        ${teamCol('team2', 'left')}
+      </div>
+      ${_ssVoteBar(ctx, s)}
+      ${res ? '' : _ssDaySection(ctx, s)}
+      ${_ssAdminActions(ctx, s, res)}
+    </div>`;
+}
+
+function _ssDaySection(ctx, s) {
+  const k = String(s.id);
+  const p = ctx.picks[k] || {};
+  const isFinal = !!s.date;
+  const ws = s.weekStart;
+  const chip = (day, kind) => `<span title="${SS_DAYS[day].full}" style="display:inline-block;font-size:.72rem;padding:.12rem .45rem;border-radius:5px;margin:.1rem .15rem 0 0;
+    ${kind === 'primary' ? 'background:var(--accent);color:rgba(0,0,0,.88);font-weight:700' : 'border:1px solid var(--border);color:var(--muted)'}">${kind === 'primary' ? '⭐ ' : '↺ '}${_ssDayChip(ws, day)}</span>`;
+
+  const col = side => {
+    const pk = p[side];
+    const isMine = ctx.myTeam && ctx.myTeam.toLowerCase() === String(s[side]).toLowerCase();
+    const head = `<div style="font-size:.66rem;color:var(--muted);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isMine ? '🏀 Ty · ' : ''}${_h(s[side])}</div>`;
+    if(isMine && !isFinal) return head + _ssPicker(ctx, s, side);
+    return head + (pk ? chip(pk.primary, 'primary') + chip(pk.backup, 'backup') : `<span style="font-size:.72rem;color:var(--muted)">— czeka na wybór —</span>`);
+  };
+
+  let suggestHtml = '';
+  if(!isFinal) {
+    const sg = _ssSuggest(p);
+    const msg = !sg
+      ? (p.team1 || p.team2 ? `⏳ Czeka na: ${_h(p.team1 ? s.team2 : s.team1)}` : '')
+      : sg.kind === 'match' ? `✨ Oba priorytety zgodne: <b>${_ssDayChip(ws, sg.day)}</b>`
+      : sg.kind === 'partial' ? `👍 Wspólny dzień: <b>${_ssDayChip(ws, sg.day)}</b>`
+      : sg.kind === 'backup' ? `↺ Zgodne tylko dni zapasowe: <b>${_ssDayChip(ws, sg.day)}</b>`
+      : `⚠ Brak wspólnego dnia — termin ustala admin`;
+    if(msg) suggestHtml = `<div style="font-size:.75rem;margin-top:.5rem;color:${sg && sg.kind === 'none' ? 'var(--loss)' : 'var(--text)'}">${msg}</div>`;
+  }
+
+  return `
+    <div style="margin-top:.75rem;padding-top:.65rem;border-top:1px solid var(--border)">
+      <div style="font-size:.68rem;font-weight:700;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📅 PROPOZYCJE TERMINU</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div>${col('team1')}</div>
+        <div>${col('team2')}</div>
+      </div>
+      ${suggestHtml}
+    </div>`;
+}
+
+function _ssPicker(ctx, s, side) {
+  const k = String(s.id);
+  const saved = ctx.picks[k]?.[side] || {};
+  const d = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '' };
+  const dirty = d.primary !== (saved.primary || '') || d.backup !== (saved.backup || '');
+  const row = (kind, label) => `
+    <div style="font-size:.64rem;color:var(--muted);margin:.25rem 0 .15rem">${label}</div>
+    <div style="display:flex;gap:.25rem">
+      ${Object.keys(SS_DAYS).map(day => {
+        const on = d[kind] === day;
+        const disabled = kind === 'backup' && d.primary === day;
+        return `<button ${disabled ? 'disabled' : ''} onclick="ssPickDraft('${k}','${kind}','${day}')" title="${SS_DAYS[day].full}"
+          style="flex:1;font-size:.7rem;padding:.25rem 0;border-radius:5px;font-family:inherit;cursor:${disabled ? 'not-allowed' : 'pointer'};
+          border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? (kind === 'primary' ? 'var(--accent)' : 'rgba(245,197,24,.15)') : 'transparent'};
+          color:${on ? (kind === 'primary' ? 'rgba(0,0,0,.88)' : 'var(--accent)') : disabled ? 'rgba(127,127,127,.35)' : 'var(--text)'}">${_ssDayChip(s.weekStart, day)}</button>`;
+      }).join('')}
+    </div>`;
+  const canSave = d.primary && d.backup && dirty;
+  return row('primary', '⭐ Priorytet') + row('backup', '↺ Zapas') + `
+    <button onclick="ssSavePick('${k}')" ${canSave ? '' : 'disabled'} class="btn btn-primary" style="width:100%;margin-top:.4rem;font-size:.72rem;padding:.25rem 0;${canSave ? '' : 'opacity:.45'}">
+      ${saved.primary && !dirty ? '✓ Zapisano' : '💾 Zapisz wybór'}</button>`;
+}
+
+function _ssAdminActions(ctx, s, res) {
+  if(!ctx.isAdmin) return '';
+  const k = String(s.id);
+  const b = (onclick, label, style) => `<button onclick="${onclick}" class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem;${style || ''}">${label}</button>`;
+  const out = [];
+  if(!res) {
+    if(s.date) out.push(b(`ssUnfinalize('${k}')`, '↩ Zmień termin'));
+    else {
+      const sg = _ssSuggest(ctx.picks[k]);
+      Object.keys(SS_DAYS).forEach(day => {
+        const sug = sg && sg.day === day;
+        out.push(`<button onclick="ssFinalize('${k}','${day}')" class="btn ${sug ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.2rem .5rem">✅ ${_ssDayChip(s.weekStart, day)}</button>`);
+      });
+    }
+    if(ctx.demo) out.push(b(`demoSimResult('${k}')`, '🎲 Symuluj wynik'));
+  } else if(ctx.demo) out.push(b(`demoSimResult('${k}', true)`, '↩ Cofnij wynik'));
+  if(!ctx.demo) {
+    if(!s.played) out.push(b(`linkScheduleMatch(${s.id})`, '🔗 Wynik'));
+    out.push(b(`openScheduleEdit(${s.id})`, '✏️'));
+  }
+  return `<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.65rem;padding-top:.55rem;border-top:1px dashed var(--border)">
+    <span style="font-size:.64rem;color:var(--muted);align-self:center;margin-right:.2rem">👑 ${s.date || res ? 'ADMIN' : 'ZATWIERDŹ TERMIN'}</span>${out.join('')}</div>`;
+}
+
+// ── akcje ──
+function ssPickDraft(k, kind, day) {
+  const ctx = _ssCtx();
+  const s = _ssItem(k);
+  const side = ctx.myTeam && (String(s.team1).toLowerCase() === ctx.myTeam.toLowerCase() ? 'team1' : 'team2');
+  const saved = ctx.picks[k]?.[side] || {};
+  const d = _ssDraft[k] = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '' };
+  d[kind] = day;
+  if(kind === 'primary' && d.backup === day) d.backup = '';
+  renderSeasonSchedule();
+}
+
+async function ssSavePick(k) {
+  const d = _ssDraft[k];
+  if(!d?.primary || !d?.backup) return;
+  if(_demo) {
+    const s = _ssItem(k);
+    const side = String(s.team1).toLowerCase() === _demo.captainTeam.toLowerCase() ? 'team1' : 'team2';
+    _demo.picks[k] = _demo.picks[k] || {};
+    _demo.picks[k][side] = { primary: d.primary, backup: d.backup, by: 'Demo' };
+    delete _ssDraft[k];
+    renderSeasonSchedule();
+    showToast('✅ (demo) Zapisano wybór terminu', 'success');
+    return;
+  }
+  if(!_ensureSession()) return;
+  const res = await _api('/schedule-day-pick', 'POST', { scheduleId: k, primary: d.primary, backup: d.backup }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  scheduleDayPicks[k] = res.picks;
+  delete _ssDraft[k];
+  renderSeasonSchedule();
+  showToast('✅ Zapisano wybór terminu', 'success');
+}
+
+async function ssFinalize(k, day) {
+  const s = _ssItem(k);
+  if(!s) return;
+  const date = _ssDayDate(s.weekStart, day);
+  const time = s.defaultTime || (_demo ? _demo.fixture?.time : seasons.find(x => x.id === s.seasonId)?.fixture?.time) || '20:00';
+  if(!_demo && !confirm(`Zatwierdzić termin ${s.team1} vs ${s.team2}: ${SS_DAYS[day].full} ${_ssFmt(date)}, ${time}?`)) return;
+  Object.assign(s, { date, time, finalDay: day });
+  if(_demo) { renderSeasonSchedule(); showToast('✅ (demo) Termin zatwierdzony', 'success'); return; }
+  const ok = await saveData();
+  if(!ok) { Object.assign(s, { date: '', time: '', finalDay: null }); renderSeasonSchedule(); return; }
+  renderSchedule();
+  renderScheduleDashboard();
+  showToast('✅ Termin zatwierdzony', 'success');
+  try {
+    await _discordNotify({ embeds: [{
+      title: `📅 Termin meczu — Week ${s.week}`,
+      description: `**${s.team1}** vs **${s.team2}**\n${SS_DAYS[day].full}, ${_ssFmt(date)} · ${time}`,
+      color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+    }] });
+  } catch(e) {}
+}
+
+async function ssUnfinalize(k) {
+  const s = _ssItem(k);
+  if(!s) return;
+  const prev = { date: s.date, time: s.time, finalDay: s.finalDay };
+  Object.assign(s, { date: '', time: '', finalDay: null });
+  if(_demo) { renderSeasonSchedule(); return; }
+  const ok = await saveData();
+  if(!ok) Object.assign(s, prev);
+  renderSchedule();
+  renderScheduleDashboard();
+}
+
+// ── generator ──
+function openFixtureGenerator() {
+  const demo = !!_demo;
+  const seasonId = demo ? 'demo' : (_ssSeasonId || currentSeasonId || seasons[0]?.id || null);
+  const teams = demo ? [..._demo.teams] : _ssApprovedTeams(seasonId);
+  _ssGen = {
+    demo, seasonId, teams,
+    format: teams.length >= 10 ? 'groups' : 'single',
+    groupCount: 2, groups: null, drawing: false,
+    startDate: _ssNextMonday(), time: '20:00', announce: true
+  };
+  let m = document.getElementById('fixture-gen-modal');
+  if(!m) {
+    m = document.createElement('div');
+    m.id = 'fixture-gen-modal';
+    m.className = 'modal-overlay';
+    m.style.zIndex = '1200';
+    m.onclick = e => { if(e.target === m && !_ssGen?.drawing) m.classList.remove('open'); };
+    m.innerHTML = '<div class="modal" style="max-width:640px"></div>';
+    document.body.appendChild(m);
+  }
+  _ssGenRender();
+  m.classList.add('open');
+}
+
+function _ssGenSet(key, val) {
+  _ssGen[key] = val;
+  if(key === 'seasonId') _ssGen.teams = _ssApprovedTeams(val);
+  if(key === 'demoCount') { _demo.teams = SS_DEMO_TEAMS.slice(0, val); _ssGen.teams = [..._demo.teams]; }
+  if(['seasonId', 'demoCount', 'format', 'groupCount'].includes(key)) _ssGen.groups = null;
+  _ssGenRender();
+}
+
+function _ssGenRender() {
+  const g = _ssGen;
+  const box = document.querySelector('#fixture-gen-modal .modal');
+  if(!box || !g) return;
+  const inp = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.45rem .6rem;font-family:inherit;font-size:.85rem;width:100%;box-sizing:border-box';
+  const lbl = 'display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem';
+  const n = g.teams.length;
+  const maxGroups = Math.max(2, Math.min(4, Math.floor(n / 3)));
+  if(g.groupCount > maxGroups) g.groupCount = maxGroups;
+  const canGroups = n >= 6;
+  if(!canGroups && g.format === 'groups') g.format = 'single';
+
+  const fmtCard = (val, title, desc, disabled) => {
+    const on = g.format === val;
+    return `<div onclick="${disabled ? '' : `_ssGenSet('format','${val}')`}" style="flex:1;min-width:200px;cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? .45 : 1};
+      border:2px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.07)' : 'var(--surface2)'};border-radius:10px;padding:.7rem .85rem">
+      <div style="font-weight:800;font-size:.9rem;margin-bottom:.2rem">${title}</div>
+      <div style="font-size:.75rem;color:var(--muted);line-height:1.35">${desc}</div></div>`;
+  };
+
+  // podsumowanie
+  const sizes = g.format === 'groups'
+    ? Array.from({ length: g.groupCount }, (_, i) => Math.floor(n / g.groupCount) + (i < n % g.groupCount ? 1 : 0))
+    : [n];
+  const weeks = Math.max(0, ...sizes.map(x => x % 2 ? x : x - 1));
+  const total = sizes.reduce((a, x) => a + x * (x - 1) / 2, 0);
+  const start = g.startDate ? _ssMondayOf(g.startDate) : null;
+  const end = start && weeks ? _ssAddDays(start, (weeks - 1) * 7 + 6) : null;
+
+  const groupsPreview = g.format === 'groups' ? `
+    <div style="margin:.9rem 0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <label style="${lbl};margin:0">Losowanie grup</label>
+        <button onclick="ssDrawGroups()" class="btn ${g.groups ? 'btn-ghost' : 'btn-primary'}" ${g.drawing || n < 2 ? 'disabled' : ''} style="font-size:.78rem;padding:.3rem .7rem">${g.drawing ? '⏳ Losowanie…' : g.groups ? '🎲 Losuj ponownie' : '🎲 Losuj grupy'}</button>
+      </div>
+      <div id="ss-gen-groups" style="display:grid;grid-template-columns:repeat(${g.groupCount},1fr);gap:.5rem">
+        ${Array.from({ length: g.groupCount }, (_, i) => {
+          const grp = g.groups?.[i];
+          return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.5rem .6rem;min-height:80px">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;color:var(--accent);margin-bottom:.25rem">Grupa ${String.fromCharCode(65 + i)}</div>
+            ${(grp?.shown || grp?.teams || []).map(t => `<div style="font-size:.78rem;padding:.08rem 0;animation:ssPop .25s ease">${_h(t)}</div>`).join('') || '<div style="font-size:.72rem;color:var(--muted)">—</div>'}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  const ready = n >= 3 && g.startDate && (g.format === 'single' || (g.groups && !g.drawing));
+
+  box.innerHTML = `
+    <style>@keyframes ssPop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}</style>
+    <button class="modal-close" onclick="if(!_ssGen.drawing)document.getElementById('fixture-gen-modal').classList.remove('open')">&#x2715;</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px;margin-bottom:1rem">🗓 Generator terminarza${g.demo ? ' <span style="font-size:.8rem;color:var(--accent)">DEMO</span>' : ''}</div>
+
+    ${g.demo
+      ? `<div style="margin-bottom:.9rem"><label style="${lbl}">Liczba drużyn (demo)</label>
+          <select onchange="_ssGenSet('demoCount',+this.value)" style="${inp}">${[4,5,6,7,8,9,10,11,12].map(x => `<option ${x === n ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`
+      : `<div style="margin-bottom:.9rem"><label style="${lbl}">Sezon</label>
+          <select onchange="_ssGenSet('seasonId',this.value)" style="${inp}">${seasons.map(x => `<option value="${_h(x.id)}" ${x.id === g.seasonId ? 'selected' : ''}>${_h(x.name)}</option>`).join('')}</select></div>`}
+
+    <div style="margin-bottom:.9rem">
+      <label style="${lbl}">Drużyny${g.demo ? '' : ' (zatwierdzone)'} — ${n}</label>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem">${g.teams.map(t => `<span style="font-size:.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.12rem .45rem">${_h(t)}</span>`).join('') || '<span style="font-size:.8rem;color:var(--loss)">Brak zatwierdzonych drużyn w tym sezonie</span>'}</div>
+      ${n > 0 && n < 3 ? '<div style="font-size:.75rem;color:var(--loss);margin-top:.35rem">Potrzebne minimum 3 drużyny.</div>' : ''}
+    </div>
+
+    <label style="${lbl}">Format sezonu</label>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      ${fmtCard('single', '🏟 Jedna grupa', 'Każdy z każdym. Jedna kolejka = jeden tydzień.', false)}
+      ${fmtCard('groups', '👥 Grupy', `Losowanie do grup, w każdej grupie każdy z każdym.${n >= 10 ? ' <b style="color:var(--accent)">Zalecane przy ' + n + ' drużynach.</b>' : ''}`, !canGroups)}
+    </div>
+    ${g.format === 'groups' ? `
+      <div style="display:flex;align-items:center;gap:.5rem;margin-top:.6rem;font-size:.82rem">
+        Liczba grup:
+        <select onchange="_ssGenSet('groupCount',+this.value)" style="${inp};width:auto">${Array.from({ length: maxGroups - 1 }, (_, i) => i + 2).map(x => `<option ${x === g.groupCount ? 'selected' : ''}>${x}</option>`).join('')}</select>
+        <span style="color:var(--muted)">(${sizes.join(' / ')} drużyn)</span>
+      </div>` : ''}
+
+    ${groupsPreview}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:.9rem 0">
+      <div><label style="${lbl}">Start (tydzień 1)</label>
+        <input type="date" value="${g.startDate}" onchange="_ssGenSet('startDate',this.value)" style="${inp}"></div>
+      <div><label style="${lbl}">Domyślna godzina</label>
+        <input type="time" value="${g.time}" onchange="_ssGen.time=this.value" style="${inp}"></div>
+    </div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;font-size:.8rem;line-height:1.5;margin-bottom:1rem">
+      📊 <b>${weeks}</b> kolejek (tygodni) · <b>${total}</b> meczów
+      ${start ? ` · od <b>${_ssFmt(start)}</b>${end ? ' do <b>' + _ssFmt(end) + '</b>' : ''}` : ''}<br>
+      <span style="color:var(--muted)">Kapitanowie wybierają dzień priorytetowy i zapasowy: Pn / Śr / Nd danego tygodnia. Admin zatwierdza termin.</span>
+    </div>
+
+    ${g.demo ? '' : `<label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
+      <input type="checkbox" ${g.announce ? 'checked' : ''} onchange="_ssGen.announce=this.checked" style="accent-color:var(--accent)"> Ogłoś terminarz${g.format === 'groups' ? ' i skład grup' : ''} na Discordzie</label>`}
+
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn btn-ghost" ${g.drawing ? 'disabled' : ''} onclick="document.getElementById('fixture-gen-modal').classList.remove('open')">Anuluj</button>
+      <button class="btn btn-primary" ${ready ? '' : 'disabled style="opacity:.45"'} onclick="ssConfirmFixture()">✅ Generuj terminarz</button>
+    </div>`;
+}
+
+function ssDrawGroups() {
+  const g = _ssGen;
+  const final = _ssDrawGroups(g.teams, g.groupCount);
+  g.groups = final.map(x => ({ ...x, shown: [] }));
+  g.drawing = true;
+  const order = [];
+  const maxLen = Math.max(...final.map(x => x.teams.length));
+  for(let i = 0; i < maxLen; i++) final.forEach((grp, gi) => { if(grp.teams[i]) order.push([gi, grp.teams[i]]); });
+  let i = 0;
+  const step = () => {
+    if(!_ssGen || _ssGen !== g) return;
+    if(i >= order.length) { g.drawing = false; g.groups.forEach(x => delete x.shown); _ssGenRender(); return; }
+    const [gi, t] = order[i++];
+    g.groups[gi].shown.push(t);
+    _ssGenRender();
+    setTimeout(step, 320);
+  };
+  _ssGenRender();
+  setTimeout(step, 250);
+}
+
+async function ssConfirmFixture() {
+  const g = _ssGen;
+  if(!g || g.drawing) return;
+  const startDate = _ssMondayOf(g.startDate);
+  const groups = g.format === 'groups' ? g.groups.map(x => ({ id: x.id, name: x.name, teams: [...x.teams] })) : null;
+  const { items, byes } = _ssBuildFixture({ teams: g.teams, format: g.format, groups, startDate, time: g.time || '20:00', seasonId: g.seasonId });
+  const fixture = { format: g.format, groups: groups || [], startDate, time: g.time || '20:00', byes, generatedAt: new Date().toISOString() };
+
+  if(g.demo) {
+    _demo.fixture = fixture;
+    _demo.items = items;
+    _demoSeed();
+    _ssWeek = null;
+    document.getElementById('fixture-gen-modal').classList.remove('open');
+    renderSeasonSchedule();
+    showToast('✅ (demo) Wygenerowano terminarz', 'success');
+    return;
+  }
+
+  const existing = schedule.filter(s => s.generated && (s.seasonId || null) === (g.seasonId || null));
+  if(existing.some(s => s.played || s.matchId)) { showToast('❌ Ten terminarz ma już rozegrane mecze — nie można go wygenerować ponownie', 'error'); return; }
+  if(existing.length && !confirm(`Sezon ma już terminarz (${existing.length} meczów). Zastąpić go nowym? Propozycje terminów i głosy zostaną wyzerowane.`)) return;
+
+  const season = seasons.find(x => x.id === g.seasonId);
+  const prevSchedule = schedule, prevFixture = season?.fixture;
+  schedule = schedule.filter(s => !existing.includes(s)).concat(items);
+  if(season) season.fixture = fixture;
+  const ok = await saveData();
+  if(!ok) { schedule = prevSchedule; if(season) season.fixture = prevFixture; return; }
+
+  _ssSeasonId = g.seasonId;
+  _ssWeek = null;
+  document.getElementById('fixture-gen-modal').classList.remove('open');
+  renderSchedule();
+  showToast('✅ Terminarz wygenerowany', 'success');
+
+  if(g.announce) {
+    const fields = groups
+      ? groups.map(x => ({ name: x.name, value: x.teams.map(t => '• ' + t).join('\n'), inline: true }))
+      : [{ name: 'Drużyny', value: g.teams.map(t => '• ' + t).join('\n'), inline: false }];
+    const weeksCount = Math.max(...items.map(s => s.week));
+    try {
+      await _discordNotify({ embeds: [{
+        title: `🗓 Terminarz ${season?.name || 'sezonu'} gotowy!`,
+        description: `${groups ? '👥 ' + groups.length + ' grupy' : '🏟 Jedna grupa — każdy z każdym'} · ${weeksCount} kolejek · ${items.length} meczów\n` +
+          `Start: **${_ssFmt(startDate)}**. Kapitanowie — wybierzcie na stronie dzień priorytetowy i zapasowy (Pn / Śr / Nd) dla swoich meczów.`,
+        fields, color: 0xf5c518,
+        url: (typeof APP_URL !== 'undefined' ? APP_URL : location.href.split('?')[0].split('#')[0]),
+        footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+      }] });
+    } catch(e) {}
+  }
+}
+
+// ── DEMO ──
+function startDemo() {
+  _demo = { teams: SS_DEMO_TEAMS.slice(0, 10), role: 'admin', captainTeam: SS_DEMO_TEAMS[0],
+    fixture: null, items: [], picks: {}, counts: {}, myVotes: {}, results: {} };
+  const groups = _ssDrawGroups(_demo.teams, 2);
+  const startDate = _ssMondayOf(new Date().toISOString().slice(0, 10)); // Week 1 = ten tydzień (rozegrany), Week 2 = następny
+  const { items, byes } = _ssBuildFixture({ teams: _demo.teams, format: 'groups', groups, startDate, time: '20:00', seasonId: 'demo' });
+  _demo.fixture = { format: 'groups', groups, startDate, time: '20:00', byes };
+  _demo.items = items;
+  _demoSeed();
+  _ssDraft = {};
+  _ssWeek = 2;
+  showView('schedule');
+  renderSeasonSchedule();
+  document.getElementById('season-schedule-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function _demoSeed() {
+  const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const days = Object.keys(SS_DAYS);
+  _demo.picks = {}; _demo.counts = {}; _demo.myVotes = {}; _demo.results = {};
+  _demo.items.forEach(s => {
+    const k = String(s.id);
+    _demo.counts[k] = { team1: rnd(0, 14), team2: rnd(0, 14) };
+    if(s.week === 1) {
+      let s1 = rnd(55, 95), s2 = rnd(55, 95); if(s1 === s2) s1++;
+      _demo.results[k] = { s1, s2 };
+      Object.assign(s, { date: _ssDayDate(s.weekStart, days[rnd(0, 2)]), time: '20:00' });
+    }
+  });
+  // tydzień 2 — różne przypadki wyboru terminu
+  const w2 = _demo.items.filter(s => s.week === 2);
+  const set = (s, a, b) => { _demo.picks[String(s.id)] = { ...(a ? { team1: { primary: a[0], backup: a[1] } } : {}), ...(b ? { team2: { primary: b[0], backup: b[1] } } : {}) }; };
+  if(w2[0]) set(w2[0], ['wed', 'sun'], ['wed', 'mon']);   // zgodne priorytety
+  if(w2[1]) set(w2[1], ['mon', 'sun'], ['sun', 'wed']);   // priorytet = zapas drugiej
+  if(w2[2]) set(w2[2], ['mon', 'wed'], ['sun', 'wed']);   // zgodny tylko zapas
+  if(w2[3]) set(w2[3], ['mon', 'wed'], null);             // czeka na drugą drużynę
+  if(w2[4]) { set(w2[4], ['sun', 'mon'], ['sun', 'wed']); Object.assign(w2[4], { date: _ssDayDate(w2[4].weekStart, 'sun'), time: '20:00', finalDay: 'sun' }); }
+  if(w2[5]) set(w2[5], ['mon', 'sun'], ['wed', 'sun']);
+  // kapitan demo = drużyna z meczu tygodnia 2 bez wyboru terminu
+  const free = w2.find(s => !_demo.picks[String(s.id)]) || w2[3] || w2[0];
+  if(free) _demo.captainTeam = _demo.picks[String(free.id)]?.team1 ? free.team2 : free.team1;
+}
+
+function demoSetRole(r) { _demo.role = r; _ssDraft = {}; renderSeasonSchedule(); }
+function demoSetCaptain(t) { _demo.captainTeam = t; _ssDraft = {}; renderSeasonSchedule(); }
+function demoVote(k, side) {
+  const prev = _demo.myVotes[k];
+  if(prev === side) return;
+  const c = _demo.counts[k] = _demo.counts[k] || { team1: 0, team2: 0 };
+  if(prev) c[prev] = Math.max(0, c[prev] - 1);
+  c[side]++;
+  _demo.myVotes[k] = side;
+  renderSeasonSchedule();
+}
+function demoSimResult(k, undo) {
+  const s = _ssItem(k);
+  if(undo) { delete _demo.results[k]; renderSeasonSchedule(); return; }
+  let s1 = 55 + Math.floor(Math.random() * 40), s2 = 55 + Math.floor(Math.random() * 40);
+  if(s1 === s2) s1++;
+  _demo.results[k] = { s1, s2 };
+  if(!s.date) Object.assign(s, { date: _ssDayDate(s.weekStart, 'wed'), time: '20:00' });
+  renderSeasonSchedule();
+}
+function endDemo() { _demo = null; _ssDraft = {}; _ssWeek = null; renderSeasonSchedule(); }
 
 function goToTeamRegistrations() {
   showView('dashboard');
@@ -6090,25 +6825,6 @@ async function submitTeamRegistration() {
   document.getElementById('team-reg-modal').style.display = 'none';
   showToast('✅ Drużyna zgłoszona! Czeka na weryfikację.', 'success');
   renderTeamRegistrations();
-
-  // Discord notification
-  const seasonName = seasonId ? (seasons.find(s=>s.id===seasonId)?.name || seasonId) : 'brak sezonu';
-  const playerLines = players.map((p,i) =>
-    `${i+1}. **${p.gamertag}** [${p.platform.toUpperCase()}]${p.experience ? ' · ' + _expLabels[p.experience] : ''}`
-  ).join('\n');
-  const embed = {
-    title: '🏀 Nowe zgłoszenie drużyny — NBA 2K27',
-    color: 0xf5c518,
-    fields: [
-      { name: 'Drużyna', value: teamName, inline: true },
-      { name: 'Sezon', value: seasonName, inline: true },
-      { name: 'Kapitan', value: `${reg.captain.name}${reg.captain.discordTag ? ' (@' + reg.captain.discordTag + ')' : ''}`, inline: true },
-      { name: `Skład (${players.length} graczy)`, value: playerLines, inline: false }
-    ],
-    footer: { text: 'NBA 2K Pro-Am Ekstraklasa · ' + new Date().toLocaleDateString('pl-PL') },
-    timestamp: new Date().toISOString()
-  };
-  try { await _teamRegDiscordSend({ embeds: [embed] }, reg.logo); } catch(e) { console.warn('Discord notify failed', e); }
 }
 
 function renderTeamRegistrations() {
@@ -6217,6 +6933,7 @@ async function teamRegSetStatus(id, status) {
   renderTeamRegistrations();
 
   if(status === 'pending') { showToast('↩ Przywrócono do oczekujących', 'info'); return; }
+  if(status === 'rejected') { showToast('❌ Zgłoszenie odrzucone', 'info'); return; }
 
   const seasonName = reg.seasonId ? (seasons.find(s => s.id === reg.seasonId)?.name || reg.seasonId) : '—';
   const approvedCount = teamRegistrations.filter(r => r.status === 'approved' && r.seasonId === reg.seasonId).length;
