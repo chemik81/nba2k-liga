@@ -6942,8 +6942,18 @@ async function teamRegSetStatus(id, status) {
   ).join('\n') || '—';
   const captainId = reg.captain?.id && /^\d+$/.test(String(reg.captain.id)) ? String(reg.captain.id) : null;
 
+  let funLine = '';
+  if(status === 'approved') {
+    const fl = await Promise.race([
+      _api('/fun-line', 'POST', { kind: 'team', data: { teamName: reg.teamName, seasonName, players: reg.players?.length || 0 } }, { admin: true }),
+      new Promise(r => setTimeout(() => r({}), 9000))
+    ]);
+    funLine = fl?.line || '';
+  }
+
   const embed = status === 'approved' ? {
     title: `✅ ${reg.teamName} dołącza do ligi NBA 2K27!`,
+    description: funLine ? `*${funLine}*` : undefined,
     color: 0x16a34a,
     fields: [
       { name: 'Sezon', value: seasonName, inline: true },
