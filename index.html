@@ -1858,6 +1858,7 @@ let aiModel = (_storedModel && _storedModel.includes('gemini') && _storedModel !
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
 let discordTeamRegWebhookUrl = '';
 let freeAgents = [];          // z Workera (osobny klucz KV)
+let discordFreeAgentsWebhookUrl = ''; // kanał wolnych agentów (ustawiany przez admina)
 let scheduleVoteCounts = {};  // { scheduleId: { team1, team2 } }
 let myVotes = {};             // { scheduleId: 'team1'|'team2' } — głosy zalogowanego użytkownika
 let _regTab = 'teams';        // 'teams' | 'fa'
@@ -2041,7 +2042,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl,
+      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2176,6 +2177,7 @@ async function loadData() {
     teamRegistrations = record.teamRegistrations || [];
     discordTeamRegWebhookUrl = record.discordTeamRegWebhookUrl || '';
     freeAgents = record.freeAgents || [];
+    discordFreeAgentsWebhookUrl = record.discordFreeAgentsWebhookUrl || '';
     scheduleVoteCounts = record.scheduleVoteCounts || {};
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
@@ -5460,7 +5462,25 @@ async function _teamRegDiscordSend(payload, logo, webhookOverride) {
   return false;
 }
 
-function openTeamRegWebhookModal() {
+const _WEBHOOK_KINDS = {
+  teams: {
+    title: '⚙ Kanał Discord — zgłoszenia drużyn',
+    hint: 'Puste = powiadomienia idą na główny kanał ligi (bez logo).',
+    get: () => discordTeamRegWebhookUrl, set: v => { discordTeamRegWebhookUrl = v; }
+  },
+  fa: {
+    title: '⚙ Kanał Discord — wolni agenci',
+    hint: 'Kanał forum: każdy agent dostaje własny wątek. Kanał tekstowy: zwykły post. Puste = sekret DISCORD_WEBHOOK_FREE_AGENTS w Workerze (jeśli ustawiony).',
+    get: () => discordFreeAgentsWebhookUrl, set: v => { discordFreeAgentsWebhookUrl = v; }
+  }
+};
+let _webhookKind = 'teams';
+
+function openTeamRegWebhookModal() { openWebhookModal('teams'); }
+
+function openWebhookModal(kind) {
+  _webhookKind = kind;
+  const cfg = _WEBHOOK_KINDS[kind];
   let m = document.getElementById('team-reg-webhook-modal');
   if(!m) {
     m = document.createElement('div');
@@ -5471,10 +5491,10 @@ function openTeamRegWebhookModal() {
     m.innerHTML = `
       <div class="modal" style="max-width:520px">
         <button class="modal-close" onclick="document.getElementById('team-reg-webhook-modal').classList.remove('open')">&#x2715;</button>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;margin-bottom:1rem">⚙ Kanał Discord — zgłoszenia drużyn</div>
+        <div id="team-reg-webhook-title" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;margin-bottom:1rem"></div>
         <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Webhook URL</label>
         <input type="text" id="team-reg-webhook-input" placeholder="https://discord.com/api/webhooks/..." style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.85rem;width:100%;box-sizing:border-box">
-        <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Puste = powiadomienia idą na główny kanał ligi (bez logo).</div>
+        <div id="team-reg-webhook-hint" style="font-size:.75rem;color:var(--muted);margin-top:.4rem;line-height:1.4"></div>
         <div id="team-reg-webhook-status" style="font-size:.8rem;margin-top:.6rem;min-height:1.1em"></div>
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
           <button class="btn btn-ghost" onclick="testTeamRegWebhook()">🧪 Testuj</button>
@@ -5483,13 +5503,15 @@ function openTeamRegWebhookModal() {
       </div>`;
     document.body.appendChild(m);
   }
-  document.getElementById('team-reg-webhook-input').value = discordTeamRegWebhookUrl || '';
+  document.getElementById('team-reg-webhook-title').textContent = cfg.title;
+  document.getElementById('team-reg-webhook-hint').textContent = cfg.hint;
+  document.getElementById('team-reg-webhook-input').value = cfg.get() || '';
   document.getElementById('team-reg-webhook-status').textContent = '';
   m.classList.add('open');
 }
 
 function _validTeamRegWebhook(url) {
-  return /^https:\/\/(canary\.|ptb\.)?(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+/.test(url);
+  return /^https:\/\/(canary\.|ptb\.)?(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url);
 }
 
 async function testTeamRegWebhook() {
@@ -5497,410 +5519,34 @@ async function testTeamRegWebhook() {
   const st = document.getElementById('team-reg-webhook-status');
   if(!_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
   st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłanie...';
-  const sample = teamRegistrations.find(r => r.logo);
-  const ok = await _teamRegDiscordSend({ embeds: [{
-    title: '🧪 Test — kanał zgłoszeń drużyn',
+  const isFa = _webhookKind === 'fa';
+  const sample = isFa ? null : teamRegistrations.find(r => r.logo);
+  const payload = { embeds: [{
+    title: isFa ? '🧪 Test — kanał wolnych agentów' : '🧪 Test — kanał zgłoszeń drużyn',
     description: sample ? `Logo testowe: **${sample.teamName}**` : 'Webhook działa.',
     color: 0xf5c518,
     footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
     timestamp: new Date().toISOString()
-  }] }, sample?.logo || null, url);
+  }] };
+  if(isFa) payload.thread_name = '🧪 Test webhooka';
+  let ok = await _teamRegDiscordSend(payload, sample?.logo || null, url);
+  if(!ok && isFa) { delete payload.thread_name; ok = await _teamRegDiscordSend(payload, null, url); } // kanał tekstowy
   st.style.color = ok ? 'var(--win)' : 'var(--loss)';
   st.textContent = ok ? '✅ Wysłano — sprawdź kanał' : '❌ Discord odrzucił wiadomość (szczegóły w konsoli)';
 }
 
 async function saveTeamRegWebhook() {
+  const cfg = _WEBHOOK_KINDS[_webhookKind];
   const url = document.getElementById('team-reg-webhook-input').value.trim();
   const st = document.getElementById('team-reg-webhook-status');
   if(url && !_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
-  const prev = discordTeamRegWebhookUrl;
-  discordTeamRegWebhookUrl = url;
+  const prev = cfg.get();
+  cfg.set(url);
   const saved = await saveData();
-  if(!saved) { discordTeamRegWebhookUrl = prev; st.style.color = 'var(--loss)'; st.textContent = '❌ Błąd zapisu'; return; }
+  if(!saved) { cfg.set(prev); st.style.color = 'var(--loss)'; st.textContent = '❌ Błąd zapisu'; return; }
   document.getElementById('team-reg-webhook-modal').classList.remove('open');
   renderTeamRegistrations();
-  showToast(url ? '✅ Zapisano kanał zgłoszeń' : '✅ Zgłoszenia wrócą na główny kanał', 'success');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// API (Worker) — sesja Discord / token admina
-// ═══════════════════════════════════════════════════════════════
-function _h(v) {
-  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-}
-function _adminToken() {
-  return localStorage.getItem('nba2k_admin_token_hash') || localStorage.getItem('nba2k_events_token_hash') || '';
-}
-function _ensureSession() {
-  if(!discordUser) { showToast('❌ Zaloguj się przez Discord', 'error'); return false; }
-  if(!discordUser.session) {
-    showToast('🔑 Zaloguj się ponownie przez Discord (jednorazowo)', 'info');
-    setTimeout(() => loginWithDiscord(), 1200);
-    return false;
-  }
-  return true;
-}
-async function _api(path, method, body, opts = {}) {
-  if(!workerUrl) return { ok: false, error: 'Brak Worker URL' };
-  const headers = { 'Content-Type': 'application/json' };
-  if(opts.session && discordUser?.session) headers['X-Discord-Session'] = discordUser.session;
-  if(opts.admin) headers['X-Admin-Token'] = _adminToken();
-  let res, data = {};
-  try {
-    res = await fetch(workerUrl.replace(/\/+$/, '') + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
-    data = await res.json().catch(() => ({}));
-  } catch(e) { return { ok: false, error: 'Błąd sieci' }; }
-  if(res.status === 401 && data.code === 'session' && discordUser) {
-    delete discordUser.session;
-    localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
-  }
-  return { ...data, ok: res.ok, status: res.status, error: data.error || (res.ok ? null : 'HTTP ' + res.status) };
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ZAKŁADKI: Zapisy drużyn | Wolni agenci
-// ═══════════════════════════════════════════════════════════════
-function setRegTab(tab) { _regTab = tab; renderTeamRegistrations(); }
-
-function _regTabsHtml(rightHtml) {
-  const isAdmin = _isLoggedInSync();
-  const pending = teamRegistrations.filter(r => r.status === 'pending').length;
-  const faActive = freeAgents.filter(f => f.status === 'active').length;
-  const tab = (id, label) => {
-    const on = _regTab === id;
-    return `<button onclick="setRegTab('${id}')" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.05rem;letter-spacing:1px;text-transform:uppercase;padding:.4rem .9rem;border-radius:7px;border:none;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'rgba(0,0,0,.88)' : 'var(--muted)'};white-space:nowrap">${label}</button>`;
-  };
-  const cnt = (n, hot) => n ? ` <span style="font-size:.75rem;background:${hot ? 'var(--loss)' : 'rgba(127,127,127,.25)'};color:${hot ? '#fff' : 'inherit'};border-radius:5px;padding:0 .35rem;vertical-align:middle">${n}</span>` : '';
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-      <div style="display:flex;gap:.2rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.2rem;flex-wrap:wrap">
-        ${tab('teams', '🏀 Zapisy do ligi — NBA 2K27' + (isAdmin ? cnt(pending, true) : ''))}
-        ${tab('fa', '🆓 Wolni agenci' + cnt(faActive, false))}
-      </div>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap">${rightHtml}</div>
-    </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// WOLNI AGENCI
-// ═══════════════════════════════════════════════════════════════
-const FA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
-const FA_POS_NAMES = { PG:'Rozgrywający', SG:'Rzucający obrońca', SF:'Niski skrzydłowy', PF:'Silny skrzydłowy', C:'Środkowy' };
-let _faPos1 = '', _faPos2 = '';
-
-function _myActiveFa() {
-  if(!discordUser) return null;
-  return freeAgents.find(f => f.discordId === discordUser.id && f.status === 'active' && (!currentSeasonId || !f.seasonId || f.seasonId === currentSeasonId)) || null;
-}
-
-function setFaPosFilter(p) { _faPosFilter = _faPosFilter === p ? '' : p; renderTeamRegistrations(); }
-
-function renderFreeAgents(wrap) {
-  const isAdmin = _isLoggedInSync();
-  const mine = _myActiveFa();
-  const isMine = f => discordUser && f.discordId === discordUser.id;
-  const stOrder = { active: 0, signed: 1, withdrawn: 2 };
-
-  const list = freeAgents
-    .filter(f => f.status === 'active' || isAdmin || (isMine(f) && f.status === 'signed'))
-    .filter(f => !_faPosFilter || f.pos1 === _faPosFilter || f.pos2 === _faPosFilter)
-    .sort((a, b) => (stOrder[a.status] ?? 9) - (stOrder[b.status] ?? 9) || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
-
-  const posBadge = (p, primary) => `<span title="${FA_POS_NAMES[p] || ''}" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.8rem;letter-spacing:.5px;padding:.1rem .45rem;border-radius:5px;${primary ? 'background:var(--accent);color:rgba(0,0,0,.88)' : 'border:1px solid var(--accent);color:var(--accent)'}">${p}</span>`;
-  const statusBadge = st => st === 'signed'
-    ? '<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">✅ PODPISANY</span>'
-    : st === 'withdrawn' ? '<span style="background:#6b7280;color:#fff;border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">🚫 WYCOFANE</span>' : '';
-  const smallBtn = (onclick, label, color) => `<button onclick="${onclick}" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:${color}">${label}</button>`;
-
-  const cards = list.map(f => {
-    const av = f.avatar
-      ? `<img src="${_h(f.avatar)}" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
-      : `<div style="width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0">👤</div>`;
-    const actions = [];
-    if(isMine(f) && f.status === 'active') {
-      actions.push(smallBtn('openFreeAgentModal()', '✏️ Edytuj', 'var(--text)'));
-      actions.push(smallBtn(`withdrawFreeAgent('${f.id}')`, '🚫 Wycofaj', 'var(--muted)'));
-    }
-    if(isAdmin) {
-      if(f.status !== 'signed') actions.push(smallBtn(`faAdminSet('${f.id}','signed')`, '✅ Podpisany', 'var(--win)'));
-      if(f.status !== 'active') actions.push(smallBtn(`faAdminSet('${f.id}','active')`, '↩ Przywróć', 'var(--muted)'));
-      if(f.status === 'active' && !isMine(f)) actions.push(smallBtn(`faAdminSet('${f.id}','withdrawn')`, '🚫 Wycofaj', 'var(--loss)'));
-    }
-    return `
-      <div style="background:var(--surface2);border:1px solid ${isMine(f) && f.status === 'active' ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:.9rem 1.1rem;${f.status !== 'active' ? 'opacity:.65' : ''}">
-        <div style="display:flex;gap:.8rem;align-items:flex-start">
-          ${av}
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.3rem">
-              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.05rem">${_h(f.name)}</span>
-              ${posBadge(f.pos1, true)}${f.pos2 ? posBadge(f.pos2, false) : ''}
-              ${statusBadge(f.status)}
-              ${f.status === 'signed' && f.signedTeam ? `<span style="font-size:.72rem;color:var(--win);font-weight:700">→ ${_h(f.signedTeam)}</span>` : ''}
-            </div>
-            <div style="font-size:.75rem;color:var(--muted);margin-bottom:${f.description ? '.45rem' : '0'}">
-              ${f.platform === 'xbox' ? '🎮' : '🎯'} <b style="color:var(--text)">${_h(f.gamertag)}</b> · ${(f.platform || 'psn').toUpperCase()}
-              · ${new Date(f.updatedAt || f.createdAt).toLocaleDateString('pl-PL')}
-            </div>
-            ${f.description ? `<div style="font-size:.84rem;line-height:1.45;white-space:pre-wrap;word-break:break-word">${_h(f.description)}</div>` : ''}
-            ${actions.length ? `<div style="display:flex;gap:.35rem;margin-top:.6rem;flex-wrap:wrap">${actions.join('')}</div>` : ''}
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-
-  const chip = p => {
-    const on = _faPosFilter === p;
-    return `<button onclick="setFaPosFilter('${p}')" title="${FA_POS_NAMES[p]}" style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.8rem;padding:.2rem .6rem;border-radius:999px;cursor:pointer;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'transparent'};color:${on ? 'var(--accent)' : 'var(--muted)'}">${p}</button>`;
-  };
-
-  wrap.innerHTML = _regTabsHtml(`
-      <button onclick="openFreeAgentModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">${mine ? '✏️ Edytuj moje zgłoszenie' : '+ Zgłoś się jako wolny agent'}</button>`) + `
-    <div style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
-      <span style="font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:1px;margin-right:.25rem">POZYCJA</span>
-      ${FA_POSITIONS.map(chip).join('')}
-    </div>
-    ${cards
-      ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.6rem">${cards}</div>`
-      : `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted)">
-          <div style="font-size:2rem;margin-bottom:.5rem">🆓</div>
-          <div style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">${_faPosFilter ? 'Brak wolnych agentów na pozycji ' + _faPosFilter : 'Brak wolnych agentów'}</div>
-          <div style="font-size:.8rem">Szukasz drużyny? Zgłoś się — kapitanowie zobaczą Cię tutaj i na Discordzie.</div>
-        </div>`}`;
-}
-
-function _faPosButtons(group) {
-  const cur = group === 1 ? _faPos1 : _faPos2;
-  const opts = group === 2 ? ['', ...FA_POSITIONS] : FA_POSITIONS;
-  return opts.map(p => {
-    const disabled = group === 2 && p && p === _faPos1;
-    const on = cur === p;
-    return `<button type="button" ${disabled ? 'disabled' : ''} onclick="faPickPos(${group},'${p}')" title="${p ? FA_POS_NAMES[p] : ''}"
-      style="flex:1;min-width:52px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:.95rem;padding:.45rem 0;border-radius:7px;cursor:${disabled ? 'not-allowed' : 'pointer'};
-      border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'var(--bg)'};color:${on ? 'rgba(0,0,0,.88)' : disabled ? 'rgba(127,127,127,.4)' : 'var(--text)'}">${p || 'Brak'}</button>`;
-  }).join('');
-}
-
-function faPickPos(group, p) {
-  if(group === 1) { _faPos1 = p; if(_faPos2 === p) _faPos2 = ''; }
-  else _faPos2 = p;
-  document.getElementById('fa-pos1').innerHTML = _faPosButtons(1);
-  document.getElementById('fa-pos2').innerHTML = _faPosButtons(2);
-}
-
-function openFreeAgentModal() {
-  let m = document.getElementById('fa-modal');
-  if(!m) {
-    m = document.createElement('div');
-    m.id = 'fa-modal';
-    m.className = 'modal-overlay';
-    m.style.zIndex = '1200';
-    m.onclick = e => { if(e.target === m) m.classList.remove('open'); };
-    m.innerHTML = '<div class="modal" style="max-width:560px"></div>';
-    document.body.appendChild(m);
-  }
-  const box = m.querySelector('.modal');
-  const close = `<button class="modal-close" onclick="document.getElementById('fa-modal').classList.remove('open')">&#x2715;</button>`;
-  const title = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px;margin-bottom:1.1rem">🆓 Zgłoszenie — wolny agent</div>`;
-
-  if(!discordUser || !discordUser.session) {
-    box.innerHTML = close + title + `
-      <div style="text-align:center;padding:1.25rem 0">
-        <div style="font-size:2rem;margin-bottom:.5rem">🔒</div>
-        <div style="font-size:.9rem;margin-bottom:1rem">${discordUser ? 'Zaloguj się ponownie przez Discord, aby się zgłosić.' : 'Zaloguj się przez Discord, aby się zgłosić.'}</div>
-        <button class="btn btn-primary" onclick="loginWithDiscord()">Zaloguj przez Discord</button>
-      </div>`;
-    m.classList.add('open');
-    return;
-  }
-
-  const mine = _myActiveFa();
-  _faPos1 = mine?.pos1 || '';
-  _faPos2 = mine?.pos2 || '';
-  const inp = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.88rem;width:100%;box-sizing:border-box';
-  const lbl = 'display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem';
-  const seasonOpts = '<option value="">— bez sezonu —</option>' + seasons.map(x => `<option value="${_h(x.id)}">${_h(x.name)}</option>`).join('');
-
-  box.innerHTML = close + title + `
-    <div style="display:flex;align-items:center;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;margin-bottom:1rem">
-      ${discordUser.avatar ? `<img src="${_h(discordUser.avatar)}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover">` : ''}
-      <div style="font-size:.88rem;font-weight:600">${_h(discordUser.name)}</div>
-    </div>
-
-    <div style="margin-bottom:.9rem"><label style="${lbl}">Pozycja preferowana <span style="color:var(--loss)">*</span></label>
-      <div id="fa-pos1" style="display:flex;gap:.35rem;flex-wrap:wrap">${_faPosButtons(1)}</div></div>
-    <div style="margin-bottom:.9rem"><label style="${lbl}">Druga pozycja</label>
-      <div id="fa-pos2" style="display:flex;gap:.35rem;flex-wrap:wrap">${_faPosButtons(2)}</div></div>
-
-    <div style="display:grid;grid-template-columns:1fr 110px;gap:.6rem;margin-bottom:.9rem">
-      <div><label style="${lbl}">Gamertag <span style="color:var(--loss)">*</span></label>
-        <input type="text" id="fa-gamertag" maxlength="32" value="${_h(mine?.gamertag || '')}" style="${inp}"></div>
-      <div><label style="${lbl}">Platforma</label>
-        <select id="fa-platform" style="${inp}"><option value="psn">PSN</option><option value="xbox">Xbox</option></select></div>
-    </div>
-
-    <div style="margin-bottom:.9rem"><label style="${lbl}">Sezon</label>
-      <select id="fa-season" style="${inp}">${seasonOpts}</select></div>
-
-    <div style="margin-bottom:1rem">
-      <label style="${lbl}">Opis <span id="fa-desc-count" style="letter-spacing:0;font-weight:400"></span></label>
-      <textarea id="fa-desc" maxlength="500" rows="4" placeholder="Doświadczenie, build, dostępność w tygodniu, czego szukasz w drużynie…" style="${inp};resize:vertical;line-height:1.4"
-        oninput="document.getElementById('fa-desc-count').textContent=this.value.length+'/500'">${_h(mine?.description || '')}</textarea>
-    </div>
-
-    <label id="fa-rules-wrap" style="display:flex;align-items:flex-start;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .8rem;margin-bottom:1.25rem;cursor:pointer;font-size:.85rem;line-height:1.4">
-      <input type="checkbox" id="fa-rules" onchange="document.getElementById('fa-rules-wrap').style.borderColor='var(--border)'" style="accent-color:var(--accent);width:16px;height:16px;margin-top:.1rem;flex-shrink:0;cursor:pointer">
-      <span>Przeczytałem i akceptuję regulamin, który znajduje się na <a href="https://discord.gg/EQ87cFkuW" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">discordzie 2K Pro Am Ekstraklasa</a> <span style="color:var(--loss)">*</span></span>
-    </label>
-
-    <div style="display:flex;gap:.5rem;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="document.getElementById('fa-modal').classList.remove('open')">Anuluj</button>
-      <button class="btn btn-primary" id="fa-submit-btn" onclick="submitFreeAgent()">${mine ? '💾 Zapisz zmiany' : '📢 Opublikuj'}</button>
-    </div>`;
-
-  document.getElementById('fa-platform').value = mine?.platform || 'psn';
-  document.getElementById('fa-season').value = mine ? (mine.seasonId || '') : (currentSeasonId || '');
-  document.getElementById('fa-desc-count').textContent = (mine?.description || '').length + '/500';
-  m.classList.add('open');
-}
-
-async function submitFreeAgent() {
-  if(!_faPos1) { showToast('❌ Wybierz pozycję preferowaną', 'error'); return; }
-  const gamertag = document.getElementById('fa-gamertag').value.trim();
-  if(!gamertag) { showToast('❌ Podaj gamertag', 'error'); return; }
-  if(!document.getElementById('fa-rules').checked) {
-    document.getElementById('fa-rules-wrap').style.borderColor = 'var(--loss)';
-    showToast('❌ Zaakceptuj regulamin', 'error');
-    return;
-  }
-  if(!_ensureSession()) return;
-
-  const btn = document.getElementById('fa-submit-btn');
-  btn.disabled = true;
-  const res = await _api('/free-agent', 'POST', {
-    pos1: _faPos1, pos2: _faPos2 || '', gamertag,
-    platform: document.getElementById('fa-platform').value,
-    seasonId: document.getElementById('fa-season').value || null,
-    description: document.getElementById('fa-desc').value.trim(),
-    rulesAccepted: true
-  }, { session: true });
-  btn.disabled = false;
-  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
-
-  const i = freeAgents.findIndex(f => f.id === res.freeAgent.id);
-  if(i >= 0) freeAgents[i] = res.freeAgent; else freeAgents.push(res.freeAgent);
-  document.getElementById('fa-modal').classList.remove('open');
-  _regTab = 'fa';
-  renderTeamRegistrations();
-  showToast(i >= 0 ? '✅ Zgłoszenie zaktualizowane' : '✅ Opublikowano' + (res.posted ? ' · post na Discordzie' : ''), 'success');
-}
-
-async function withdrawFreeAgent(id) {
-  if(!confirm('Wycofać zgłoszenie wolnego agenta?')) return;
-  if(!_ensureSession()) return;
-  const res = await _api('/free-agent', 'DELETE', { id }, { session: true });
-  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
-  const i = freeAgents.findIndex(f => f.id === id);
-  if(i >= 0) freeAgents[i] = res.freeAgent;
-  renderTeamRegistrations();
-  showToast('🚫 Zgłoszenie wycofane', 'info');
-}
-
-async function faAdminSet(id, status) {
-  let signedTeam = '';
-  if(status === 'signed') {
-    const names = teamRegistrations.filter(r => r.status === 'approved').map(r => r.teamName);
-    signedTeam = prompt('Do jakiej drużyny? (opcjonalnie)' + (names.length ? '\n' + names.join(', ') : ''), '');
-    if(signedTeam === null) return;
-  } else if(status === 'withdrawn' && !confirm('Wycofać to zgłoszenie?')) return;
-  const res = await _api('/free-agent', 'PATCH', { id, status, signedTeam: signedTeam.trim() }, { admin: true });
-  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
-  const i = freeAgents.findIndex(f => f.id === id);
-  if(i >= 0) freeAgents[i] = res.freeAgent;
-  renderTeamRegistrations();
-}
-
-// ═══════════════════════════════════════════════════════════════
-// GŁOSOWANIE "KTO WYGRA" (terminarz)
-// ═══════════════════════════════════════════════════════════════
-async function _loadMyVotes() {
-  if(!discordUser?.session) return;
-  const res = await _api('/my-votes', 'GET', null, { session: true });
-  if(res.ok) { myVotes = res.votes || {}; if(typeof renderSchedule === 'function') renderSchedule(); }
-}
-
-function _voteClosedClient(s) {
-  if(s.played || s.matchId) return true;
-  if(s.date) {
-    const t = new Date(s.date + 'T' + (/^\d{2}:\d{2}$/.test(s.time || '') ? s.time : '23:59'));
-    return Date.now() >= t.getTime();
-  }
-  return false;
-}
-
-function _plVotes(n) {
-  if(n === 1) return 'głos';
-  const d = n % 10, h = n % 100;
-  return d >= 2 && d <= 4 && (h < 12 || h > 14) ? 'głosy' : 'głosów';
-}
-
-function _voteBtn(s, side) {
-  if(_voteClosedClient(s)) return '';
-  const k = String(s.id);
-  const on = myVotes[k] === side;
-  return `<button onclick="event.stopPropagation();voteSchedule('${k}','${side}')" title="Typuję, że wygra ${_h(s[side])}"
-    style="margin-top:.35rem;font-size:.75rem;padding:.2rem .65rem;border-radius:999px;cursor:pointer;font-family:inherit;
-    border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'transparent'};color:${on ? 'var(--accent)' : 'var(--muted)'}">👍${on ? ' Twój typ' : ''}</button>`;
-}
-
-function _voteBar(s) {
-  const k = String(s.id);
-  const c = scheduleVoteCounts[k] || { team1: 0, team2: 0 };
-  const total = (c.team1 || 0) + (c.team2 || 0);
-  const closed = _voteClosedClient(s);
-  const reveal = !!myVotes[k] || closed || _isLoggedInSync();
-  const note = txt => `<div style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:.6rem">${txt}</div>`;
-
-  if(!reveal) return note(total ? `🗳 ${total} ${_plVotes(total)} · zagłosuj 👍, aby zobaczyć wyniki` : '🗳 Kto wygra? Zagłosuj 👍');
-  if(!total) return closed ? '' : note('🗳 Brak głosów — bądź pierwszy');
-
-  const p1 = Math.round((c.team1 || 0) / total * 100), p2 = 100 - p1;
-  const lead = p1 === p2 ? 0 : (p1 > p2 ? 1 : 2);
-  const pct = (v, on) => `<span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;color:${on ? 'var(--accent)' : 'var(--muted)'}">${v}%</span>`;
-  return `
-    <div style="margin-top:.7rem">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.25rem">
-        ${pct(p1, lead === 1)}
-        <span style="font-size:.68rem;color:var(--muted)">🗳 ${total} ${_plVotes(total)}${closed ? ' · głosowanie zakończone' : ''}</span>
-        ${pct(p2, lead === 2)}
-      </div>
-      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface2)">
-        <div style="width:${p1}%;background:var(--accent);transition:width .3s"></div>
-        <div style="width:${p2}%;background:#3b82f6;transition:width .3s"></div>
-      </div>
-    </div>`;
-}
-
-async function voteSchedule(k, side) {
-  if(!_ensureSession()) return;
-  if(myVotes[k] === side) return;
-  const prev = myVotes[k];
-  const c = scheduleVoteCounts[k] = scheduleVoteCounts[k] || { team1: 0, team2: 0 };
-  if(prev) c[prev] = Math.max(0, c[prev] - 1);
-  c[side] = (c[side] || 0) + 1;
-  myVotes[k] = side;
-  renderSchedule();
-
-  const res = await _api('/schedule-vote', 'POST', { scheduleId: k, pick: side }, { session: true });
-  if(!res.ok) {
-    c[side] = Math.max(0, c[side] - 1);
-    if(prev) { c[prev]++; myVotes[k] = prev; } else delete myVotes[k];
-    renderSchedule();
-    showToast('❌ ' + res.error, 'error');
-    return;
-  }
-  scheduleVoteCounts[k] = res.counts;
-  myVotes[k] = res.myPick;
-  renderSchedule();
+  showToast(url ? '✅ Zapisano kanał Discord' : '✅ Kanał wyczyszczony', 'success');
 }
 
 function goToTeamRegistrations() {
