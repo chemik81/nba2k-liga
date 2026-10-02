@@ -4619,11 +4619,17 @@ async function saveSetup() {
 
   if(_discordParam) {
     try {
-      discordUser = JSON.parse(decodeURIComponent(escape(atob(_discordParam))));
+      // '+' w base64 zamienia się w adresie na spację (np. emoji w nazwie Discord) — przywróć przed dekodowaniem
+      const _b64 = _discordParam.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
+      discordUser = JSON.parse(decodeURIComponent(escape(atob(_b64))));
       localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
       localStorage.removeItem('nba2k_discord_pending');
       window.history.replaceState({}, '', window.location.pathname);
-    } catch(e) { console.error('Discord user parse error', e); }
+    } catch(e) {
+      console.error('Discord user parse error', e);
+      window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => showToast('❌ Nie udało się dokończyć logowania przez Discord — spróbuj ponownie', 'error'), 800);
+    }
   } else {
     try {
       // iOS Safari fallback — Worker bridge page saved user to localStorage directly
