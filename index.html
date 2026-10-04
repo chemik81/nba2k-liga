@@ -6965,7 +6965,7 @@ async function teamRegSetStatus(id, status) {
   let funLine = '';
   if(status === 'approved') {
     const fl = await Promise.race([
-      _api('/fun-line', 'POST', { kind: 'team', data: { teamName: reg.teamName, seasonName, players: reg.players?.length || 0 } }, { admin: true }),
+      _api('/fun-line', 'POST', { kind: 'team', data: { teamName: reg.teamName, seasonName, players: (reg.players || []).map(p => ({ gamertag: p.gamertag, level: (_expLabels[p.experience] || '').replace(/^\S+\s/, '') })) } }, { admin: true }),
       new Promise(r => setTimeout(() => r({}), 9000))
     ]);
     funLine = fl?.line || '';
