@@ -6014,7 +6014,23 @@ function _ssBuildFixture({ teams, format, groups, startDate, time, seasonId, bes
   return { items, byes };
 }
 
-function _ssSuggest(p) {
+// Wartość propozycji: 'mon' | 'wed' | 'sun' albo własny termin 'YYYY-MM-DD' / 'YYYY-MM-DDTHH:MM'
+function _ssIsCustom(v) { return /^\d{4}-\d{2}-\d{2}/.test(v || ''); }
+function _ssPickDate(ws, v) { return _ssIsCustom(v) ? v.slice(0, 10) : _ssDayDate(ws, v); }
+function _ssPickTime(v) { return _ssIsCustom(v) && v.length > 10 ? v.slice(11, 16) : ''; }
+function _ssPickLabel(ws, v) {
+  if(!_ssIsCustom(v)) return _ssDayChip(ws, v);
+  const d = new Date(v.slice(0, 10) + 'T12:00:00');
+  const wd = d.toLocaleDateString('pl-PL', { weekday: 'short' }).replace('.', '');
+  return `📅 ${wd.charAt(0).toUpperCase() + wd.slice(1)} ${_ssFmt(v.slice(0, 10))}${_ssPickTime(v) ? ' ' + _ssPickTime(v) : ''}`;
+}
+function _ssPickFull(v, ws) {
+  const date = _ssPickDate(ws, v);
+  const wd = new Date(date + 'T12:00:00').toLocaleDateString('pl-PL', { weekday: 'long' });
+  return wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' + _ssFmt(date);
+}
+
+function _ssSuggest(p, ws) {
   const a = p?.team1, b = p?.team2;
   if(!a || !b) return null;
   if(a.primary === b.primary) return { day: a.primary, kind: 'match' };
@@ -6022,7 +6038,7 @@ function _ssSuggest(p) {
   const cands = [];
   if(bSet.includes(a.primary)) cands.push(a.primary);
   if(aSet.includes(b.primary)) cands.push(b.primary);
-  if(cands.length) return { day: cands.sort((x, y) => SS_DAYS[x].off - SS_DAYS[y].off)[0], kind: 'partial' };
+  if(cands.length) return { day: cands.sort((x, y) => _ssPickDate(ws, x).localeCompare(_ssPickDate(ws, y)))[0], kind: 'partial' };
   if(a.backup === b.backup) return { day: a.backup, kind: 'backup' };
   return { day: null, kind: 'none' };
 }
@@ -6295,8 +6311,8 @@ function _ssDaySection(ctx, s) {
   const p = ctx.picks[k] || {};
   const isFinal = !!s.date;
   const ws = s.weekStart;
-  const chip = (day, kind) => `<span title="${SS_DAYS[day].full}" style="display:inline-block;font-size:.72rem;padding:.12rem .45rem;border-radius:5px;margin:.1rem .15rem 0 0;
-    ${kind === 'primary' ? 'background:var(--accent);color:rgba(0,0,0,.88);font-weight:700' : 'border:1px solid var(--border);color:var(--muted)'}">${kind === 'primary' ? '⭐ ' : '↺ '}${_ssDayChip(ws, day)}</span>`;
+  const chip = (day, kind) => `<span title="${_ssPickFull(day, ws)}" style="display:inline-block;font-size:.72rem;padding:.12rem .45rem;border-radius:5px;margin:.1rem .15rem 0 0;
+    ${kind === 'primary' ? 'background:var(--accent);color:rgba(0,0,0,.88);font-weight:700' : 'border:1px solid var(--border);color:var(--muted)'}">${kind === 'primary' ? '⭐ ' : '↺ '}${_ssPickLabel(ws, day)}</span>`;
 
   const col = side => {
     const pk = p[side];
@@ -6308,12 +6324,12 @@ function _ssDaySection(ctx, s) {
 
   let suggestHtml = '';
   if(!isFinal) {
-    const sg = _ssSuggest(p);
+    const sg = _ssSuggest(p, ws);
     const msg = !sg
       ? (p.team1 || p.team2 ? `⏳ Czeka na: ${_h(p.team1 ? s.team2 : s.team1)}` : '')
-      : sg.kind === 'match' ? `✨ Oba priorytety zgodne: <b>${_ssDayChip(ws, sg.day)}</b>`
-      : sg.kind === 'partial' ? `👍 Wspólny dzień: <b>${_ssDayChip(ws, sg.day)}</b>`
-      : sg.kind === 'backup' ? `↺ Zgodne tylko dni zapasowe: <b>${_ssDayChip(ws, sg.day)}</b>`
+      : sg.kind === 'match' ? `✨ Oba priorytety zgodne: <b>${_ssPickLabel(ws, sg.day)}</b>`
+      : sg.kind === 'partial' ? `👍 Wspólny dzień: <b>${_ssPickLabel(ws, sg.day)}</b>`
+      : sg.kind === 'backup' ? `↺ Zgodne tylko dni zapasowe: <b>${_ssPickLabel(ws, sg.day)}</b>`
       : `⚠ Brak wspólnego dnia — termin ustala admin`;
     if(msg) suggestHtml = `<div style="font-size:.75rem;margin-top:.5rem;color:${sg && sg.kind === 'none' ? 'var(--loss)' : 'var(--text)'}">${msg}</div>`;
   }
@@ -6332,21 +6348,37 @@ function _ssDaySection(ctx, s) {
 function _ssPicker(ctx, s, side) {
   const k = String(s.id);
   const saved = ctx.picks[k]?.[side] || {};
-  const d = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '' };
+  const d = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '', open: {} };
+  d.open = d.open || {};
   const dirty = d.primary !== (saved.primary || '') || d.backup !== (saved.backup || '');
-  const row = (kind, label) => `
+  const today = new Date().toISOString().slice(0, 10);
+  const btnStyle = (on, disabled, kind) => `flex:1;font-size:.7rem;padding:.25rem 0;border-radius:5px;font-family:inherit;cursor:${disabled ? 'not-allowed' : 'pointer'};
+    border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? (kind === 'primary' ? 'var(--accent)' : 'rgba(245,197,24,.15)') : 'transparent'};
+    color:${on ? (kind === 'primary' ? 'rgba(0,0,0,.88)' : 'var(--accent)') : disabled ? 'rgba(127,127,127,.35)' : 'var(--text)'}`;
+  const row = (kind, label) => {
+    const custom = d.open[kind] || _ssIsCustom(d[kind]);
+    const other = kind === 'backup' ? d.primary : '';
+    return `
     <div style="font-size:.64rem;color:var(--muted);margin:.25rem 0 .15rem">${label}</div>
     <div style="display:flex;gap:.25rem">
       ${Object.keys(SS_DAYS).map(day => {
-        const on = d[kind] === day;
-        const disabled = kind === 'backup' && d.primary === day;
-        return `<button ${disabled ? 'disabled' : ''} onclick="ssPickDraft('${k}','${kind}','${day}')" title="${SS_DAYS[day].full}"
-          style="flex:1;font-size:.7rem;padding:.25rem 0;border-radius:5px;font-family:inherit;cursor:${disabled ? 'not-allowed' : 'pointer'};
-          border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? (kind === 'primary' ? 'var(--accent)' : 'rgba(245,197,24,.15)') : 'transparent'};
-          color:${on ? (kind === 'primary' ? 'rgba(0,0,0,.88)' : 'var(--accent)') : disabled ? 'rgba(127,127,127,.35)' : 'var(--text)'}">${_ssDayChip(s.weekStart, day)}</button>`;
+        const on = d[kind] === day && !custom;
+        const disabled = kind === 'backup' && other === day;
+        return `<button ${disabled ? 'disabled' : ''} onclick="ssPickDraft('${k}','${kind}','${day}')" title="${SS_DAYS[day].full}" style="${btnStyle(on, disabled, kind)}">${_ssDayChip(s.weekStart, day)}</button>`;
       }).join('')}
-    </div>`;
-  const canSave = d.primary && d.backup && dirty;
+      <button onclick="ssPickDraft('${k}','${kind}','custom')" title="Inny termin uzgodniony z rywalem" style="${btnStyle(custom, false, kind)}">📅 Inny</button>
+    </div>
+    ${custom ? `
+      <div style="display:flex;gap:.25rem;margin-top:.25rem">
+        <input type="date" id="ss-c-${k}-${kind}-d" min="${today}" value="${_ssIsCustom(d[kind]) ? d[kind].slice(0, 10) : ''}" onchange="ssPickCustom('${k}','${kind}')"
+          style="flex:2;min-width:0;background:var(--bg);border:1px solid var(--accent);color:var(--text);border-radius:5px;padding:.2rem .3rem;font-family:inherit;font-size:.7rem">
+        <input type="time" id="ss-c-${k}-${kind}-t" value="${_ssPickTime(d[kind])}" onchange="ssPickCustom('${k}','${kind}')" title="Godzina (opcjonalnie)"
+          style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .3rem;font-family:inherit;font-size:.7rem">
+      </div>
+      ${_ssIsCustom(d[kind]) && (d[kind].slice(0, 10) < s.weekStart || d[kind].slice(0, 10) > _ssAddDays(s.weekStart, 6))
+        ? `<div style="font-size:.62rem;color:var(--accent);margin-top:.15rem">⚠ Poza tygodniem ${s.week} — upewnij się, że rywal się zgadza</div>` : ''}` : ''}`;
+  };
+  const canSave = d.primary && d.backup && d.primary !== d.backup && dirty;
   return row('primary', '⭐ Priorytet') + row('backup', '↺ Zapas') + `
     <button onclick="ssSavePick('${k}')" ${canSave ? '' : 'disabled'} class="btn btn-primary" style="width:100%;margin-top:.4rem;font-size:.72rem;padding:.25rem 0;${canSave ? '' : 'opacity:.45'}">
       ${saved.primary && !dirty ? '✓ Zapisano' : '💾 Zapisz wybór'}</button>`;
@@ -6360,10 +6392,12 @@ function _ssAdminActions(ctx, s, res) {
   if(!res) {
     if(s.date) out.push(b(`ssUnfinalize('${k}')`, '↩ Zmień termin'));
     else {
-      const sg = _ssSuggest(ctx.picks[k]);
-      Object.keys(SS_DAYS).forEach(day => {
-        const sug = sg && sg.day === day;
-        out.push(`<button onclick="ssFinalize('${k}','${day}')" class="btn ${sug ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.2rem .5rem">✅ ${_ssDayChip(s.weekStart, day)}</button>`);
+      const p = ctx.picks[k] || {};
+      const sg = _ssSuggest(p, s.weekStart);
+      const customs = [...new Set(['team1', 'team2'].flatMap(sd => [p[sd]?.primary, p[sd]?.backup]).filter(_ssIsCustom))];
+      [...Object.keys(SS_DAYS), ...customs].forEach(v => {
+        const sug = sg && sg.day === v;
+        out.push(`<button onclick="ssFinalize('${k}','${v}')" class="btn ${sug ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.2rem .5rem">✅ ${_ssPickLabel(s.weekStart, v)}</button>`);
       });
     }
   }
@@ -6431,14 +6465,31 @@ async function ssConfirmLinkGames(k) {
   showToast('✅ Zapisano wyniki', 'success');
 }
 
-function ssPickDraft(k, kind, day) {
+function ssPickDraft(k, kind, val) {
   const ctx = _ssCtx();
   const s = _ssItem(k);
   const side = ctx.myTeam && (String(s.team1).toLowerCase() === ctx.myTeam.toLowerCase() ? 'team1' : 'team2');
   const saved = ctx.picks[k]?.[side] || {};
-  const d = _ssDraft[k] = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '' };
-  d[kind] = day;
-  if(kind === 'primary' && d.backup === day) d.backup = '';
+  const d = _ssDraft[k] = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '', open: {} };
+  d.open = d.open || {};
+  if(val === 'custom') {
+    d.open[kind] = true;
+    if(!_ssIsCustom(d[kind])) d[kind] = '';
+  } else {
+    d.open[kind] = false;
+    d[kind] = val;
+  }
+  if(kind === 'primary' && d.backup && d.backup === d.primary) d.backup = '';
+  renderSeasonSchedule();
+}
+
+function ssPickCustom(k, kind) {
+  const d = _ssDraft[k];
+  if(!d) return;
+  const date = document.getElementById(`ss-c-${k}-${kind}-d`)?.value || '';
+  const time = document.getElementById(`ss-c-${k}-${kind}-t`)?.value || '';
+  d[kind] = date ? date + (time ? 'T' + time : '') : '';
+  if(kind === 'primary' && d.backup && d.backup === d.primary) d.backup = '';
   renderSeasonSchedule();
 }
 
@@ -6467,9 +6518,10 @@ async function ssSavePick(k) {
 async function ssFinalize(k, day) {
   const s = _ssItem(k);
   if(!s) return;
-  const date = _ssDayDate(s.weekStart, day);
-  const time = s.defaultTime || (_demo ? _demo.fixture?.time : seasons.find(x => x.id === s.seasonId)?.fixture?.time) || '20:00';
-  if(!_demo && !confirm(`Zatwierdzić termin ${s.team1} vs ${s.team2}: ${SS_DAYS[day].full} ${_ssFmt(date)}, ${time}?`)) return;
+  const date = _ssPickDate(s.weekStart, day);
+  const time = _ssPickTime(day) || s.defaultTime || (_demo ? _demo.fixture?.time : seasons.find(x => x.id === s.seasonId)?.fixture?.time) || '20:00';
+  const full = _ssPickFull(day, s.weekStart);
+  if(!_demo && !confirm(`Zatwierdzić termin ${s.team1} vs ${s.team2}: ${full}, ${time}?`)) return;
   Object.assign(s, { date, time, finalDay: day });
   if(_demo) { renderSeasonSchedule(); showToast('✅ (demo) Termin zatwierdzony', 'success'); return; }
   const ok = await saveData();
@@ -6480,7 +6532,7 @@ async function ssFinalize(k, day) {
   try {
     await _discordNotify({ embeds: [{
       title: `📅 Termin meczu — Week ${s.week}`,
-      description: `**${s.team1}** vs **${s.team2}**\n${SS_DAYS[day].full}, ${_ssFmt(date)} · ${time}`,
+      description: `**${s.team1}** vs **${s.team2}**${(s.bestOf || 1) > 1 ? ' (Bo' + s.bestOf + ')' : ''}\n${full} · ${time}`,
       color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
     }] });
   } catch(e) {}
@@ -6633,7 +6685,7 @@ function _ssGenRender() {
       Na drużynę: <b>${Math.max(0, ...sizes) - 1}</b> spotkań = <b>${(Math.max(0, ...sizes) - 1) * g.bestOf}</b> meczów w sezonie<br>
       Każda drużyna gra do <b>${g.roundsPerWeek}</b> ${g.roundsPerWeek === 1 ? 'spotkania' : 'spotkań'} (${g.roundsPerWeek * g.bestOf} ${g.roundsPerWeek * g.bestOf === 1 ? 'meczu' : 'meczów'}) w tygodniu
       ${start ? ` · od <b>${_ssFmt(start)}</b>${end ? ' do <b>' + _ssFmt(end) + '</b>' : ''}` : ''}<br>
-      <span style="color:var(--muted)">Kapitanowie wybierają dla każdego spotkania dzień priorytetowy i zapasowy: Pn / Śr / Nd danego tygodnia. Admin zatwierdza termin.</span>
+      <span style="color:var(--muted)">Kapitanowie wybierają dla każdego spotkania dzień priorytetowy i zapasowy: Pn / Śr / Nd albo własny termin uzgodniony z rywalem. Admin zatwierdza termin.</span>
     </div>
 
     ${g.demo || registrationsClosed ? '' : `<div style="background:rgba(245,197,24,.08);border:1px solid var(--accent);border-radius:8px;padding:.5rem .7rem;font-size:.78rem;margin-bottom:.6rem">⚠ Zapisy są nadal otwarte — zostaną zamknięte automatycznie po wygenerowaniu terminarza.</div>`}
