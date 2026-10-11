@@ -1859,6 +1859,7 @@ let aiModel = (_storedModel && _storedModel.includes('gemini') && _storedModel !
 let discordWebhookUrl = localStorage.getItem('nba2k_discord_webhook') || '';
 let discordTeamRegWebhookUrl = '';
 let freeAgents = [];          // z Workera (osobny klucz KV)
+let registrationsClosed = false; // zapisy drużyn zamknięte przez admina
 let discordFreeAgentsWebhookUrl = ''; // kanał wolnych agentów (ustawiany przez admina)
 let scheduleVoteCounts = {};  // { scheduleId: { team1, team2 } }
 let myVotes = {};
@@ -2044,7 +2045,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl,
+      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, registrationsClosed,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2179,6 +2180,7 @@ async function loadData() {
     teamRegistrations = record.teamRegistrations || [];
     discordTeamRegWebhookUrl = record.discordTeamRegWebhookUrl || '';
     freeAgents = record.freeAgents || [];
+    registrationsClosed = !!record.registrationsClosed;
     discordFreeAgentsWebhookUrl = record.discordFreeAgentsWebhookUrl || '';
     scheduleVoteCounts = record.scheduleVoteCounts || {};
     scheduleDayPicks = record.scheduleDayPicks || {};
@@ -3979,7 +3981,7 @@ function deleteScheduleMatch(id) {
 }
 
 function linkScheduleMatch(schedId) {
-  const unlinked = matches.filter(m => !schedule.some(s=>s.matchId===m.id));
+  const unlinked = matches.filter(m => !schedule.some(s=>s.matchId===m.id || (s.matchIds||[]).map(Number).includes(Number(m.id))));
   const opts = unlinked.map(m=>`<option value="${m.id}">${formatDate(m.date)}: ${m.team1.name} ${m.team1.score}-${m.team2.score} ${m.team2.name}</option>`).join('');
   if(!opts) { showToast(t('no_matches_to_merge'),'info'); return; }
   const modal = document.getElementById('schedule-modal');
@@ -5597,6 +5599,18 @@ async function _api(path, method, body, opts = {}) {
 // ═══════════════════════════════════════════════════════════════
 // ZAKŁADKI: Zapisy drużyn | Wolni agenci
 // ═══════════════════════════════════════════════════════════════
+async function toggleRegistrations() {
+  const closing = !registrationsClosed;
+  if(!confirm(closing
+    ? 'Zamknąć zapisy drużyn? Formularz zniknie, a nowe zgłoszenia nie będą przyjmowane. Wolni agenci nadal mogą się zgłaszać.'
+    : 'Otworzyć ponownie zapisy drużyn?')) return;
+  registrationsClosed = closing;
+  const ok = await saveData();
+  if(!ok) { registrationsClosed = !closing; return; }
+  renderTeamRegistrations();
+  showToast(closing ? '🔒 Zapisy zamknięte' : '🔓 Zapisy otwarte', 'success');
+}
+
 function setRegTab(tab) { _regTab = tab; renderTeamRegistrations(); }
 
 function _regTabsHtml(rightHtml) {
@@ -5982,19 +5996,19 @@ function _ssDrawGroups(teams, count) {
   return gs;
 }
 
-function _ssBuildFixture({ teams, format, groups, startDate, time, seasonId }) {
+function _ssBuildFixture({ teams, format, groups, startDate, time, seasonId, bestOf = 1, roundsPerWeek = 1 }) {
   const gs = format === 'groups' ? groups : [{ id: 'all', name: '', teams }];
   const items = [], byes = {};
   let id = Date.now();
   gs.forEach(g => {
     _ssRoundRobin(g.teams).forEach((rd, r) => {
-      const week = r + 1, weekStart = _ssAddDays(startDate, r * 7);
+      const round = r + 1, week = Math.floor(r / roundsPerWeek) + 1, weekStart = _ssAddDays(startDate, (week - 1) * 7);
       rd.pairs.forEach(([a, b]) => items.push({
-        id: id++, generated: true, seasonId, week, weekStart, groupId: g.id,
+        id: id++, generated: true, seasonId, week, round, weekStart, groupId: g.id, bestOf,
         team1: a, team2: b, date: '', time: '', defaultTime: time, streamUrl: '',
-        played: false, prediction: null, matchId: null
+        played: false, prediction: null, matchId: null, matchIds: []
       }));
-      rd.byes.forEach(x => (byes[week] = byes[week] || []).push({ team: x, groupId: g.id }));
+      rd.byes.forEach(x => (byes[week] = byes[week] || []).push({ team: x, groupId: g.id, round }));
     });
   });
   return { items, byes };
@@ -6044,13 +6058,28 @@ function _ssDemoCtx() {
 function _ssCtx() { return _demo ? _ssDemoCtx() : _ssRealCtx(); }
 function _ssItem(k) { return (_demo ? _demo.items : schedule).find(x => String(x.id) === String(k)); }
 
+function _ssMatchIds(s) {
+  return Array.isArray(s.matchIds) && s.matchIds.length ? s.matchIds : (s.matchId ? [s.matchId] : []);
+}
+
+function _ssSeries(games, bestOf) {
+  if(!games || !games.length) return null;
+  const w1 = games.filter(g => g.s1 > g.s2).length, w2 = games.filter(g => g.s2 > g.s1).length;
+  const done = games.length >= (bestOf || 1);
+  const winnerSide = done ? (w1 > w2 ? 'team1' : w2 > w1 ? 'team2' : null) : null;
+  return { games, w1, w2, done, winnerSide, draw: done && w1 === w2 };
+}
+
 function _ssResult(ctx, s) {
   if(ctx.demo) {
     const r = _demo.results[String(s.id)];
-    return r ? { s1: r.s1, s2: r.s2, winnerSide: r.s1 > r.s2 ? 'team1' : 'team2' } : null;
+    return r ? _ssSeries(r.games, s.bestOf) : null;
   }
-  const m = s.matchId ? matches.find(x => Number(x.id) === Number(s.matchId)) : null;
-  return m ? _ssMatchToResult(s, m) : null;
+  const games = _ssMatchIds(s)
+    .map(id => matches.find(x => Number(x.id) === Number(id)))
+    .filter(Boolean)
+    .map(m => { const r = _ssMatchToResult(s, m); return { s1: r.s1, s2: r.s2, matchId: m.id }; });
+  return _ssSeries(games, s.bestOf);
 }
 
 function _ssMatchToResult(s, m) {
@@ -6061,7 +6090,7 @@ function _ssMatchToResult(s, m) {
 }
 
 // ── głosowanie (wspólny pasek dla Harmonogramu i terminarza sezonu) ──
-function _voteBarHtml({ c, mine, closed, reveal, winnerSide }) {
+function _voteBarHtml({ c, mine, closed, reveal, winnerSide, draw }) {
   const total = (c.team1 || 0) + (c.team2 || 0);
   const note = txt => `<div style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:.6rem">${txt}</div>`;
   if(!reveal) return note(total ? `🗳 ${total} ${_plVotes(total)} · zagłosuj 👍, aby zobaczyć wyniki` : '🗳 Kto wygra? Zagłosuj 👍');
@@ -6080,12 +6109,14 @@ function _voteBarHtml({ c, mine, closed, reveal, winnerSide }) {
         ? `🎯 Kibice trafili — ${share}% typowało zwycięzcę`
         : `😮 Niespodzianka — tylko ${share}% typowało zwycięzcę`;
     if(mine) verdict += mine === winnerSide ? ' · ✅ Twój typ trafiony' : ' · ❌ Twój typ nietrafiony';
+  } else if(draw) {
+    verdict = '🤝 Remis — nikt nie trafił, nikt nie przegrał zakładu';
   }
   return `
     <div style="margin-top:.7rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.25rem">
         ${pct(p1, lead === 1)}
-        <span style="font-size:.68rem;color:var(--muted)">🗳 ${total} ${_plVotes(total)}${closed && !winnerSide ? ' · głosowanie zakończone' : ''}</span>
+        <span style="font-size:.68rem;color:var(--muted)">🗳 ${total} ${_plVotes(total)}${closed && !winnerSide && !draw ? ' · głosowanie zakończone' : ''}</span>
         ${pct(p2, lead === 2)}
       </div>
       <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface2)">
@@ -6114,7 +6145,7 @@ function _ssVoteBar(ctx, s) {
   const closed = _ssVoteClosed(ctx, s);
   return _voteBarHtml({
     c: ctx.counts[k] || { team1: 0, team2: 0 }, mine: ctx.myVotes[k],
-    closed, reveal: !!ctx.myVotes[k] || closed || ctx.isAdmin, winnerSide: res?.winnerSide || null
+    closed, reveal: !!ctx.myVotes[k] || closed || ctx.isAdmin, winnerSide: res?.winnerSide || null, draw: !!res?.draw
   });
 }
 
@@ -6194,7 +6225,7 @@ function renderSeasonSchedule() {
 
   // tygodnie
   const weeks = [...new Set(ctx.items.map(s => s.week))].sort((a, b) => a - b);
-  const weekDone = w => ctx.items.filter(s => s.week === w).every(s => _ssResult(ctx, s));
+  const weekDone = w => ctx.items.filter(s => s.week === w).every(s => _ssResult(ctx, s)?.done);
   if(!weeks.includes(_ssWeek)) _ssWeek = weeks.find(w => !weekDone(w)) || weeks[weeks.length - 1];
   const weekStart = w => ctx.items.find(s => s.week === w)?.weekStart;
   const tabs = weeks.map(w => {
@@ -6206,7 +6237,7 @@ function renderSeasonSchedule() {
     </button>`;
   }).join('');
 
-  const weekItems = ctx.items.filter(s => s.week === _ssWeek);
+  const weekItems = ctx.items.filter(s => s.week === _ssWeek).sort((a, b) => (a.round || 0) - (b.round || 0));
   const byGroup = groups.length ? groups.map(g => ({ g, list: weekItems.filter(s => s.groupId === g.id) })) : [{ g: null, list: weekItems }];
   const byes = (ctx.fixture?.byes?.[_ssWeek] || []);
 
@@ -6217,7 +6248,7 @@ function renderSeasonSchedule() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:.6rem;margin-bottom:.5rem">
         ${list.map(s => _ssCard(ctx, s, groupName)).join('')}
       </div>`).join('')}
-    ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + (groupName(b.groupId) ? ' (' + groupName(b.groupId) + ')' : '')).join(', ')}</div>` : ''}`;
+    ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + ' (' + [groupName(b.groupId), b.round ? 'kolejka ' + b.round : ''].filter(Boolean).join(', ') + ')').join(', ')}</div>` : ''}`;
 }
 
 function _ssTeamName(ctx, t) {
@@ -6228,29 +6259,31 @@ function _ssCard(ctx, s, groupName) {
   const k = String(s.id);
   const res = _ssResult(ctx, s);
   const isFinal = !!s.date;
+  const bo = s.bestOf || 1;
   const status = res
-    ? `<span style="color:var(--win);font-weight:700">✅ Rozegrany</span>`
+    ? (res.done ? `<span style="color:var(--win);font-weight:700">✅ Rozegrany</span>` : `<span style="color:var(--accent);font-weight:700">▶ Mecz ${res.games.length}/${bo} rozegrany</span>`)
     : isFinal
       ? `<span style="color:var(--win);font-weight:700">📅 ${new Date(s.date + 'T12:00:00').toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'numeric' })}${s.time ? ' · ' + s.time : ''}</span>`
       : `<span style="color:var(--muted)">⏳ Termin do ustalenia</span>`;
   const mineSide = ctx.myTeam && [s.team1, s.team2].map(x => String(x).toLowerCase()).includes(ctx.myTeam.toLowerCase());
   const teamCol = (side, align) => `
     <div style="flex:1;min-width:0;text-align:${align}">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_ssTeamName(ctx, s[side])}</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};line-height:1.15;word-break:break-word">${_ssTeamName(ctx, s[side])}</div>
       ${_ssVoteBtn(ctx, s, side)}
     </div>`;
 
   return `
     <div style="background:var(--surface);border:1px solid ${mineSide && !res ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:.85rem 1rem">
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:.72rem;margin-bottom:.6rem;gap:.5rem">
-        <span style="color:var(--muted)">${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}</span>
+        <span style="color:var(--muted)">${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}${s.round ? ' · Kolejka ' + s.round : ''}${bo > 1 ? ' · <b style="color:var(--text)">Bo' + bo + '</b>' : ''}</span>
         ${status}
       </div>
       <div style="display:flex;align-items:center;gap:.6rem">
         ${teamCol('team1', 'right')}
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${res ? '1.25rem' : '.95rem'};color:${res ? 'var(--text)' : 'var(--muted)'};min-width:56px;text-align:center">${res ? res.s1 + ' — ' + res.s2 : 'VS'}</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${res ? '1.25rem' : '.95rem'};color:${res ? 'var(--text)' : 'var(--muted)'};min-width:56px;text-align:center">${res ? res.w1 + ' — ' + res.w2 : 'VS'}</div>
         ${teamCol('team2', 'left')}
       </div>
+      ${res && bo > 1 ? `<div style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:.3rem">${res.games.map((g, i) => `Mecz ${i + 1}: <b style="color:var(--text)">${g.s1}:${g.s2}</b>`).join(' · ')}</div>` : ''}
       ${_ssVoteBar(ctx, s)}
       ${res ? '' : _ssDaySection(ctx, s)}
       ${_ssAdminActions(ctx, s, res)}
@@ -6333,10 +6366,12 @@ function _ssAdminActions(ctx, s, res) {
         out.push(`<button onclick="ssFinalize('${k}','${day}')" class="btn ${sug ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.2rem .5rem">✅ ${_ssDayChip(s.weekStart, day)}</button>`);
       });
     }
-    if(ctx.demo) out.push(b(`demoSimResult('${k}')`, '🎲 Symuluj wynik'));
-  } else if(ctx.demo) out.push(b(`demoSimResult('${k}', true)`, '↩ Cofnij wynik'));
-  if(!ctx.demo) {
-    if(!s.played) out.push(b(`linkScheduleMatch(${s.id})`, '🔗 Wynik'));
+  }
+  if(ctx.demo) {
+    if(!res?.done) out.push(b(`demoSimResult('${k}')`, '🎲 Symuluj ' + ((s.bestOf || 1) > 1 ? 'mecz' : 'wynik')));
+    if(res) out.push(b(`demoSimResult('${k}', true)`, '↩ Cofnij wynik'));
+  } else {
+    out.push(b(`ssLinkGames('${k}')`, `🔗 Wyniki ${res ? res.games.length : 0}/${s.bestOf || 1}`));
     out.push(b(`openScheduleEdit(${s.id})`, '✏️'));
   }
   return `<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.65rem;padding-top:.55rem;border-top:1px dashed var(--border)">
@@ -6344,6 +6379,58 @@ function _ssAdminActions(ctx, s, res) {
 }
 
 // ── akcje ──
+function ssLinkGames(k) {
+  const s = _ssItem(k);
+  if(!s) return;
+  const bo = s.bestOf || 1;
+  const linked = _ssMatchIds(s).map(Number);
+  const usedElsewhere = new Set(schedule.filter(x => x !== s).flatMap(x => _ssMatchIds(x).map(Number)));
+  const pairKey = [s.team1, s.team2].map(x => String(x).toLowerCase()).sort().join('|');
+  const isPair = m => [m.team1.name, m.team2.name].map(x => String(x).toLowerCase()).sort().join('|') === pairKey;
+  const list = matches
+    .filter(m => !usedElsewhere.has(Number(m.id)))
+    .sort((a, b) => (isPair(b) - isPair(a)) || (new Date(b.date) - new Date(a.date)))
+    .slice(0, 60);
+  if(!list.length) { showToast('Brak meczów do połączenia', 'info'); return; }
+  const modal = document.getElementById('schedule-modal');
+  document.getElementById('schedule-modal-content').innerHTML = `
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;margin-bottom:.3rem">🔗 Wyniki spotkania</div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:.9rem">${_h(s.team1)} vs ${_h(s.team2)} · Bo${bo} — zaznacz ${bo === 1 ? 'mecz' : 'do ' + bo + ' meczów'}</div>
+    <div id="ss-link-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:.3rem;margin-bottom:1rem">
+      ${list.map(m => `
+        <label style="display:flex;align-items:center;gap:.6rem;padding:.45rem .6rem;border:1px solid ${isPair(m) ? 'var(--accent)' : 'var(--border)'};border-radius:7px;cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="${m.id}" ${linked.includes(Number(m.id)) ? 'checked' : ''} onchange="ssLinkLimit(${bo})" style="accent-color:var(--accent)">
+          <span style="color:var(--muted);min-width:70px">${formatDate(m.date)}</span>
+          <span>${_h(m.team1.name)} <b>${m.team1.score}:${m.team2.score}</b> ${_h(m.team2.name)}</span>
+        </label>`).join('')}
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="ssConfirmLinkGames('${k}')">✅ Zapisz</button>`;
+  modal.classList.add('open');
+  ssLinkLimit(bo);
+}
+
+function ssLinkLimit(bo) {
+  const boxes = [...document.querySelectorAll('#ss-link-list input[type=checkbox]')];
+  const n = boxes.filter(b => b.checked).length;
+  boxes.forEach(b => { if(!b.checked) b.disabled = n >= bo; });
+}
+
+async function ssConfirmLinkGames(k) {
+  const s = _ssItem(k);
+  if(!s) return;
+  const ids = [...document.querySelectorAll('#ss-link-list input:checked')].map(b => Number(b.value))
+    .sort((a, b) => new Date(matches.find(m => Number(m.id) === a)?.date) - new Date(matches.find(m => Number(m.id) === b)?.date));
+  const prev = { matchIds: s.matchIds, matchId: s.matchId, played: s.played };
+  s.matchIds = ids;
+  s.matchId = ids[0] || null;
+  s.played = ids.length >= (s.bestOf || 1);
+  const ok = await saveData();
+  if(!ok) { Object.assign(s, prev); return; }
+  document.getElementById('schedule-modal').classList.remove('open');
+  renderSchedule();
+  showToast('✅ Zapisano wyniki', 'success');
+}
+
 function ssPickDraft(k, kind, day) {
   const ctx = _ssCtx();
   const s = _ssItem(k);
@@ -6420,6 +6507,8 @@ function openFixtureGenerator() {
     demo, seasonId, teams,
     format: teams.length >= 10 ? 'groups' : 'single',
     groupCount: 2, groups: null, drawing: false,
+    bestOf: (demo ? _demo.fixture?.bestOf : null) || 2,
+    roundsPerWeek: (demo ? _demo.fixture?.roundsPerWeek : null) || 1,
     startDate: _ssNextMonday(), time: '20:00', announce: true
   };
   let m = document.getElementById('fixture-gen-modal');
@@ -6468,7 +6557,8 @@ function _ssGenRender() {
   const sizes = g.format === 'groups'
     ? Array.from({ length: g.groupCount }, (_, i) => Math.floor(n / g.groupCount) + (i < n % g.groupCount ? 1 : 0))
     : [n];
-  const weeks = Math.max(0, ...sizes.map(x => x % 2 ? x : x - 1));
+  const rounds = Math.max(0, ...sizes.map(x => x % 2 ? x : x - 1));
+  const weeks = Math.ceil(rounds / g.roundsPerWeek);
   const total = sizes.reduce((a, x) => a + x * (x - 1) / 2, 0);
   const start = g.startDate ? _ssMondayOf(g.startDate) : null;
   const end = start && weeks ? _ssAddDays(start, (weeks - 1) * 7 + 6) : null;
@@ -6511,7 +6601,7 @@ function _ssGenRender() {
 
     <label style="${lbl}">Format sezonu</label>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-      ${fmtCard('single', '🏟 Jedna grupa', 'Każdy z każdym. Jedna kolejka = jeden tydzień.', false)}
+      ${fmtCard('single', '🏟 Jedna grupa', 'Każdy z każdym w całej lidze.', false)}
       ${fmtCard('groups', '👥 Grupy', `Losowanie do grup, w każdej grupie każdy z każdym.${n >= 10 ? ' <b style="color:var(--accent)">Zalecane przy ' + n + ' drużynach.</b>' : ''}`, !canGroups)}
     </div>
     ${g.format === 'groups' ? `
@@ -6523,6 +6613,13 @@ function _ssGenRender() {
 
     ${groupsPreview}
 
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:.9rem 0 0">
+      <div><label style="${lbl}">Format spotkania</label>
+        <select onchange="_ssGenSet('bestOf',+this.value)" style="${inp}">${[1, 2, 3].map(x => `<option value="${x}" ${x === g.bestOf ? 'selected' : ''}>Bo${x} — ${x === 1 ? '1 mecz' : x + ' mecze'}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Spotkań w tygodniu</label>
+        <select onchange="_ssGenSet('roundsPerWeek',+this.value)" style="${inp}">${[1, 2, 3].map(x => `<option value="${x}" ${x === g.roundsPerWeek ? 'selected' : ''}>${x} na drużynę (${x * g.bestOf} ${x * g.bestOf === 1 ? 'mecz' : x * g.bestOf < 5 ? 'mecze' : 'meczów'})</option>`).join('')}</select></div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:.9rem 0">
       <div><label style="${lbl}">Start (tydzień 1)</label>
         <input type="date" value="${g.startDate}" onchange="_ssGenSet('startDate',this.value)" style="${inp}"></div>
@@ -6531,11 +6628,15 @@ function _ssGenRender() {
     </div>
 
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;font-size:.8rem;line-height:1.5;margin-bottom:1rem">
-      📊 <b>${weeks}</b> kolejek (tygodni) · <b>${total}</b> meczów
+      📊 <b>${rounds}</b> kolejek w <b>${weeks}</b> ${weeks === 1 ? 'tygodniu' : 'tygodniach'}<br>
+      Cała liga: <b>${total}</b> spotkań Bo${g.bestOf} = <b>${total * g.bestOf}</b> meczów<br>
+      Na drużynę: <b>${Math.max(0, ...sizes) - 1}</b> spotkań = <b>${(Math.max(0, ...sizes) - 1) * g.bestOf}</b> meczów w sezonie<br>
+      Każda drużyna gra do <b>${g.roundsPerWeek}</b> ${g.roundsPerWeek === 1 ? 'spotkania' : 'spotkań'} (${g.roundsPerWeek * g.bestOf} ${g.roundsPerWeek * g.bestOf === 1 ? 'meczu' : 'meczów'}) w tygodniu
       ${start ? ` · od <b>${_ssFmt(start)}</b>${end ? ' do <b>' + _ssFmt(end) + '</b>' : ''}` : ''}<br>
-      <span style="color:var(--muted)">Kapitanowie wybierają dzień priorytetowy i zapasowy: Pn / Śr / Nd danego tygodnia. Admin zatwierdza termin.</span>
+      <span style="color:var(--muted)">Kapitanowie wybierają dla każdego spotkania dzień priorytetowy i zapasowy: Pn / Śr / Nd danego tygodnia. Admin zatwierdza termin.</span>
     </div>
 
+    ${g.demo || registrationsClosed ? '' : `<div style="background:rgba(245,197,24,.08);border:1px solid var(--accent);border-radius:8px;padding:.5rem .7rem;font-size:.78rem;margin-bottom:.6rem">⚠ Zapisy są nadal otwarte — zostaną zamknięte automatycznie po wygenerowaniu terminarza.</div>`}
     ${g.demo ? '' : `<label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
       <input type="checkbox" ${g.announce ? 'checked' : ''} onchange="_ssGen.announce=this.checked" style="accent-color:var(--accent)"> Ogłoś terminarz${g.format === 'groups' ? ' i skład grup' : ''} na Discordzie</label>`}
 
@@ -6571,8 +6672,8 @@ async function ssConfirmFixture() {
   if(!g || g.drawing) return;
   const startDate = _ssMondayOf(g.startDate);
   const groups = g.format === 'groups' ? g.groups.map(x => ({ id: x.id, name: x.name, teams: [...x.teams] })) : null;
-  const { items, byes } = _ssBuildFixture({ teams: g.teams, format: g.format, groups, startDate, time: g.time || '20:00', seasonId: g.seasonId });
-  const fixture = { format: g.format, groups: groups || [], startDate, time: g.time || '20:00', byes, generatedAt: new Date().toISOString() };
+  const { items, byes } = _ssBuildFixture({ teams: g.teams, format: g.format, groups, startDate, time: g.time || '20:00', seasonId: g.seasonId, bestOf: g.bestOf, roundsPerWeek: g.roundsPerWeek });
+  const fixture = { format: g.format, groups: groups || [], startDate, time: g.time || '20:00', byes, bestOf: g.bestOf, roundsPerWeek: g.roundsPerWeek, generatedAt: new Date().toISOString() };
 
   if(g.demo) {
     _demo.fixture = fixture;
@@ -6590,11 +6691,13 @@ async function ssConfirmFixture() {
   if(existing.length && !confirm(`Sezon ma już terminarz (${existing.length} meczów). Zastąpić go nowym? Propozycje terminów i głosy zostaną wyzerowane.`)) return;
 
   const season = seasons.find(x => x.id === g.seasonId);
-  const prevSchedule = schedule, prevFixture = season?.fixture;
+  const prevSchedule = schedule, prevFixture = season?.fixture, prevClosed = registrationsClosed;
   schedule = schedule.filter(s => !existing.includes(s)).concat(items);
   if(season) season.fixture = fixture;
+  registrationsClosed = true;
   const ok = await saveData();
-  if(!ok) { schedule = prevSchedule; if(season) season.fixture = prevFixture; return; }
+  if(!ok) { schedule = prevSchedule; if(season) season.fixture = prevFixture; registrationsClosed = prevClosed; return; }
+  renderTeamRegistrations();
 
   _ssSeasonId = g.seasonId;
   _ssWeek = null;
@@ -6610,8 +6713,8 @@ async function ssConfirmFixture() {
     try {
       await _discordNotify({ embeds: [{
         title: `🗓 Terminarz ${season?.name || 'sezonu'} gotowy!`,
-        description: `${groups ? '👥 ' + groups.length + ' grupy' : '🏟 Jedna grupa — każdy z każdym'} · ${weeksCount} kolejek · ${items.length} meczów\n` +
-          `Start: **${_ssFmt(startDate)}**. Kapitanowie — wybierzcie na stronie dzień priorytetowy i zapasowy (Pn / Śr / Nd) dla swoich meczów.`,
+        description: `${groups ? '👥 ' + groups.length + ' grupy' : '🏟 Jedna grupa — każdy z każdym'} · ${Math.max(...items.map(s => s.round))} kolejek w ${weeksCount} tygodniach · ${items.length} spotkań Bo${g.bestOf}\n` +
+          `Start: **${_ssFmt(startDate)}**. Każda drużyna gra do ${g.roundsPerWeek} ${g.roundsPerWeek === 1 ? 'spotkania' : 'spotkań'} w tygodniu. Kapitanowie — wybierzcie na stronie dzień priorytetowy i zapasowy (Pn / Śr / Nd) dla swoich spotkań.`,
         fields, color: 0xf5c518,
         url: (typeof APP_URL !== 'undefined' ? APP_URL : location.href.split('?')[0].split('#')[0]),
         footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
@@ -6622,12 +6725,11 @@ async function ssConfirmFixture() {
 
 // ── DEMO ──
 function startDemo() {
-  _demo = { teams: SS_DEMO_TEAMS.slice(0, 10), role: _isLoggedInSync() ? 'admin' : 'captain', captainTeam: SS_DEMO_TEAMS[0],
+  _demo = { teams: SS_DEMO_TEAMS.slice(0, 9), role: _isLoggedInSync() ? 'admin' : 'captain', captainTeam: SS_DEMO_TEAMS[0],
     fixture: null, items: [], picks: {}, counts: {}, myVotes: {}, results: {} };
-  const groups = _ssDrawGroups(_demo.teams, 2);
   const startDate = _ssMondayOf(new Date().toISOString().slice(0, 10)); // Week 1 = ten tydzień (rozegrany), Week 2 = następny
-  const { items, byes } = _ssBuildFixture({ teams: _demo.teams, format: 'groups', groups, startDate, time: '20:00', seasonId: 'demo' });
-  _demo.fixture = { format: 'groups', groups, startDate, time: '20:00', byes };
+  const { items, byes } = _ssBuildFixture({ teams: _demo.teams, format: 'single', groups: null, startDate, time: '20:00', seasonId: 'demo', bestOf: 2, roundsPerWeek: 2 });
+  _demo.fixture = { format: 'single', groups: [], startDate, time: '20:00', byes, bestOf: 2, roundsPerWeek: 2 };
   _demo.items = items;
   _demoSeed();
   _ssDraft = {};
@@ -6635,6 +6737,12 @@ function startDemo() {
   showView('schedule');
   renderSeasonSchedule();
   document.getElementById('season-schedule-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function _demoGame() {
+  let s1 = 55 + Math.floor(Math.random() * 40), s2 = 55 + Math.floor(Math.random() * 40);
+  if(s1 === s2) s1++;
+  return { s1, s2 };
 }
 
 function _demoSeed() {
@@ -6645,8 +6753,7 @@ function _demoSeed() {
     const k = String(s.id);
     _demo.counts[k] = { team1: rnd(0, 14), team2: rnd(0, 14) };
     if(s.week === 1) {
-      let s1 = rnd(55, 95), s2 = rnd(55, 95); if(s1 === s2) s1++;
-      _demo.results[k] = { s1, s2 };
+      _demo.results[k] = { games: Array.from({ length: s.bestOf || 1 }, _demoGame) };
       Object.assign(s, { date: _ssDayDate(s.weekStart, days[rnd(0, 2)]), time: '20:00' });
     }
   });
@@ -6678,9 +6785,8 @@ function demoVote(k, side) {
 function demoSimResult(k, undo) {
   const s = _ssItem(k);
   if(undo) { delete _demo.results[k]; renderSeasonSchedule(); return; }
-  let s1 = 55 + Math.floor(Math.random() * 40), s2 = 55 + Math.floor(Math.random() * 40);
-  if(s1 === s2) s1++;
-  _demo.results[k] = { s1, s2 };
+  const r = _demo.results[k] = _demo.results[k] || { games: [] };
+  if(r.games.length < (s.bestOf || 1)) r.games.push(_demoGame());
   if(!s.date) Object.assign(s, { date: _ssDayDate(s.weekStart, 'wed'), time: '20:00' });
   renderSeasonSchedule();
 }
@@ -6706,6 +6812,7 @@ function closeTeamRegModal() {
 }
 
 function openTeamRegModal() {
+  if(registrationsClosed) { showToast('🔒 Zapisy drużyn są zamknięte', 'info'); return; }
   const modal = document.getElementById('team-reg-modal');
   if(!modal) { console.error('Brak #team-reg-modal'); return; }
   modal.style.display = 'flex';
@@ -6923,7 +7030,10 @@ function renderTeamRegistrations() {
 
   wrap.innerHTML = _regTabsHtml(`
         ${isAdmin ? `<button onclick="openTeamRegWebhookModal()" class="btn btn-ghost" style="font-size:.78rem;padding:.35rem .7rem" title="Kanał Discord dla zgłoszeń">⚙ Kanał Discord${discordTeamRegWebhookUrl ? '' : ' <span style="color:var(--loss)">●</span>'}</button>` : ''}
-        <button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>`) + `
+        ${isAdmin ? `<button onclick="toggleRegistrations()" class="btn btn-ghost" style="font-size:.78rem;padding:.35rem .7rem">${registrationsClosed ? '🔓 Otwórz zapisy' : '🔒 Zamknij zapisy'}</button>` : ''}
+        ${registrationsClosed
+          ? `<span style="font-size:.78rem;font-weight:700;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.35rem .75rem">🔒 Zapisy zamknięte</span>`
+          : `<button onclick="openTeamRegModal()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Zgłoś drużynę</button>`}`) + `
     ${cards || `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted)">
       <div style="font-size:2rem;margin-bottom:.5rem">🏀</div>
       <div style="font-size:.9rem;font-weight:600;margin-bottom:.35rem">Brak zgłoszonych drużyn</div>
