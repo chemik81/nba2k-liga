@@ -4048,6 +4048,18 @@ function renderScheduleDashboard() {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
+// ═══ Dashboard pokazuje tylko bieżący sezon ═══════════════════════
+// Pełna historia zostaje w Meczach / Statystykach (filtr sezonu).
+let _seasonScopeDepth = 0;
+function _withSeasonMatches(fn) {
+  if(_seasonScopeDepth > 0 || !currentSeasonId || !seasons.some(x => x.id === currentSeasonId)) return fn();
+  const all = matches;
+  matches = all.filter(m => m.seasonId === currentSeasonId);
+  _seasonScopeDepth++;
+  try { return fn(); }
+  finally { _seasonScopeDepth--; matches = all; }
+}
+
 function renderDashboard() {
   renderEventsDashboard();
   renderStandings();
@@ -4145,6 +4157,14 @@ function renderStandings() {
       ts[m.team2.name].pf+=m.team2.score; ts[m.team2.name].pa+=m.team1.score;
     }
   });
+  // Drużyny z terminarza bieżącego sezonu — widoczne w tabeli od pierwszego dnia (0-0)
+  const _fx = seasons.find(x => x.id === currentSeasonId)?.fixture;
+  const _fxTeams = _fx
+    ? (_fx.groups?.length ? _fx.groups.flatMap(g => g.teams)
+       : [...new Set(schedule.filter(x => x.generated && x.seasonId === currentSeasonId).flatMap(x => [x.team1, x.team2]))])
+    : [];
+  _fxTeams.forEach(n => { if(!ts[n]) ts[n] = { w:0, l:0, wo:0, pf:0, pa:0 }; });
+  const _standingsGroups = _fx?.format === 'groups' && _fx.groups?.length ? _fx.groups : null;
   // Liga points: win=2, loss (normal)=1, walkover loss=0
   const ligaPts = (s) => s.w*2 + (s.l - s.wo)*1 + s.wo*0;
   const sorted=Object.entries(ts).sort((a,b)=>{
@@ -4165,7 +4185,7 @@ function renderStandings() {
     else streaks[n]='<span style="color:var(--muted)">-</span>';
   });
   const hot=getHotPlayers();
-  tbody.innerHTML=sorted.map(([name,s],i)=>{
+  const _row=([name,s],i)=>{
     const gp=s.w+s.l,pct=gp>0?(s.w/gp).toFixed(3):'.000';
     const ligaPts=s.w*2+(s.l-s.wo)*1+s.wo*0;
     const ppg=gp>0?(s.pf/gp).toFixed(1):'0.0',opp=gp>0?(s.pa/gp).toFixed(1):'0.0';
@@ -4174,7 +4194,16 @@ function renderStandings() {
     const hc=[...hot].filter(p=>matches.some(m=>[...(m.team1.players||[]),...(m.team2.players||[])].some(pl=>pl.name===p&&(m.team1.name===name||m.team2.name===name)))).length;
     const _hs=hc>1?' '+t('hot_streak_has'):'';const _hx=hc>1?' x'+hc:'';const _htitle=String.fromCharCode(128293)+' Hot Streak: '+hc+' '+t('hot_streak_players')+_hs+' '+t('hot_streak_last3');const hb=hc>0?'<span class="hot" title="'+_htitle+'">' +String.fromCharCode(128293)+_hx+'</span>':'';
     return `<tr><td style="padding-left:1.5rem"><span class="rank-num rank-${i+1}">${i+1}</span></td><td style="font-weight:700"><span class="tlink" data-t="${name.replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${name}</span>${hb}</td><td>${gp}</td><td>${s.w}</td><td>${s.l}</td><td style="font-weight:900;color:var(--accent)">${ligaPts}</td><td>${pct}</td><td>${ppg}</td><td>${opp}</td><td>${streaks[name]||'-'}</td><td>${l5h}</td></tr>`;
-  }).join('');
+  };
+  if(_standingsGroups) {
+    const inGroup = new Set(_standingsGroups.flatMap(g => g.teams));
+    const parts = _standingsGroups.map(g => ({ name: g.name, list: sorted.filter(([n]) => g.teams.includes(n)) }));
+    const rest = sorted.filter(([n]) => !inGroup.has(n));
+    if(rest.length) parts.push({ name: 'Poza grupami', list: rest });
+    tbody.innerHTML = parts.map(pt => `<tr><td colspan="10" style="padding:.55rem 1.5rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;letter-spacing:1px;color:var(--accent);background:var(--surface2)">${pt.name}</td></tr>` + pt.list.map(_row).join('')).join('');
+  } else {
+    tbody.innerHTML = sorted.map(_row).join('');
+  }
   renderTeamForm(sorted);
   renderTop3();
   if(typeof renderPlayoffDashboard === 'function') renderPlayoffDashboard();
@@ -6696,6 +6725,12 @@ function _ssGenRender() {
       <span style="color:var(--muted)">Kapitanowie wybierają dla każdego spotkania dzień priorytetowy i zapasowy: Pn / Śr / Nd albo własny termin uzgodniony z rywalem. Admin zatwierdza termin.</span>
     </div>
 
+    ${(() => {
+      if(g.demo) return '';
+      const old = matches.filter(m => m.seasonId === g.seasonId).length;
+      const sn = seasons.find(x => x.id === g.seasonId)?.name || '';
+      return old ? `<div style="background:rgba(220,38,38,.08);border:1px solid var(--loss);border-radius:8px;padding:.5rem .7rem;font-size:.78rem;margin-bottom:.6rem;line-height:1.45">⚠ W sezonie „${_h(sn)}” jest już <b>${old}</b> ${old === 1 ? 'mecz' : 'meczów'} — pewnie z poprzednich rozgrywek. Dla nowego sezonu utwórz go w <b>🏆 Sezony</b>, ustaw jako aktywny i dopiero wtedy generuj terminarz. Inaczej stare wyniki trafią do nowej tabeli.</div>` : '';
+    })()}
     ${g.demo || registrationsClosed ? '' : `<div style="background:rgba(245,197,24,.08);border:1px solid var(--accent);border-radius:8px;padding:.5rem .7rem;font-size:.78rem;margin-bottom:.6rem">⚠ Zapisy są nadal otwarte — zostaną zamknięte automatycznie po wygenerowaniu terminarza.</div>`}
     ${g.demo ? '' : `<label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
       <input type="checkbox" ${g.announce ? 'checked' : ''} onchange="_ssGen.announce=this.checked" style="accent-color:var(--accent)"> Ogłoś terminarz${g.format === 'groups' ? ' i skład grup' : ''} na Discordzie</label>`}
@@ -16667,6 +16702,15 @@ async function _dsLaunch() {
 }
 
 
+
+// Dashboard: tabela, liderzy, drużyna tygodnia itd. liczone tylko z meczów bieżącego sezonu
+['renderStandings', 'renderLeaders', 'renderTop3', 'renderTeamOfWeek', 'renderRoundComparison', 'renderMilestoneBanner', 'renderTeamForm']
+  .forEach(fn => {
+    if(typeof window[fn] !== 'function' || window[fn]._seasonScoped) return;
+    const orig = window[fn];
+    window[fn] = function(...args) { return _withSeasonMatches(() => orig.apply(this, args)); };
+    window[fn]._seasonScoped = true;
+  });
 </script>
 
 
