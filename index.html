@@ -4694,6 +4694,8 @@ async function saveSetup() {
     } catch(e) {}
   }
 
+  // Link bezpośredni: przełącz widok od razu, zanim dane się wczytają
+  try { openDeepLink(); } catch(e) {}
   // Always load data - credentials are embedded
   await loadData();
   renderDashboard();
@@ -6901,7 +6903,8 @@ function endDemo() { _demo = null; _ssDraft = {}; _ssWeek = null; renderSeasonSc
 
 // ═══ Linki bezpośrednie: #terminarz, #terminarz-week-3, #zapisy, #wolni-agenci ═══
 function openDeepLink() {
-  const h = decodeURIComponent((location.hash || '').replace(/^#/, '')).toLowerCase();
+  const _q = new URLSearchParams(location.search).get('v') || '';
+  const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q).toLowerCase();
   if(!h) return;
   const flash = el => {
     if(!el) return;
@@ -7010,6 +7013,73 @@ function openChampionsHistory() {
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px;margin-bottom:1rem">📜 Historia mistrzów</div>
     ${list.length ? _withAllMatches(() => list.map(_poHistoryHtml).join('')) : '<div style="color:var(--muted);text-align:center;padding:2rem">Brak rozegranych playoffów</div>'}`;
   m.classList.add('open');
+}
+
+// ═══ ZMIANA KAPITANA (admin) ═══════════════════════════════════
+function _knownDiscordUsers() {
+  const map = new Map();
+  const add = (id, name) => { if(id && /^\d{15,21}$/.test(String(id)) && !map.has(String(id))) map.set(String(id), name || ''); };
+  if(discordUser) add(discordUser.id, discordUser.name);
+  freeAgents.forEach(f => add(f.discordId, f.name));
+  teamRegistrations.forEach(r => add(r.captain?.id, r.captain?.name));
+  (events || []).forEach(ev => (ev.players || []).forEach(p => add(p.id, p.name)));
+  return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+}
+
+function openCaptainChange(regId) {
+  const reg = teamRegistrations.find(r => r.id === regId);
+  if(!reg) return;
+  let m = document.getElementById('captain-modal');
+  if(!m) {
+    m = document.createElement('div');
+    m.id = 'captain-modal';
+    m.className = 'modal-overlay';
+    m.style.zIndex = '1250';
+    m.onclick = e => { if(e.target === m) m.classList.remove('open'); };
+    m.innerHTML = '<div class="modal" style="max-width:520px"></div>';
+    document.body.appendChild(m);
+  }
+  const inp = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.85rem;width:100%;box-sizing:border-box';
+  const known = _knownDiscordUsers().filter(u => u.id !== reg.captain?.id);
+  m.querySelector('.modal').innerHTML = `
+    <button class="modal-close" onclick="document.getElementById('captain-modal').classList.remove('open')">&#x2715;</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;margin-bottom:.3rem">👤 Zmień kapitana</div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">${_h(reg.teamName)} · obecnie: <b style="color:var(--text)">${_h(reg.captain?.name || '?')}</b></div>
+
+    ${known.length ? `
+      <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Wybierz z listy</label>
+      <select onchange="if(this.value){document.getElementById('cap-id').value=this.value;document.getElementById('cap-name').value=this.options[this.selectedIndex].dataset.name||'';}" style="${inp};margin-bottom:.9rem">
+        <option value="">— osoby znane stronie (agenci, kapitanowie, eventy) —</option>
+        ${known.map(u => `<option value="${u.id}" data-name="${_h(u.name)}">${_h(u.name || u.id)}</option>`).join('')}
+      </select>` : ''}
+
+    <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Discord ID nowego kapitana</label>
+    <input id="cap-id" type="text" inputmode="numeric" placeholder="np. 712345678901234567" style="${inp};margin-bottom:.4rem">
+    <div style="font-size:.72rem;color:var(--muted);line-height:1.45;margin-bottom:.9rem">
+      Jak zdobyć ID: Discord → Ustawienia → Zaawansowane → włącz <b>Tryb dewelopera</b>. Potem prawy klik (na telefonie przytrzymaj) na nicku osoby → <b>Kopiuj ID użytkownika</b>.
+    </div>
+    <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Nazwa (opcjonalnie)</label>
+    <input id="cap-name" type="text" maxlength="40" placeholder="uzupełni się sama z Discorda" style="${inp};margin-bottom:1.1rem">
+
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('captain-modal').classList.remove('open')">Anuluj</button>
+      <button class="btn btn-primary" onclick="saveCaptainChange('${reg.id}')">💾 Zapisz</button>
+    </div>`;
+  m.classList.add('open');
+}
+
+async function saveCaptainChange(regId) {
+  const id = document.getElementById('cap-id').value.trim();
+  const name = document.getElementById('cap-name').value.trim();
+  if(!/^\d{15,21}$/.test(id)) { showToast('❌ Discord ID to 15–21 cyfr', 'error'); return; }
+  const res = await _api('/team-registration', 'PATCH', { id: regId, captainId: id, captainName: name }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const reg = teamRegistrations.find(r => r.id === regId);
+  if(reg) { Object.keys(reg).forEach(k => delete reg[k]); Object.assign(reg, res.registration); }
+  document.getElementById('captain-modal').classList.remove('open');
+  renderTeamRegistrations();
+  renderSchedule();
+  showToast('✅ Nowy kapitan: ' + (res.registration.captain?.name || id), 'success');
 }
 
 function goToTeamRegistrations() {
@@ -7214,6 +7284,7 @@ function renderTeamRegistrations() {
           ${r.status !== 'approved' ? btn('approved','✅ Zatwierdź','var(--win)') : ''}
           ${r.status !== 'rejected' ? btn('rejected','❌ Odrzuć','var(--loss)') : ''}
           ${r.status !== 'pending'  ? btn('pending','↩ Cofnij do oczekujących','var(--muted)') : ''}
+          <button onclick="openCaptainChange('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">👤 Zmień kapitana</button>
           <button onclick="teamRegDelete('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">🗑 Usuń</button>
         </div>` : '';
       const rejectNote = (isAdmin || isMyTeam(r)) && r.status === 'rejected' && r.rejectReason
