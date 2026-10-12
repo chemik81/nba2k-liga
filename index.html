@@ -1861,6 +1861,7 @@ let discordTeamRegWebhookUrl = '';
 let freeAgents = [];          // z Workera (osobny klucz KV)
 let registrationsClosed = false; // zapisy drużyn zamknięte przez admina
 let discordFreeAgentsWebhookUrl = ''; // kanał wolnych agentów (ustawiany przez admina)
+let discordScheduleWebhookUrl = '';   // kanał ogłoszeń terminarza
 let scheduleVoteCounts = {};  // { scheduleId: { team1, team2 } }
 let myVotes = {};
 let scheduleDayPicks = {};     // { scheduleId: { team1:{primary,backup}, team2:{...} } }             // { scheduleId: 'team1'|'team2' } — głosy zalogowanego użytkownika
@@ -2045,7 +2046,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, registrationsClosed,
+      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2182,6 +2183,7 @@ async function loadData() {
     freeAgents = record.freeAgents || [];
     registrationsClosed = !!record.registrationsClosed;
     discordFreeAgentsWebhookUrl = record.discordFreeAgentsWebhookUrl || '';
+    discordScheduleWebhookUrl = record.discordScheduleWebhookUrl || '';
     scheduleVoteCounts = record.scheduleVoteCounts || {};
     scheduleDayPicks = record.scheduleDayPicks || {};
     _loadMyVotes();
@@ -2691,6 +2693,10 @@ function teamInitials(name) {
 function teamLogo(name, size=40, fontSize='1rem') {
   if(typeof teams !== 'undefined' && teams[name]?.logo)
     return `<img src="${teams[name].logo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">`;
+  const _regLogo = typeof teamRegistrations !== 'undefined'
+    ? teamRegistrations.find(r => r.logo && r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(name).toLowerCase())?.logo : null;
+  if(_regLogo)
+    return `<img src="${_regLogo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">`;
   const color = teamColor(name);
   const initials = teamInitials(name);
   return `<div style="width:${size}px;height:${size}px;border-radius:8px;background:${color};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${fontSize};color:#fff;flex-shrink:0;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,.4)">${initials}</div>`;
@@ -3906,7 +3912,7 @@ function renderSchedule() {
 
   if(upEl) upEl.innerHTML = upcoming.length
     ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Nadchodzące mecze (${upcoming.length})</div>` + upcoming.map(s=>renderCard(s,false)).join('')
-    : `<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">${t('no_schedule')} '+t('games_count')+'</div>`;
+    : (schedule.some(x => x.generated) ? '' : `<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">${t('no_schedule')}</div>`);
 
   if(plEl) plEl.innerHTML = played.length
     ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Rozegrane (${played.length})</div>` + played.map(s=>renderCard(s,true)).join('')
@@ -5530,6 +5536,11 @@ const _WEBHOOK_KINDS = {
     hint: 'Puste = powiadomienia idą na główny kanał ligi (bez logo).',
     get: () => discordTeamRegWebhookUrl, set: v => { discordTeamRegWebhookUrl = v; }
   },
+  schedule: {
+    title: '⚙ Kanał Discord — terminarz',
+    hint: 'Ogłoszenia terminarza, składu grup i ustalonych terminów meczów. Puste = główny kanał ligi.',
+    get: () => discordScheduleWebhookUrl, set: v => { discordScheduleWebhookUrl = v; }
+  },
   fa: {
     title: '⚙ Kanał Discord — wolni agenci',
     hint: 'Kanał forum: każdy agent dostaje własny wątek. Kanał tekstowy: zwykły post. Puste = sekret DISCORD_WEBHOOK_FREE_AGENTS w Workerze (jeśli ustawiony).',
@@ -5582,9 +5593,9 @@ async function testTeamRegWebhook() {
   if(!_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
   st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłanie...';
   const isFa = _webhookKind === 'fa';
-  const sample = isFa ? null : teamRegistrations.find(r => r.logo);
+  const sample = _webhookKind === 'teams' ? teamRegistrations.find(r => r.logo) : null;
   const payload = { embeds: [{
-    title: isFa ? '🧪 Test — kanał wolnych agentów' : '🧪 Test — kanał zgłoszeń drużyn',
+    title: isFa ? '🧪 Test — kanał wolnych agentów' : _webhookKind === 'schedule' ? '🧪 Test — kanał terminarza' : '🧪 Test — kanał zgłoszeń drużyn',
     description: sample ? `Logo testowe: **${sample.teamName}**` : 'Webhook działa.',
     color: 0xf5c518,
     footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
@@ -6240,7 +6251,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (discordScheduleWebhookUrl ? '' : ' <span style="color:var(--loss)">●</span>'), false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -6315,7 +6326,46 @@ function renderSeasonSchedule() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:.6rem;margin-bottom:.5rem">
         ${list.map(s => _ssCard(ctx, s, groupName)).join('')}
       </div>`).join('')}
-    ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + ' (' + [groupName(b.groupId), b.round ? 'kolejka ' + b.round : ''].filter(Boolean).join(', ') + ')').join(', ')}</div>` : ''}`;
+    ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + ' (' + [groupName(b.groupId), b.round ? 'kolejka ' + b.round : ''].filter(Boolean).join(', ') + ')').join(', ')}</div>` : ''}
+    ${_ssScheduledList(ctx, groupName)}`;
+}
+
+function _ssScheduledList(ctx, groupName) {
+  const list = ctx.items
+    .filter(s => s.date && !_ssResult(ctx, s)?.done)
+    .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = list.map(s => {
+    const k = String(s.id);
+    const d = new Date(s.date + 'T12:00:00');
+    const wd = d.toLocaleDateString('pl-PL', { weekday: 'short' }).replace('.', '');
+    const isToday = s.date === today;
+    const res = _ssResult(ctx, s);
+    return `
+      <div style="display:grid;grid-template-columns:92px 1fr auto;align-items:center;gap:.75rem;padding:.55rem .8rem;border-bottom:1px solid var(--border);${isToday ? 'background:rgba(245,197,24,.07)' : ''}">
+        <div style="line-height:1.15">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;${isToday ? 'color:var(--accent)' : ''}">${isToday ? 'DZIŚ' : wd.charAt(0).toUpperCase() + wd.slice(1) + ' ' + _ssFmt(s.date)}</div>
+          <div style="font-size:.72rem;color:var(--muted)">${s.time || ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;min-width:0;flex-wrap:wrap">
+          ${teamLogo(s.team1, 24, '.6rem')}<b style="font-size:.85rem">${_ssTeamName(ctx, s.team1)}</b>
+          <span style="color:var(--muted);font-size:.75rem">${res ? res.w1 + ':' + res.w2 : 'vs'}</span>
+          <b style="font-size:.85rem">${_ssTeamName(ctx, s.team2)}</b>${teamLogo(s.team2, 24, '.6rem')}
+          <span style="font-size:.68rem;color:var(--muted);margin-left:.25rem">${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}${(s.bestOf || 1) > 1 ? ' · Bo' + s.bestOf : ''}</span>
+        </div>
+        <div style="display:flex;gap:.3rem">
+          <button onclick="_ssWeek=${s.week};renderSeasonSchedule()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem" title="Pokaż w tygodniu">👁</button>
+          ${ctx.isAdmin && !ctx.demo ? `<button onclick="ssResendMatch('${k}')" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem" title="Wyślij ponownie na Discord">📣</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div style="margin-top:1.5rem">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📅 Umówione mecze (${list.length})</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        ${rows || '<div style="padding:1.1rem;text-align:center;color:var(--muted);font-size:.85rem">Jeszcze żaden termin nie został zatwierdzony</div>'}
+      </div>
+    </div>`;
 }
 
 function _ssTeamName(ctx, t) {
@@ -6334,7 +6384,8 @@ function _ssCard(ctx, s, groupName) {
       : `<span style="color:var(--muted)">⏳ Termin do ustalenia</span>`;
   const mineSide = ctx.myTeam && [s.team1, s.team2].map(x => String(x).toLowerCase()).includes(ctx.myTeam.toLowerCase());
   const teamCol = (side, align) => `
-    <div style="flex:1;min-width:0;text-align:${align}">
+    <div style="flex:1;min-width:0;text-align:${align};display:flex;flex-direction:column;align-items:${align === 'right' ? 'flex-end' : 'flex-start'};gap:.3rem">
+      ${teamLogo(s[side], 38, '.85rem')}
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};line-height:1.15;word-break:break-word">${_ssTeamName(ctx, s[side])}</div>
       ${_ssVoteBtn(ctx, s, side)}
     </div>`;
@@ -6441,7 +6492,10 @@ function _ssAdminActions(ctx, s, res) {
   const b = (onclick, label, style) => `<button onclick="${onclick}" class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem;${style || ''}">${label}</button>`;
   const out = [];
   if(!res) {
-    if(s.date) out.push(b(`ssUnfinalize('${k}')`, '↩ Zmień termin'));
+    if(s.date) {
+      out.push(b(`ssUnfinalize('${k}')`, '↩ Zmień termin'));
+      if(!ctx.demo) out.push(b(`ssResendMatch('${k}')`, '📣 Wyślij na Discord'));
+    }
     else {
       const p = ctx.picks[k] || {};
       const sg = _ssSuggest(p, s.weekStart);
@@ -6461,6 +6515,186 @@ function _ssAdminActions(ctx, s, res) {
   }
   return `<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.65rem;padding-top:.55rem;border-top:1px dashed var(--border)">
     <span style="font-size:.64rem;color:var(--muted);align-self:center;margin-right:.2rem">👑 ${s.date || res ? 'ADMIN' : 'ZATWIERDŹ TERMIN'}</span>${out.join('')}</div>`;
+}
+
+// ── Discord: terminarz ──
+// Wysyłka z opcjonalnym obrazkiem (baner meczu) — kanał terminarza albo główny kanał przez Workera
+async function _scheduleDiscordSend(payload, imageDataUrl) {
+  const embed = payload.embeds?.[0];
+  if(imageDataUrl && embed) embed.image = { url: 'attachment://mecz.png' };
+  if(discordScheduleWebhookUrl) {
+    try {
+      const fd = new FormData();
+      if(imageDataUrl) {
+        payload.attachments = [{ id: 0, filename: 'mecz.png' }];
+        fd.append('files[0]', _dataUrlToBlob(imageDataUrl), 'mecz.png');
+      }
+      fd.append('payload_json', JSON.stringify(payload));
+      const r = await fetch(discordScheduleWebhookUrl, { method: 'POST', body: fd });
+      if(r.ok || r.status === 204) return true;
+      console.warn('Schedule webhook returned', r.status, await r.text().catch(() => ''));
+    } catch(e) { console.warn('Schedule webhook error:', e); }
+    return false;
+  }
+  if(imageDataUrl && workerUrl) {
+    try {
+      const r = await fetch(workerUrl.replace(/\/$/, '') + '/discord-notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': _adminToken() },
+        body: JSON.stringify({ ...payload, __file: { name: 'mecz.png', dataUrl: imageDataUrl } })
+      });
+      if(r.ok || r.status === 204) return true;
+    } catch(e) {}
+  }
+  if(embed) delete embed.image;
+  return _discordNotify(payload);
+}
+
+// Baner meczu: logo — VS — logo (PNG do wiadomości na Discordzie)
+function _ssLoadImg(src) {
+  return new Promise(res => {
+    if(!src) return res(null);
+    const img = new Image();
+    if(/^https?:/.test(src)) img.crossOrigin = 'anonymous';
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = src;
+  });
+}
+function _ssLogoSrc(name) {
+  if(typeof teams !== 'undefined' && teams[name]?.logo) return teams[name].logo;
+  return teamRegistrations.find(r => r.logo && r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(name).toLowerCase())?.logo || null;
+}
+async function _ssMatchBanner(s) {
+  const W = 900, H = 340;
+  const draw = async withImages => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const bg = g.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#0d0f14'); bg.addColorStop(1, '#1c1f2b');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#f5c518'; g.fillRect(0, 0, W, 6);
+    const font = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
+    const R = 82, cy = 150, xs = [210, W - 210];
+    for(const [i, name] of [s.team1, s.team2].entries()) {
+      const x = xs[i];
+      g.save();
+      g.beginPath(); g.arc(x, cy, R, 0, Math.PI * 2); g.closePath();
+      g.fillStyle = typeof teamColor === 'function' ? teamColor(name) : '#333'; g.fill();
+      const img = withImages ? await _ssLoadImg(_ssLogoSrc(name)) : null;
+      if(img) {
+        g.clip();
+        const sc = Math.max((R * 2) / img.width, (R * 2) / img.height);
+        g.drawImage(img, x - img.width * sc / 2, cy - img.height * sc / 2, img.width * sc, img.height * sc);
+      } else {
+        g.fillStyle = '#fff'; g.font = `900 64px ${font}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(typeof teamInitials === 'function' ? teamInitials(name) : String(name).slice(0, 2).toUpperCase(), x, cy + 2);
+      }
+      g.restore();
+      g.lineWidth = 4; g.strokeStyle = '#f5c518';
+      g.beginPath(); g.arc(x, cy, R, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#ffffff'; g.font = `800 30px ${font}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      let label = String(name);
+      while(g.measureText(label).width > 320 && label.length > 3) label = label.slice(0, -2) + '…';
+      g.fillText(label, x, cy + R + 46);
+    }
+    g.fillStyle = '#f5c518'; g.font = `900 72px ${font}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('VS', W / 2, cy);
+    g.fillStyle = '#8b90a0'; g.font = `700 22px ${font}`;
+    g.fillText(`WEEK ${s.week}${(s.bestOf || 1) > 1 ? ' · BO' + s.bestOf : ''}`, W / 2, cy + 62);
+    return c.toDataURL('image/png');
+  };
+  try { if(document.fonts?.ready) await document.fonts.ready; } catch(e) {}
+  try { return await draw(true); }
+  catch(e) { try { return await draw(false); } catch(e2) { return null; } } // obce logo bez CORS → inicjały
+}
+
+// Dane dla AI: statystyki drużyn w tym sezonie
+function _ssTeamSeasonStats(name, seasonId) {
+  return _withAllMatches(() => {
+    const ms = matches
+      .filter(m => (!seasonId || m.seasonId === seasonId) && (m.team1?.name === name || m.team2?.name === name))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    if(!ms.length) return { games: 0 };
+    let w = 0, l = 0, pf = 0, pa = 0;
+    const form = [], players = {};
+    ms.forEach(m => {
+      const me = m.team1.name === name ? m.team1 : m.team2, op = me === m.team1 ? m.team2 : m.team1;
+      const win = me.score > op.score;
+      win ? w++ : l++;
+      pf += me.score || 0; pa += op.score || 0;
+      form.push(win ? 'W' : 'L');
+      (me.players || []).forEach(p => { const x = players[p.name] = players[p.name] || { pts: 0, gp: 0 }; x.pts += p.pts || 0; x.gp++; });
+    });
+    const top = Object.entries(players).map(([n, x]) => ({ name: n, ppg: +(x.pts / x.gp).toFixed(1) })).sort((a, b) => b.ppg - a.ppg)[0] || null;
+    return { games: ms.length, w, l, ppg: +(pf / ms.length).toFixed(1), oppg: +(pa / ms.length).toFixed(1), form: form.slice(-5).join(''), top };
+  });
+}
+
+function _ssMatchAiData(s) {
+  const st1 = _ssTeamSeasonStats(s.team1, s.seasonId), st2 = _ssTeamSeasonStats(s.team2, s.seasonId);
+  const roster = name => (teamRegistrations.find(r => String(r.teamName).toLowerCase() === String(name).toLowerCase())?.players || [])
+    .slice(0, 8).map(p => p.gamertag + (p.experience && _expLabels[p.experience] ? ' (' + _expLabels[p.experience].replace(/^\S+\s/, '') + ')' : '')).join(', ');
+  const h2h = _withAllMatches(() => matches.filter(m => m.seasonId === s.seasonId &&
+      [m.team1.name, m.team2.name].includes(s.team1) && [m.team1.name, m.team2.name].includes(s.team2))
+    .map(m => `${m.team1.name} ${m.team1.score}:${m.team2.score} ${m.team2.name}`).join('; '));
+  const c = scheduleVoteCounts[String(s.id)];
+  const tot = c ? (c.team1 || 0) + (c.team2 || 0) : 0;
+  return {
+    team1: s.team1, team2: s.team2, week: s.week, bestOf: s.bestOf || 1,
+    when: s.date ? _ssPickFull(s.finalDay || s.date, s.weekStart) + (s.time ? ' ' + s.time : '') : '',
+    stats1: st1, stats2: st2,
+    roster1: st1.games ? '' : roster(s.team1), roster2: st2.games ? '' : roster(s.team2),
+    h2h, votes: tot ? `${Math.round(c.team1 / tot * 100)}% na ${s.team1}, ${100 - Math.round(c.team1 / tot * 100)}% na ${s.team2} (${tot} głosów)` : ''
+  };
+}
+
+function _ssMatchEmbed(s, title) {
+  const full = s.finalDay ? _ssPickFull(s.finalDay, s.weekStart) : (() => {
+    const wd = new Date(s.date + 'T12:00:00').toLocaleDateString('pl-PL', { weekday: 'long' });
+    return wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' + _ssFmt(s.date);
+  })();
+  const fx = seasons.find(x => x.id === s.seasonId)?.fixture;
+  const grp = fx?.groups?.find(g => g.id === s.groupId)?.name;
+  return {
+    title: title || `📅 Termin meczu — Week ${s.week}`,
+    description: `**${s.team1}** vs **${s.team2}**${(s.bestOf || 1) > 1 ? ' (Bo' + s.bestOf + ')' : ''}\n${full} · ${s.time || ''}` +
+      `${grp ? '\n' + grp : ''}${s.round ? ' · Kolejka ' + s.round : ''}`,
+    url: location.origin + location.pathname + '#terminarz-week-' + s.week,
+    color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+  };
+}
+
+// Pełne ogłoszenie meczu: embed + zapowiedź AI + baner z logotypami
+async function _ssAnnounceMatch(s, title) {
+  const embed = _ssMatchEmbed(s, title);
+  const [fl, banner] = await Promise.all([
+    Promise.race([
+      _api('/fun-line', 'POST', { kind: 'match', data: _ssMatchAiData(s) }, { admin: true }),
+      new Promise(r => setTimeout(() => r({}), 10000))
+    ]).catch(() => ({})),
+    _ssMatchBanner(s)
+  ]);
+  if(fl?.line) embed.description += `\n\n🎙️ *${fl.line}*`;
+  const st1 = _ssTeamSeasonStats(s.team1, s.seasonId), st2 = _ssTeamSeasonStats(s.team2, s.seasonId);
+  if(st1.games || st2.games) {
+    const f = st => st.games ? `${st.w}-${st.l} · ${st.ppg} pkt/mecz${st.form ? ' · ' + st.form : ''}` : 'bez meczów';
+    embed.fields = [
+      { name: s.team1, value: f(st1), inline: true },
+      { name: s.team2, value: f(st2), inline: true }
+    ];
+  }
+  return _scheduleDiscordSend({ embeds: [embed] }, banner);
+}
+
+async function ssResendMatch(k) {
+  const s = _ssItem(k);
+  if(!s || !s.date) return;
+  if(!confirm(`Wysłać ponownie na Discord termin: ${s.team1} vs ${s.team2}?`)) return;
+  showToast('⏳ Przygotowuję zapowiedź…', 'info');
+  let ok = false;
+  try { ok = await _ssAnnounceMatch(s); } catch(e) { console.warn(e); }
+  showToast(ok ? '📣 Wysłano na Discord' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
 }
 
 // ── akcje ──
@@ -6580,13 +6814,7 @@ async function ssFinalize(k, day) {
   renderSchedule();
   renderScheduleDashboard();
   showToast('✅ Termin zatwierdzony', 'success');
-  try {
-    await _discordNotify({ embeds: [{
-      title: `📅 Termin meczu — Week ${s.week}`,
-      description: `**${s.team1}** vs **${s.team2}**${(s.bestOf || 1) > 1 ? ' (Bo' + s.bestOf + ')' : ''}\n${full} · ${time}`,
-      color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
-    }] });
-  } catch(e) {}
+  try { await _ssAnnounceMatch(s); } catch(e) { console.warn(e); }
 }
 
 async function ssUnfinalize(k) {
@@ -6820,7 +7048,7 @@ async function ssConfirmFixture() {
       : [{ name: 'Drużyny', value: g.teams.map(t => '• ' + t).join('\n'), inline: false }];
     const weeksCount = Math.max(...items.map(s => s.week));
     try {
-      await _discordNotify({ embeds: [{
+      await _scheduleDiscordSend({ embeds: [{
         title: `🗓 Terminarz ${season?.name || 'sezonu'} gotowy!`,
         description: `${groups ? '👥 ' + groups.length + ' grupy' : '🏟 Jedna grupa — każdy z każdym'} · ${Math.max(...items.map(s => s.round))} kolejek w ${weeksCount} tygodniach · ${items.length} spotkań Bo${g.bestOf}\n` +
           `Start: **${_ssFmt(startDate)}**. Każda drużyna gra do ${g.roundsPerWeek} ${g.roundsPerWeek === 1 ? 'spotkania' : 'spotkań'} w tygodniu. Kapitanowie — wybierzcie na stronie dzień priorytetowy i zapasowy (Pn / Śr / Nd) dla swoich spotkań.`,
