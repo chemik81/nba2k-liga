@@ -796,7 +796,10 @@
     <div id="events-dashboard-wrap"></div>
 
     <div id="playoff-dashboard-wrap"></div>
+    <div id="bracket-wrap"></div>
+    <div id="quicklinks-wrap"></div>
     <div id="records-banner-wrap"></div>
+    <div id="ach-wrap"></div>
     <div id="awards-dashboard-wrap"></div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="standings">Tabela</div><button onclick="shareStandings()" title="Udostępnij tabelę" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">&#x1F4E4;</button></div>
@@ -816,6 +819,7 @@
     </div>
 
     <div id="power-ranking-wrap" style="margin-top:1.5rem"></div>
+    <div id="elo-wrap"></div>
     <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
     <div class="leaders-grid" id="leaders-grid">
       <div class="empty" style="grid-column:1/-1;padding:2rem"><div class="icon">🏀</div><p>Dodaj mecze aby zobaczyć liderów</p></div>
@@ -2202,6 +2206,7 @@ async function loadData() {
     transfersList = record.transfers || [];
     pendingResults = record.pendingResults || [];
     powerRankings = record.powerRankings || [];
+    bracketData = record.bracket || {};
     _dataLoadedAt = new Date().toISOString();
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
@@ -2772,6 +2777,7 @@ function renderMatches() {
       <div class="match-meta">
         <div style="display:flex;align-items:center;justify-content:center;gap:.4rem">
           <div class="match-date">${formatDate(m.date)}</div>
+          <button onclick="event.stopPropagation();openMatchPoster(${m.id})" title="Plakat meczu" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;padding:2px;font-size:.9rem">🖼</button>
           <button onclick="event.stopPropagation();shareMatch(${m.id})" title="Udostępnij" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px;border-radius:4px;transition:color .2s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">&#x1F4E4;</button>
         </div>
         ${isPlayoffMatch(m) ? '<div style="font-size:.6rem;font-weight:900;letter-spacing:1px;background:linear-gradient(135deg,var(--accent),#b8882a);color:#000;border-radius:4px;padding:.1rem .4rem;margin-bottom:.2rem">🏆 PLAYOFF</div>' : ''}
@@ -4095,7 +4101,10 @@ function renderDashboard() {
   renderEventsDashboard();
   renderStandings();
   if(typeof renderPlayoffDashboard === 'function') renderPlayoffDashboard();
-  try { renderRecordsBanner(); renderAwardsDashboard(); renderPowerRanking(); } catch(e) { console.warn('dashboard extras', e); }
+  _eloCache = null; _achCache = null;
+  for(const fn of [renderQuickLinks, renderRecordsBanner, renderAchievementsDashboard, renderAwardsDashboard, renderBracketDashboard, renderPowerRanking, renderEloDashboard]) {
+    try { fn(); } catch(e) { console.warn('dashboard extras', fn.name, e); }
+  }
   loadTeams();
   setTimeout(renderScheduleDashboard, 100);
   renderLeaders();
@@ -5970,6 +5979,8 @@ async function _loadMyVotes() {
   if(res.ok) {
     myVotes = res.votes || {};
     myAwardVotes = res.awards || {};
+    myBracket = res.bracket || {};
+    if(typeof renderBracketDashboard === 'function') renderBracketDashboard();
     if(typeof renderSchedule === 'function') renderSchedule();
     if(typeof renderAwardsDashboard === 'function') renderAwardsDashboard();
   }
@@ -6428,7 +6439,8 @@ function _ssCard(ctx, s, groupName) {
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${res ? '1.25rem' : '.95rem'};color:${res ? 'var(--text)' : 'var(--muted)'};min-width:56px;text-align:center">${res ? res.w1 + ' — ' + res.w2 : 'VS'}</div>
         ${teamCol('team2', 'left')}
       </div>
-      ${res && bo > 1 ? `<div style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:.3rem">${res.games.map((g, i) => `Mecz ${i + 1}: <b style="color:var(--text)">${g.s1}:${g.s2}</b>`).join(' · ')}</div>` : ''}
+      ${res && bo > 1 ? `<div style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:.3rem">${res.games.map((g, i) => `Mecz ${i + 1}: <b style="color:var(--text)">${g.s1}:${g.s2}</b>${g.matchId ? ` <span onclick="openMatchPoster(${g.matchId})" title="Plakat meczu" style="cursor:pointer">🖼</span>` : ''}`).join(' · ')}</div>` : ''}
+      ${!ctx.demo && !res ? _eloLine(s) : ''}
       ${_ssVoteBar(ctx, s)}
       ${res ? '' : _ssDaySection(ctx, s)}
       ${_ssResultsBlock(ctx, s)}
@@ -6670,6 +6682,7 @@ function _ssMatchAiData(s) {
   const tot = c ? (c.team1 || 0) + (c.team2 || 0) : 0;
   return {
     team1: s.team1, team2: s.team2, week: s.week, bestOf: s.bestOf || 1,
+    odds: (() => { try { if(!_elo().games) return ''; const p = Math.round(_eloProb(s.team1, s.team2) * 100); return `${s.team1} ${p}% · ${s.team2} ${100 - p}% (ranking ${Math.round(_elo().R[s.team1] ?? 1500)} vs ${Math.round(_elo().R[s.team2] ?? 1500)})`; } catch(e) { return ''; } })(),
     when: s.date ? _ssPickFull(s.finalDay || s.date, s.weekStart) + (s.time ? ' ' + s.time : '') : '',
     stats1: st1, stats2: st2,
     roster1: st1.games ? '' : roster(s.team1), roster2: st2.games ? '' : roster(s.team2),
@@ -7179,6 +7192,7 @@ function openDeepLink() {
     setTimeout(() => flash(document.getElementById('season-schedule-wrap')), 150);
     return;
   }
+  if(h === 'kronika') { showView('dashboard'); setTimeout(openChronicle, 300); return; }
   if(h === 'zapisy' || h === 'wolni-agenci' || h === 'transfery') {
     _regTab = h === 'zapisy' ? 'teams' : h === 'transfery' ? 'tr' : 'fa';
     showView('dashboard');
@@ -8040,8 +8054,27 @@ const _REC_KEYS = [
   { key: 'teamScore', label: 'Najwyższy wynik drużyny', emoji: '🏀', unit: 'PKT' },
   { key: 'margin', label: 'Najwyższe zwycięstwo', emoji: '💥', unit: 'PKT różnicy' }
 ];
-function _recordEvents() {
-  return _withAllMatches(() => {
+// Edycja gry z nazwy sezonu („Sezon 1, NBA2K27” → „NBA 2K27”); bez numeru → nazwa sezonu
+function _editionOf(seasonId) {
+  const name = _seasonName(seasonId);
+  const m = name.match(/2k\s*(\d{2})/i);
+  return m ? 'NBA 2K' + m[1] : (name || 'Bez sezonu');
+}
+function _editionsList() {
+  const set = new Set();
+  _withAllMatches(() => matches.forEach(m => set.add(_editionOf(m.seasonId))));
+  return [...set].sort((a, b) => b.localeCompare(a, 'pl', { numeric: true }));
+}
+function _currentEdition() { return currentSeasonId ? _editionOf(currentSeasonId) : null; }
+function _editionMatches(ed) {
+  return _withAllMatches(() => ed ? matches.filter(m => _editionOf(m.seasonId) === ed) : matches.slice());
+}
+let _recordsEdition; // undefined = bieżąca edycja, null = wszech czasów
+
+function _recordEvents(ed) {
+  const list = _editionMatches(ed === undefined ? _currentEdition() : ed);
+  return (() => {
+    const matches = list;
     const best = {}, events = [];
     const consider = (k, value, holder, team, opp, m) => {
       const cur = best[k.key];
@@ -8063,20 +8096,20 @@ function _recordEvents() {
       consider(_REC_KEYS[7], diff, win.name, win.name, los.name, m);
     });
     return events.reverse();
-  });
+  })();
 }
 
 function renderRecordsBanner() {
   const el = document.getElementById('records-banner-wrap');
   if(!el) return;
   const cutoff = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-  const recent = _recordEvents().filter(e => String(e.date) >= cutoff).slice(0, 3);
+  const recent = _recordEvents(_currentEdition()).filter(e => String(e.date) >= cutoff).slice(0, 3);
   const admin = _isLoggedInSync();
   el.innerHTML = recent.length ? `
     <div style="background:linear-gradient(135deg,rgba(220,38,38,.14),rgba(245,197,24,.08));border:1px solid rgba(245,197,24,.4);border-radius:12px;padding:.6rem .9rem;margin-bottom:1rem">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.35rem">
-        <div style="font-size:.66rem;font-weight:800;letter-spacing:2px;color:var(--accent)">🆕 NOWE REKORDY LIGI</div>
-        <button onclick="openLeagueRecordsModal()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .55rem">🏛 Wszystkie rekordy</button>
+        <div style="font-size:.66rem;font-weight:800;letter-spacing:2px;color:var(--accent)">🆕 NOWE REKORDY LIGI${_currentEdition() ? ' · ' + _h(_currentEdition()).toUpperCase() : ''}</div>
+        <button onclick="_recordsEdition=undefined;openLeagueRecordsModal()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .55rem">🏛 Wszystkie rekordy</button>
       </div>
       ${recent.map((e, i) => `<div style="display:flex;align-items:center;gap:.6rem;padding:.3rem 0;${i ? 'border-top:1px solid rgba(255,255,255,.06)' : ''}">
         <span style="font-size:1.15rem">${e.emoji}</span>
@@ -8102,8 +8135,22 @@ async function announceRecord(i, fromAll) {
   showToast(ok ? '📣 Rekord ogłoszony' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
 }
 
+function _recordsEditionBar() {
+  const eds = _editionsList();
+  const sel = _recordsEdition === undefined ? _currentEdition() : _recordsEdition;
+  const b = (val, label) => {
+    const on = val === sel;
+    return `<button onclick="_recordsEdition=${val === null ? 'null' : `'${String(val).replace(/'/g, "\'")}'`};openLeagueRecordsModal()" style="font-size:.75rem;padding:.3rem .7rem;border-radius:999px;cursor:pointer;font-family:inherit;
+      border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'rgba(0,0,0,.88)' : 'var(--text)'};font-weight:${on ? 800 : 600}">${_h(label)}</button>`;
+  };
+  return `<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+    <span style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-right:.2rem">EDYCJA:</span>
+    ${eds.map(e => b(e, e)).join('')}${b(null, '🌐 Wszech czasów')}
+  </div>`;
+}
+
 function _recordsTimelineHtml() {
-  const ev = _recordEvents().slice(0, 12);
+  const ev = _recordEvents(_recordsEdition === undefined ? _currentEdition() : _recordsEdition).slice(0, 12);
   window._allRecordEvents = ev;
   if(!ev.length) return '';
   const admin = _isLoggedInSync();
@@ -8137,11 +8184,13 @@ function _playerBadgesHtml(name) {
     }
   })));
   const tr = (transfersList || []).filter(t => t.player === name);
-  if(!badges.length && Object.keys(teamsBySeason).length < 2 && !tr.length) return '';
+  const achHtml = _playerAchievementsHtml(name);
+  if(!badges.length && Object.keys(teamsBySeason).length < 2 && !tr.length && !achHtml) return '';
   return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">
     ${badges.length ? `<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.5rem">${badges.map(b => `<span style="font-size:.74rem;background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.4);border-radius:999px;padding:.15rem .6rem">${b.icon} ${_h(b.text)}</span>`).join('')}</div>` : ''}
     <div style="font-size:.74rem;color:var(--muted)">🧭 Kariera: ${Object.entries(teamsBySeason).map(([sn, set]) => `<b style="color:var(--text)">${_h(sn)}</b>: ${[...set].map(_h).join(', ')}`).join(' · ')}</div>
     ${tr.length ? `<div style="font-size:.74rem;color:var(--muted);margin-top:.25rem">🔁 ${tr.map(t => `${_h(t.from || 'Wolny agent')} ➜ ${_h(t.to)} (${new Date(t.at).toLocaleDateString('pl-PL')})`).join(' · ')}</div>` : ''}
+    ${achHtml}
   </div>`;
 }
 
@@ -8184,6 +8233,526 @@ function _teamExtrasHtml(tn) {
     ${tr.length ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
       <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">TRANSFERY</div>
       ${tr.map(t => `<div style="font-size:.78rem;margin-bottom:.15rem">${t.to === tn ? '➕' : '➖'} ${_h(t.player)} <span style="color:var(--muted)">${t.to === tn ? 'z ' + _h(t.from || 'wolnych agentów') : 'do ' + _h(t.to)}</span></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAKIET 2: ranking siły (Elo) + prognozy, typer playoffów,
+//           osiągnięcia, plakat meczu, kronika ligi
+// ═══════════════════════════════════════════════════════════════
+let bracketData = {};   // { poId: { count, locked, maxPts, leaders, championPicks } } z Workera
+let myBracket = {};     // { poId: picks }
+let _bracketDraft = null;
+
+// ═══ ⚡ RANKING SIŁY (Elo) ═══════════════════════════════════════
+let _eloCache = null;
+function _elo(ed) {
+  const edition = ed === undefined ? _currentEdition() : ed;
+  const list = _editionMatches(edition).sort((a, b) => String(a.date).localeCompare(String(b.date)) || (Number(a.id) - Number(b.id)));
+  const key = (edition || '*') + '|' + list.length + '|' + (list[list.length - 1]?.id || '');
+  if(_eloCache && _eloCache.key === key) return _eloCache;
+  const R = {}, hist = {};
+  list.forEach(m => {
+    const a = m.team1?.name, b = m.team2?.name;
+    if(!a || !b) return;
+    const ra = R[a] ?? 1500, rb = R[b] ?? 1500;
+    const sa = m.team1.score || 0, sb = m.team2.score || 0;
+    const aWin = sa > sb;
+    const ea = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+    const gap = aWin ? ra - rb : rb - ra;
+    const mult = Math.max(0.5, Math.log(Math.abs(sa - sb) + 1)) * (2.2 / (gap * 0.001 + 2.2));
+    const delta = 32 * mult * ((aWin ? 1 : 0) - ea);
+    R[a] = ra + delta; R[b] = rb - delta;
+    (hist[a] = hist[a] || []).push({ date: m.date, r: R[a] });
+    (hist[b] = hist[b] || []).push({ date: m.date, r: R[b] });
+  });
+  _eloCache = { key, edition, R, hist, games: list.length };
+  return _eloCache;
+}
+function _eloProb(t1, t2) {
+  const e = _elo();
+  const r1 = e.R[t1] ?? 1500, r2 = e.R[t2] ?? 1500;
+  return 1 / (1 + Math.pow(10, (r2 - r1) / 400));
+}
+function _eloLine(s) {
+  const e = _elo();
+  if(!e.games) return '';
+  const p = Math.round(_eloProb(s.team1, s.team2) * 100);
+  const fav = p >= 50 ? 1 : 2;
+  return `<div title="Prognoza z rankingu siły (Elo) — szansa na wygranie pojedynczego meczu" style="display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.7rem;color:var(--muted);margin-top:.45rem">
+    ⚡ <b style="color:${fav === 1 ? 'var(--text)' : 'var(--muted)'}">${p}%</b>
+    <span style="display:inline-flex;width:70px;height:4px;border-radius:2px;overflow:hidden;background:var(--surface2)"><span style="width:${p}%;background:#a78bfa"></span></span>
+    <b style="color:${fav === 2 ? 'var(--text)' : 'var(--muted)'}">${100 - p}%</b> <span>prognoza</span>
+  </div>`;
+}
+
+function _sparkline(points, w, h, color) {
+  if(!points || points.length < 2) return '';
+  const ys = points.map(p => p.r), min = Math.min(...ys), max = Math.max(...ys), span = Math.max(1, max - min);
+  const d = points.map((p, i) => `${(i / (points.length - 1) * w).toFixed(1)},${(h - (p.r - min) / span * h).toFixed(1)}`).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="overflow:visible"><polyline points="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function renderEloDashboard() {
+  const el = document.getElementById('elo-wrap');
+  if(!el) return;
+  const e = _elo();
+  const teams = Object.keys(e.R);
+  if(!e.games || teams.length < 2) { el.innerHTML = ''; return; }
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const rows = teams.map(t => {
+    const h = e.hist[t] || [];
+    const before = [...h].reverse().find(x => String(x.date) < weekAgo);
+    return { team: t, r: e.R[t], d: before ? e.R[t] - before.r : (h.length ? e.R[t] - 1500 : 0), h };
+  }).sort((a, b) => b.r - a.r);
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+      <div class="section-title" style="margin-bottom:0;font-size:1.3rem">⚡ Ranking siły${e.edition ? ' <span style="color:var(--muted);font-size:.75em">· ' + _h(e.edition) + '</span>' : ''}</div>
+      <button onclick="openEloChart()" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .6rem">📈 Wykres</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem">
+      ${rows.slice(0, 12).map((x, i) => `<div style="display:grid;grid-template-columns:28px 30px 1fr 90px 64px 52px;align-items:center;gap:.6rem;padding:.45rem .9rem;border-bottom:1px solid var(--border)">
+        <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.1rem;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'}">${i + 1}</b>
+        ${teamLogo(x.team, 26, '.6rem')}
+        <span style="font-weight:700;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(x.team)}</span>
+        <span style="text-align:right">${_sparkline(x.h.length <= 12 ? [{ r: 1500 }, ...x.h] : x.h.slice(-12), 80, 20, typeof teamColor === 'function' ? teamColor(x.team) : '#a78bfa')}</span>
+        <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.1rem;text-align:right">${Math.round(x.r)}</b>
+        <span style="font-size:.74rem;font-weight:800;text-align:right;color:${x.d > 0.5 ? 'var(--win)' : x.d < -0.5 ? 'var(--loss)' : 'var(--muted)'}">${x.d > 0.5 ? '▲' : x.d < -0.5 ? '▼' : '='}${Math.abs(Math.round(x.d)) || ''}</span>
+      </div>`).join('')}
+      <div style="padding:.4rem .9rem;font-size:.68rem;color:var(--muted)">Start 1500. Wygrana z mocniejszym rywalem i wyższą różnicą punktów daje więcej. Strzałka = zmiana w ostatnich 7 dniach.</div>
+    </div>`;
+}
+
+function openEloChart() {
+  const e = _elo();
+  const teams = Object.keys(e.hist).sort((a, b) => e.R[b] - e.R[a]);
+  const all = teams.flatMap(t => e.hist[t]);
+  if(all.length < 2) { showToast('Za mało meczów do wykresu', 'info'); return; }
+  const dates = [...new Set(all.map(p => p.date))].sort();
+  const W = 760, H = 340, P = 36;
+  const ys = all.map(p => p.r), min = Math.min(1500, ...ys) - 10, max = Math.max(1500, ...ys) + 10;
+  const x = d => P + dates.indexOf(d) / Math.max(1, dates.length - 1) * (W - P * 2);
+  const y = r => H - P - (r - min) / (max - min) * (H - P * 2);
+  const color = t => typeof teamColor === 'function' ? teamColor(t) : '#a78bfa';
+  const lines = teams.map(t => {
+    const pts = [{ date: dates[0], r: 1500 }, ...e.hist[t]];
+    const byDate = {}; pts.forEach(p => { byDate[p.date] = p.r; });
+    const d = Object.entries(byDate).map(([dt, r]) => `${x(dt).toFixed(1)},${y(r).toFixed(1)}`).join(' ');
+    return `<polyline points="${d}" fill="none" stroke="${color(t)}" stroke-width="2.5" stroke-linejoin="round"><title>${_h(t)}</title></polyline>`;
+  }).join('');
+  const m = _fxModal('elo-modal', 860);
+  m.querySelector('.modal').innerHTML = _fxHead('elo-modal', `📈 Ranking siły${e.edition ? ' — ' + _h(e.edition) : ''}`) + `
+    <div style="overflow-x:auto"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;height:auto">
+      <line x1="${P}" x2="${W - P}" y1="${y(1500)}" y2="${y(1500)}" stroke="rgba(127,127,127,.35)" stroke-dasharray="4 4"/>
+      <text x="${P - 4}" y="${y(1500) + 4}" text-anchor="end" font-size="10" fill="#8b90a0">1500</text>
+      <text x="${P}" y="${H - 10}" font-size="10" fill="#8b90a0">${_ssFmt(dates[0])}</text>
+      <text x="${W - P}" y="${H - 10}" text-anchor="end" font-size="10" fill="#8b90a0">${_ssFmt(dates[dates.length - 1])}</text>
+      ${lines}
+    </svg></div>
+    <div style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-top:.6rem">
+      ${teams.map(t => `<span style="display:inline-flex;align-items:center;gap:.35rem;font-size:.76rem"><span style="width:12px;height:3px;border-radius:2px;background:${color(t)}"></span>${_h(t)} <b>${Math.round(e.R[t])}</b></span>`).join('')}
+    </div>`;
+  m.classList.add('open');
+}
+
+// ═══ 🏆 TYPER PLAYOFFÓW ══════════════════════════════════════════
+function _poMain(po) { return (po.rounds || []).filter(r => !/3/.test(r.name || '')); }
+function _poThird(po) { return (po.rounds || []).find(r => /3/.test(r.name || '')) || null; }
+function _bracketSlots(po, picks) {
+  const main = _poMain(po), slots = [];
+  main.forEach((r, ri) => {
+    const n = ri === 0 ? r.pairs.length : Math.ceil(slots[ri - 1].length / 2);
+    slots[ri] = [];
+    for(let pi = 0; pi < n; pi++) {
+      const teams = ri === 0 ? [r.pairs[pi]?.team1, r.pairs[pi]?.team2] : [picks?.[`r${ri - 1}p${pi * 2}`], picks?.[`r${ri - 1}p${pi * 2 + 1}`]];
+      slots[ri].push(teams.filter(Boolean));
+    }
+  });
+  let third = null;
+  if(_poThird(po) && main.length >= 2) {
+    const semi = main.length - 2;
+    third = slots[semi].map((teams, pi) => teams.length === 2 ? teams.find(t => t !== picks?.[`r${semi}p${pi}`]) : null).filter(Boolean);
+    if(third.length < 2 || slots[semi].some((_, pi) => !picks?.[`r${semi}p${pi}`])) third = third.length === 2 ? third : [];
+  }
+  return { main, slots, third };
+}
+function _bracketReady(po) { const r0 = _poMain(po)[0]; return !!r0 && r0.pairs.length >= 1 && r0.pairs.every(p => p.team1 && p.team2); }
+
+function renderBracketDashboard() {
+  const el = document.getElementById('bracket-wrap');
+  if(!el) return;
+  const po = typeof getActivePlayoff === 'function' ? getActivePlayoff() : null;
+  if(!po || !_bracketReady(po)) { el.innerHTML = ''; return; }
+  const bd = bracketData[String(po.id)] || { count: 0, locked: false, leaders: [], championPicks: {} };
+  const mine = myBracket[String(po.id)];
+  const main = _poMain(po);
+  const champKey = `r${main.length - 1}p0`;
+  const cp = Object.entries(bd.championPicks || {}).sort((a, b) => b[1] - a[1]);
+  const totCp = cp.reduce((s, x) => s + x[1], 0);
+  const me = discordUser?.id;
+  const myIdx = (bd.leaders || []).findIndex(x => x.id === me);
+  const lb = (bd.leaders || []).slice(0, 10).map((x, i) => `<div style="display:grid;grid-template-columns:26px 24px 1fr auto auto;gap:.5rem;align-items:center;padding:.35rem .6rem;border-bottom:1px solid var(--border);${x.id === me ? 'background:rgba(245,197,24,.08)' : ''}">
+      <b style="color:${i < 3 ? 'var(--accent)' : 'var(--muted)'}">${['🥇', '🥈', '🥉'][i] || i + 1}</b>${_avatarHtml(x.avatar, 22)}
+      <span style="font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(x.name)}</span>
+      <span style="font-size:.68rem;color:var(--muted)">🏆 ${_h(x.champion || '—')}</span>
+      <b style="font-family:'Barlow Condensed',sans-serif;color:var(--accent)">${x.pts}</b>
+    </div>`).join('');
+  el.innerHTML = `<div style="background:var(--surface);border:1px solid rgba(245,197,24,.35);border-radius:12px;padding:.85rem 1rem;margin-bottom:1.5rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🏆 Typer playoffów</div>
+        <div style="font-size:.72rem;color:var(--muted)">${bd.locked ? `Typowanie zamknięte · ${bd.count} uczestników · maks. ${bd.maxPts || '?'} pkt` : `Wytypuj całą drabinkę${po.startDate ? ' do ' + _ssFmt(po.startDate) : ''} · ${bd.count} już typuje · punkty rosną w kolejnych rundach: ${main.map((_, ri) => 2 ** ri).join(' / ')}`}</div>
+      </div>
+      ${!bd.locked ? `<button onclick="openBracketPicker()" class="btn btn-primary" style="font-size:.8rem;padding:.35rem .85rem">${mine ? '✏️ Zmień typy' : '📝 Wypełnij drabinkę'}</button>` : ''}
+    </div>
+    ${mine ? `<div style="font-size:.78rem;margin-bottom:.6rem">Twój mistrz: <b style="color:var(--accent)">${_h(mine[champKey] || '—')}</b>${myIdx >= 0 && bd.locked ? ` · Twoje miejsce: <b>${myIdx + 1}</b> (${bd.leaders[myIdx].pts} pkt)` : ''}</div>` : ''}
+    ${cp.length ? `<div style="margin-bottom:${bd.locked ? '.7rem' : 0}">
+      <div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.3rem">KOGO KIBICE WIDZĄ JAKO MISTRZA</div>
+      ${cp.slice(0, 5).map(([t, n]) => `<div style="display:grid;grid-template-columns:22px 130px 1fr 36px;gap:.45rem;align-items:center;margin-bottom:.2rem;font-size:.76rem">
+        ${teamLogo(t, 20, '.5rem')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(t)}</span>
+        <span style="height:6px;border-radius:3px;background:var(--surface2);overflow:hidden"><span style="display:block;height:100%;width:${Math.round(n / totCp * 100)}%;background:var(--accent)"></span></span>
+        <b style="text-align:right">${Math.round(n / totCp * 100)}%</b></div>`).join('')}
+    </div>` : ''}
+    ${bd.locked && lb ? `<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">${lb}</div>` : ''}
+  </div>`;
+}
+
+function openBracketPicker() {
+  const po = getActivePlayoff();
+  if(!po || !_bracketReady(po)) return;
+  if(!_ensureSession()) return;
+  _bracketDraft = { poId: String(po.id), picks: { ...(myBracket[String(po.id)] || {}) } };
+  const m = _fxModal('bracket-modal', 900);
+  m.classList.add('open');
+  _renderBracketPicker();
+}
+
+function _bracketPick(key, team) {
+  const po = getActivePlayoff();
+  _bracketDraft.picks[key] = team;
+  // Usuń typy, które przestały pasować (zmiana wcześniejszej rundy)
+  for(let pass = 0; pass < 6; pass++) {
+    const { slots, third } = _bracketSlots(po, _bracketDraft.picks);
+    slots.forEach((round, ri) => round.forEach((teams, pi) => {
+      const k = `r${ri}p${pi}`;
+      if(_bracketDraft.picks[k] && !teams.includes(_bracketDraft.picks[k])) delete _bracketDraft.picks[k];
+    }));
+    if(_bracketDraft.picks.third && !(third || []).includes(_bracketDraft.picks.third)) delete _bracketDraft.picks.third;
+  }
+  _renderBracketPicker();
+}
+
+function _renderBracketPicker() {
+  const po = getActivePlayoff();
+  const box = document.querySelector('#bracket-modal .modal');
+  if(!po || !box) return;
+  const { main, slots, third } = _bracketSlots(po, _bracketDraft.picks);
+  const total = slots.reduce((s, r) => s + r.length, 0) + (_poThird(po) ? 1 : 0);
+  const done = Object.keys(_bracketDraft.picks).length;
+  const btn = (key, team) => {
+    const on = _bracketDraft.picks[key] === team;
+    return `<button onclick="_bracketPick('${key}', this.dataset.t)" data-t="${_h(team)}" style="display:flex;align-items:center;gap:.4rem;width:100%;padding:.35rem .5rem;border-radius:7px;cursor:pointer;font-family:inherit;font-size:.78rem;margin-bottom:.2rem;
+      border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'var(--bg)'};color:var(--text);font-weight:${on ? 800 : 500}">
+      ${teamLogo(team, 18, '.45rem')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(team)}</span>${on ? '<span style="margin-left:auto">✅</span>' : ''}</button>`;
+  };
+  const slotHtml = (key, teams) => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:.4rem;margin-bottom:.5rem;min-height:72px">
+      ${teams.length === 2 ? teams.map(t => btn(key, t)).join('') : `<div style="font-size:.72rem;color:var(--muted);padding:.5rem;text-align:center">najpierw wytypuj poprzednią rundę</div>`}
+    </div>`;
+  box.innerHTML = _fxHead('bracket-modal', '🏆 Typer playoffów') + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem">Kliknij zwycięzcę każdej pary — kolejne rundy wypełniają się z Twoich typów. Punkty za trafienie: ${main.map((r, ri) => `<b>${2 ** ri}</b> (${_h(r.name || 'runda ' + (ri + 1))})`).join(', ')}${_poThird(po) ? ', <b>2</b> (mecz o 3. miejsce)' : ''}. Typy możesz zmieniać do startu playoffów.</div>
+    <div style="display:flex;gap:.8rem;overflow-x:auto;padding-bottom:.4rem">
+      ${main.map((r, ri) => `<div style="min-width:190px;flex:1">
+        <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">${_h(r.name || 'Runda ' + (ri + 1))} · ${2 ** ri} pkt</div>
+        ${slots[ri].map((teams, pi) => slotHtml(`r${ri}p${pi}`, teams)).join('')}
+      </div>`).join('')}
+      ${_poThird(po) ? `<div style="min-width:190px;flex:1">
+        <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Mecz o 3. miejsce · 2 pkt</div>
+        ${slotHtml('third', third || [])}
+      </div>` : ''}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.8rem;flex-wrap:wrap">
+      <span style="font-size:.78rem;color:var(--muted)">Wytypowano ${done}/${total}</span>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-ghost" onclick="_fxClose('bracket-modal')">Anuluj</button>
+        <button class="btn btn-primary" ${done < total ? 'disabled style="opacity:.45"' : ''} onclick="saveBracket()">💾 Zapisz typy</button>
+      </div>
+    </div>`;
+}
+
+async function saveBracket() {
+  if(!_bracketDraft) return;
+  if(!_ensureSession()) return;
+  const res = await _api('/bracket-pick', 'POST', { poId: _bracketDraft.poId, picks: _bracketDraft.picks }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const first = !myBracket[_bracketDraft.poId];
+  myBracket[_bracketDraft.poId] = res.picks;
+  const bd = bracketData[_bracketDraft.poId] = bracketData[_bracketDraft.poId] || { count: 0, locked: false, leaders: [], championPicks: {} };
+  if(first) bd.count++;
+  _fxClose('bracket-modal');
+  renderBracketDashboard();
+  showToast('🏆 Typy zapisane — powodzenia!', 'success');
+}
+
+// ═══ 🎖 OSIĄGNIĘCIA ══════════════════════════════════════════════
+const _ACH = [
+  { key: 'td',    icon: '🔺', name: 'Triple-double',                    rare: true,  test: p => ['pts', 'reb', 'ast', 'stl', 'blk'].filter(k => (p[k] || 0) >= 10).length >= 3 },
+  { key: 'p50',   icon: '🌋', name: '50+ punktów w meczu',              rare: true,  test: p => (p.pts || 0) >= 50 },
+  { key: 'p40',   icon: '🔥', name: '40+ punktów w meczu',              rare: true,  test: p => (p.pts || 0) >= 40 && (p.pts || 0) < 50 },
+  { key: 'tp8',   icon: '🌧️', name: 'Ulewa trójek (8+ 3PM)',             rare: true,  test: p => (p.tpm || 0) >= 8 },
+  { key: 'tp5',   icon: '🎯', name: 'Deszcz trójek (5+ 3PM)',           rare: false, test: p => (p.tpm || 0) >= 5 && (p.tpm || 0) < 8 },
+  { key: 'fg100', icon: '💯', name: 'Bezbłędny (100% FG, min. 8 rzutów)', rare: true,  test: p => (p.fga || 0) >= 8 && (p.fgm || 0) === (p.fga || 0) },
+  { key: 'reb15', icon: '💪', name: 'Władca tablic (15+ REB)',          rare: false, test: p => (p.reb || 0) >= 15 },
+  { key: 'ast12', icon: '🧠', name: 'Mózg operacji (12+ AST)',          rare: false, test: p => (p.ast || 0) >= 12 },
+  { key: 'stl5',  icon: '🦅', name: 'Złodziej (5+ STL)',                rare: false, test: p => (p.stl || 0) >= 5 },
+  { key: 'blk5',  icon: '🛡️', name: 'Mur (5+ BLK)',                      rare: false, test: p => (p.blk || 0) >= 5 }
+];
+const _ACH_CAREER = [
+  { key: 'gp', icon: '🎽', name: n => `Weteran — ${n} meczów`, steps: [10, 25, 50, 100], rare: n => n >= 50 },
+  { key: 'pts', icon: '💰', name: n => `${n} punktów w karierze`, steps: [500, 1000, 2500, 5000], rare: n => n >= 1000 },
+  { key: 'streak', icon: '⚡', name: n => `Seria ${n} wygranych z rzędu`, steps: [5, 10], rare: n => n >= 10 }
+];
+
+let _achCache = null;
+function _achievements(ed) {
+  const list = _editionMatches(ed).sort((a, b) => String(a.date).localeCompare(String(b.date)) || (Number(a.id) - Number(b.id)));
+  const key = (ed || '*') + '|' + list.length + '|' + (list[list.length - 1]?.id || '');
+  if(_achCache && _achCache.key === key) return _achCache.events;
+  const events = [], career = {};
+  list.forEach(m => {
+    [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => {
+      const won = (t.score || 0) > (o.score || 0);
+      (t.players || []).forEach(p => {
+        if(!p.name) return;
+        const base = { player: p.name, team: t.name, opp: o.name, date: m.date, matchId: m.id };
+        _ACH.forEach(a => { if(a.test(p)) events.push({ ...base, key: a.key, icon: a.icon, name: a.name, rare: a.rare, value: `${p.pts || 0} PTS · ${p.reb || 0} REB · ${p.ast || 0} AST` }); });
+        const c = career[p.name] = career[p.name] || { gp: 0, pts: 0, streak: 0 };
+        const prev = { ...c };
+        c.gp++; c.pts += p.pts || 0; c.streak = won ? c.streak + 1 : 0;
+        _ACH_CAREER.forEach(a => a.steps.forEach(n => {
+          if(prev[a.key] < n && c[a.key] >= n) events.push({ ...base, key: a.key + n, icon: a.icon, name: a.name(n), rare: a.rare(n), career: true, value: a.key === 'pts' ? `${c.pts} pkt łącznie` : '' });
+        }));
+      });
+    });
+  });
+  events.reverse();
+  _achCache = { key, events };
+  return events;
+}
+
+function renderAchievementsDashboard() {
+  const el = document.getElementById('ach-wrap');
+  if(!el) return;
+  const cutoff = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const recent = _achievements(_currentEdition()).filter(e => String(e.date) >= cutoff)
+    .sort((a, b) => (b.rare - a.rare) || String(b.date).localeCompare(String(a.date))).slice(0, 6);
+  window._recentAch = recent;
+  const admin = _isLoggedInSync();
+  el.innerHTML = recent.length ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.6rem .9rem;margin-bottom:1rem">
+    <div style="font-size:.66rem;font-weight:800;letter-spacing:2px;color:var(--muted);margin-bottom:.35rem">🎖 NOWE OSIĄGNIĘCIA</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:.35rem .8rem">
+      ${recent.map((e, i) => `<div style="display:flex;align-items:center;gap:.5rem;padding:.25rem 0">
+        <span style="font-size:1.15rem">${e.icon}</span>
+        <div style="flex:1;min-width:0;font-size:.8rem;line-height:1.3">
+          <b style="cursor:pointer" onclick="openPlayerModal(this.dataset.p, this.dataset.t)" data-p="${_h(e.player)}" data-t="${_h(e.team)}">${_h(e.player)}</b> <span style="color:var(--muted)">(${_h(e.team)})</span><br>
+          <span style="color:${e.rare ? 'var(--accent)' : 'var(--text)'};font-weight:${e.rare ? 800 : 500}">${_h(e.name)}</span> <span style="font-size:.68rem;color:var(--muted)">· ${_ssFmt(e.date)}</span>
+        </div>
+        ${admin ? `<button onclick="announceAchievement(${i})" class="btn btn-ghost" style="font-size:.64rem;padding:.15rem .4rem">📣</button>` : ''}
+      </div>`).join('')}
+    </div>
+  </div>` : '';
+}
+
+async function announceAchievement(i) {
+  const e = window._recentAch?.[i];
+  if(!e || !confirm(`Ogłosić na Discordzie: ${e.player} — ${e.name}?`)) return;
+  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'achievement', data: { label: e.name, holder: e.player, team: e.team, opp: e.opp, value: e.value, names: [e.player, e.team, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
+  const ok = await _scheduleDiscordSend({ embeds: [{
+    title: `${e.icon} Osiągnięcie: ${e.name}`,
+    description: `**${e.player}** (${e.team})${e.career ? '' : ' vs ' + e.opp}${e.value ? '\n' + e.value : ''}${fl?.line ? `\n\n🎙️ *${fl.line}*` : ''}`,
+    color: 0xa78bfa, footer: { text: 'NBA 2K Pro-Am Ekstraklasa · Osiągnięcia' }, timestamp: new Date().toISOString()
+  }] });
+  showToast(ok ? '📣 Ogłoszone' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
+}
+
+function _playerAchievementsHtml(name) {
+  const evs = _achievements(null).filter(e => e.player === name);
+  if(!evs.length) return '';
+  const groups = {};
+  evs.forEach(e => { const g = groups[e.name] = groups[e.name] || { icon: e.icon, rare: e.rare, n: 0, last: e.date }; g.n++; });
+  return `<div style="margin-top:.5rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.3rem">🎖 OSIĄGNIĘCIA</div>
+    <div style="display:flex;gap:.3rem;flex-wrap:wrap">${Object.entries(groups).sort((a, b) => (b[1].rare - a[1].rare) || (b[1].n - a[1].n)).map(([nm, g]) =>
+      `<span title="ostatnio ${_ssFmt(g.last)}" style="font-size:.72rem;border-radius:999px;padding:.12rem .55rem;border:1px solid ${g.rare ? 'rgba(167,139,250,.6)' : 'var(--border)'};background:${g.rare ? 'rgba(167,139,250,.12)' : 'transparent'}">${g.icon} ${_h(nm)}${g.n > 1 ? ' ×' + g.n : ''}</span>`).join('')}</div></div>`;
+}
+
+// ═══ 🖼 PLAKAT MECZU ═════════════════════════════════════════════
+function _gameMvp(m) {
+  const eff = p => (p.pts || 0) + (p.reb || 0) * 1.2 + (p.ast || 0) * 1.5 + (p.stl || 0) * 2 + (p.blk || 0) * 2 - (p.to || 0) * 1.5;
+  const all = [[m.team1, m.team2], [m.team2, m.team1]].flatMap(([t]) => (t.players || []).map(p => ({ ...p, team: t.name })));
+  return all.sort((a, b) => eff(b) - eff(a))[0] || null;
+}
+
+async function _matchPoster(m) {
+  const S = 1080;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const g = c.getContext('2d');
+  const font = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
+  const bg = g.createLinearGradient(0, 0, S, S); bg.addColorStop(0, '#0d0f14'); bg.addColorStop(1, '#22121a');
+  g.fillStyle = bg; g.fillRect(0, 0, S, S);
+  g.fillStyle = '#8b0000'; g.fillRect(0, 0, S, 12); g.fillStyle = '#f5c518'; g.fillRect(0, 12, S, 4);
+  const sItem = schedule.find(s => (s.matchIds || []).map(Number).includes(Number(m.id)) || Number(s.matchId) === Number(m.id));
+  const ed = _editionOf(m.seasonId);
+  g.textAlign = 'center';
+  g.fillStyle = '#f5c518'; g.font = `900 34px ${font}`; g.fillText('2K PRO-AM EKSTRAKLASA', S / 2, 82);
+  g.fillStyle = '#8b90a0'; g.font = `700 26px ${font}`;
+  g.fillText([ed, sItem ? 'WEEK ' + sItem.week : '', formatDate(m.date).toUpperCase()].filter(Boolean).join('  ·  '), S / 2, 122);
+  const t1Win = (m.team1.score || 0) > (m.team2.score || 0);
+  const R = 135, cy = 350, xs = [230, S - 230];
+  for(const [i, t] of [m.team1, m.team2].entries()) {
+    const x = xs[i], win = i === 0 ? t1Win : !t1Win;
+    g.save(); g.beginPath(); g.arc(x, cy, R, 0, Math.PI * 2); g.closePath();
+    g.fillStyle = typeof teamColor === 'function' ? teamColor(t.name) : '#333'; g.fill();
+    const img = await _ssLoadImg(_ssLogoSrc(t.name));
+    try {
+      if(img) { g.clip(); const sc = Math.max(R * 2 / img.width, R * 2 / img.height); g.drawImage(img, x - img.width * sc / 2, cy - img.height * sc / 2, img.width * sc, img.height * sc); }
+      else { g.fillStyle = '#fff'; g.font = `900 96px ${font}`; g.textBaseline = 'middle'; g.fillText(typeof teamInitials === 'function' ? teamInitials(t.name) : t.name.slice(0, 2), x, cy + 4); }
+    } catch(e) {}
+    g.restore();
+    g.lineWidth = 7; g.strokeStyle = win ? '#f5c518' : '#3a3f4f'; g.beginPath(); g.arc(x, cy, R, 0, Math.PI * 2); g.stroke();
+    g.textBaseline = 'alphabetic'; g.fillStyle = win ? '#ffffff' : '#9aa0b0'; g.font = `800 40px ${font}`;
+    let label = t.name; while(g.measureText(label).width > 380 && label.length > 3) label = label.slice(0, -2) + '…';
+    g.fillText(label, x, cy + R + 62);
+    g.font = `900 120px ${font}`; g.fillStyle = win ? '#f5c518' : '#ffffff';
+    g.fillText(String(t.score ?? '?'), x, cy + R + 190);
+  }
+  g.fillStyle = '#8b90a0'; g.font = `900 64px ${font}`; g.textBaseline = 'middle'; g.fillText('VS', S / 2, cy); g.textBaseline = 'alphabetic';
+  const mvp = _gameMvp(m);
+  if(mvp) {
+    const ach = _ACH.filter(a => a.test(mvp)).map(a => a.icon + ' ' + a.name.split(' (')[0]).slice(0, 3).join('    ');
+    const boxH = ach ? 205 : 165;
+    g.fillStyle = 'rgba(245,197,24,.10)'; g.fillRect(80, 815, S - 160, boxH);
+    g.fillStyle = '#f5c518'; g.fillRect(80, 815, 8, boxH);
+    g.textAlign = 'left';
+    g.fillStyle = '#f5c518'; g.font = `800 26px ${font}`; g.fillText('MVP MECZU', 120, 860);
+    g.fillStyle = '#ffffff'; g.font = `900 52px ${font}`;
+    let nm = `${mvp.name}`; while(g.measureText(nm).width > 620 && nm.length > 3) nm = nm.slice(0, -2) + '…';
+    g.fillText(nm, 120, 918);
+    g.fillStyle = '#c9cdd8'; g.font = `700 30px ${font}`;
+    g.fillText(`${mvp.pts || 0} PTS · ${mvp.reb || 0} REB · ${mvp.ast || 0} AST${mvp.tpm ? ' · ' + mvp.tpm + ' 3PM' : ''}`, 120, 960);
+    if(ach) { g.fillStyle = '#a78bfa'; g.font = `800 26px ${font}`; g.fillText(ach, 120, 1000); }
+    g.textAlign = 'right'; g.fillStyle = '#8b90a0'; g.font = `700 26px ${font}`;
+    let tn = mvp.team; while(g.measureText(tn).width > 300 && tn.length > 3) tn = tn.slice(0, -2) + '…';
+    g.fillText(tn, S - 120, 860);
+    g.textAlign = 'center';
+  }
+  g.fillStyle = '#5a6070'; g.font = `600 22px ${font}`; g.fillText((location.host || 'chemik81.github.io') + location.pathname.replace(/index\.html$/, ''), S / 2, S - 22);
+  try { return c.toDataURL('image/png'); } catch(e) { return null; }
+}
+
+async function openMatchPoster(id) {
+  const m = _withAllMatches(() => matches.find(x => Number(x.id) === Number(id)));
+  if(!m) return;
+  const modal = _fxModal('poster-modal', 640);
+  const box = modal.querySelector('.modal');
+  box.innerHTML = _fxHead('poster-modal', '🖼 Plakat meczu') + '<div style="color:var(--muted);font-size:.85rem">⏳ Rysuję…</div>';
+  modal.classList.add('open');
+  try { if(document.fonts?.ready) await document.fonts.ready; } catch(e) {}
+  const url = await _matchPoster(m);
+  if(!url) { box.innerHTML = _fxHead('poster-modal', '🖼 Plakat meczu') + '<div style="color:var(--loss)">Nie udało się narysować plakatu (logo z obcego serwera blokuje eksport).</div>'; return; }
+  window._posterData = { url, m };
+  const file = `${m.team1.name}-${m.team2.name}-${m.date}.png`.replace(/[^\w.-]+/g, '_');
+  box.innerHTML = _fxHead('poster-modal', '🖼 Plakat meczu') + `
+    <img src="${url}" alt="" style="width:100%;border-radius:10px;border:1px solid var(--border);margin-bottom:.8rem">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+      <a href="${url}" download="${file}" class="btn btn-primary" style="text-decoration:none">⬇ Pobierz PNG</a>
+      ${navigator.clipboard && window.ClipboardItem ? `<button class="btn btn-ghost" onclick="_copyPoster()">📋 Kopiuj</button>` : ''}
+      ${_isLoggedInSync() ? `<button class="btn btn-ghost" onclick="_sendPoster()">📣 Wyślij na Discord</button>` : ''}
+    </div>`;
+}
+async function _copyPoster() {
+  try {
+    const blob = _dataUrlToBlob(window._posterData.url);
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+    showToast('📋 Skopiowano — wklej na Discordzie (Ctrl+V)', 'success');
+  } catch(e) { showToast('Przeglądarka nie pozwala kopiować obrazów — użyj Pobierz', 'info'); }
+}
+async function _sendPoster() {
+  const { url, m } = window._posterData || {};
+  if(!url) return;
+  const ok = await _scheduleDiscordSend({ embeds: [{
+    title: `🏀 ${m.team1.name} ${m.team1.score} : ${m.team2.score} ${m.team2.name}`,
+    color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+  }] }, url);
+  showToast(ok ? '📣 Plakat wysłany' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
+}
+
+// ═══ 📜 KRONIKA LIGI ═════════════════════════════════════════════
+let _chron = { ed: undefined, types: null, limit: 80 };
+const _CHRON_TYPES = { result: '🏀 Wyniki', transfer: '🔁 Transfery', record: '🏛 Rekordy', ach: '🎖 Osiągnięcia', award: '🏅 Nagrody', champ: '🏆 Mistrzowie', team: '✅ Drużyny', power: '📊 Power Ranking' };
+
+function _chronicleItems(ed) {
+  const items = [];
+  const inEd = sid => !ed || _editionOf(sid) === ed;
+  _editionMatches(ed).forEach(m => {
+    const w = (m.team1.score || 0) > (m.team2.score || 0) ? m.team1 : m.team2, l = w === m.team1 ? m.team2 : m.team1;
+    items.push({ type: 'result', date: m.date, icon: '🏀', html: `<b>${_h(w.name)}</b> ${w.score}:${l.score} ${_h(l.name)}`, poster: m.id });
+  });
+  (transfersList || []).filter(t => !ed || !t.seasonId || inEd(t.seasonId)).forEach(t => items.push({ type: 'transfer', date: String(t.at).slice(0, 10), icon: '🔁', html: `<b>${_h(t.player)}</b>: ${_h(t.from || 'Wolny agent')} ➜ <b>${_h(t.to)}</b>` }));
+  _recordEvents(ed).forEach(e => items.push({ type: 'record', date: e.date, icon: e.emoji, html: `Rekord: <b>${_h(e.label)}</b> — ${_h(e.holder)} (${e.value} ${e.unit}), wcześniej ${_h(e.prevHolder)} (${e.prevValue})` }));
+  _achievements(ed).filter(e => e.rare).forEach(e => items.push({ type: 'ach', date: e.date, icon: e.icon, html: `<b>${_h(e.player)}</b> (${_h(e.team)}) — ${_h(e.name)}` }));
+  awardsList.filter(a => a.status === 'closed' && a.winners && (!ed || inEd(a.seasonId))).forEach(a => a.categories.forEach(c => {
+    const w = a.winners[c.key];
+    if(w) items.push({ type: 'award', date: String(a.closedAt || a.createdAt).slice(0, 10), icon: c.emoji || '🏅', html: `${_h(c.title)} Week ${a.week}: <b>${_h(w.label)}</b>` });
+  }));
+  playoffs.filter(po => po.champion && (!ed || inEd(po.seasonId))).forEach(po => {
+    const last = _withAllMatches(() => getPlayoffMatches(po)).map(m => m.date).sort().pop() || po.startDate || '';
+    items.push({ type: 'champ', date: last, icon: '🏆', html: `<b>${_h(po.champion)}</b> mistrzem ${_h(_seasonName(po.seasonId) || 'sezonu')}!` });
+  });
+  teamRegistrations.filter(r => r.status === 'approved' && (!ed || inEd(r.seasonId))).forEach(r => items.push({ type: 'team', date: String(r.reviewedAt || r.registeredAt || '').slice(0, 10), icon: '✅', html: `<b>${_h(r.teamName)}</b> dołącza do ligi` }));
+  (powerRankings || []).filter(p => !ed || inEd(p.seasonId)).forEach(p => p.entries?.[0] && items.push({ type: 'power', date: String(p.createdAt).slice(0, 10), icon: '📊', html: `Power Ranking Week ${p.week}: liderem <b>${_h(p.entries[0].team)}</b>` }));
+  return items.filter(x => x.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function openChronicle() {
+  if(_chron.types === null) _chron.types = new Set(Object.keys(_CHRON_TYPES));
+  const ed = _chron.ed === undefined ? _currentEdition() : _chron.ed;
+  const all = _chronicleItems(ed).filter(x => _chron.types.has(x.type));
+  const shown = all.slice(0, _chron.limit);
+  const eds = _editionsList();
+  const chip = (on, onclick, label) => `<button onclick="${onclick}" style="font-size:.72rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer;font-family:inherit;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'transparent'};color:${on ? 'var(--accent)' : 'var(--text)'}">${label}</button>`;
+  let lastDate = '';
+  const rows = shown.map(x => {
+    const head = x.date !== lastDate ? `<div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.7rem 0 .25rem;text-transform:uppercase">${formatDate(x.date)}</div>` : '';
+    lastDate = x.date;
+    return head + `<div style="display:flex;align-items:center;gap:.55rem;padding:.3rem .5rem;border-left:2px solid var(--border);margin-left:.3rem;font-size:.82rem">
+      <span>${x.icon}</span><span style="flex:1">${x.html}</span>
+      ${x.poster ? `<button onclick="openMatchPoster(${x.poster})" class="btn btn-ghost" title="Plakat meczu" style="font-size:.64rem;padding:.1rem .4rem">🖼</button>` : ''}
+    </div>`;
+  }).join('');
+  const m = _fxModal('chronicle-modal', 720);
+  m.querySelector('.modal').innerHTML = _fxHead('chronicle-modal', '📜 Kronika ligi') + `
+    <div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.45rem">
+      ${eds.map(e => chip(e === ed, `_chron.ed='${String(e).replace(/'/g, "\\'")}';_chron.limit=80;openChronicle()`, _h(e))).join('')}
+      ${chip(ed === null, `_chron.ed=null;_chron.limit=80;openChronicle()`, '🌐 Wszystko')}
+    </div>
+    <div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem">
+      ${Object.entries(_CHRON_TYPES).map(([k, l]) => chip(_chron.types.has(k), `_chron.types.has('${k}')?_chron.types.delete('${k}'):_chron.types.add('${k}');openChronicle()`, l)).join('')}
+    </div>
+    <div style="max-height:60vh;overflow-y:auto;padding-right:.3rem">${rows || '<div style="color:var(--muted);text-align:center;padding:2rem">Brak wydarzeń</div>'}
+      ${all.length > shown.length ? `<div style="text-align:center;margin-top:.8rem"><button class="btn btn-ghost" onclick="_chron.limit+=120;openChronicle()">Pokaż więcej (${all.length - shown.length})</button></div>` : ''}
+    </div>`;
+  m.classList.add('open');
+}
+
+// ═══ Skróty na Dashboardzie ═══
+function renderQuickLinks() {
+  const el = document.getElementById('quicklinks-wrap');
+  if(!el) return;
+  const b = (onclick, label) => `<button onclick="${onclick}" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem">${label}</button>`;
+  el.innerHTML = `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    ${b('openChronicle()', '📜 Kronika ligi')}
+    ${b("document.getElementById('elo-wrap')?.scrollIntoView({behavior:'smooth'})", '⚡ Ranking siły')}
+    ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
+    ${b('openChampionsHistory()', '📜 Historia mistrzów')}
   </div>`;
 }
 
@@ -18074,7 +18643,26 @@ async function _dsLaunch() {
   };
   inject('openPlayerModal', 'player-modal-content', name => _playerBadgesHtml(name), 'afterFirst');
   inject('openTeamModal', 'team-modal-content', tn => _teamExtrasHtml(tn), 'afterFirst');
-  inject('openLeagueRecordsModal', 'league-records-content', () => _recordsTimelineHtml(), 'prepend');
+  // Rekordy: liczone dla wybranej edycji gry (domyślnie bieżącej), z przełącznikiem edycji
+  if(typeof window.openLeagueRecordsModal === 'function' && !window.openLeagueRecordsModal._extended) {
+    const origRec = window.openLeagueRecordsModal;
+    window.openLeagueRecordsModal = function() {
+      const ed = _recordsEdition === undefined ? _currentEdition() : _recordsEdition;
+      const list = _editionMatches(ed);
+      const el = document.getElementById('league-records-content');
+      if(!list.length) {
+        if(el) el.innerHTML = _recordsEditionBar() + `<div style="text-align:center;color:var(--muted);padding:2rem">Brak meczów w edycji ${_h(ed || '')} — rekordy pojawią się po pierwszych meczach.</div>`;
+        document.getElementById('league-records-modal')?.classList.add('open');
+        return;
+      }
+      const all = matches;
+      matches = list;
+      try { origRec.apply(this, arguments); }
+      finally { matches = all; }
+      try { if(el) el.insertAdjacentHTML('afterbegin', _recordsEditionBar() + _recordsTimelineHtml()); } catch(e) { console.warn('records extras', e); }
+    };
+    window.openLeagueRecordsModal._extended = true;
+  }
 })();
 
 ['renderPlayoffDashboard', 'syncPlayoffBracket'].forEach(fn => {
