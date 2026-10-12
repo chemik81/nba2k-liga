@@ -796,6 +796,8 @@
     <div id="events-dashboard-wrap"></div>
 
     <div id="playoff-dashboard-wrap"></div>
+    <div id="records-banner-wrap"></div>
+    <div id="awards-dashboard-wrap"></div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem"><div class="section-title" style="margin-bottom:0" data-i18n="standings">Tabela</div><button onclick="shareStandings()" title="Udostępnij tabelę" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">&#x1F4E4;</button></div>
     <div class="card" style="padding:0;overflow:hidden">
@@ -813,6 +815,7 @@
       </div>
     </div>
 
+    <div id="power-ranking-wrap" style="margin-top:1.5rem"></div>
     <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
     <div class="leaders-grid" id="leaders-grid">
       <div class="empty" style="grid-column:1/-1;padding:2rem"><div class="icon">🏀</div><p>Dodaj mecze aby zobaczyć liderów</p></div>
@@ -1864,8 +1867,15 @@ let discordFreeAgentsWebhookUrl = ''; // kanał wolnych agentów (ustawiany prze
 let discordScheduleWebhookUrl = '';   // kanał ogłoszeń terminarza
 let scheduleVoteCounts = {};  // { scheduleId: { team1, team2 } }
 let myVotes = {};
-let scheduleDayPicks = {};     // { scheduleId: { team1:{primary,backup}, team2:{...} } }             // { scheduleId: 'team1'|'team2' } — głosy zalogowanego użytkownika
-let _regTab = 'teams';        // 'teams' | 'fa'
+let scheduleDayPicks = {};     // { scheduleId: { team1:{primary,backup}, team2:{...} } }
+let typerData = {};            // ranking typerów (liczony w Workerze)
+let awardsList = [];           // nagrody tygodnia
+let myAwardVotes = {};         // { awardId: { kategoria: kandydat } }
+let transfersList = [];        // transfery
+let pendingResults = [];       // wyniki zgłoszone przez kapitanów, czekające na potwierdzenie
+let powerRankings = [];        // power rankingi (zapisywane z danymi ligi)
+let _dataLoadedAt = null;      // kiedy wczytano dane (chroni mecze dodane w międzyczasie przez Workera)             // { scheduleId: 'team1'|'team2' } — głosy zalogowanego użytkownika
+let _regTab = 'fa';           // 'teams' | 'fa' — domyślnie wolni agenci
 let _faPosFilter = ''; // osobny kanał dla zgłoszeń drużyn (zapisywany w danych ligi)
 let recapModel = localStorage.getItem('nba2k_recap_model') || 'claude-haiku-4-5-20251001';
 const MODEL_SCREENSHOT = () => aiModel;
@@ -2047,6 +2057,7 @@ async function saveData(silent = false) {
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
       ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
+      powerRankings, _loadedAt: _dataLoadedAt,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2186,6 +2197,12 @@ async function loadData() {
     discordScheduleWebhookUrl = record.discordScheduleWebhookUrl || '';
     scheduleVoteCounts = record.scheduleVoteCounts || {};
     scheduleDayPicks = record.scheduleDayPicks || {};
+    typerData = record.typer || {};
+    awardsList = record.awards || [];
+    transfersList = record.transfers || [];
+    pendingResults = record.pendingResults || [];
+    powerRankings = record.powerRankings || [];
+    _dataLoadedAt = new Date().toISOString();
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
     // Fix playoffs with missing startDate — use createdAt date as fallback
@@ -4078,6 +4095,7 @@ function renderDashboard() {
   renderEventsDashboard();
   renderStandings();
   if(typeof renderPlayoffDashboard === 'function') renderPlayoffDashboard();
+  try { renderRecordsBanner(); renderAwardsDashboard(); renderPowerRanking(); } catch(e) { console.warn('dashboard extras', e); }
   loadTeams();
   setTimeout(renderScheduleDashboard, 100);
   renderLeaders();
@@ -5688,6 +5706,7 @@ function _regTabsHtml(rightHtml) {
       <div style="display:flex;gap:.2rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.2rem;flex-wrap:wrap">
         ${tab('teams', '🏀 Zapisy do ligi — NBA 2K27' + (isAdmin ? cnt(pending, true) : ''))}
         ${tab('fa', '🆓 Wolni agenci' + cnt(faActive, false))}
+        ${tab('tr', '🔁 Transfery')}
       </div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">${rightHtml}</div>
     </div>`;
@@ -5936,6 +5955,7 @@ async function faAdminSet(id, status) {
   } else if(status === 'withdrawn' && !confirm('Wycofać to zgłoszenie?')) return;
   const res = await _api('/free-agent', 'PATCH', { id, status, signedTeam: signedTeam.trim() }, { admin: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  if(res.transfer) { transfersList.unshift(res.transfer); showToast('🔁 Transfer ogłoszony na Discordzie', 'success'); }
   const i = freeAgents.findIndex(f => f.id === id);
   if(i >= 0) freeAgents[i] = res.freeAgent;
   renderTeamRegistrations();
@@ -5947,7 +5967,12 @@ async function faAdminSet(id, status) {
 async function _loadMyVotes() {
   if(!discordUser?.session) return;
   const res = await _api('/my-votes', 'GET', null, { session: true });
-  if(res.ok) { myVotes = res.votes || {}; if(typeof renderSchedule === 'function') renderSchedule(); }
+  if(res.ok) {
+    myVotes = res.votes || {};
+    myAwardVotes = res.awards || {};
+    if(typeof renderSchedule === 'function') renderSchedule();
+    if(typeof renderAwardsDashboard === 'function') renderAwardsDashboard();
+  }
 }
 
 function _voteClosedClient(s) {
@@ -6319,7 +6344,7 @@ function renderSeasonSchedule() {
   const byGroup = groups.length ? groups.map(g => ({ g, list: weekItems.filter(s => s.groupId === g.id) })) : [{ g: null, list: weekItems }];
   const byes = (ctx.fixture?.byes?.[_ssWeek] || []);
 
-  el.innerHTML = header + demoBar + groupsHtml + `
+  el.innerHTML = header + demoBar + _ssToolsHtml(ctx) + groupsHtml + `
     <div style="display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.4rem;margin-bottom:.75rem">${tabs}</div>
     ${byGroup.map(({ g, list }) => `
       ${g ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.4rem 0 .4rem;text-transform:uppercase">${_h(g.name)}</div>` : ''}
@@ -6327,7 +6352,8 @@ function renderSeasonSchedule() {
         ${list.map(s => _ssCard(ctx, s, groupName)).join('')}
       </div>`).join('')}
     ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + ' (' + [groupName(b.groupId), b.round ? 'kolejka ' + b.round : ''].filter(Boolean).join(', ') + ')').join(', ')}</div>` : ''}
-    ${_ssScheduledList(ctx, groupName)}`;
+    ${_ssScheduledList(ctx, groupName)}
+    ${_typerHtml(ctx)}`;
 }
 
 function _ssScheduledList(ctx, groupName) {
@@ -6355,6 +6381,7 @@ function _ssScheduledList(ctx, groupName) {
         </div>
         <div style="display:flex;gap:.3rem">
           <button onclick="_ssWeek=${s.week};renderSeasonSchedule()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem" title="Pokaż w tygodniu">👁</button>
+          ${ctx.demo ? '' : `<button onclick="ssCalendarSingle('${k}')" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem" title="Dodaj do kalendarza">📆</button>`}
           ${ctx.isAdmin && !ctx.demo ? `<button onclick="ssResendMatch('${k}')" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem" title="Wyślij ponownie na Discord">📣</button>` : ''}
         </div>
       </div>`;
@@ -6404,6 +6431,7 @@ function _ssCard(ctx, s, groupName) {
       ${res && bo > 1 ? `<div style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:.3rem">${res.games.map((g, i) => `Mecz ${i + 1}: <b style="color:var(--text)">${g.s1}:${g.s2}</b>`).join(' · ')}</div>` : ''}
       ${_ssVoteBar(ctx, s)}
       ${res ? '' : _ssDaySection(ctx, s)}
+      ${_ssResultsBlock(ctx, s)}
       ${_ssAdminActions(ctx, s, res)}
     </div>`;
 }
@@ -6815,6 +6843,7 @@ async function ssFinalize(k, day) {
   renderScheduleDashboard();
   showToast('✅ Termin zatwierdzony', 'success');
   try { await _ssAnnounceMatch(s); } catch(e) { console.warn(e); }
+  _api('/captain-notify-final', 'POST', { scheduleId: s.id, when: _ssPickFull(day, s.weekStart) + ' · ' + time }, { admin: true }).catch(() => {});
 }
 
 async function ssUnfinalize(k) {
@@ -7150,8 +7179,8 @@ function openDeepLink() {
     setTimeout(() => flash(document.getElementById('season-schedule-wrap')), 150);
     return;
   }
-  if(h === 'zapisy' || h === 'wolni-agenci') {
-    _regTab = h === 'zapisy' ? 'teams' : 'fa';
+  if(h === 'zapisy' || h === 'wolni-agenci' || h === 'transfery') {
+    _regTab = h === 'zapisy' ? 'teams' : h === 'transfery' ? 'tr' : 'fa';
     showView('dashboard');
     renderTeamRegistrations();
     setTimeout(() => flash(document.getElementById('team-registrations-wrap')), 150);
@@ -7308,6 +7337,854 @@ async function saveCaptainChange(regId) {
   renderTeamRegistrations();
   renderSchedule();
   showToast('✅ Nowy kapitan: ' + (res.registration.captain?.name || id), 'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NOWOŚCI: typer, nagrody tygodnia, power ranking, transfery, podsumowanie
+// tygodnia, przypomnienia, rekordy, kalendarz, wyniki od kapitanów, profile
+// ═══════════════════════════════════════════════════════════════
+const _MODAL_INP = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.85rem;width:100%;box-sizing:border-box';
+const _MODAL_LBL = 'display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem';
+
+function _fxModal(id, maxW) {
+  let m = document.getElementById(id);
+  if(!m) {
+    m = document.createElement('div');
+    m.id = id;
+    m.className = 'modal-overlay';
+    m.style.zIndex = '1250';
+    m.onclick = e => { if(e.target === m) m.classList.remove('open'); };
+    m.innerHTML = `<div class="modal" style="max-width:${maxW || 620}px"></div>`;
+    document.body.appendChild(m);
+  }
+  return m;
+}
+function _fxClose(id) { document.getElementById(id)?.classList.remove('open'); }
+function _fxHead(id, title) {
+  return `<button class="modal-close" onclick="_fxClose('${id}')">&#x2715;</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.45rem;letter-spacing:1px;margin-bottom:1rem">${title}</div>`;
+}
+function _seasonKey(sid) { return sid || '_'; }
+function _seasonName(sid) { return seasons.find(x => x.id === sid)?.name || ''; }
+function _seasonMatchesOf(sid) { return _withAllMatches(() => matches.filter(m => !sid || m.seasonId === sid)); }
+function _trunc(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function _avatarHtml(url, size) {
+  return url ? `<img src="${_h(url)}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+             : `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:${size * .5}px;flex-shrink:0">👤</div>`;
+}
+// Mecze (gry) przypięte do pozycji terminarza
+function _itemGames(s) {
+  return _withAllMatches(() => _ssMatchIds(s).map(id => matches.find(m => Number(m.id) === Number(id))).filter(Boolean));
+}
+// Bilans drużyn w sezonie (W/L z pojedynczych meczów)
+function _seasonTable(sid) {
+  const t = {};
+  const add = n => (t[n] = t[n] || { team: n, w: 0, l: 0, pf: 0, pa: 0, form: [] });
+  const fx = seasons.find(x => x.id === sid)?.fixture;
+  (fx?.groups?.length ? fx.groups.flatMap(g => g.teams) : schedule.filter(s => s.generated && s.seasonId === sid).flatMap(s => [s.team1, s.team2])).forEach(add);
+  _seasonMatchesOf(sid).filter(m => !_isAnyPlayoffMatch(m)).sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(m => {
+    const a = add(m.team1.name), b = add(m.team2.name);
+    const w1 = m.team1.score > m.team2.score;
+    a.pf += m.team1.score || 0; a.pa += m.team2.score || 0; b.pf += m.team2.score || 0; b.pa += m.team1.score || 0;
+    w1 ? (a.w++, b.l++) : (b.w++, a.l++);
+    a.form.push(w1 ? 'W' : 'L'); b.form.push(w1 ? 'L' : 'W');
+  });
+  return Object.values(t).map(x => ({ ...x, gp: x.w + x.l, diff: x.pf - x.pa, form5: x.form.slice(-5).join('') }))
+    .sort((a, b) => (b.w - a.w) || (b.diff - a.diff) || a.team.localeCompare(b.team));
+}
+
+// ═══ 🎯 TYPER ═══════════════════════════════════════════════════
+function _typerHtml(ctx) {
+  if(ctx.demo) return '';
+  const td = typerData[_seasonKey(ctx.seasonId)];
+  const overall = td?.overall || [];
+  const weekList = td?.weeks?.[_ssWeek] || [];
+  const me = discordUser?.id;
+  const myIdx = overall.findIndex(x => x.id === me);
+  const row = (x, i, hl) => `
+    <div style="display:grid;grid-template-columns:28px 26px 1fr auto auto;align-items:center;gap:.55rem;padding:.4rem .7rem;border-bottom:1px solid var(--border);${hl ? 'background:rgba(245,197,24,.08)' : ''}">
+      <b style="font-family:'Barlow Condensed',sans-serif;font-size:1rem;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'}">${['🥇', '🥈', '🥉'][i] || i + 1}</b>
+      ${_avatarHtml(x.avatar, 24)}
+      <span style="font-size:.84rem;font-weight:${hl ? 800 : 600};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(x.name)}${hl ? ' (Ty)' : ''}</span>
+      <span style="font-size:.7rem;color:var(--muted)">${x.acc}% · ${x.picks} typ.</span>
+      <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;color:var(--accent);min-width:34px;text-align:right">${x.pts}</b>
+    </div>`;
+  const top = overall.slice(0, 10).map((x, i) => row(x, i, x.id === me)).join('');
+  const mine = myIdx >= 10 ? `<div style="text-align:center;color:var(--muted);font-size:.7rem;padding:.15rem">⋯</div>` + row(overall[myIdx], myIdx, true) : '';
+  const wk = weekList.slice(0, 3).map((x, i) => row(x, i, x.id === me)).join('');
+  return `
+    <div style="margin-top:1.5rem">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">🎯 Typer sezonu</div>
+        <div style="font-size:.7rem;color:var(--muted)">1 pkt za trafionego zwycięzcę spotkania · remis = 0 pkt · typujesz przyciskiem 👍 przy meczu</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.75rem">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <div style="padding:.5rem .7rem;font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border)">KLASYFIKACJA GENERALNA</div>
+          ${top + mine || '<div style="padding:1rem;text-align:center;color:var(--muted);font-size:.82rem">Ranking pojawi się po pierwszych rozegranych meczach z typami</div>'}
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <div style="padding:.5rem .7rem;font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border)">TYPER TYGODNIA — WEEK ${_ssWeek || '?'}</div>
+          ${wk || '<div style="padding:1rem;text-align:center;color:var(--muted);font-size:.82rem">Brak rozstrzygniętych typów w tym tygodniu</div>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ═══ 🛠 NARZĘDZIA TYGODNIA (admin) + 📆 kalendarz ══════════════════
+function _ssToolsHtml(ctx) {
+  if(ctx.demo || !ctx.items.length) return '';
+  const b = (onclick, label, title) => `<button onclick="${onclick}" class="btn btn-ghost" title="${title || ''}" style="font-size:.74rem;padding:.3rem .65rem">${label}</button>`;
+  const admin = ctx.isAdmin ? `
+    <span style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-right:.15rem">👑 WEEK ${_ssWeek}:</span>
+    ${b('ssRemindCaptains()', '🔔 Przypomnij kapitanom', 'Wiadomość prywatna do kapitanów, którzy nie wybrali terminu')}
+    ${b('openWeekSummary()', '📰 Podsumowanie', 'Podsumowanie tygodnia na Discord')}
+    ${b('openAwardsCreate()', '🏅 Nagrody tygodnia', 'Głosowanie kibiców na nagrody tygodnia')}
+    ${b('openPowerRankingCreate()', '📊 Power Ranking')}` : '';
+  return `<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin:-.25rem 0 .85rem">
+    ${admin}
+    <span style="flex:1"></span>
+    ${b('openCalendarModal()', '📆 Kalendarz', 'Mecze w Twoim kalendarzu')}
+  </div>`;
+}
+
+async function ssRemindCaptains() {
+  const ctx = _ssCtx();
+  if(!confirm(`Wysłać prywatne przypomnienia do kapitanów, którzy nie wybrali terminu w Week ${_ssWeek}?`)) return;
+  const res = await _api('/captain-remind', 'POST', { seasonId: ctx.seasonId, week: _ssWeek }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  if(!res.captains) { showToast('✅ Wszyscy kapitanowie wybrali już terminy', 'success'); return; }
+  showToast(`🔔 Wysłano: ${res.sent}${res.failed ? ` · nieudane: ${res.failed} (zamknięte wiadomości prywatne)` : ''}`, res.failed ? 'info' : 'success');
+}
+
+// ═══ 📸 WYNIKI ZGŁASZANE PRZEZ KAPITANÓW ═════════════════════════
+function _ssResultsBlock(ctx, s) {
+  if(ctx.demo) return '';
+  const k = String(s.id);
+  const res = _ssResult(ctx, s);
+  const pend = pendingResults.filter(p => String(p.scheduleId) === k);
+  const mySide = ctx.myTeam ? ['team1', 'team2'].find(sd => String(s[sd]).toLowerCase() === ctx.myTeam.toLowerCase()) : null;
+  const linked = res ? res.games.length : 0;
+  const canReport = mySide && linked + pend.length < (s.bestOf || 1);
+  if(!pend.length && !canReport) return '';
+  const rows = pend.map(p => {
+    const md = p.matchData;
+    const mine = p.side === mySide;
+    const canDecide = ctx.isAdmin || (mySide && !mine);
+    return `<div style="background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.5rem .65rem;font-size:.78rem;margin-top:.4rem">
+      ⏳ <b>Do potwierdzenia:</b> ${_h(md.team1.name)} <b>${md.team1.score}:${md.team2.score}</b> ${_h(md.team2.name)}
+      <div style="font-size:.68rem;color:var(--muted);margin:.15rem 0 .35rem">zgłosił ${_h(p.by?.name || '?')} · ${mine ? 'czeka na potwierdzenie rywala' : canDecide ? 'sprawdź wynik' : 'czeka na kapitana rywala'}</div>
+      <div style="display:flex;gap:.3rem;flex-wrap:wrap">
+        ${canDecide ? `<button onclick="ssDecideResult('${p.id}',true)" class="btn btn-primary" style="font-size:.7rem;padding:.2rem .55rem">✅ Potwierdź</button>` : ''}
+        ${canDecide || mine ? `<button onclick="ssDecideResult('${p.id}',false)" class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem">${mine && !ctx.isAdmin ? '↩ Wycofaj' : '❌ Odrzuć'}</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:.65rem">${rows}
+    ${canReport ? `<button onclick="openReportResult('${k}')" class="btn btn-ghost" style="width:100%;margin-top:.45rem;font-size:.74rem;padding:.3rem 0">📸 Zgłoś wynik${(s.bestOf || 1) > 1 ? ` (mecz ${linked + pend.length + 1}/${s.bestOf})` : ''}</button>` : ''}
+  </div>`;
+}
+
+function openReportResult(k) {
+  const s = _ssItem(k);
+  if(!s) return;
+  if(!_ensureSession()) return;
+  const m = _fxModal('report-modal', 520);
+  m.querySelector('.modal').innerHTML = _fxHead('report-modal', '📸 Zgłoś wynik meczu') + `
+    <div style="font-size:.84rem;margin-bottom:.9rem">${_h(s.team1)} vs ${_h(s.team2)} · Week ${s.week}${(s.bestOf || 1) > 1 ? ' · Bo' + s.bestOf : ''}</div>
+    <div style="font-size:.78rem;color:var(--muted);line-height:1.5;margin-bottom:.9rem">
+      Wrzuć zrzut ekranu <b>Game Stats</b> po meczu (jeden mecz = jeden screen). AI odczyta wynik i statystyki, a kapitan rywala dostanie prośbę o potwierdzenie.
+      Wynik trafi do ligi dopiero po jego akceptacji.
+    </div>
+    <label style="display:block;border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer;margin-bottom:.9rem">
+      <input type="file" id="report-file" accept="image/*" style="display:none" onchange="_reportPreview(this)">
+      <div id="report-preview" style="font-size:.82rem;color:var(--muted)">🖼 Kliknij, aby wybrać screen</div>
+    </label>
+    <div id="report-status" style="font-size:.8rem;min-height:1.1em;margin-bottom:.6rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="_fxClose('report-modal')">Anuluj</button>
+      <button class="btn btn-primary" id="report-send" disabled style="opacity:.45" onclick="sendReportResult('${k}')">📤 Wyślij</button>
+    </div>`;
+  m.classList.add('open');
+}
+
+let _reportImage = null;
+function _reportPreview(input) {
+  const f = input.files?.[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      // Zmniejsz do 1600 px szerokości — szybciej i w limicie
+      const sc = Math.min(1, 1600 / img.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      _reportImage = c.toDataURL('image/jpeg', 0.9);
+      document.getElementById('report-preview').innerHTML = `<img src="${_reportImage}" style="max-width:100%;max-height:220px;border-radius:6px">`;
+      const btn = document.getElementById('report-send');
+      btn.disabled = false; btn.style.opacity = '';
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(f);
+}
+
+async function sendReportResult(k) {
+  if(!_reportImage) return;
+  const btn = document.getElementById('report-send'), st = document.getElementById('report-status');
+  btn.disabled = true; btn.style.opacity = '.45';
+  st.style.color = 'var(--muted)'; st.textContent = '⏳ AI odczytuje screen… (do 30 s)';
+  const res = await _api('/captain-result', 'POST', { scheduleId: k, imageBase64: _reportImage.split(',')[1], mimeType: 'image/jpeg' }, { session: true });
+  if(!res.ok || !res.pending) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + (res.error || 'Błąd'); btn.disabled = false; btn.style.opacity = ''; return; }
+  pendingResults.push(res.pending);
+  _reportImage = null;
+  _fxClose('report-modal');
+  renderSeasonSchedule();
+  const md = res.pending.matchData;
+  showToast(`✅ Odczytano: ${md.team1.name} ${md.team1.score}:${md.team2.score} ${md.team2.name} — czeka na potwierdzenie rywala`, 'success');
+}
+
+async function ssDecideResult(id, accept) {
+  const p = pendingResults.find(x => x.id === id);
+  if(!p) return;
+  const md = p.matchData;
+  if(!confirm(`${accept ? 'Potwierdzić' : 'Odrzucić'} wynik: ${md.team1.name} ${md.team1.score}:${md.team2.score} ${md.team2.name}?`)) return;
+  const isAdmin = _isLoggedInSync();
+  if(!isAdmin && !_ensureSession()) return;
+  const res = await _api('/captain-result/decide', 'POST', { id, accept }, isAdmin ? { admin: true } : { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  pendingResults = pendingResults.filter(x => x.id !== id);
+  if(accept) {
+    showToast('✅ Wynik zapisany', 'success');
+    await loadData();
+    renderDashboard();
+    renderSchedule();
+  } else {
+    renderSeasonSchedule();
+    showToast('↩ Zgłoszenie usunięte', 'info');
+  }
+}
+
+// ═══ 📆 KALENDARZ ════════════════════════════════════════════════
+function _calTeamUrl(team) {
+  const base = (workerUrl || '').replace(/\/+$/, '') + '/calendar.ics';
+  return team ? base + '?team=' + encodeURIComponent(team) : base;
+}
+function openCalendarModal() {
+  const ctx = _ssCtx();
+  const teamsList = [...new Set(ctx.items.flatMap(s => [s.team1, s.team2]))].sort((a, b) => a.localeCompare(b, 'pl'));
+  const myTeam = ctx.myTeam;
+  const row = (label, team) => {
+    const https = _calTeamUrl(team), webcal = https.replace(/^https?:/, 'webcal:');
+    const google = 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(webcal);
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;border-bottom:1px solid var(--border);${team && team === myTeam ? 'background:rgba(245,197,24,.08)' : ''}">
+      ${team ? teamLogo(team, 22, '.55rem') : '🏀'}
+      <span style="flex:1;font-size:.84rem;font-weight:600">${_h(label)}${team && team === myTeam ? ' (Twoja drużyna)' : ''}</span>
+      <a href="${google}" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .5rem;text-decoration:none">Google</a>
+      <a href="${webcal}" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .5rem;text-decoration:none">Apple / Outlook</a>
+      <button onclick="navigator.clipboard?.writeText('${https}').then(()=>showToast('🔗 Skopiowano link kalendarza','success'))" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .5rem">🔗</button>
+    </div>`;
+  };
+  const m = _fxModal('calendar-modal', 600);
+  m.querySelector('.modal').innerHTML = _fxHead('calendar-modal', '📆 Mecze w Twoim kalendarzu') + `
+    <div style="font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:.9rem">
+      Subskrybuj kalendarz drużyny — każdy zatwierdzony termin pojawi się w nim sam (z przypomnieniem godzinę przed meczem).
+      Google odświeża subskrypcje co kilka godzin, Apple i Outlook częściej.
+    </div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;max-height:380px;overflow-y:auto">
+      ${row('Cała liga', '')}
+      ${teamsList.map(t => row(t, t)).join('')}
+    </div>`;
+  m.classList.add('open');
+}
+
+function ssCalendarSingle(k) {
+  const s = _ssItem(k);
+  if(!s?.date) return;
+  const [hh, mm] = (s.time || '20:00').split(':').map(Number);
+  const start = s.date.replace(/-/g, '') + 'T' + String(hh).padStart(2, '0') + String(mm).padStart(2, '0') + '00';
+  const endD = new Date(Date.UTC(+s.date.slice(0, 4), +s.date.slice(5, 7) - 1, +s.date.slice(8, 10), hh, mm + 45 * (s.bestOf || 1) + 15));
+  const end = endD.toISOString().slice(0, 10).replace(/-/g, '') + 'T' + endD.toISOString().slice(11, 16).replace(':', '') + '00';
+  const title = `🏀 ${s.team1} vs ${s.team2}${(s.bestOf || 1) > 1 ? ' (Bo' + s.bestOf + ')' : ''}`;
+  const link = location.origin + location.pathname + '#terminarz-week-' + s.week;
+  const g = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(title) +
+    '&dates=' + start + '/' + end + '&ctz=Europe/Warsaw&details=' + encodeURIComponent('Week ' + s.week + ' · 2K Pro-Am Ekstraklasa\n' + link);
+  const m = _fxModal('cal1-modal', 420);
+  m.querySelector('.modal').innerHTML = _fxHead('cal1-modal', '📆 Dodaj do kalendarza') + `
+    <div style="font-size:.85rem;margin-bottom:1rem">${_h(s.team1)} vs ${_h(s.team2)}<br><span style="color:var(--muted)">${_ssFmt(s.date)} · ${s.time || '20:00'}</span></div>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+      <a href="${g}" target="_blank" rel="noopener" class="btn btn-primary" style="text-align:center;text-decoration:none">Google Calendar</a>
+      <button class="btn btn-ghost" onclick="_downloadIcs('${k}')">Apple / Outlook (.ics)</button>
+    </div>`;
+  m.classList.add('open');
+}
+
+function _downloadIcs(k) {
+  const s = _ssItem(k);
+  const [hh, mm] = (s.time || '20:00').split(':').map(Number);
+  const loc = (d, h, mi) => d.replace(/-/g, '') + 'T' + String(h).padStart(2, '0') + String(mi).padStart(2, '0') + '00';
+  const endM = hh * 60 + mm + 45 * (s.bestOf || 1) + 15;
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//2K Pro-Am Ekstraklasa//PL', 'BEGIN:VEVENT',
+    `UID:nba2k-${s.id}@ekstraklasa`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
+    `DTSTART;TZID=Europe/Warsaw:${loc(s.date, hh, mm)}`,
+    `DTEND;TZID=Europe/Warsaw:${endM < 1440 ? loc(s.date, Math.floor(endM / 60), endM % 60) : loc(s.date, 23, 59)}`,
+    `SUMMARY:${s.team1} vs ${s.team2}`.replace(/[,;]/g, ' '),
+    'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Mecz za godzinę', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  a.download = `${s.team1}-vs-${s.team2}.ics`.replace(/[^\w.-]+/g, '_');
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ═══ 📰 PODSUMOWANIE TYGODNIA ════════════════════════════════════
+function _weekData(sid, week) {
+  const items = schedule.filter(s => s.generated && (s.seasonId || null) === (sid || null) && s.week === week);
+  const ctx = { demo: false };
+  const results = items.map(s => ({ s, res: _ssResult(ctx, s) })).filter(x => x.res);
+  const games = items.flatMap(_itemGames);
+  const pl = {};
+  games.forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
+    const x = pl[p.name + '|' + t.name] = pl[p.name + '|' + t.name] || { name: p.name, team: t.name, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0, gp: 0 };
+    x.pts += p.pts || 0; x.reb += p.reb || 0; x.ast += p.ast || 0; x.stl += p.stl || 0; x.blk += p.blk || 0; x.to += p.to || p.tov || 0; x.gp++;
+  })));
+  return { items, results, games, players: Object.values(pl) };
+}
+
+async function openWeekSummary() {
+  const ctx = _ssCtx(), week = _ssWeek, sid = ctx.seasonId;
+  const wd = _weekData(sid, week);
+  const table = _seasonTable(sid);
+  const top = [...wd.players].sort((a, b) => b.pts - a.pts)[0];
+  const typ = typerData[_seasonKey(sid)]?.weeks?.[week]?.[0];
+  const next = schedule.filter(s => s.generated && (s.seasonId || null) === (sid || null) && s.week === week + 1);
+  const resLines = wd.results.map(({ s, res }) => `${res.done ? '' : '▶ '}**${s.team1}** ${res.w1}:${res.w2} **${s.team2}**${res.games.length > 1 ? ` (${res.games.map(g => g.s1 + ':' + g.s2).join(', ')})` : ''}`);
+  const nextLines = next.map(s => `${s.date ? _ssFmt(s.date) + ' ' + (s.time || '') : 'termin do ustalenia'} — ${s.team1} vs ${s.team2}`);
+  const data = {
+    week, seasonName: _seasonName(sid),
+    results: wd.results.map(({ s, res }) => `${s.team1} ${res.w1}:${res.w2} ${s.team2}`).join('; '),
+    leader: table[0] ? `${table[0].team} (${table[0].w}-${table[0].l})` : '',
+    topScorer: top ? `${top.name} (${top.team}) — ${top.pts} pkt w ${top.gp} meczach` : '',
+    typer: typ ? `${typ.name} (${typ.pts}/${typ.picks})` : '',
+    names: [...new Set([...wd.items.flatMap(s => [s.team1, s.team2]), top?.name, typ?.name].filter(Boolean))]
+  };
+  const m = _fxModal('summary-modal', 640);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('summary-modal', `📰 Podsumowanie Week ${week}`) + '<div style="color:var(--muted);font-size:.85rem">⏳ AI pisze wstęp…</div>';
+  m.classList.add('open');
+  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'summary', data }, { admin: true }), new Promise(r => setTimeout(() => r({}), 12000))]);
+  const embed = {
+    title: `📰 Podsumowanie Week ${week}${data.seasonName ? ' — ' + data.seasonName : ''}`,
+    description: fl?.line ? `🎙️ *${fl.line}*` : '',
+    fields: [
+      { name: '🏀 Wyniki', value: _trunc(resLines.join('\n') || 'Brak rozegranych meczów', 1020) },
+      { name: '📊 Czołówka tabeli', value: _trunc(table.slice(0, 3).map((t, i) => `${['🥇', '🥈', '🥉'][i]} ${t.team} — ${t.w}-${t.l}`).join('\n') || '—', 1020), inline: true },
+      { name: '🔥 Najlepszy strzelec', value: top ? `${top.name} (${top.team})\n${top.pts} pkt · ${top.gp} ${top.gp === 1 ? 'mecz' : 'mecze'}` : '—', inline: true },
+      { name: '🎯 Typer tygodnia', value: typ ? `${typ.name} — ${typ.pts}/${typ.picks}` : '—', inline: true },
+      { name: `📅 Week ${week + 1}`, value: _trunc(nextLines.join('\n') || 'Koniec sezonu zasadniczego 🏁', 1020) }
+    ],
+    url: location.origin + location.pathname + '#terminarz-week-' + (next.length ? week + 1 : week),
+    color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+  };
+  window._summaryEmbed = embed;
+  box.innerHTML = _fxHead('summary-modal', `📰 Podsumowanie Week ${week}`) + `
+    <div style="background:var(--surface2);border-left:4px solid var(--accent);border-radius:8px;padding:.8rem 1rem;font-size:.82rem;line-height:1.55">
+      ${embed.description ? `<div style="margin-bottom:.6rem">${_h(embed.description).replace(/\*/g, '')}</div>` : ''}
+      ${embed.fields.map(f => `<div style="margin-bottom:.55rem"><b>${_h(f.name)}</b><div style="white-space:pre-wrap;color:var(--muted)">${_h(f.value).replace(/\*\*/g, '')}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="openWeekSummary()">🔄 Nowy wstęp</button>
+      <button class="btn btn-primary" onclick="sendWeekSummary()">📣 Wyślij na Discord</button>
+    </div>`;
+}
+
+async function sendWeekSummary() {
+  if(!window._summaryEmbed) return;
+  const ok = await _scheduleDiscordSend({ embeds: [JSON.parse(JSON.stringify(window._summaryEmbed))] });
+  showToast(ok ? '📣 Podsumowanie wysłane' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
+  if(ok) _fxClose('summary-modal');
+}
+
+// ═══ 🏅 NAGRODY TYGODNIA ═════════════════════════════════════════
+function _awardCandidates(sid, week) {
+  const wd = _weekData(sid, week);
+  const fmtLine = p => `${p.pts} PTS · ${p.reb} REB · ${p.ast} AST${p.gp > 1 ? ` (${p.gp} mecze)` : ''}`;
+  const eff = p => p.pts + p.reb * 1.2 + p.ast * 1.5 + p.stl * 2 + p.blk * 2 - p.to * 1.5;
+  const cats = [];
+  const mvp = [...wd.players].sort((a, b) => eff(b) - eff(a)).slice(0, 3);
+  if(mvp.length >= 2) cats.push({ key: 'mvp', emoji: '⭐', title: 'MVP tygodnia', candidates: mvp.map(p => ({ id: p.name + '|' + p.team, label: p.name, team: p.team, sub: `${p.team} · ${fmtLine(p)}` })) });
+  const def = [...wd.players].filter(p => p.stl + p.blk > 0).sort((a, b) => (b.stl + b.blk) - (a.stl + a.blk)).slice(0, 3);
+  if(def.length >= 2) cats.push({ key: 'def', emoji: '🛡️', title: 'Obrońca tygodnia', candidates: def.map(p => ({ id: p.name + '|' + p.team, label: p.name, team: p.team, sub: `${p.team} · ${p.stl} STL · ${p.blk} BLK` })) });
+  const close = [...wd.games].map(m => ({ m, d: Math.abs((m.team1.score || 0) - (m.team2.score || 0)) })).sort((a, b) => a.d - b.d).slice(0, 3);
+  if(close.length >= 2) cats.push({ key: 'game', emoji: '🔥', title: 'Mecz tygodnia', candidates: close.map(({ m, d }) => ({ id: 'm' + m.id, label: `${m.team1.name} ${m.team1.score}:${m.team2.score} ${m.team2.name}`, sub: `różnica ${d} pkt` })) });
+  const ups = wd.results.filter(x => x.res.done && x.res.winnerSide).map(({ s, res }) => {
+    const c = scheduleVoteCounts[String(s.id)] || {}; const tot = (c.team1 || 0) + (c.team2 || 0);
+    const loser = res.winnerSide === 'team1' ? 'team2' : 'team1';
+    const share = tot ? Math.round((c[loser] || 0) / tot * 100) : 0;
+    return { s, res, share, winner: s[res.winnerSide], loserName: s[loser], tot };
+  }).filter(x => x.tot >= 2 && x.share > 50).sort((a, b) => b.share - a.share).slice(0, 3);
+  if(ups.length >= 2) cats.push({ key: 'upset', emoji: '😮', title: 'Niespodzianka tygodnia', candidates: ups.map(x => ({ id: 's' + x.s.id, label: `${x.winner} pokonali ${x.loserName}`, sub: `${x.share}% kibiców typowało ${x.loserName}` })) });
+  return cats;
+}
+
+function openAwardsCreate() {
+  const ctx = _ssCtx(), week = _ssWeek;
+  const cats = _awardCandidates(ctx.seasonId, week);
+  const m = _fxModal('awards-create-modal', 620);
+  window._awardDraft = { seasonId: ctx.seasonId, week, cats };
+  m.querySelector('.modal').innerHTML = _fxHead('awards-create-modal', `🏅 Nagrody tygodnia — Week ${week}`) + (cats.length ? `
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.9rem">Kandydaci wyliczeni automatycznie ze statystyk i typów kibiców z tego tygodnia. Odznacz kategorie, których nie chcesz.</div>
+    ${cats.map((c, i) => `<label style="display:block;border:1px solid var(--border);border-radius:10px;padding:.6rem .8rem;margin-bottom:.5rem;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:.5rem;font-weight:800;margin-bottom:.3rem"><input type="checkbox" data-cat="${i}" checked style="accent-color:var(--accent)"> ${c.emoji} ${_h(c.title)}</div>
+      ${c.candidates.map(x => `<div style="font-size:.78rem;margin-left:1.5rem"><b>${_h(x.label)}</b> <span style="color:var(--muted)">${_h(x.sub)}</span></div>`).join('')}
+    </label>`).join('')}
+    <label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;margin:.8rem 0 1rem;cursor:pointer"><input type="checkbox" id="aw-announce" checked style="accent-color:var(--accent)"> Ogłoś start głosowania na Discordzie</label>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="_fxClose('awards-create-modal')">Anuluj</button>
+      <button class="btn btn-primary" onclick="createAwards()">🗳 Otwórz głosowanie</button>
+    </div>` : `<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Za mało rozegranych meczów w Week ${week}, żeby wybrać kandydatów (potrzeba min. 2 meczów ze statystykami).</div>`);
+  m.classList.add('open');
+}
+
+async function createAwards() {
+  const d = window._awardDraft;
+  const chosen = [...document.querySelectorAll('#awards-create-modal input[data-cat]:checked')].map(x => d.cats[+x.dataset.cat]);
+  if(!chosen.length) { showToast('Zaznacz co najmniej jedną kategorię', 'info'); return; }
+  const res = await _api('/awards', 'POST', { seasonId: d.seasonId, week: d.week, title: `Nagrody Week ${d.week}`, categories: chosen }, { admin: true });
+  if(!res.ok || !res.award) { showToast('❌ ' + (res.error || 'Błąd'), 'error'); return; }
+  awardsList.push(res.award);
+  _fxClose('awards-create-modal');
+  renderAwardsDashboard();
+  showToast('🗳 Głosowanie otwarte — jest na Dashboardzie', 'success');
+  if(document.getElementById('aw-announce')?.checked) {
+    await _scheduleDiscordSend({ embeds: [{
+      title: `🗳 Głosowanie: Nagrody Week ${d.week}`,
+      description: chosen.map(c => `**${c.emoji} ${c.title}**\n` + c.candidates.map(x => `• ${x.label}`).join('\n')).join('\n\n') + '\n\nGłosujcie na stronie (Dashboard)! 👇',
+      url: location.origin + location.pathname, color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+    }] });
+  }
+}
+
+function renderAwardsDashboard() {
+  const el = document.getElementById('awards-dashboard-wrap');
+  if(!el) return;
+  const isAdmin = _isLoggedInSync();
+  const sid = currentSeasonId || null;
+  awardsList = awardsList.filter(Boolean);
+  const open = awardsList.filter(a => a.status === 'open' && (!sid || !a.seasonId || a.seasonId === sid));
+  const lastClosed = [...awardsList].filter(a => a.status === 'closed' && (!sid || !a.seasonId || a.seasonId === sid)).sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt)))[0];
+  const card = a => {
+    const mine = myAwardVotes[a.id] || {};
+    return `<div style="background:linear-gradient(135deg,rgba(245,197,24,.10),rgba(245,197,24,.02));border:1px solid rgba(245,197,24,.4);border-radius:12px;padding:.9rem 1rem;margin-bottom:.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🗳 ${_h(a.title)}</div>
+        ${isAdmin ? `<div style="display:flex;gap:.3rem"><button onclick="closeAwards('${a.id}')" class="btn btn-primary" style="font-size:.72rem;padding:.25rem .6rem">🔒 Zakończ i ogłoś</button>
+          <button onclick="removeAwards('${a.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .5rem">🗑</button></div>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.6rem">
+        ${a.categories.map(c => {
+          const cnt = a.counts?.[c.key] || {}; const tot = Object.values(cnt).reduce((x, y) => x + y, 0);
+          const reveal = !!mine[c.key] || isAdmin;
+          return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.55rem .65rem">
+            <div style="font-weight:800;font-size:.85rem;margin-bottom:.4rem">${c.emoji || ''} ${_h(c.title)}</div>
+            ${c.candidates.map((x, xi) => {
+              const on = mine[c.key] === x.id; const pct = tot ? Math.round((cnt[x.id] || 0) / tot * 100) : 0;
+              return `<button onclick="voteAward('${a.id}','${c.key}',${xi})" style="position:relative;overflow:hidden;width:100%;text-align:left;margin-bottom:.3rem;padding:.4rem .55rem;border-radius:7px;cursor:pointer;font-family:inherit;
+                border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:var(--bg);color:var(--text)">
+                ${reveal ? `<span style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:rgba(245,197,24,.14)"></span>` : ''}
+                <span style="position:relative;display:flex;justify-content:space-between;gap:.4rem">
+                  <span><b style="font-size:.8rem">${on ? '✅ ' : ''}${_h(x.label)}</b><br><span style="font-size:.68rem;color:var(--muted)">${_h(x.sub || '')}</span></span>
+                  ${reveal ? `<b style="font-size:.78rem;color:var(--accent);align-self:center">${pct}%</b>` : ''}
+                </span>
+              </button>`;
+            }).join('')}
+            <div style="font-size:.66rem;color:var(--muted);text-align:right">${tot} ${_plVotes(tot)}${!mine[c.key] && !isAdmin ? ' · zagłosuj, aby zobaczyć wyniki' : ''}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  };
+  const winners = lastClosed && lastClosed.winners ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .8rem;margin-bottom:.75rem;font-size:.8rem">
+      <b>🏅 ${_h(lastClosed.title)}:</b>
+      ${lastClosed.categories.map(c => lastClosed.winners[c.key] ? `<span>${c.emoji || ''} ${_h(c.title)}: <b style="color:var(--accent)">${_h(lastClosed.winners[c.key].label)}</b></span>` : '').join('<span style="color:var(--muted)">·</span>')}
+    </div>` : '';
+  el.innerHTML = open.map(card).join('') + (open.length ? '' : winners);
+}
+
+async function voteAward(id, cat, idx) {
+  if(!_ensureSession()) return;
+  const candId = awardsList.find(a => a.id === id)?.categories.find(c => c.key === cat)?.candidates[idx]?.id;
+  if(!candId) return;
+  const res = await _api('/awards/vote', 'POST', { id, cat, candidateId: candId }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const i = awardsList.findIndex(a => a.id === id);
+  if(i >= 0 && res.award) awardsList[i] = res.award;
+  (myAwardVotes[id] = myAwardVotes[id] || {})[cat] = res.myVote || candId;
+  renderAwardsDashboard();
+}
+
+async function removeAwards(id) {
+  if(!confirm('Usunąć to głosowanie?')) return;
+  const res = await _api('/awards', 'PATCH', { id, remove: true }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  awardsList = awardsList.filter(a => a.id !== id);
+  renderAwardsDashboard();
+}
+
+async function closeAwards(id) {
+  if(!confirm('Zakończyć głosowanie i ogłosić zwycięzców na Discordzie?')) return;
+  const res = await _api('/awards', 'PATCH', { id, status: 'closed' }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const a = res.award;
+  if(!a) { showToast('❌ Brak danych głosowania', 'error'); return; }
+  const i = awardsList.findIndex(x => x.id === id);
+  if(i >= 0) awardsList[i] = a;
+  renderAwardsDashboard();
+  const lines = await Promise.all(a.categories.filter(c => a.winners?.[c.key]).map(async c => {
+    const w = a.winners[c.key];
+    const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'award', data: { label: c.title, holder: w.label, week: a.week, value: w.team, names: [w.label, w.team] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
+    return { name: `${c.emoji || '🏅'} ${c.title}`, value: _trunc(`**${w.label}**${w.team ? ' (' + w.team + ')' : ''} · ${w.votes} ${_plVotes(w.votes)}${fl?.line ? '\n*' + fl.line + '*' : ''}`, 1020) };
+  }));
+  const ok = await _scheduleDiscordSend({ embeds: [{
+    title: `🏅 ${a.title} — zwycięzcy`, fields: lines.length ? lines : [{ name: 'Brak głosów', value: 'Nikt nie zagłosował 😢' }],
+    color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+  }] });
+  showToast(ok ? '🏅 Zwycięzcy ogłoszeni' : '⚠ Głosowanie zamknięte, ale Discord nie przyjął wiadomości', ok ? 'success' : 'info');
+}
+
+// ═══ 📊 POWER RANKING ════════════════════════════════════════════
+function _latestPower(sid) {
+  return [...(powerRankings || [])].filter(p => (p.seasonId || null) === (sid || null)).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0] || null;
+}
+
+function renderPowerRanking() {
+  const el = document.getElementById('power-ranking-wrap');
+  if(!el) return;
+  const isAdmin = _isLoggedInSync();
+  const pr = _latestPower(currentSeasonId || null);
+  if(!pr) {
+    el.innerHTML = isAdmin && schedule.some(s => s.generated && s.seasonId === currentSeasonId)
+      ? `<div style="text-align:right;margin:-.75rem 0 1.25rem"><button onclick="openPowerRankingCreate()" class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .7rem">📊 Utwórz Power Ranking</button></div>` : '';
+    return;
+  }
+  const arrow = e => !e.prev ? '<span style="color:var(--muted);font-size:.7rem">NOWI</span>'
+    : e.prev > e.rank ? `<span style="color:var(--win);font-weight:800">▲${e.prev - e.rank}</span>`
+    : e.prev < e.rank ? `<span style="color:var(--loss);font-weight:800">▼${e.rank - e.prev}</span>` : '<span style="color:var(--muted)">=</span>';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+      <div class="section-title" style="margin-bottom:0;font-size:1.3rem">📊 Power Ranking — Week ${pr.week}</div>
+      ${isAdmin ? `<div style="display:flex;gap:.3rem"><button onclick="openPowerRankingCreate()" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .6rem">🔄 Nowy</button>
+        <button onclick="sendPowerRanking()" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .6rem">📣 Wyślij</button></div>` : ''}
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem">
+      ${pr.entries.map(e => `<div style="display:grid;grid-template-columns:34px 42px 30px 1fr;align-items:center;gap:.6rem;padding:.5rem .9rem;border-bottom:1px solid var(--border)">
+        <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.35rem;color:${e.rank <= 3 ? 'var(--accent)' : 'var(--text)'}">${e.rank}</b>
+        <div style="text-align:center;font-size:.8rem">${arrow(e)}</div>
+        ${teamLogo(e.team, 28, '.65rem')}
+        <div style="min-width:0">
+          <div style="font-weight:800;font-size:.9rem">${_h(e.team)} <span style="font-weight:600;font-size:.72rem;color:var(--muted)">${e.w}-${e.l}${e.form ? ' · ' + e.form : ''}</span></div>
+          <div style="font-size:.76rem;color:var(--muted);font-style:italic">${_h(e.line || '')}</div>
+        </div>
+      </div>`).join('')}
+    </div>`;
+}
+
+async function openPowerRankingCreate() {
+  const sid = (_ssCtx().seasonId) || currentSeasonId || null;
+  const table = _seasonTable(sid);
+  if(table.length < 2) { showToast('Za mało drużyn w sezonie', 'info'); return; }
+  const prev = _latestPower(sid);
+  const doneWeeks = schedule.filter(s => s.generated && s.seasonId === sid && _ssResult({ demo: false }, s)?.done).map(s => s.week);
+  const week = doneWeeks.length ? Math.max(...doneWeeks) : 1;
+  const score = t => (t.gp ? t.w / t.gp : 0) * 100 + (t.gp ? t.diff / t.gp : 0) * 1.5 + (t.form.slice(-3).filter(x => x === 'W').length) * 3;
+  const ordered = [...table].sort((a, b) => score(b) - score(a) || a.team.localeCompare(b.team));
+  const entries = ordered.map((t, i) => ({
+    team: t.team, rank: i + 1, prev: prev?.entries.find(e => e.team === t.team)?.rank || null,
+    w: t.w, l: t.l, diff: t.diff, form: t.form5
+  }));
+  const m = _fxModal('power-modal', 620);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('power-modal', `📊 Power Ranking — Week ${week}`) + '<div style="color:var(--muted);font-size:.85rem">⏳ AI pisze komentarze…</div>';
+  m.classList.add('open');
+  const res = await Promise.race([_api('/ai-power', 'POST', { week, entries }, { admin: true }), new Promise(r => setTimeout(() => r({}), 20000))]);
+  entries.forEach(e => { e.line = res?.lines?.[e.team] || ''; });
+  window._powerDraft = { id: 'pr_' + Date.now(), seasonId: sid, week, createdAt: new Date().toISOString(), entries };
+  box.innerHTML = _fxHead('power-modal', `📊 Power Ranking — Week ${week}`) + `
+    <div style="font-size:.76rem;color:var(--muted);margin-bottom:.6rem">Kolejność: procent zwycięstw, bilans punktów i forma z 3 ostatnich meczów. Możesz poprawić komentarze.</div>
+    <div style="max-height:420px;overflow-y:auto">
+      ${entries.map((e, i) => `<div style="display:grid;grid-template-columns:28px 26px 1fr;gap:.5rem;align-items:center;margin-bottom:.45rem">
+        <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.15rem">${e.rank}</b>${teamLogo(e.team, 24, '.55rem')}
+        <div><div style="font-size:.82rem;font-weight:800">${_h(e.team)} <span style="color:var(--muted);font-weight:600">${e.w}-${e.l}</span></div>
+          <input data-pr="${i}" value="${_h(e.line)}" maxlength="160" style="${_MODAL_INP};font-size:.76rem;padding:.3rem .5rem"></div>
+      </div>`).join('')}
+    </div>
+    <label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;margin:.8rem 0 1rem;cursor:pointer"><input type="checkbox" id="pr-send" checked style="accent-color:var(--accent)"> Wyślij na Discord</label>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="_fxClose('power-modal')">Anuluj</button>
+      <button class="btn btn-primary" onclick="savePowerRanking()">💾 Opublikuj</button>
+    </div>`;
+}
+
+async function savePowerRanking() {
+  const d = window._powerDraft;
+  document.querySelectorAll('#power-modal input[data-pr]').forEach(inp => { d.entries[+inp.dataset.pr].line = inp.value.trim(); });
+  powerRankings = [...(powerRankings || []), d].slice(-40);
+  const ok = await saveData();
+  if(!ok) { powerRankings = powerRankings.filter(x => x !== d); return; }
+  _fxClose('power-modal');
+  renderPowerRanking();
+  showToast('📊 Power Ranking opublikowany', 'success');
+  if(document.getElementById('pr-send')?.checked) await sendPowerRanking(true);
+}
+
+async function sendPowerRanking(silent) {
+  const pr = _latestPower(currentSeasonId || null) || _latestPower(window._powerDraft?.seasonId);
+  if(!pr) return;
+  const arrow = e => !e.prev ? '🆕' : e.prev > e.rank ? `🔼${e.prev - e.rank}` : e.prev < e.rank ? `🔽${e.rank - e.prev}` : '➖';
+  const desc = pr.entries.map(e => `**${e.rank}. ${e.team}** ${arrow(e)} · ${e.w}-${e.l}\n*${e.line || ''}*`).join('\n');
+  const ok = await _scheduleDiscordSend({ embeds: [{
+    title: `📊 Power Ranking — Week ${pr.week}`, description: _trunc(desc, 4000),
+    url: location.origin + location.pathname, color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
+  }] });
+  if(!silent || !ok) showToast(ok ? '📣 Power Ranking wysłany' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
+}
+
+// ═══ 🔁 TRANSFERY ════════════════════════════════════════════════
+function renderTransfers(wrap) {
+  const isAdmin = _isLoggedInSync();
+  const list = transfersList || [];
+  wrap.innerHTML = _regTabsHtml(isAdmin ? `<button onclick="openTransferAdd()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Dodaj transfer</button>` : '') +
+    (list.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.6rem">
+      ${list.map(t => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem">
+        <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.1rem">🔁 ${_h(t.player)}</div>
+          <span style="font-size:.68rem;color:var(--muted)">${new Date(t.at).toLocaleDateString('pl-PL')}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.45rem;margin:.4rem 0;font-size:.82rem;flex-wrap:wrap">
+          ${t.from && t.from !== 'Wolny agent' ? teamLogo(t.from, 22, '.55rem') : '🆓'}<span style="color:var(--muted)">${_h(t.from || 'Wolny agent')}</span>
+          <b style="color:var(--accent)">➜</b>${teamLogo(t.to, 22, '.55rem')}<b>${_h(t.to)}</b>
+        </div>
+        ${t.line ? `<div style="font-size:.78rem;font-style:italic;color:var(--muted)">${_h(t.line)}</div>` : ''}
+        ${t.note ? `<div style="font-size:.78rem;margin-top:.3rem">${_h(t.note)}</div>` : ''}
+        ${isAdmin ? `<div style="text-align:right;margin-top:.4rem"><button onclick="deleteTransfer('${t.id}')" class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .45rem">🗑</button></div>` : ''}
+      </div>`).join('')}
+    </div>` : `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2rem;text-align:center;color:var(--muted)">
+      <div style="font-size:2rem;margin-bottom:.4rem">🔁</div><div style="font-size:.88rem">Okno transferowe jeszcze ciche</div>
+      <div style="font-size:.78rem;margin-top:.25rem">Gdy wolny agent podpisze kontrakt albo gracz zmieni drużynę, zobaczysz to tutaj i na Discordzie.</div></div>`);
+}
+
+function _knownPlayers() {
+  const set = new Set();
+  _withAllMatches(() => matches.forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => p.name && set.add(p.name)))));
+  freeAgents.forEach(f => set.add(f.name));
+  teamRegistrations.forEach(r => (r.players || []).forEach(p => p.gamertag && set.add(p.gamertag)));
+  return [...set].sort((a, b) => a.localeCompare(b, 'pl'));
+}
+function _knownTeams() {
+  const set = new Set(teamRegistrations.filter(r => r.status === 'approved').map(r => r.teamName));
+  _withAllMatches(() => matches.forEach(m => { set.add(m.team1.name); set.add(m.team2.name); }));
+  return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b, 'pl'));
+}
+
+function openTransferAdd() {
+  const m = _fxModal('transfer-modal', 500);
+  const teamsOpts = _knownTeams().map(t => `<option value="${_h(t)}">`).join('');
+  m.querySelector('.modal').innerHTML = _fxHead('transfer-modal', '🔁 Nowy transfer') + `
+    <datalist id="tr-players">${_knownPlayers().map(p => `<option value="${_h(p)}">`).join('')}</datalist>
+    <datalist id="tr-teams"><option value="Wolny agent">${teamsOpts}</datalist>
+    <label style="${_MODAL_LBL}">Zawodnik</label><input id="tr-player" list="tr-players" maxlength="40" style="${_MODAL_INP};margin-bottom:.7rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.7rem">
+      <div><label style="${_MODAL_LBL}">Z drużyny</label><input id="tr-from" list="tr-teams" value="Wolny agent" maxlength="40" style="${_MODAL_INP}"></div>
+      <div><label style="${_MODAL_LBL}">Do drużyny</label><input id="tr-to" list="tr-teams" maxlength="40" style="${_MODAL_INP}"></div>
+    </div>
+    <label style="${_MODAL_LBL}">Notka (opcjonalnie)</label><input id="tr-note" maxlength="200" placeholder="np. wymiana za…" style="${_MODAL_INP};margin-bottom:1rem">
+    <div style="font-size:.74rem;color:var(--muted);margin-bottom:1rem">Transfer pojawi się w zakładce 🔁 Transfery i na Discordzie z komentarzem AI.</div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="_fxClose('transfer-modal')">Anuluj</button>
+      <button class="btn btn-primary" onclick="saveTransfer()">💾 Ogłoś transfer</button>
+    </div>`;
+  m.classList.add('open');
+}
+
+async function saveTransfer() {
+  const player = document.getElementById('tr-player').value.trim(), from = document.getElementById('tr-from').value.trim(),
+        to = document.getElementById('tr-to').value.trim(), note = document.getElementById('tr-note').value.trim();
+  if(!player || !to) { showToast('Podaj zawodnika i nową drużynę', 'info'); return; }
+  if(from && from.toLowerCase() === to.toLowerCase()) { showToast('Drużyny muszą być różne', 'info'); return; }
+  const res = await _api('/transfers', 'POST', { player, from, to, note, seasonId: currentSeasonId || null }, { admin: true });
+  if(!res.ok || !res.transfer) { showToast('❌ ' + (res.error || 'Błąd'), 'error'); return; }
+  transfersList.unshift(res.transfer);
+  _fxClose('transfer-modal');
+  renderTeamRegistrations();
+  showToast('🔁 Transfer ogłoszony', 'success');
+}
+
+async function deleteTransfer(id) {
+  if(!confirm('Usunąć wpis o transferze? (post na Discordzie zostanie)')) return;
+  const res = await _api('/transfers', 'DELETE', { id }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  transfersList = transfersList.filter(t => t.id !== id);
+  renderTeamRegistrations();
+}
+
+// ═══ 🏛 REKORDY: wykrywanie pobitych rekordów ═══════════════════════
+const _REC_KEYS = [
+  { key: 'pts', label: 'Najwięcej punktów w meczu', emoji: '🔥', unit: 'PTS' },
+  { key: 'reb', label: 'Najwięcej zbiórek w meczu', emoji: '💪', unit: 'REB' },
+  { key: 'ast', label: 'Najwięcej asyst w meczu', emoji: '🎯', unit: 'AST' },
+  { key: 'stl', label: 'Najwięcej przechwytów w meczu', emoji: '🦅', unit: 'STL' },
+  { key: 'blk', label: 'Najwięcej bloków w meczu', emoji: '🛡️', unit: 'BLK' },
+  { key: 'tpm', label: 'Najwięcej trójek w meczu', emoji: '🎯', unit: '3PM' },
+  { key: 'teamScore', label: 'Najwyższy wynik drużyny', emoji: '🏀', unit: 'PKT' },
+  { key: 'margin', label: 'Najwyższe zwycięstwo', emoji: '💥', unit: 'PKT różnicy' }
+];
+function _recordEvents() {
+  return _withAllMatches(() => {
+    const best = {}, events = [];
+    const consider = (k, value, holder, team, opp, m) => {
+      const cur = best[k.key];
+      if(!cur || value > cur.value) {
+        if(cur && value > 0) events.push({ ...k, value, holder, team, opp, date: m.date, matchId: m.id, prevHolder: cur.holder, prevValue: cur.value });
+        best[k.key] = { value, holder };
+      }
+    };
+    [...matches].sort((a, b) => String(a.date).localeCompare(String(b.date)) || (Number(a.id) - Number(b.id))).forEach(m => {
+      [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => {
+        _REC_KEYS.slice(0, 6).forEach(k => {
+          const top = [...(t.players || [])].sort((a, b) => (b[k.key] || 0) - (a[k.key] || 0))[0];
+          if(top && (top[k.key] || 0) > 0) consider(k, top[k.key] || 0, top.name, t.name, o.name, m);
+        });
+        consider(_REC_KEYS[6], t.score || 0, t.name, t.name, o.name, m);
+      });
+      const diff = Math.abs((m.team1.score || 0) - (m.team2.score || 0));
+      const win = (m.team1.score || 0) > (m.team2.score || 0) ? m.team1 : m.team2, los = win === m.team1 ? m.team2 : m.team1;
+      consider(_REC_KEYS[7], diff, win.name, win.name, los.name, m);
+    });
+    return events.reverse();
+  });
+}
+
+function renderRecordsBanner() {
+  const el = document.getElementById('records-banner-wrap');
+  if(!el) return;
+  const cutoff = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const recent = _recordEvents().filter(e => String(e.date) >= cutoff).slice(0, 3);
+  const admin = _isLoggedInSync();
+  el.innerHTML = recent.length ? `
+    <div style="background:linear-gradient(135deg,rgba(220,38,38,.14),rgba(245,197,24,.08));border:1px solid rgba(245,197,24,.4);border-radius:12px;padding:.6rem .9rem;margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.35rem">
+        <div style="font-size:.66rem;font-weight:800;letter-spacing:2px;color:var(--accent)">🆕 NOWE REKORDY LIGI</div>
+        <button onclick="openLeagueRecordsModal()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .55rem">🏛 Wszystkie rekordy</button>
+      </div>
+      ${recent.map((e, i) => `<div style="display:flex;align-items:center;gap:.6rem;padding:.3rem 0;${i ? 'border-top:1px solid rgba(255,255,255,.06)' : ''}">
+        <span style="font-size:1.15rem">${e.emoji}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.84rem"><b>${_h(e.label)}:</b> ${_h(e.holder)}${e.team && e.team !== e.holder ? ' (' + _h(e.team) + ')' : ''} — <b style="color:var(--accent)">${e.value} ${e.unit}</b></div>
+          <div style="font-size:.68rem;color:var(--muted)">poprzednio ${_h(e.prevHolder)} (${e.prevValue}) · ${formatDate(e.date)} · vs ${_h(e.opp)}</div>
+        </div>
+        ${admin ? `<button onclick="announceRecord(${i})" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .5rem">📣</button>` : ''}
+      </div>`).join('')}
+    </div>` : '';
+  window._recentRecords = recent;
+}
+
+async function announceRecord(i, fromAll) {
+  const e = (fromAll ? window._allRecordEvents : window._recentRecords)?.[i];
+  if(!e || !confirm(`Ogłosić na Discordzie rekord: ${e.label} — ${e.holder} (${e.value})?`)) return;
+  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'record', data: { label: e.label, holder: e.holder, value: e.value + ' ' + e.unit, prevHolder: e.prevHolder, prevValue: e.prevValue, opp: e.opp, names: [e.holder, e.team, e.prevHolder, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
+  const ok = await _scheduleDiscordSend({ embeds: [{
+    title: `${e.emoji} Nowy rekord ligi!`,
+    description: `**${e.label}**\n${e.holder}${e.team && e.team !== e.holder ? ' (' + e.team + ')' : ''} — **${e.value} ${e.unit}** vs ${e.opp}\nPoprzedni rekord: ${e.prevHolder} (${e.prevValue})${fl?.line ? `\n\n🎙️ *${fl.line}*` : ''}`,
+    color: 0xdc2626, footer: { text: 'NBA 2K Pro-Am Ekstraklasa · Rekordy' }, timestamp: new Date().toISOString()
+  }] });
+  showToast(ok ? '📣 Rekord ogłoszony' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
+}
+
+function _recordsTimelineHtml() {
+  const ev = _recordEvents().slice(0, 12);
+  window._allRecordEvents = ev;
+  if(!ev.length) return '';
+  const admin = _isLoggedInSync();
+  return `<div style="margin-bottom:1.25rem">
+    <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🆕 OSTATNIO POBITE REKORDY</div>
+    ${ev.map((e, i) => `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;border-bottom:1px solid var(--border);font-size:.8rem">
+      <span>${e.emoji}</span>
+      <div style="flex:1;min-width:0"><b>${_h(e.holder)}</b> — ${e.value} ${e.unit} <span style="color:var(--muted)">(${_h(e.label)}, wcześniej ${_h(e.prevHolder)}: ${e.prevValue})</span></div>
+      <span style="font-size:.7rem;color:var(--muted)">${formatDate(e.date)}</span>
+      ${admin ? `<button onclick="announceRecord(${i},true)" class="btn btn-ghost" style="font-size:.66rem;padding:.15rem .4rem">📣</button>` : ''}
+    </div>`).join('')}
+  </div>`;
+}
+
+// ═══ 👤 PROFILE: odznaki gracza, trofea i rywalizacje drużyny ═══════
+function _playerBadgesHtml(name) {
+  const badges = [];
+  awardsList.filter(a => a && a.status === 'closed' && a.winners).forEach(a => a.categories.forEach(c => {
+    const w = a.winners[c.key];
+    if(w && String(w.id).split('|')[0] === name) badges.push({ icon: c.emoji || '🏅', text: `${c.title} · Week ${a.week}${_seasonName(a.seasonId) ? ' · ' + _seasonName(a.seasonId) : ''}` });
+  }));
+  playoffs.filter(po => po.champion).forEach(po => {
+    const played = _withAllMatches(() => getPlayoffMatches(po)).some(m => [m.team1, m.team2].some(t => t.name === po.champion && (t.players || []).some(p => p.name === name)));
+    if(played) badges.push({ icon: '🏆', text: `Mistrz · ${_seasonName(po.seasonId) || (po.startDate || '').slice(0, 4)}` });
+  });
+  const teamsBySeason = {};
+  _withAllMatches(() => matches.forEach(m => [m.team1, m.team2].forEach(t => {
+    if((t.players || []).some(p => p.name === name)) {
+      const sn = _seasonName(m.seasonId) || 'Bez sezonu';
+      (teamsBySeason[sn] = teamsBySeason[sn] || new Set()).add(t.name);
+    }
+  })));
+  const tr = (transfersList || []).filter(t => t.player === name);
+  if(!badges.length && Object.keys(teamsBySeason).length < 2 && !tr.length) return '';
+  return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">
+    ${badges.length ? `<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.5rem">${badges.map(b => `<span style="font-size:.74rem;background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.4);border-radius:999px;padding:.15rem .6rem">${b.icon} ${_h(b.text)}</span>`).join('')}</div>` : ''}
+    <div style="font-size:.74rem;color:var(--muted)">🧭 Kariera: ${Object.entries(teamsBySeason).map(([sn, set]) => `<b style="color:var(--text)">${_h(sn)}</b>: ${[...set].map(_h).join(', ')}`).join(' · ')}</div>
+    ${tr.length ? `<div style="font-size:.74rem;color:var(--muted);margin-top:.25rem">🔁 ${tr.map(t => `${_h(t.from || 'Wolny agent')} ➜ ${_h(t.to)} (${new Date(t.at).toLocaleDateString('pl-PL')})`).join(' · ')}</div>` : ''}
+  </div>`;
+}
+
+function _teamExtrasHtml(tn) {
+  const trophies = [];
+  playoffs.forEach(po => {
+    const sn = _seasonName(po.seasonId) || (po.startDate || '').slice(0, 4);
+    if(po.champion === tn) trophies.push(`🏆 Mistrz · ${sn}`);
+    else {
+      const fin = [...(po.rounds || [])].reverse().find(r => /fina/i.test(r.name) && !/3/.test(r.name));
+      if(po.champion && fin?.pairs?.some(p => p.team1 === tn || p.team2 === tn)) trophies.push(`🥈 Finał · ${sn}`);
+    }
+  });
+  awardsList.filter(a => a.status === 'closed' && a.winners).forEach(a => a.categories.forEach(c => {
+    const w = a.winners[c.key];
+    if(w && (w.team === tn || String(w.id).split('|')[1] === tn)) trophies.push(`${c.emoji || '🏅'} ${c.title} (${w.label}) · Week ${a.week}`);
+  }));
+  const h2h = {};
+  _withAllMatches(() => matches.forEach(m => {
+    if(m.team1.name !== tn && m.team2.name !== tn) return;
+    const me = m.team1.name === tn ? m.team1 : m.team2, op = me === m.team1 ? m.team2 : m.team1;
+    const x = h2h[op.name] = h2h[op.name] || { w: 0, l: 0, sw: 0, sl: 0 };
+    const win = me.score > op.score;
+    win ? x.w++ : x.l++;
+    if(currentSeasonId && m.seasonId === currentSeasonId) win ? x.sw++ : x.sl++;
+  }));
+  const rows = Object.entries(h2h).sort((a, b) => (b[1].w + b[1].l) - (a[1].w + a[1].l)).slice(0, 10);
+  const tr = (transfersList || []).filter(t => t.to === tn || t.from === tn).slice(0, 6);
+  if(!trophies.length && !rows.length && !tr.length) return '';
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.75rem;margin-bottom:1.25rem">
+    ${trophies.length ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">GABLOTA</div>
+      ${trophies.map(t => `<div style="font-size:.8rem;margin-bottom:.2rem">${_h(t)}</div>`).join('')}</div>` : ''}
+    ${rows.length ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">BILANS Z RYWALAMI <span style="font-weight:600">(wszystkie sezony · ten sezon)</span></div>
+      ${rows.map(([op, x]) => `<div style="display:flex;justify-content:space-between;gap:.5rem;font-size:.78rem;margin-bottom:.15rem">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(op)}</span>
+        <span><b style="color:${x.w >= x.l ? 'var(--win)' : 'var(--loss)'}">${x.w}-${x.l}</b>${x.sw + x.sl ? ` <span style="color:var(--muted)">· ${x.sw}-${x.sl}</span>` : ''}</span>
+      </div>`).join('')}</div>` : ''}
+    ${tr.length ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">TRANSFERY</div>
+      ${tr.map(t => `<div style="font-size:.78rem;margin-bottom:.15rem">${t.to === tn ? '➕' : '➖'} ${_h(t.player)} <span style="color:var(--muted)">${t.to === tn ? 'z ' + _h(t.from || 'wolnych agentów') : 'do ' + _h(t.to)}</span></div>`).join('')}</div>` : ''}
+  </div>`;
 }
 
 function goToTeamRegistrations() {
@@ -7498,6 +8375,7 @@ function renderTeamRegistrations() {
   const badge = document.getElementById('team-reg-admin-badge');
   if(badge) { badge.textContent = pendingCount; badge.style.display = pendingCount ? 'inline' : 'none'; }
   if(_regTab === 'fa') { renderFreeAgents(wrap); return; }
+  if(_regTab === 'tr') { renderTransfers(wrap); return; }
   const cards = [...teamRegistrations]
     .filter(r => r.status !== 'rejected' || isAdmin || isMyTeam(r))
     .sort((a,b) => isAdmin ? (_stOrder[a.status]??9) - (_stOrder[b.status]??9) : 0)
@@ -17171,6 +18049,34 @@ async function _dsLaunch() {
 
 
 // Dashboard: tabela, liderzy, drużyna tygodnia itd. liczone tylko z meczów bieżącego sezonu
+// Profile i rekordy: dodatkowe sekcje (odznaki, gablota, rywalizacje, pobite rekordy)
+(function() {
+  const inject = (fnName, elId, htmlFn, position) => {
+    if(typeof window[fnName] !== 'function' || window[fnName]._extended) return;
+    const orig = window[fnName];
+    window[fnName] = function(...args) {
+      const before = document.getElementById(elId)?.innerHTML;
+      const out = orig.apply(this, args);
+      try {
+        const el = document.getElementById(elId);
+        if(!el || el.innerHTML === before) return out; // modal nie został przerysowany (np. brak danych)
+        const html = htmlFn(...args);
+        if(el && html) {
+          const box = document.createElement('div');
+          box.innerHTML = html;
+          if(position === 'afterFirst' && el.firstElementChild) el.firstElementChild.after(box);
+          else el.prepend(box);
+        }
+      } catch(e) { console.warn(fnName + ' extras', e); }
+      return out;
+    };
+    window[fnName]._extended = true;
+  };
+  inject('openPlayerModal', 'player-modal-content', name => _playerBadgesHtml(name), 'afterFirst');
+  inject('openTeamModal', 'team-modal-content', tn => _teamExtrasHtml(tn), 'afterFirst');
+  inject('openLeagueRecordsModal', 'league-records-content', () => _recordsTimelineHtml(), 'prepend');
+})();
+
 ['renderPlayoffDashboard', 'syncPlayoffBracket'].forEach(fn => {
   if(typeof window[fn] !== 'function' || window[fn]._allScoped) return;
   const orig = window[fn];
