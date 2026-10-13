@@ -2060,7 +2060,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides, teamRegistrations, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
+      ovrMethod, ovrOverrides, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
       powerRankings, _loadedAt: _dataLoadedAt,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
@@ -2128,12 +2128,19 @@ async function loadData() {
 
     // ── Primary: Cloudflare KV via Worker ────────────────────────────────
     if(workerUrl) {
-      const res = await fetch(workerUrl.replace(/\/$/, '') + '/data');
+      const base = workerUrl.replace(/\/$/, '');
+      // Dane dodatkowe (zgłoszenia, agenci, głosy, typer…) z lekkiego endpointu — równolegle
+      const extrasP = fetch(base + '/extras').then(r => r.ok ? r.json() : null).catch(() => null);
+      const res = await fetch(base + '/data');
       if(res.ok) {
         const data = await res.json();
-        if(data.record) {
-          record = data.record;
-          window._dataLoadedAt = data.record._savedAt || Date.now();
+        const rec0 = data.record || (data.matches ? data : null);
+        if(rec0) {
+          record = rec0;
+          window._dataLoadedAt = record._savedAt || Date.now();
+          const extras = await extrasP;
+          if(extras && !extras.error) Object.assign(record, extras);
+          window._needDerived = !!(extras && !extras.error && !extras.derivedAt);
         }
       }
     }
@@ -4733,6 +4740,8 @@ async function saveSetup() {
   await loadData();
   renderDashboard();
   updateAuthUI();
+  // Jednorazowo po aktualizacji Workera: admin zapisuje dane, żeby Worker przeliczył dane pochodne
+  if(window._needDerived && _isLoggedInSync()) setTimeout(() => saveData(true).catch(() => {}), 1500);
   applyLangOnLoad();
   if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
   checkEventUrlParam();
