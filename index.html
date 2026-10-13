@@ -6152,16 +6152,44 @@ function _ssPickFull(v, ws) {
   return wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' + _ssFmt(date);
 }
 
+// Okna godzinowe propozycji: 1–3 h, np. 20:00–22:00
+const TW_OPTS = Array.from({ length: 25 }, (_, i) => { const m = 12 * 60 + i * 30; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + (m % 60 ? '30' : '00'); });
+function _twMin(x) { return +x.slice(0, 2) * 60 + +x.slice(3, 5); }
+function _twValid(f, t) { if(!f || !t) return false; const d = _twMin(t) - _twMin(f); return d >= 60 && d <= 180; }
+function _tw(f, t) { return f && t ? `${f}–${t}` : ''; }
+function _twWin(pick, day) {
+  if(!pick) return null;
+  if(pick.primary === day && pick.primaryFrom) return { f: pick.primaryFrom, t: pick.primaryTo };
+  if(pick.backup === day && pick.backupFrom) return { f: pick.backupFrom, t: pick.backupTo };
+  return null;
+}
+function _twOverlap(a, b) {
+  if(!a || !b) return null;
+  const f = Math.max(_twMin(a.f), _twMin(b.f)), t = Math.min(_twMin(a.t), _twMin(b.t));
+  if(t - f < 30) return null;
+  const hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  return { f: hm(f), t: hm(t) };
+}
+function _dowOfPick(ws, v) { return (new Date(_ssPickDate(ws, v) + 'T12:00:00').getDay() + 6) % 7; }
+
 function _ssSuggest(p, ws) {
   const a = p?.team1, b = p?.team2;
   if(!a || !b) return null;
-  if(a.primary === b.primary) return { day: a.primary, kind: 'match' };
+  const withWin = (day, kind) => {
+    const wa = _twWin(a, day), wb = _twWin(b, day);
+    const ov = _twOverlap(wa, wb);
+    return { day, kind, overlap: ov, wa, wb, time: ov?.f || null };
+  };
+  if(a.primary === b.primary) return withWin(a.primary, 'match');
   const aSet = [a.primary, a.backup], bSet = [b.primary, b.backup];
   const cands = [];
   if(bSet.includes(a.primary)) cands.push(a.primary);
   if(aSet.includes(b.primary)) cands.push(b.primary);
-  if(cands.length) return { day: cands.sort((x, y) => _ssPickDate(ws, x).localeCompare(_ssPickDate(ws, y)))[0], kind: 'partial' };
-  if(a.backup === b.backup) return { day: a.backup, kind: 'backup' };
+  if(cands.length) {
+    const opts = cands.map(d => withWin(d, 'partial')).sort((x, y) => (!!y.overlap - !!x.overlap) || _ssPickDate(ws, x.day).localeCompare(_ssPickDate(ws, y.day)));
+    return opts[0];
+  }
+  if(a.backup === b.backup) return withWin(a.backup, 'backup');
   return { day: null, kind: 'none' };
 }
 
@@ -6490,8 +6518,9 @@ function _ssDaySection(ctx, s) {
   const p = ctx.picks[k] || {};
   const isFinal = !!s.date;
   const ws = s.weekStart;
-  const chip = (day, kind) => `<span title="${_ssPickFull(day, ws)}" style="display:inline-block;font-size:.72rem;padding:.12rem .45rem;border-radius:5px;margin:.1rem .15rem 0 0;
-    ${kind === 'primary' ? 'background:var(--accent);color:rgba(0,0,0,.88);font-weight:700' : 'border:1px solid var(--border);color:var(--muted)'}">${kind === 'primary' ? '⭐ ' : '↺ '}${_ssPickLabel(ws, day)}</span>`;
+  const chip = (day, kind, pk) => { const w = pk ? _tw(pk[kind + 'From'], pk[kind + 'To']) : '';
+    return `<span title="${_ssPickFull(day, ws)}${w ? ', ' + w : ''}" style="display:inline-block;font-size:.72rem;padding:.12rem .45rem;border-radius:5px;margin:.1rem .15rem 0 0;
+    ${kind === 'primary' ? 'background:var(--accent);color:rgba(0,0,0,.88);font-weight:700' : 'border:1px solid var(--border);color:var(--muted)'}">${kind === 'primary' ? '⭐ ' : '↺ '}${_ssPickLabel(ws, day)}${w ? ' · ' + w : ''}</span>`; };
 
   const col = side => {
     const pk = p[side];
@@ -6499,7 +6528,7 @@ function _ssDaySection(ctx, s) {
     const head = `<div style="font-size:.66rem;color:var(--muted);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isMine ? '🏀 Ty · ' : ''}${_h(s[side])}</div>`;
     const av = ctx.demo ? '' : _availLine(s[side], s);
     if(isMine && !isFinal) return head + _ssPicker(ctx, s, side) + av;
-    return head + (pk ? chip(pk.primary, 'primary') + chip(pk.backup, 'backup') : `<span style="font-size:.72rem;color:var(--muted)">— czeka na wybór —</span>`) + av;
+    return head + (pk ? chip(pk.primary, 'primary', pk) + chip(pk.backup, 'backup', pk) : `<span style="font-size:.72rem;color:var(--muted)">— czeka na wybór —</span>`) + av;
   };
 
   let suggestHtml = '';
@@ -6507,10 +6536,11 @@ function _ssDaySection(ctx, s) {
     const sg = _ssSuggest(p, ws);
     const msg = !sg
       ? (p.team1 || p.team2 ? `⏳ Czeka na: ${_h(p.team1 ? s.team2 : s.team1)}` : '')
-      : sg.kind === 'match' ? `✨ Oba priorytety zgodne: <b>${_ssPickLabel(ws, sg.day)}</b>`
-      : sg.kind === 'partial' ? `👍 Wspólny dzień: <b>${_ssPickLabel(ws, sg.day)}</b>`
-      : sg.kind === 'backup' ? `↺ Zgodne tylko dni zapasowe: <b>${_ssPickLabel(ws, sg.day)}</b>`
-      : `⚠ Brak wspólnego dnia — termin ustala admin`;
+      : sg.kind === 'none' ? `⚠ Brak wspólnego dnia — termin ustala admin`
+      : (sg.kind === 'match' ? '✨ Oba priorytety zgodne: ' : sg.kind === 'partial' ? '👍 Wspólny dzień: ' : '↺ Zgodne tylko dni zapasowe: ') +
+        `<b>${_ssPickLabel(ws, sg.day)}</b>` +
+        (sg.overlap ? ` · wspólne okno <b>${_tw(sg.overlap.f, sg.overlap.t)}</b>`
+          : sg.wa && sg.wb ? ` · <span style="color:var(--loss)">godziny się nie pokrywają (${_tw(sg.wa.f, sg.wa.t)} vs ${_tw(sg.wb.f, sg.wb.t)})</span>` : '');
     if(msg) suggestHtml = `<div style="font-size:.75rem;margin-top:.5rem;color:${sg && sg.kind === 'none' ? 'var(--loss)' : 'var(--text)'}">${msg}</div>`;
   }
 
@@ -6528,18 +6558,33 @@ function _ssDaySection(ctx, s) {
 function _ssPicker(ctx, s, side) {
   const k = String(s.id);
   const saved = ctx.picks[k]?.[side] || {};
-  const d = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '', open: {} };
+  const d = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '', primaryFrom: saved.primaryFrom || '', primaryTo: saved.primaryTo || '', backupFrom: saved.backupFrom || '', backupTo: saved.backupTo || '', open: {} };
   d.open = d.open || {};
-  const dirty = d.primary !== (saved.primary || '') || d.backup !== (saved.backup || '');
+  const keys = ['primary', 'backup', 'primaryFrom', 'primaryTo', 'backupFrom', 'backupTo'];
+  const dirty = keys.some(x => (d[x] || '') !== (saved[x] || ''));
   const today = new Date().toISOString().slice(0, 10);
   const btnStyle = (on, disabled, kind) => `flex:1;font-size:.7rem;padding:.25rem 0;border-radius:5px;font-family:inherit;cursor:${disabled ? 'not-allowed' : 'pointer'};
     border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? (kind === 'primary' ? 'var(--accent)' : 'rgba(245,197,24,.15)') : 'transparent'};
     color:${on ? (kind === 'primary' ? 'rgba(0,0,0,.88)' : 'var(--accent)') : disabled ? 'rgba(127,127,127,.35)' : 'var(--text)'}`;
+  const sel = (kind, which) => `<select onchange="ssPickTime('${k}','${kind}','${which}',this.value)" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.15rem .2rem;font-family:inherit;font-size:.7rem">
+      <option value="">—</option>${TW_OPTS.map(o => `<option ${d[kind + which] === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
   const row = (kind, label) => {
     const custom = d.open[kind] || _ssIsCustom(d[kind]);
     const other = kind === 'backup' ? d.primary : '';
+    const f = d[kind + 'From'], t = d[kind + 'To'];
+    const winBad = (f || t) && !_twValid(f, t);
+    // ilu potwierdzonych graczy z mojej drużyny może w tym dniu i oknie
+    let avail = '';
+    if(!ctx.demo && d[kind] && _twValid(f, t)) {
+      const ps = _teamPlayers(s[side], s.seasonId);
+      if(ps.length) {
+        const dow = _dowOfPick(s.weekStart, d[kind]);
+        const ok = ps.filter(p => _availOn(p, s.week, dow) && (!p.hours?.[dow] || _twOverlap({ f, t }, { f: p.hours[dow][0], t: p.hours[dow][1] })));
+        avail = `<div style="font-size:.62rem;color:var(--muted);margin-top:.12rem">👥 może grać: <b style="color:${ok.length >= 5 ? 'var(--win)' : 'var(--text)'}">${ok.length}</b> / ${ps.length}</div>`;
+      }
+    }
     return `
-    <div style="font-size:.64rem;color:var(--muted);margin:.25rem 0 .15rem">${label}</div>
+    <div style="font-size:.64rem;color:var(--muted);margin:.3rem 0 .15rem">${label}</div>
     <div style="display:flex;gap:.25rem">
       ${Object.keys(SS_DAYS).map(day => {
         const on = d[kind] === day && !custom;
@@ -6549,17 +6594,18 @@ function _ssPicker(ctx, s, side) {
       <button onclick="ssPickDraft('${k}','${kind}','custom')" title="Inny termin uzgodniony z rywalem" style="${btnStyle(custom, false, kind)}">📅 Inny</button>
     </div>
     ${custom ? `
-      <div style="display:flex;gap:.25rem;margin-top:.25rem">
-        <input type="date" id="ss-c-${k}-${kind}-d" min="${today}" value="${_ssIsCustom(d[kind]) ? d[kind].slice(0, 10) : ''}" onchange="ssPickCustom('${k}','${kind}')"
-          style="flex:2;min-width:0;background:var(--bg);border:1px solid var(--accent);color:var(--text);border-radius:5px;padding:.2rem .3rem;font-family:inherit;font-size:.7rem">
-        <input type="time" id="ss-c-${k}-${kind}-t" value="${_ssPickTime(d[kind])}" onchange="ssPickCustom('${k}','${kind}')" title="Godzina (opcjonalnie)"
-          style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .3rem;font-family:inherit;font-size:.7rem">
-      </div>
+      <input type="date" id="ss-c-${k}-${kind}-d" min="${today}" value="${_ssIsCustom(d[kind]) ? d[kind].slice(0, 10) : ''}" onchange="ssPickCustom('${k}','${kind}')"
+        style="width:100%;box-sizing:border-box;margin-top:.25rem;background:var(--bg);border:1px solid var(--accent);color:var(--text);border-radius:5px;padding:.2rem .3rem;font-family:inherit;font-size:.7rem">
       ${_ssIsCustom(d[kind]) && (d[kind].slice(0, 10) < s.weekStart || d[kind].slice(0, 10) > _ssAddDays(s.weekStart, 6))
-        ? `<div style="font-size:.62rem;color:var(--accent);margin-top:.15rem">⚠ Poza tygodniem ${s.week} — upewnij się, że rywal się zgadza</div>` : ''}` : ''}`;
+        ? `<div style="font-size:.62rem;color:var(--accent);margin-top:.15rem">⚠ Poza tygodniem ${s.week} — upewnij się, że rywal się zgadza</div>` : ''}` : ''}
+    <div style="display:flex;gap:.25rem;align-items:center;margin-top:.25rem;font-size:.66rem;color:var(--muted)">🕐 od ${sel(kind, 'From')} do ${sel(kind, 'To')}</div>
+    ${winBad ? '<div style="font-size:.62rem;color:var(--loss);margin-top:.12rem">Okno ma mieć od 1 do 3 godzin</div>' : ''}
+    ${avail}`;
   };
-  const canSave = d.primary && d.backup && d.primary !== d.backup && dirty;
-  return row('primary', '⭐ Priorytet') + row('backup', '↺ Zapas') + `
+  const winsOk = _twValid(d.primaryFrom, d.primaryTo) && _twValid(d.backupFrom, d.backupTo);
+  const canSave = d.primary && d.backup && d.primary !== d.backup && winsOk && dirty;
+  const hint = d.primary && d.backup && !winsOk ? '<div style="font-size:.62rem;color:var(--muted);margin-top:.25rem">Podaj okno godzin (1–3 h) dla obu dni, np. 20:00–22:00</div>' : '';
+  return row('primary', '⭐ Priorytet') + row('backup', '↺ Zapas') + hint + `
     <button onclick="ssSavePick('${k}')" ${canSave ? '' : 'disabled'} class="btn btn-primary" style="width:100%;margin-top:.4rem;font-size:.72rem;padding:.25rem 0;${canSave ? '' : 'opacity:.45'}">
       ${saved.primary && !dirty ? '✓ Zapisano' : '💾 Zapisz wybór'}</button>`;
 }
@@ -6580,7 +6626,9 @@ function _ssAdminActions(ctx, s, res) {
       const customs = [...new Set(['team1', 'team2'].flatMap(sd => [p[sd]?.primary, p[sd]?.backup]).filter(_ssIsCustom))];
       [...Object.keys(SS_DAYS), ...customs].forEach(v => {
         const sug = sg && sg.day === v;
-        out.push(`<button onclick="ssFinalize('${k}','${v}')" class="btn ${sug ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.2rem .5rem">✅ ${_ssPickLabel(s.weekStart, v)}</button>`);
+        const wa = _twWin(p.team1, v), wb = _twWin(p.team2, v), ov = _twOverlap(wa, wb);
+        const tm = ov?.f || wa?.f || wb?.f || '';
+        out.push(`<button onclick="ssFinalize('${k}','${v}','${tm}')" class="btn ${sug ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.2rem .5rem">✅ ${_ssPickLabel(s.weekStart, v)}${tm && !_ssPickTime(v) ? ' ' + tm : ''}</button>`);
       });
     }
   }
@@ -6835,7 +6883,7 @@ function ssPickDraft(k, kind, val) {
   const s = _ssItem(k);
   const side = ctx.myTeam && (String(s.team1).toLowerCase() === ctx.myTeam.toLowerCase() ? 'team1' : 'team2');
   const saved = ctx.picks[k]?.[side] || {};
-  const d = _ssDraft[k] = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '', open: {} };
+  const d = _ssDraft[k] = _ssDraft[k] || { primary: saved.primary || '', backup: saved.backup || '', primaryFrom: saved.primaryFrom || '', primaryTo: saved.primaryTo || '', backupFrom: saved.backupFrom || '', backupTo: saved.backupTo || '', open: {} };
   d.open = d.open || {};
   if(val === 'custom') {
     d.open[kind] = true;
@@ -6848,12 +6896,24 @@ function ssPickDraft(k, kind, val) {
   renderSeasonSchedule();
 }
 
+function ssPickTime(k, kind, which, val) {
+  if(!_ssDraft[k]) ssPickDraft(k, kind, _ssCtx().picks[k]?.[_ssMySide(k)]?.[kind] || '');
+  const d = _ssDraft[k];
+  d[kind + which] = val;
+  // wygodnie: po wybraniu „od” podpowiedz „do” = +2 h
+  if(which === 'From' && val && !d[kind + 'To']) { const m = Math.min(_twMin(val) + 120, 24 * 60); d[kind + 'To'] = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  renderSeasonSchedule();
+}
+function _ssMySide(k) {
+  const ctx = _ssCtx(), s = _ssItem(k);
+  return ctx.myTeam && s && (String(s.team1).toLowerCase() === ctx.myTeam.toLowerCase() ? 'team1' : 'team2');
+}
+
 function ssPickCustom(k, kind) {
   const d = _ssDraft[k];
   if(!d) return;
   const date = document.getElementById(`ss-c-${k}-${kind}-d`)?.value || '';
-  const time = document.getElementById(`ss-c-${k}-${kind}-t`)?.value || '';
-  d[kind] = date ? date + (time ? 'T' + time : '') : '';
+  d[kind] = date || '';
   if(kind === 'primary' && d.backup && d.backup === d.primary) d.backup = '';
   renderSeasonSchedule();
 }
@@ -6865,14 +6925,14 @@ async function ssSavePick(k) {
     const s = _ssItem(k);
     const side = String(s.team1).toLowerCase() === _demo.captainTeam.toLowerCase() ? 'team1' : 'team2';
     _demo.picks[k] = _demo.picks[k] || {};
-    _demo.picks[k][side] = { primary: d.primary, backup: d.backup, by: 'Demo' };
+    _demo.picks[k][side] = { primary: d.primary, backup: d.backup, primaryFrom: d.primaryFrom, primaryTo: d.primaryTo, backupFrom: d.backupFrom, backupTo: d.backupTo, by: 'Demo' };
     delete _ssDraft[k];
     renderSeasonSchedule();
     showToast('✅ (demo) Zapisano wybór terminu', 'success');
     return;
   }
   if(!_ensureSession()) return;
-  const res = await _api('/schedule-day-pick', 'POST', { scheduleId: k, primary: d.primary, backup: d.backup }, { session: true });
+  const res = await _api('/schedule-day-pick', 'POST', { scheduleId: k, primary: d.primary, backup: d.backup, primaryFrom: d.primaryFrom, primaryTo: d.primaryTo, backupFrom: d.backupFrom, backupTo: d.backupTo }, { session: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   scheduleDayPicks[k] = res.picks;
   delete _ssDraft[k];
@@ -6880,11 +6940,11 @@ async function ssSavePick(k) {
   showToast('✅ Zapisano wybór terminu', 'success');
 }
 
-async function ssFinalize(k, day) {
+async function ssFinalize(k, day, pickedTime) {
   const s = _ssItem(k);
   if(!s) return;
   const date = _ssPickDate(s.weekStart, day);
-  const time = _ssPickTime(day) || s.defaultTime || (_demo ? _demo.fixture?.time : seasons.find(x => x.id === s.seasonId)?.fixture?.time) || '20:00';
+  const time = _ssPickTime(day) || pickedTime || s.defaultTime || (_demo ? _demo.fixture?.time : seasons.find(x => x.id === s.seasonId)?.fixture?.time) || '20:00';
   const full = _ssPickFull(day, s.weekStart);
   if(!_demo && !confirm(`Zatwierdzić termin ${s.team1} vs ${s.team2}: ${full}, ${time}?`)) return;
   Object.assign(s, { date, time, finalDay: day });
@@ -7177,7 +7237,8 @@ function _demoSeed() {
   });
   // tydzień 2 — różne przypadki wyboru terminu
   const w2 = _demo.items.filter(s => s.week === 2);
-  const set = (s, a, b) => { _demo.picks[String(s.id)] = { ...(a ? { team1: { primary: a[0], backup: a[1] } } : {}), ...(b ? { team2: { primary: b[0], backup: b[1] } } : {}) }; };
+  const W = (x, f1, t1, f2, t2) => ({ primary: x[0], backup: x[1], primaryFrom: f1, primaryTo: t1, backupFrom: f2, backupTo: t2 });
+  const set = (s, a, b) => { _demo.picks[String(s.id)] = { ...(a ? { team1: W(a, '20:00', '22:00', '19:00', '21:00') } : {}), ...(b ? { team2: W(b, '20:30', '22:30', '18:00', '20:00') } : {}) }; };
   if(w2[0]) set(w2[0], ['wed', 'sun'], ['wed', 'mon']);   // zgodne priorytety
   if(w2[1]) set(w2[1], ['mon', 'sun'], ['sun', 'wed']);   // priorytet = zapas drugiej
   if(w2[2]) set(w2[2], ['mon', 'wed'], ['sun', 'wed']);   // zgodny tylko zapas
@@ -9238,7 +9299,13 @@ function openMyPanel() {
       </div>
       ${isCaptain ? `<div style="margin-bottom:.7rem">${_membersHtml(team, true, 'panel') || '<div style="font-size:.74rem;color:var(--muted)">Nikt z drużyny nie połączył jeszcze konta.</div>'}</div>` : ''}
       <label style="${_MODAL_LBL}">W które dni zwykle mogę grać</label>
-      <div style="display:flex;gap:.3rem;margin-bottom:.7rem">${dayRow(days, 'g')}</div>
+      <div style="display:flex;gap:.3rem;margin-bottom:.45rem">${dayRow(days, 'g')}</div>
+      ${(() => { const h = Object.values(myProfile?.hours || {})[0] || ['', ''];
+        const opt = v => '<option value="">—</option>' + TW_OPTS.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('');
+        return `<div style="display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(--muted);margin-bottom:.7rem">🕐 zwykle w godzinach od
+          <select id="me-h-f" style="width:auto;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem">${opt(h[0])}</select> do
+          <select id="me-h-t" style="width:auto;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem">${opt(h[1])}</select>
+          <span style="font-size:.68rem">(puste = cały wieczór)</span></div>`; })()}
       ${nextWeek ? `<label style="${_MODAL_LBL}">Wyjątek na Week ${curWeek || nextWeek} <span style="font-weight:400;text-transform:none;letter-spacing:0">(zostaw puste = jak zwykle)</span></label>
         <div style="display:flex;gap:.3rem;margin-bottom:.8rem">${dayRow(wkDays(curWeek || nextWeek) || [false, false, false, false, false, false, false], 'w')}</div>` : ''}
       <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="saveMyProfile(${curWeek || nextWeek || 'null'})">💾 Zapisz</button></div>
@@ -9258,11 +9325,15 @@ async function saveMyProfile(week) {
   if(!_ensureSession()) return;
   const read = key => DOW.map((_, i) => !!document.querySelector(`#mypanel-modal button[data-k="${key}"][data-i="${i}"]`)?.classList.contains('on'));
   const days = read('g'), wk = read('w');
+  const hf = document.getElementById('me-h-f')?.value || '', ht = document.getElementById('me-h-t')?.value || '';
+  if((hf || ht) && !(hf && ht && _twMin(ht) > _twMin(hf))) { showToast('Podaj godziny „od” i „do” (koniec po początku)', 'info'); return; }
+  const hours = {};
+  if(hf && ht) DOW.forEach((_, i) => { if(days[i] || wk[i]) hours[i] = [hf, ht]; });
   const weeks = { ...(myProfile?.weeks || {}) };
   if(week) { if(wk.some(Boolean)) weeks[week] = wk; else delete weeks[week]; }
   const isCaptainNow = discordUser && teamRegistrations.some(r => r.status === 'approved' && r.captain?.id === discordUser.id);
   const capTeam = isCaptainNow ? _myTeamName() : null;
-  const res = await _api('/me', 'POST', { team: capTeam || document.getElementById('me-team').value, gamertag: capTeam ? (myProfile?.gamertag || '') : (document.getElementById('me-gt').value || '').trim(), days, weeks, seasonId: currentSeasonId || null }, { session: true });
+  const res = await _api('/me', 'POST', { team: capTeam || document.getElementById('me-team').value, gamertag: capTeam ? (myProfile?.gamertag || '') : (document.getElementById('me-gt').value || '').trim(), days, weeks, hours, seasonId: currentSeasonId || null }, { session: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   myProfile = res.me;
   const i = playersList.findIndex(p => p.id === res.me.id);
