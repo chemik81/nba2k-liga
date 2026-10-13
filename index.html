@@ -792,6 +792,7 @@
         <div style="font-size:.8rem;color:rgba(255,255,255,0.6);margin-top:.25rem;letter-spacing:1px;">OFICJALNA PLATFORMA LIGOWA</div>
       </div>
     </div>
+    <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div id="team-registrations-wrap" style="margin-bottom:1.5rem"></div>
     <div id="events-dashboard-wrap"></div>
 
@@ -840,7 +841,6 @@
         <div class="card" style="padding:1rem" id="top3-wrap"><div style="color:var(--muted);font-size:.9rem">Brak danych</div></div>
       </div>
     </div>
-    <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div id="milestone-banner" style="margin-bottom:1.5rem"></div>
     <div id="round-comparison-wrap" style="margin-bottom:1.5rem"></div>
     <div id="event-ratings-wrap" style="margin-bottom:1.5rem"></div>
@@ -6365,14 +6365,14 @@ function renderSeasonSchedule() {
   const byes = (ctx.fixture?.byes?.[_ssWeek] || []);
 
   el.innerHTML = header + demoBar + _ssToolsHtml(ctx) + groupsHtml + `
-    <div style="display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.4rem;margin-bottom:.75rem">${tabs}</div>
+    ${_ssScheduledList(ctx, groupName)}
+    <div style="display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.4rem;margin:1.25rem 0 .75rem">${tabs}</div>
     ${byGroup.map(({ g, list }) => `
       ${g ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.4rem 0 .4rem;text-transform:uppercase">${_h(g.name)}</div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:.6rem;margin-bottom:.5rem">
         ${list.map(s => _ssCard(ctx, s, groupName)).join('')}
       </div>`).join('')}
     ${byes.length ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">💤 Pauzuje: ${byes.map(b => _h(b.team) + ' (' + [groupName(b.groupId), b.round ? 'kolejka ' + b.round : ''].filter(Boolean).join(', ') + ')').join(', ')}</div>` : ''}
-    ${_ssScheduledList(ctx, groupName)}
     ${_typerHtml(ctx)}`;
 }
 
@@ -6407,7 +6407,7 @@ function _ssScheduledList(ctx, groupName) {
       </div>`;
   }).join('');
   return `
-    <div style="margin-top:1.5rem">
+    <div style="margin-top:.25rem">
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📅 Umówione mecze (${list.length})</div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
         ${rows || '<div style="padding:1.1rem;text-align:center;color:var(--muted);font-size:.85rem">Jeszcze żaden termin nie został zatwierdzony</div>'}
