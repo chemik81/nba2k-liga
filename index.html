@@ -758,6 +758,7 @@
   </a>
   <nav>
     <button class="active" onclick="showView('dashboard')" data-i18n="nav_dashboard">Dashboard</button>
+    <button id="nav-mypanel" onclick="showView('mypanel')" style="position:relative">👤 Mój panel<span id="mypanel-badge" style="display:none;position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#dc2626;color:#fff;font-size:.62rem;font-weight:900;line-height:16px;text-align:center"></span></button>
     <button id="nav-events" onclick="showView('events')">🏆 Eventy</button>
     <button onclick="showView('matches')" data-i18n="nav_matches">Mecze</button>
     <button onclick="showView('stats')" data-i18n="nav_stats">Statystyki</button>
@@ -1008,6 +1009,10 @@
 
 
   <!-- SCHEDULE -->
+  <div id="view-mypanel" class="view">
+    <div id="mypanel-view"></div>
+  </div>
+
   <div id="view-schedule" class="view">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem">
       <div class="section-title" style="margin-bottom:0" data-i18n="schedule_title">📅 Harmonogram</div>
@@ -2348,10 +2353,11 @@ function showView(id) {
 function _doShowView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + id).classList.add('active');
-  document.querySelectorAll('nav button').forEach((b,i) => {
-    const ids = ['dashboard','matches','stats','add-match','schedule','aliases','events'];
-    b.classList.toggle('active', ids[i] === id);
+  document.querySelectorAll('nav button').forEach(b => {
+    const m = (b.getAttribute('onclick') || '').match(/showView\('([\w-]+)'\)/);
+    b.classList.toggle('active', !!m && m[1] === id);
   });
+  if(id==='mypanel') renderMyPanelView();
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
   if(id==='stats') { renderStats(); populateTeamFilter(); }
@@ -4122,7 +4128,7 @@ function renderDashboard() {
   renderStandings();
   if(typeof renderPlayoffDashboard === 'function') renderPlayoffDashboard();
   _eloCache = null; _achCache = null;
-  for(const fn of [renderLiveBanner, renderQuickLinks, renderRecordsBanner, renderAchievementsDashboard, renderAwardsDashboard, renderBracketDashboard, renderPenaltiesNote, renderScenarios, renderPowerRanking, renderEloDashboard]) {
+  for(const fn of [updateMyPanelBadge, renderLiveBanner, renderQuickLinks, renderRecordsBanner, renderAchievementsDashboard, renderAwardsDashboard, renderBracketDashboard, renderPenaltiesNote, renderScenarios, renderPowerRanking, renderEloDashboard]) {
     try { fn(); } catch(e) { console.warn('dashboard extras', fn.name, e); }
   }
   loadTeams();
@@ -6005,6 +6011,8 @@ async function _loadMyVotes() {
     myBracket = res.bracket || {};
     myClipLikes = new Set(res.clipLikes || []);
     myProfile = res.me || null;
+    if(typeof updateMyPanelBadge === 'function') updateMyPanelBadge();
+    if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView();
     if(typeof renderBracketDashboard === 'function') renderBracketDashboard();
     if(typeof renderSchedule === 'function') renderSchedule();
     if(typeof renderAwardsDashboard === 'function') renderAwardsDashboard();
@@ -7293,6 +7301,7 @@ function openDeepLink() {
     return;
   }
   if(h === 'kronika') { showView('dashboard'); setTimeout(openChronicle, 300); return; }
+  if(h === 'panel' || h === 'moj-panel') { showView('mypanel'); return; }
   if(h === 'zapisy' || h === 'wolni-agenci' || h === 'transfery') {
     _regTab = h === 'zapisy' ? 'teams' : h === 'transfery' ? 'tr' : 'fa';
     showView('dashboard');
@@ -9207,7 +9216,8 @@ async function decideMember(playerId, approve, from) {
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   Object.assign(p, res.player);
   showToast(approve ? '✅ Potwierdzono' : 'Usunięto z drużyny', 'success');
-  if(from === 'panel') openMyPanel(); else if(from === 'roster') openTeamRoster(); else renderTeamRegistrations();
+  if(from === 'panel') renderMyPanelView(); else if(from === 'roster') openTeamRoster(); else renderTeamRegistrations();
+  updateMyPanelBadge();
   renderSeasonSchedule();
 }
 function _membersHtml(team, canDecide, from) {
@@ -9219,30 +9229,63 @@ function _membersHtml(team, canDecide, from) {
     ${conf.length ? `<div style="font-size:.74rem;margin-top:.3rem;color:var(--muted)">👥 Konta na stronie: ${conf.map(p => `<span style="margin-right:.4rem">${_h(p.name)} (${_h(p.gamertag || 'kapitan')})${canDecide && p.gamertag ? ' ' + btn(p.id, false, '✕') : ''}</span>`).join('')}</div>` : ''}`;
 }
 
-function openMyPanel() {
-  if(!discordUser) { loginWithDiscord(); return; }
+function openMyPanel() { showView('mypanel'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+// Lista „Do zrobienia” (też dla licznika w zakładce)
+function _myTodo() {
+  if(!discordUser) return [];
+  const sid = currentSeasonId || null;
+  const team = _myTeamName();
+  const isCaptain = !!(discordUser && teamRegistrations.some(r => r.status === 'approved' && r.captain?.id === discordUser.id));
+  const items = schedule.filter(s => s.generated && (s.seasonId || null) === sid);
+  const ctx = { demo: false };
+  const todo = [];
+  if(team) {
+    items.filter(s => [s.team1, s.team2].includes(team) && !s.date && !_ssResult(ctx, s)).forEach(s => {
+      const side = s.team1 === team ? 'team1' : 'team2';
+      if(isCaptain && !scheduleDayPicks[String(s.id)]?.[side]) todo.push({ urgent: true, html: `📅 Wybierz termin: vs <b>${_h(s[side === 'team1' ? 'team2' : 'team1'])}</b> (Week ${s.week})`, go: `showView('schedule');_ssWeek=${s.week};renderSchedule()` });
+    });
+    pendingResults.filter(p => { const s = items.find(x => String(x.id) === String(p.scheduleId)); return s && [s.team1, s.team2].includes(team) && s[p.side] !== team; })
+      .forEach(p => { const s = items.find(x => String(x.id) === String(p.scheduleId));
+        todo.push({ urgent: true, html: `📸 Potwierdź wynik: ${_h(p.matchData.team1.name)} ${p.matchData.team1.score}:${p.matchData.team2.score} ${_h(p.matchData.team2.name)}`, go: `showView('schedule');_ssWeek=${s?.week || 1};renderSchedule()` }); });
+  }
+  if(isCaptain && team) _memberRequestsFor(team).filter(p => p.status === 'pending').forEach(p => todo.push({ urgent: true, html: `👤 <b>${_h(p.name)}</b> chce dołączyć jako ${_h(p.gamertag)}`, go: `openTeamRoster('${String(team).replace(/'/g, "\\'")}','g')` }));
+  awardsList.filter(a => a.status === 'open' && a.categories.some(c => !myAwardVotes[a.id]?.[c.key])).forEach(a => todo.push({ urgent: true, html: `🗳 Zagłosuj: <b>${_h(a.title)}</b>`, go: `showView('dashboard');setTimeout(()=>document.getElementById('awards-dashboard-wrap')?.scrollIntoView({behavior:'smooth'}),200)` }));
+  const openVotes = items.filter(s => !_voteClosedClient(s) && !myVotes[String(s.id)] && !_ssResult(ctx, s)).length;
+  if(openVotes) todo.push({ urgent: false, html: `🎯 Wytypuj zwycięzców: ${openVotes} ${_plPL(openVotes, 'mecz czeka', 'mecze czekają', 'meczów czeka')} na Twój typ`, go: `showView('schedule')` });
+  const po = typeof getActivePlayoff === 'function' ? getActivePlayoff() : null;
+  if(po && _bracketReady(po) && !bracketData[String(po.id)]?.locked && !myBracket[String(po.id)]) todo.push({ urgent: true, html: '🏆 Wypełnij drabinkę w Typerze playoffów', go: 'openBracketPicker()' });
+  if(!myProfile || !myProfile.team) todo.push({ urgent: false, html: '🔗 Połącz konto z drużyną (niżej)', go: `document.getElementById('me-profile-box')?.scrollIntoView({behavior:'smooth'})` });
+  else if(!myProfile.days?.some(Boolean)) todo.push({ urgent: false, html: '👥 Ustaw swoją dostępność (niżej)', go: `document.getElementById('me-profile-box')?.scrollIntoView({behavior:'smooth'})` });
+  return todo;
+}
+function updateMyPanelBadge() {
+  const el = document.getElementById('mypanel-badge');
+  if(!el) return;
+  const n = discordUser ? _myTodo().filter(t => t.urgent).length : 0;
+  el.textContent = n; el.style.display = n ? 'inline-block' : 'none';
+}
+
+function renderMyPanelView() {
+  const target = document.getElementById('mypanel-view');
+  if(!target) return;
+  if(!discordUser) {
+    target.innerHTML = `<div class="section-title">👤 Mój panel</div>
+      <div class="card" style="padding:2rem;text-align:center;max-width:620px;margin:0 auto">
+        <div style="font-size:2.4rem;margin-bottom:.5rem">🏀</div>
+        <div style="font-weight:900;font-size:1.15rem;margin-bottom:.5rem">Twoje miejsce w lidze</div>
+        <div style="font-size:.86rem;color:var(--muted);line-height:1.6;margin-bottom:1.2rem">Po zalogowaniu przez Discord zobaczysz tu mecze swojej drużyny, swoje statystyki, rzeczy do zrobienia (terminy, wyniki, głosowania) i ustawisz, w które dni możesz grać.</div>
+        <button class="btn btn-primary" onclick="loginWithDiscord()">Zaloguj przez Discord</button>
+      </div>`;
+    return;
+  }
   const sid = currentSeasonId || null;
   const team = _myTeamName(), me = _myPlayerName();
   const isCaptain = !!(discordUser && teamRegistrations.some(r => r.status === 'approved' && r.captain?.id === discordUser.id));
   const items = schedule.filter(s => s.generated && (s.seasonId || null) === sid);
   const ctx = { demo: false };
-  // Do zrobienia
-  const todo = [];
-  if(team) {
-    items.filter(s => [s.team1, s.team2].includes(team) && !s.date && !_ssResult(ctx, s)).forEach(s => {
-      const side = s.team1 === team ? 'team1' : 'team2';
-      if(isCaptain && !scheduleDayPicks[String(s.id)]?.[side]) todo.push(`📅 Wybierz termin: vs <b>${_h(s[side === 'team1' ? 'team2' : 'team1'])}</b> (Week ${s.week})`);
-    });
-    pendingResults.filter(p => { const s = items.find(x => String(x.id) === String(p.scheduleId)); return s && [s.team1, s.team2].includes(team) && s[p.side] !== team; })
-      .forEach(p => todo.push(`📸 Potwierdź wynik: ${_h(p.matchData.team1.name)} ${p.matchData.team1.score}:${p.matchData.team2.score} ${_h(p.matchData.team2.name)}`));
-  }
-  if(isCaptain && team) _memberRequestsFor(team).filter(p => p.status === 'pending').forEach(p => todo.push(`👤 <b>${_h(p.name)}</b> chce dołączyć jako ${_h(p.gamertag)} — potwierdź niżej`));
-  awardsList.filter(a => a.status === 'open' && a.categories.some(c => !myAwardVotes[a.id]?.[c.key])).forEach(a => todo.push(`🗳 Zagłosuj: <b>${_h(a.title)}</b> (Dashboard)`));
-  const openVotes = items.filter(s => !_voteClosedClient(s) && !myVotes[String(s.id)] && !_ssResult(ctx, s)).length;
-  if(openVotes) todo.push(`🎯 Wytypuj zwycięzców: ${openVotes} ${openVotes === 1 ? 'mecz czeka' : 'mecze czekają'} na Twój typ`);
-  const po = typeof getActivePlayoff === 'function' ? getActivePlayoff() : null;
-  if(po && _bracketReady(po) && !bracketData[String(po.id)]?.locked && !myBracket[String(po.id)]) todo.push('🏆 Wypełnij drabinkę w Typerze playoffów');
-  if(!myProfile || !myProfile.days?.some(Boolean)) todo.push('👥 Ustaw swoją dostępność (niżej) — kapitan zobaczy, w które dni możesz grać');
+  const todo = _myTodo();
+  updateMyPanelBadge();
   // Najbliższe mecze drużyny
   const next = team ? items.filter(s => [s.team1, s.team2].includes(team) && !_ssResult(ctx, s)?.done)
     .sort((a, b) => (a.date || '9999') .localeCompare(b.date || '9999') || a.week - b.week).slice(0, 4) : [];
@@ -9263,8 +9306,9 @@ function openMyPanel() {
   const wkDays = w => (myProfile?.weeks?.[w]) || null;
   const dayRow = (arr, key) => DOW.map((d, i) => `<button type="button" data-k="${key}" data-i="${i}" onclick="this.classList.toggle('on');this.style.background=this.classList.contains('on')?'var(--accent)':'var(--bg)';this.style.color=this.classList.contains('on')?'rgba(0,0,0,.88)':'var(--text)'"
     class="${arr[i] ? 'on' : ''}" style="flex:1;min-width:38px;padding:.35rem 0;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-family:inherit;font-weight:800;font-size:.76rem;background:${arr[i] ? 'var(--accent)' : 'var(--bg)'};color:${arr[i] ? 'rgba(0,0,0,.88)' : 'var(--text)'}">${d}</button>`).join('');
-  const m = _fxModal('mypanel-modal', 720);
-  m.querySelector('.modal').innerHTML = _fxHead('mypanel-modal', `👤 Mój panel`) + `
+  target.innerHTML = `<div class="section-title">👤 Mój panel</div>
+    <div style="max-width:980px">`;
+  target.innerHTML += `
     <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1rem">
       ${_avatarHtml(discordUser.avatar, 44)}
       <div><div style="font-weight:900;font-size:1.05rem">${_h(discordUser.name)}${isCaptain ? ' <span style="font-size:.7rem;color:var(--accent)">🧢 KAPITAN</span>' : ''}</div>
@@ -9273,7 +9317,8 @@ function openMyPanel() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.8rem">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
         <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">✅ DO ZROBIENIA</div>
-        ${todo.map(t => `<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px dashed rgba(127,127,127,.2)">${t}</div>`).join('') || '<div style="font-size:.8rem;color:var(--win)">Wszystko zrobione 👌</div>'}
+        ${todo.map(t => `<div onclick="${t.go || ''}" style="font-size:.82rem;padding:.35rem .3rem;border-bottom:1px dashed rgba(127,127,127,.2);cursor:pointer;display:flex;gap:.4rem;align-items:center">
+          ${t.urgent ? '<span style="width:7px;height:7px;border-radius:50%;background:#dc2626;flex-shrink:0"></span>' : '<span style="width:7px;flex-shrink:0"></span>'}<span style="flex:1">${t.html}</span><span style="color:var(--muted)">›</span></div>`).join('') || '<div style="font-size:.8rem;color:var(--win)">Wszystko zrobione 👌</div>'}
       </div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
         <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📅 NAJBLIŻSZE MECZE${team ? ' — ' + _h(team).toUpperCase() : ''}</div>
@@ -9288,7 +9333,7 @@ function openMyPanel() {
           <button class="btn btn-ghost" style="font-size:.72rem" onclick="openPlayerModal(this.dataset.p)" data-p="${_h(me)}">Profil</button></div>` : ''}
       </div>
     </div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem;margin-top:.8rem">
+    <div id="me-profile-box" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem;margin-top:.8rem">
       <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">🎮 MÓJ PROFIL GRACZA I DOSTĘPNOŚĆ</div>
       ${isCaptain ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.6rem">🧢 Jako kapitan jesteś przypisany do <b>${_h(team)}</b> automatycznie.</div>`
         : `<div style="font-size:.74rem;color:var(--muted);margin-bottom:.6rem">Wybierz drużynę i swój nick ze składu — przypisanie potwierdza kapitan drużyny. Nie ma Cię w składzie? Poproś kapitana o dopisanie.
@@ -9312,7 +9357,7 @@ function openMyPanel() {
         <div style="display:flex;gap:.3rem;margin-bottom:.8rem">${dayRow(wkDays(curWeek || nextWeek) || [false, false, false, false, false, false, false], 'w')}</div>` : ''}
       <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="saveMyProfile(${curWeek || nextWeek || 'null'})">💾 Zapisz</button></div>
     </div>`;
-  m.classList.add('open');
+  target.innerHTML += '</div>';
   _meFillRoster(isCaptain ? team : (myProfile?.team || ''), myProfile?.gamertag || me || '');
 }
 function _meFillRoster(teamName, sel) {
@@ -9325,7 +9370,7 @@ function _meFillRoster(teamName, sel) {
 }
 async function saveMyProfile(week) {
   if(!_ensureSession()) return;
-  const read = key => DOW.map((_, i) => !!document.querySelector(`#mypanel-modal button[data-k="${key}"][data-i="${i}"]`)?.classList.contains('on'));
+  const read = key => DOW.map((_, i) => !!document.querySelector(`#mypanel-view button[data-k="${key}"][data-i="${i}"]`)?.classList.contains('on'));
   const days = read('g'), wk = read('w');
   const hf = document.getElementById('me-h-f')?.value || '', ht = document.getElementById('me-h-t')?.value || '';
   if((hf || ht) && !(hf && ht && _twMin(ht) > _twMin(hf))) { showToast('Podaj godziny „od” i „do” (koniec po początku)', 'info'); return; }
@@ -9341,7 +9386,7 @@ async function saveMyProfile(week) {
   const i = playersList.findIndex(p => p.id === res.me.id);
   if(i >= 0) playersList[i] = res.me; else playersList.push(res.me);
   showToast(myProfile.status === 'pending' ? '✅ Zapisano — kapitan dostał prośbę o potwierdzenie' : '✅ Zapisano', 'success');
-  openMyPanel(); renderSeasonSchedule();
+  renderMyPanelView(); renderSeasonSchedule();
 }
 
 // ═══ 🪪 KARTA ZAWODNIKA ══════════════════════════════════════════
@@ -12305,7 +12350,7 @@ function logoutDiscord() {
   localStorage.removeItem('nba2k_discord_user');
   updateAuthUI();
   renderEvents();
-  try { renderTeamRegistrations(); renderSchedule(); } catch(e) {}
+  try { renderTeamRegistrations(); renderSchedule(); updateMyPanelBadge(); if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView(); } catch(e) {}
   showToast('👋 Wylogowano z Discorda', 'info');
 }
 
