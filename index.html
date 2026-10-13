@@ -8870,7 +8870,7 @@ function renderQuickLinks() {
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
     ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
-    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
   </div>`;
 }
 
@@ -9216,7 +9216,7 @@ async function decideMember(playerId, approve, from) {
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   Object.assign(p, res.player);
   showToast(approve ? '✅ Potwierdzono' : 'Usunięto z drużyny', 'success');
-  if(from === 'panel') renderMyPanelView(); else if(from === 'roster') openTeamRoster(); else renderTeamRegistrations();
+  if(from === 'panel') renderMyPanelView(); else if(from === 'roster') openTeamRoster(); else if(from === 'users') _renderUsersOverview(); else renderTeamRegistrations();
   updateMyPanelBadge();
   renderSeasonSchedule();
 }
@@ -9732,6 +9732,99 @@ function openTeamRoster(team, week) {
       <button class="btn btn-ghost" style="font-size:.76rem" onclick="navigator.clipboard?.writeText(${JSON.stringify(invite).replace(/"/g, '&quot;')}).then(()=>showToast('📋 Skopiowano zaproszenie — wklej je graczom na Discordzie','success'))">📋 Kopiuj zaproszenie dla graczy</button>
     </div>` : ''}`;
   m.classList.add('open');
+}
+
+
+// ═══ 👥 ADMIN: UŻYTKOWNICY I SKŁADY ═════════════════════════════
+let _uo = { tab: 'teams', q: '', filter: 'all', users: null };
+async function openUsersOverview(tab) {
+  if(tab) _uo.tab = tab;
+  const m = _fxModal('users-modal', 980);
+  const box = m.querySelector('.modal');
+  m.classList.add('open');
+  if(!_uo.users) {
+    box.innerHTML = _fxHead('users-modal', '👥 Użytkownicy i składy') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
+    const res = await _api('/users', 'GET', null, { admin: true });
+    _uo.users = res.ok ? res.users : [];
+  }
+  _renderUsersOverview();
+}
+function _renderUsersOverview() {
+  const box = document.querySelector('#users-modal .modal');
+  if(!box) return;
+  const sid = currentSeasonId || null;
+  const regs = teamRegistrations.filter(r => r.status === 'approved' && (!sid || !r.seasonId || r.seasonId === sid));
+  const tabBtn = (id, label) => `<button onclick="_uo.tab='${id}';_renderUsersOverview()" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:1px;text-transform:uppercase;padding:.35rem .8rem;border-radius:7px;border:none;cursor:pointer;background:${_uo.tab === id ? 'var(--accent)' : 'transparent'};color:${_uo.tab === id ? 'rgba(0,0,0,.88)' : 'var(--muted)'}">${label}</button>`;
+  const th = s => `<th style="font-size:.66rem;font-weight:800;letter-spacing:.5px;color:var(--muted);padding:.4rem .5rem;text-align:${s || 'left'};white-space:nowrap">`;
+  const td = 'style="padding:.42rem .5rem;border-top:1px solid var(--border);font-size:.8rem;text-align:left"';
+  let body = '';
+  if(_uo.tab === 'teams') {
+    const rows = regs.map(r => {
+      const acc = playersList.filter(p => p.team && String(p.team).toLowerCase() === r.teamName.toLowerCase());
+      const conf = acc.filter(p => p.status === 'confirmed'), pend = acc.filter(p => p.status === 'pending');
+      const rosterN = (r.players || []).length;
+      const linkedNicks = new Set(conf.map(p => String(p.gamertag || '').toLowerCase()).filter(Boolean));
+      const linked = (r.players || []).filter(p => linkedNicks.has(String(p.gamertag).toLowerCase())).length;
+      const cnt = i => conf.filter(p => (p.days || [])[i]).length;
+      const col = n => `<b style="color:${n >= 5 ? 'var(--win)' : n >= 3 ? 'var(--accent)' : n ? 'var(--loss)' : 'var(--muted)'}">${n}</b>`;
+      return `<tr style="cursor:pointer" onclick="openTeamRoster(this.dataset.t,'g')" data-t="${_h(r.teamName)}">
+        <td ${td}><span style="display:inline-flex;align-items:center;gap:.4rem">${teamLogo(r.teamName, 22, '.5rem')}<b>${_h(r.teamName)}</b></span></td>
+        <td ${td}>${_h(r.captain?.name || '?')}${conf.some(p => p.id === r.captain?.id) ? ' <span title="kapitan zalogowany na stronie">✅</span>' : ''}</td>
+        <td ${td} style="text-align:center">${rosterN}</td>
+        <td ${td} style="text-align:center"><b style="color:${linked === rosterN && rosterN ? 'var(--win)' : 'var(--text)'}">${linked}</b> / ${rosterN}</td>
+        <td ${td} style="text-align:center">${pend.length ? `<b style="color:var(--accent)">⏳ ${pend.length}</b>` : '—'}</td>
+        <td ${td} style="text-align:center">${col(cnt(0))} · ${col(cnt(2))} · ${col(cnt(6))}</td>
+        <td ${td} style="text-align:right;color:var(--muted)">›</td>
+      </tr>`.replace(/<td style="padding:.42rem .5rem;border-top:1px solid var\(--border\);font-size:.8rem;text-align:left" style="/g, '<td style="padding:.42rem .5rem;border-top:1px solid var(--border);font-size:.8rem;');
+    }).join('');
+    const totRoster = regs.reduce((a, r) => a + (r.players || []).length, 0);
+    const totConf = playersList.filter(p => p.status === 'confirmed' && regs.some(r => r.teamName.toLowerCase() === String(p.team).toLowerCase())).length;
+    body = `<div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">${regs.length} drużyn · ${totRoster} graczy w składach · <b style="color:var(--text)">${totConf}</b> potwierdzonych kont · kliknij drużynę, aby zobaczyć skład i dostępność</div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px"><table style="width:100%;border-collapse:collapse;min-width:720px">
+        <thead><tr style="background:var(--surface2)">${th()}DRUŻYNA</th>${th()}KAPITAN</th>${th('center')}SKŁAD</th>${th('center')}POŁĄCZENI</th>${th('center')}DO POTWIERDZENIA</th>${th('center')}MOŻE GRAĆ Pn · Śr · Nd</th>${th()}</th></tr></thead>
+        <tbody>${rows || `<tr><td ${td} colspan="7" style="text-align:center;color:var(--muted)">Brak zatwierdzonych drużyn</td></tr>`}</tbody></table></div>`;
+  } else {
+    // wszyscy znani użytkownicy: aktywność + profil + rola
+    const map = new Map();
+    (_uo.users || []).forEach(u => map.set(u.id, { ...u }));
+    playersList.forEach(p => { const u = map.get(p.id) || { id: p.id, name: p.name, avatar: p.avatar }; u.profile = p; map.set(p.id, u); });
+    teamRegistrations.filter(r => r.captain?.id).forEach(r => { const u = map.get(r.captain.id) || { id: r.captain.id, name: r.captain.name, avatar: r.captain.avatar }; (u.captainOf = u.captainOf || []).push(r.teamName); map.set(r.captain.id, u); });
+    freeAgents.filter(f => f.status === 'active').forEach(f => { const u = map.get(f.discordId) || { id: f.discordId, name: f.name, avatar: f.avatar }; u.fa = f; map.set(f.discordId, u); });
+    const ago = iso => { if(!iso) return '—'; const d = Math.floor((Date.now() - new Date(iso)) / 864e5); return d <= 0 ? 'dziś' : d === 1 ? 'wczoraj' : `${d} dni temu`; };
+    let list = [...map.values()];
+    const q = _uo.q.toLowerCase();
+    if(q) list = list.filter(u => [u.name, u.tag, u.profile?.team, u.profile?.gamertag, ...(u.captainOf || [])].join(' ').toLowerCase().includes(q));
+    if(_uo.filter === 'noteam') list = list.filter(u => !u.profile?.team && !u.captainOf);
+    if(_uo.filter === 'pending') list = list.filter(u => u.profile?.status === 'pending');
+    if(_uo.filter === 'active7') list = list.filter(u => u.lastSeen && Date.now() - new Date(u.lastSeen) < 7 * 864e5);
+    list.sort((a, b) => String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')) || String(a.name).localeCompare(String(b.name), 'pl'));
+    const active7 = [...map.values()].filter(u => u.lastSeen && Date.now() - new Date(u.lastSeen) < 7 * 864e5).length;
+    const chip = (id, label) => `<button onclick="_uo.filter='${id}';_renderUsersOverview()" style="font-size:.72rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer;font-family:inherit;border:1px solid ${_uo.filter === id ? 'var(--accent)' : 'var(--border)'};background:${_uo.filter === id ? 'rgba(245,197,24,.15)' : 'transparent'};color:${_uo.filter === id ? 'var(--accent)' : 'var(--text)'}">${label}</button>`;
+    const role = u => [
+      ...(u.captainOf || []).map(t => `<span style="color:var(--accent)">🧢 ${_h(t)}</span>`),
+      u.profile?.team && !(u.captainOf || []).includes(u.profile.team) ? `${u.profile.status === 'confirmed' ? '✅' : '⏳'} ${_h(u.profile.team)} <span style="color:var(--muted)">(${_h(u.profile.gamertag || '—')})</span>` : '',
+      u.fa ? `🆓 wolny agent (${_h(u.fa.pos1)})` : ''
+    ].filter(Boolean).join('<br>') || '<span style="color:var(--muted)">kibic</span>';
+    body = `<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">
+        <input value="${_h(_uo.q)}" oninput="_uo.q=this.value;clearTimeout(window._uoT);window._uoT=setTimeout(_renderUsersOverview,250)" placeholder="Szukaj: nick, drużyna…" style="${_MODAL_INP};max-width:240px">
+        ${chip('all', 'Wszyscy')}${chip('active7', `Aktywni 7 dni (${active7})`)}${chip('pending', 'Czekają na kapitana')}${chip('noteam', 'Bez drużyny')}
+        <span style="flex:1"></span><span style="font-size:.74rem;color:var(--muted)">${list.length} os.</span>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;max-height:58vh;overflow-y:auto"><table style="width:100%;border-collapse:collapse;min-width:720px">
+        <thead><tr style="background:var(--surface2);position:sticky;top:0">${th()}UŻYTKOWNIK</th>${th()}DRUŻYNA / ROLA</th>${th('center')}OSTATNIO</th>${th('center')}DNI NA STRONIE</th>${th()}</th></tr></thead>
+        <tbody>${list.map(u => `<tr>
+          <td ${td}><span style="display:inline-flex;align-items:center;gap:.45rem">${_avatarHtml(u.avatar, 26)}<span><b>${_h(u.name || '?')}</b>${u.tag ? `<br><span style="font-size:.68rem;color:var(--muted)">@${_h(u.tag)}</span>` : ''}</span></span></td>
+          <td ${td}>${role(u)}</td>
+          <td ${td} style="text-align:center">${ago(u.lastSeen)}</td>
+          <td ${td} style="text-align:center">${u.days || '—'}</td>
+          <td ${td} style="text-align:right;white-space:nowrap">${u.profile?.status === 'pending' ? `<button class="btn btn-primary" style="font-size:.64rem;padding:.1rem .35rem" onclick="decideMember('${u.id}',true,'users')">✅</button> <button class="btn btn-ghost" style="font-size:.64rem;padding:.1rem .35rem" onclick="decideMember('${u.id}',false,'users')">❌</button>` : u.profile?.status === 'confirmed' && !(u.captainOf || []).includes(u.profile.team) ? `<button class="btn btn-ghost" title="Odłącz od drużyny" style="font-size:.64rem;padding:.1rem .35rem" onclick="decideMember('${u.id}',false,'users')">✕</button>` : ''}</td>
+        </tr>`.replace(/<td style="padding:.42rem .5rem;border-top:1px solid var\(--border\);font-size:.8rem;text-align:left" style="/g, '<td style="padding:.42rem .5rem;border-top:1px solid var(--border);font-size:.8rem;')).join('') || `<tr><td ${td} colspan="5" style="text-align:center;color:var(--muted)">Brak użytkowników</td></tr>`}</tbody></table></div>
+      <div style="font-size:.7rem;color:var(--muted);margin-top:.45rem">„Ostatnio” = ostatnie wejście na stronę zalogowanym kontem (zapisywane od tej aktualizacji). Osoby sprzed aktualizacji widać, jeśli głosowały, zgłaszały się albo są kapitanami.</div>`;
+  }
+  box.innerHTML = _fxHead('users-modal', '👥 Użytkownicy i składy') + `
+    <div style="display:flex;gap:.2rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.2rem;margin-bottom:.8rem;width:fit-content">
+      ${tabBtn('teams', '🏀 Drużyny')}${tabBtn('users', '👤 Użytkownicy')}
+    </div>${body}`;
 }
 
 function goToTeamRegistrations() {
