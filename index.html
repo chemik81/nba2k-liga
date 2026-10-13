@@ -9112,7 +9112,7 @@ async function deleteClip(id, k) {
 
 // ═══ 👥 DOSTĘPNOŚĆ SKŁADU ═════════════════════════════════════════
 function _teamPlayers(team, sid) {
-  return playersList.filter(p => p.team && String(p.team).toLowerCase() === String(team).toLowerCase() && (!sid || !p.seasonId || p.seasonId === sid));
+  return playersList.filter(p => p.team && p.status === 'confirmed' && String(p.team).toLowerCase() === String(team).toLowerCase() && (!sid || !p.seasonId || p.seasonId === sid));
 }
 function _availOn(p, week, dowIdx) { const d = (p.weeks && p.weeks[week]) || p.days || []; return !!d[dowIdx]; }
 function _availLine(team, s) {
@@ -9124,15 +9124,40 @@ function _availLine(team, s) {
 
 // ═══ 👤 MÓJ PANEL ════════════════════════════════════════════════
 function _myPlayerName() {
-  if(myProfile?.gamertag) return myProfile.gamertag;
+  if(myProfile?.gamertag && myProfile.status === 'confirmed') return myProfile.gamertag;
   if(typeof discordPsnMap !== 'undefined' && discordUser) return discordPsnMap[discordUser.discordTag] || discordPsnMap[discordUser.name] || discordPsnMap[discordUser.username] || null;
   return null;
 }
 function _myTeamName() {
   const sid = currentSeasonId || null;
   const cap = discordUser ? teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id && (!sid || !r.seasonId || r.seasonId === sid)) : null;
-  return cap?.teamName || myProfile?.team || null;
+  return cap?.teamName || (myProfile?.status === 'confirmed' ? myProfile.team : null) || null;
 }
+function _memberRequestsFor(team) {
+  return playersList.filter(p => p.team && String(p.team).toLowerCase() === String(team).toLowerCase());
+}
+async function decideMember(playerId, approve, from) {
+  const p = playersList.find(x => x.id === playerId);
+  if(!p) return;
+  if(!confirm(approve ? `Potwierdzić ${p.name} jako ${p.gamertag} w ${p.team}?` : `Usunąć ${p.name} z ${p.team}?`)) return;
+  const isAdmin = _isLoggedInSync();
+  if(!isAdmin && !_ensureSession()) return;
+  const res = await _api('/me/member', 'POST', { playerId, approve }, isAdmin ? { admin: true } : { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  Object.assign(p, res.player);
+  showToast(approve ? '✅ Potwierdzono' : 'Usunięto z drużyny', 'success');
+  if(from === 'panel') openMyPanel(); else renderTeamRegistrations();
+  renderSeasonSchedule();
+}
+function _membersHtml(team, canDecide, from) {
+  const list = _memberRequestsFor(team);
+  if(!list.length) return '';
+  const pend = list.filter(p => p.status === 'pending'), conf = list.filter(p => p.status === 'confirmed');
+  const btn = (id, ok, label) => `<button class="btn ${ok ? 'btn-primary' : 'btn-ghost'}" style="font-size:.66rem;padding:.12rem .4rem" onclick="decideMember('${id}',${ok},'${from}')">${label}</button>`;
+  return `${pend.length ? `<div style="font-size:.74rem;margin-top:.45rem"><b>⏳ Chcą dołączyć:</b> ${pend.map(p => `<span style="display:inline-flex;align-items:center;gap:.25rem;margin:.15rem .4rem .15rem 0">${_h(p.name)} <span style="color:var(--muted)">jako ${_h(p.gamertag)}</span>${canDecide ? btn(p.id, true, '✅') + btn(p.id, false, '❌') : ''}</span>`).join('')}</div>` : ''}
+    ${conf.length ? `<div style="font-size:.74rem;margin-top:.3rem;color:var(--muted)">👥 Konta na stronie: ${conf.map(p => `<span style="margin-right:.4rem">${_h(p.name)} (${_h(p.gamertag || 'kapitan')})${canDecide && p.gamertag ? ' ' + btn(p.id, false, '✕') : ''}</span>`).join('')}</div>` : ''}`;
+}
+
 function openMyPanel() {
   if(!discordUser) { loginWithDiscord(); return; }
   const sid = currentSeasonId || null;
@@ -9150,6 +9175,7 @@ function openMyPanel() {
     pendingResults.filter(p => { const s = items.find(x => String(x.id) === String(p.scheduleId)); return s && [s.team1, s.team2].includes(team) && s[p.side] !== team; })
       .forEach(p => todo.push(`📸 Potwierdź wynik: ${_h(p.matchData.team1.name)} ${p.matchData.team1.score}:${p.matchData.team2.score} ${_h(p.matchData.team2.name)}`));
   }
+  if(isCaptain && team) _memberRequestsFor(team).filter(p => p.status === 'pending').forEach(p => todo.push(`👤 <b>${_h(p.name)}</b> chce dołączyć jako ${_h(p.gamertag)} — potwierdź niżej`));
   awardsList.filter(a => a.status === 'open' && a.categories.some(c => !myAwardVotes[a.id]?.[c.key])).forEach(a => todo.push(`🗳 Zagłosuj: <b>${_h(a.title)}</b> (Dashboard)`));
   const openVotes = items.filter(s => !_voteClosedClient(s) && !myVotes[String(s.id)] && !_ssResult(ctx, s)).length;
   if(openVotes) todo.push(`🎯 Wytypuj zwycięzców: ${openVotes} ${openVotes === 1 ? 'mecz czeka' : 'mecze czekają'} na Twój typ`);
@@ -9181,7 +9207,7 @@ function openMyPanel() {
     <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1rem">
       ${_avatarHtml(discordUser.avatar, 44)}
       <div><div style="font-weight:900;font-size:1.05rem">${_h(discordUser.name)}${isCaptain ? ' <span style="font-size:.7rem;color:var(--accent)">🧢 KAPITAN</span>' : ''}</div>
-        <div style="font-size:.78rem;color:var(--muted)">${team ? '🏀 ' + _h(team) : 'Bez drużyny'}${me ? ' · 🎮 ' + _h(me) : ''}${myTyper >= 0 ? ` · 🎯 typer: ${myTyper + 1}. miejsce` : ''}</div></div>
+        <div style="font-size:.78rem;color:var(--muted)">${team ? '🏀 ' + _h(team) : myProfile?.status === 'pending' ? `⏳ Czekasz na potwierdzenie kapitana <b>${_h(myProfile.team)}</b>` : 'Bez drużyny'}${me ? ' · 🎮 ' + _h(me) : ''}${myTyper >= 0 ? ` · 🎯 typer: ${myTyper + 1}. miejsce` : ''}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.8rem">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
@@ -9202,12 +9228,15 @@ function openMyPanel() {
     </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem;margin-top:.8rem">
       <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">🎮 MÓJ PROFIL GRACZA I DOSTĘPNOŚĆ</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem">
-        <div><label style="${_MODAL_LBL}">Drużyna</label><select id="me-team" style="${_MODAL_INP}" onchange="document.getElementById('me-gt-list').innerHTML=(teamRegistrations.find(r=>r.teamName===this.value)?.players||[]).map(p=>'<option value=&quot;'+p.gamertag+'&quot;>').join('')">
-          <option value="">— bez drużyny —</option>${teamsOpts.map(t => `<option ${t === (myProfile?.team || team) ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select></div>
-        <div><label style="${_MODAL_LBL}">Mój nick w grze</label><input id="me-gt" list="me-gt-list" value="${_h(myProfile?.gamertag || me || '')}" maxlength="32" style="${_MODAL_INP}">
-          <datalist id="me-gt-list">${roster.map(g => `<option value="${_h(g)}">`).join('')}</datalist></div>
+      ${isCaptain ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.6rem">🧢 Jako kapitan jesteś przypisany do <b>${_h(team)}</b> automatycznie.</div>`
+        : `<div style="font-size:.74rem;color:var(--muted);margin-bottom:.6rem">Wybierz drużynę i swój nick ze składu — przypisanie potwierdza kapitan drużyny. Nie ma Cię w składzie? Poproś kapitana o dopisanie.
+          ${myProfile?.team ? `<br>Status: ${myProfile.status === 'confirmed' ? '<b style="color:var(--win)">✅ potwierdzony</b>' : '<b style="color:var(--accent)">⏳ czeka na kapitana</b>'}` : ''}</div>`}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem;${isCaptain ? 'display:none' : ''}">
+        <div><label style="${_MODAL_LBL}">Drużyna</label><select id="me-team" style="${_MODAL_INP}" onchange="_meFillRoster(this.value)">
+          <option value="">— bez drużyny —</option>${teamsOpts.map(t => `<option ${t === (isCaptain ? team : myProfile?.team) ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select></div>
+        <div><label style="${_MODAL_LBL}">Mój nick ze składu</label><select id="me-gt" style="${_MODAL_INP}"></select></div>
       </div>
+      ${isCaptain ? `<div style="margin-bottom:.7rem">${_membersHtml(team, true, 'panel') || '<div style="font-size:.74rem;color:var(--muted)">Nikt z drużyny nie połączył jeszcze konta.</div>'}</div>` : ''}
       <label style="${_MODAL_LBL}">W które dni zwykle mogę grać</label>
       <div style="display:flex;gap:.3rem;margin-bottom:.7rem">${dayRow(days, 'g')}</div>
       ${nextWeek ? `<label style="${_MODAL_LBL}">Wyjątek na Week ${curWeek || nextWeek} <span style="font-weight:400;text-transform:none;letter-spacing:0">(zostaw puste = jak zwykle)</span></label>
@@ -9215,6 +9244,15 @@ function openMyPanel() {
       <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="saveMyProfile(${curWeek || nextWeek || 'null'})">💾 Zapisz</button></div>
     </div>`;
   m.classList.add('open');
+  _meFillRoster(isCaptain ? team : (myProfile?.team || ''), myProfile?.gamertag || me || '');
+}
+function _meFillRoster(teamName, sel) {
+  const el = document.getElementById('me-gt');
+  if(!el) return;
+  const roster = (teamRegistrations.find(r => r.teamName === teamName)?.players || []).map(p => p.gamertag);
+  const cur = sel !== undefined ? sel : el.value;
+  el.innerHTML = teamName ? '<option value="">— wybierz swój nick —</option>' + roster.map(g => `<option ${g === cur ? 'selected' : ''}>${_h(g)}</option>`).join('') : '<option value="">—</option>';
+  el.disabled = !teamName;
 }
 async function saveMyProfile(week) {
   if(!_ensureSession()) return;
@@ -9222,12 +9260,14 @@ async function saveMyProfile(week) {
   const days = read('g'), wk = read('w');
   const weeks = { ...(myProfile?.weeks || {}) };
   if(week) { if(wk.some(Boolean)) weeks[week] = wk; else delete weeks[week]; }
-  const res = await _api('/me', 'POST', { team: document.getElementById('me-team').value, gamertag: document.getElementById('me-gt').value.trim(), days, weeks, seasonId: currentSeasonId || null }, { session: true });
+  const isCaptainNow = discordUser && teamRegistrations.some(r => r.status === 'approved' && r.captain?.id === discordUser.id);
+  const capTeam = isCaptainNow ? _myTeamName() : null;
+  const res = await _api('/me', 'POST', { team: capTeam || document.getElementById('me-team').value, gamertag: capTeam ? (myProfile?.gamertag || '') : (document.getElementById('me-gt').value || '').trim(), days, weeks, seasonId: currentSeasonId || null }, { session: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   myProfile = res.me;
   const i = playersList.findIndex(p => p.id === res.me.id);
   if(i >= 0) playersList[i] = res.me; else playersList.push(res.me);
-  showToast('✅ Zapisano', 'success');
+  showToast(myProfile.status === 'pending' ? '✅ Zapisano — kapitan dostał prośbę o potwierdzenie' : '✅ Zapisano', 'success');
   openMyPanel(); renderSeasonSchedule();
 }
 
@@ -9307,6 +9347,7 @@ async function openShareCard(name) {
 function _rosterBlock(r) {
   const isAdmin = _isLoggedInSync();
   const isCap = discordUser && r.captain?.id === discordUser.id && r.status === 'approved';
+  const membersHtml = r.status === 'approved' && (isAdmin || isCap) ? _membersHtml(r.teamName, true, 'card') : '';
   const pend = (r.rosterRequests || []).filter(q => q.status === 'pending');
   const locked = rosterLockDate && _today() > rosterLockDate;
   let html = pend.map(q => `<div style="margin-top:.5rem;font-size:.76rem;background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.45rem .6rem">
@@ -9316,7 +9357,7 @@ function _rosterBlock(r) {
       <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="decideRoster('${r.id}','${q.id}',false)">❌ Odrzuć</button></div>` : ''}
   </div>`).join('');
   if(isCap && !pend.length) html += `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin-top:.5rem" ${locked ? 'disabled title="Okno transferowe zamknięte"' : ''} onclick="openRosterChange('${r.id}')">✏️ Zmień skład${locked ? ' (okno zamknięte)' : ''}</button>`;
-  return html;
+  return membersHtml + html;
 }
 function openRosterChange(regId) {
   const r = teamRegistrations.find(x => x.id === regId);
