@@ -792,6 +792,7 @@
         <div style="font-size:.8rem;color:rgba(255,255,255,0.6);margin-top:.25rem;letter-spacing:1px;">OFICJALNA PLATFORMA LIGOWA</div>
       </div>
     </div>
+    <div id="live-wrap"></div>
     <div id="schedule-dashboard" style="margin-bottom:1.5rem;display:none"></div>
     <div id="team-registrations-wrap" style="margin-bottom:1.5rem"></div>
     <div id="events-dashboard-wrap"></div>
@@ -819,6 +820,8 @@
       </div>
     </div>
 
+    <div id="penalties-note" style="margin-top:1.5rem"></div>
+    <div id="scenario-wrap"></div>
     <div id="power-ranking-wrap" style="margin-top:1.5rem"></div>
     <div id="elo-wrap"></div>
     <div class="section-title" data-i18n="league_summary">Podsumowanie Ligi</div>
@@ -2061,7 +2064,7 @@ async function saveData(silent = false) {
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
       ovrMethod, ovrOverrides, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
-      powerRankings, _loadedAt: _dataLoadedAt,
+      powerRankings, penalties, rosterLockDate, _loadedAt: _dataLoadedAt,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2081,6 +2084,11 @@ async function saveData(silent = false) {
         return false;
       }
       window._dataLoadedAt = Date.now();
+      // Worker przeniósł logotypy do osobnych obrazków — podmień lokalnie, żeby kolejne zapisy były lekkie
+      try {
+        const info = await res.json();
+        if(info && info.logos && typeof teams !== 'undefined') Object.entries(info.logos).forEach(([n, u]) => { if(teams[n]) teams[n].logo = u; });
+      } catch(e) {}
       return true;
     }
 
@@ -2214,6 +2222,11 @@ async function loadData() {
     pendingResults = record.pendingResults || [];
     powerRankings = record.powerRankings || [];
     bracketData = record.bracket || {};
+    playersList = record.players || [];
+    streamsData = record.streams || {};
+    clipsList = record.clips || [];
+    penalties = record.penalties || [];
+    rosterLockDate = record.rosterLockDate || null;
     _dataLoadedAt = new Date().toISOString();
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
@@ -4109,7 +4122,7 @@ function renderDashboard() {
   renderStandings();
   if(typeof renderPlayoffDashboard === 'function') renderPlayoffDashboard();
   _eloCache = null; _achCache = null;
-  for(const fn of [renderQuickLinks, renderRecordsBanner, renderAchievementsDashboard, renderAwardsDashboard, renderBracketDashboard, renderPowerRanking, renderEloDashboard]) {
+  for(const fn of [renderLiveBanner, renderQuickLinks, renderRecordsBanner, renderAchievementsDashboard, renderAwardsDashboard, renderBracketDashboard, renderPenaltiesNote, renderScenarios, renderPowerRanking, renderEloDashboard]) {
     try { fn(); } catch(e) { console.warn('dashboard extras', fn.name, e); }
   }
   loadTeams();
@@ -4213,9 +4226,10 @@ function renderStandings() {
        : [...new Set(schedule.filter(x => x.generated && x.seasonId === currentSeasonId).flatMap(x => [x.team1, x.team2]))])
     : [];
   _fxTeams.forEach(n => { if(!ts[n]) ts[n] = { w:0, l:0, wo:0, pf:0, pa:0 }; });
+  (typeof _penaltiesFor === 'function' ? _penaltiesFor(currentSeasonId || null) : []).forEach(p => { if(ts[p.team]) ts[p.team].pen = (ts[p.team].pen || 0) + p.points; });
   const _standingsGroups = _fx?.format === 'groups' && _fx.groups?.length ? _fx.groups : null;
   // Liga points: win=2, loss (normal)=1, walkover loss=0
-  const ligaPts = (s) => s.w*2 + (s.l - s.wo)*1 + s.wo*0;
+  const ligaPts = (s) => s.w*2 + (s.l - s.wo)*1 + s.wo*0 - (s.pen || 0);
   const sorted=Object.entries(ts).sort((a,b)=>{
     const pa=ligaPts(a[1]), pb=ligaPts(b[1]);
     return pb!==pa ? pb-pa : b[1].w/(b[1].w+b[1].l||1)-a[1].w/(a[1].w+a[1].l||1);
@@ -4236,7 +4250,7 @@ function renderStandings() {
   const hot=getHotPlayers();
   const _row=([name,s],i)=>{
     const gp=s.w+s.l,pct=gp>0?(s.w/gp).toFixed(3):'.000';
-    const ligaPts=s.w*2+(s.l-s.wo)*1+s.wo*0;
+    const ligaPts=s.w*2+(s.l-s.wo)*1+s.wo*0-(s.pen||0);
     const ppg=gp>0?(s.pf/gp).toFixed(1):'0.0',opp=gp>0?(s.pa/gp).toFixed(1):'0.0';
     const l5=tl5[name]||[];
     const l5h='<div class="l5">'+Array.from({length:5},(_,j)=>j>=l5.length?'<span class="l5e"></span>':l5[j]==='w'?'<span class="l5w"></span>':'<span class="l5l"></span>').join('')+'</div>';
@@ -4472,7 +4486,7 @@ function updateAuthUI() {
       bar.innerHTML = `
         <img src="${discordUser.avatar||''}" onerror="this.style.display='none'"
           style="width:26px;height:26px;border-radius:50%;border:2px solid var(--accent)">
-        <span style="font-size:.8rem;font-weight:700;color:var(--text)">${_h(discordUser.name)}</span>
+        <span onclick="openMyPanel()" title="Mój panel" style="font-size:.8rem;font-weight:700;color:var(--text);cursor:pointer;text-decoration:underline dotted">${_h(discordUser.name)}</span>
         ${discordUser.session ? '' : `<button onclick="loginWithDiscord()" title="Odśwież logowanie — potrzebne do zgłoszeń, głosowania i wyboru terminów"
           style="background:rgba(245,197,24,.12);border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:.1rem .45rem;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">🔑 Odśwież</button>`}
         <button onclick="logoutDiscord()" title="Wyloguj z Discorda"
@@ -5989,6 +6003,8 @@ async function _loadMyVotes() {
     myVotes = res.votes || {};
     myAwardVotes = res.awards || {};
     myBracket = res.bracket || {};
+    myClipLikes = new Set(res.clipLikes || []);
+    myProfile = res.me || null;
     if(typeof renderBracketDashboard === 'function') renderBracketDashboard();
     if(typeof renderSchedule === 'function') renderSchedule();
     if(typeof renderAwardsDashboard === 'function') renderAwardsDashboard();
@@ -6398,6 +6414,8 @@ function _ssScheduledList(ctx, groupName) {
           <span style="color:var(--muted);font-size:.75rem">${res ? res.w1 + ':' + res.w2 : 'vs'}</span>
           <b style="font-size:.85rem">${_ssTeamName(ctx, s.team2)}</b>${teamLogo(s.team2, 24, '.6rem')}
           <span style="font-size:.68rem;color:var(--muted);margin-left:.25rem">${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}${(s.bestOf || 1) > 1 ? ' · Bo' + s.bestOf : ''}</span>
+          ${!ctx.demo && _isLive(s) ? '<span style="background:#dc2626;color:#fff;font-size:.6rem;font-weight:900;border-radius:4px;padding:.05rem .35rem">🔴 NA ŻYWO</span>' : ''}
+          ${!ctx.demo ? _streamLinks(s, true) : ''}
         </div>
         <div style="display:flex;gap:.3rem">
           <button onclick="_ssWeek=${s.week};renderSeasonSchedule()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem" title="Pokaż w tygodniu">👁</button>
@@ -6450,6 +6468,16 @@ function _ssCard(ctx, s, groupName) {
       </div>
       ${res && bo > 1 ? `<div style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:.3rem">${res.games.map((g, i) => `Mecz ${i + 1}: <b style="color:var(--text)">${g.s1}:${g.s2}</b>${g.matchId ? ` <span onclick="openMatchPoster(${g.matchId})" title="Plakat meczu" style="cursor:pointer">🖼</span>` : ''}`).join(' · ')}</div>` : ''}
       ${!ctx.demo && !res ? _eloLine(s) : ''}
+      ${!ctx.demo ? (() => {
+        const live = _isLive(s), sl = _streamLinks(s, true), nClips = _clipsFor(String(s.id)).length;
+        const canStream = ctx.isAdmin || (ctx.myTeam && [s.team1, s.team2].some(t => String(t).toLowerCase() === ctx.myTeam.toLowerCase()));
+        return `<div style="display:flex;gap:.45rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:.45rem">
+          ${live ? '<span style="background:#dc2626;color:#fff;font-size:.62rem;font-weight:900;letter-spacing:1px;border-radius:4px;padding:.05rem .4rem">🔴 NA ŻYWO</span>' : ''}
+          ${sl}
+          ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Zmień' : 'Dodaj'} transmisję</button>` : ''}
+          <button onclick="openClips('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🎬 Akcje${nClips ? ' (' + nClips + ')' : ''}</button>
+        </div>`;
+      })() : ''}
       ${_ssVoteBar(ctx, s)}
       ${res ? '' : _ssDaySection(ctx, s)}
       ${_ssResultsBlock(ctx, s)}
@@ -6469,8 +6497,9 @@ function _ssDaySection(ctx, s) {
     const pk = p[side];
     const isMine = ctx.myTeam && ctx.myTeam.toLowerCase() === String(s[side]).toLowerCase();
     const head = `<div style="font-size:.66rem;color:var(--muted);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isMine ? '🏀 Ty · ' : ''}${_h(s[side])}</div>`;
-    if(isMine && !isFinal) return head + _ssPicker(ctx, s, side);
-    return head + (pk ? chip(pk.primary, 'primary') + chip(pk.backup, 'backup') : `<span style="font-size:.72rem;color:var(--muted)">— czeka na wybór —</span>`);
+    const av = ctx.demo ? '' : _availLine(s[side], s);
+    if(isMine && !isFinal) return head + _ssPicker(ctx, s, side) + av;
+    return head + (pk ? chip(pk.primary, 'primary') + chip(pk.backup, 'backup') : `<span style="font-size:.72rem;color:var(--muted)">— czeka na wybór —</span>`) + av;
   };
 
   let suggestHtml = '';
@@ -6560,6 +6589,7 @@ function _ssAdminActions(ctx, s, res) {
     if(res) out.push(b(`demoSimResult('${k}', true)`, '↩ Cofnij wynik'));
   } else {
     out.push(b(`ssLinkGames('${k}')`, `🔗 Wyniki ${res ? res.games.length : 0}/${s.bestOf || 1}`));
+    if(!res?.done) out.push(b(`ssWalkover('${k}')`, '🏳 Walkower'));
     out.push(b(`openScheduleEdit(${s.id})`, '✏️'));
   }
   return `<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.65rem;padding-top:.55rem;border-top:1px dashed var(--border)">
@@ -7463,7 +7493,9 @@ function _ssToolsHtml(ctx) {
     ${b('ssRemindCaptains()', '🔔 Przypomnij kapitanom', 'Wiadomość prywatna do kapitanów, którzy nie wybrali terminu')}
     ${b('openWeekSummary()', '📰 Podsumowanie', 'Podsumowanie tygodnia na Discord')}
     ${b('openAwardsCreate()', '🏅 Nagrody tygodnia', 'Głosowanie kibiców na nagrody tygodnia')}
-    ${b('openPowerRankingCreate()', '📊 Power Ranking')}` : '';
+    ${b('openPowerRankingCreate()', '📊 Power Ranking')}
+    ${b('runWeekPack()', '⚡ Pakiet tygodnia', 'Przypomnienia + podsumowanie + Power Ranking + nagrody jednym kliknięciem')}
+    ${b('openGalaCreate()', '🏆 Gala sezonu', 'Głosowanie na nagrody całego sezonu')}` : '';
   return `<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin:-.25rem 0 .85rem">
     ${admin}
     <span style="flex:1"></span>
@@ -7748,6 +7780,8 @@ function _awardCandidates(sid, week) {
     const share = tot ? Math.round((c[loser] || 0) / tot * 100) : 0;
     return { s, res, share, winner: s[res.winnerSide], loserName: s[loser], tot };
   }).filter(x => x.tot >= 2 && x.share > 50).sort((a, b) => b.share - a.share).slice(0, 3);
+  const wClips = clipsList.filter(c => (c.seasonId || null) === (sid || null) && Number(c.week) === Number(week)).sort((a, b) => b.likes - a.likes).slice(0, 3);
+  if(wClips.length >= 2) cats.push({ key: 'clip', emoji: '🎬', title: 'Akcja tygodnia', candidates: wClips.map(c => ({ id: 'c' + c.id, label: c.title || 'Akcja', sub: `${(c.teams || []).join(' vs ')} · ❤️ ${c.likes}` })) });
   if(ups.length >= 2) cats.push({ key: 'upset', emoji: '😮', title: 'Niespodzianka tygodnia', candidates: ups.map(x => ({ id: 's' + x.s.id, label: `${x.winner} pokonali ${x.loserName}`, sub: `${x.share}% kibiców typowało ${x.loserName}` })) });
   return cats;
 }
@@ -7775,7 +7809,7 @@ async function createAwards() {
   const d = window._awardDraft;
   const chosen = [...document.querySelectorAll('#awards-create-modal input[data-cat]:checked')].map(x => d.cats[+x.dataset.cat]);
   if(!chosen.length) { showToast('Zaznacz co najmniej jedną kategorię', 'info'); return; }
-  const res = await _api('/awards', 'POST', { seasonId: d.seasonId, week: d.week, title: `Nagrody Week ${d.week}`, categories: chosen }, { admin: true });
+  const res = await _api('/awards', 'POST', { seasonId: d.seasonId, week: d.week, type: d.type || 'week', title: d.title || `Nagrody Week ${d.week}`, categories: chosen }, { admin: true });
   if(!res.ok || !res.award) { showToast('❌ ' + (res.error || 'Błąd'), 'error'); return; }
   awardsList.push(res.award);
   _fxClose('awards-create-modal');
@@ -7783,7 +7817,7 @@ async function createAwards() {
   showToast('🗳 Głosowanie otwarte — jest na Dashboardzie', 'success');
   if(document.getElementById('aw-announce')?.checked) {
     await _scheduleDiscordSend({ embeds: [{
-      title: `🗳 Głosowanie: Nagrody Week ${d.week}`,
+      title: `🗳 Głosowanie: ${d.title || 'Nagrody Week ' + d.week}`,
       description: chosen.map(c => `**${c.emoji} ${c.title}**\n` + c.candidates.map(x => `• ${x.label}`).join('\n')).join('\n\n') + '\n\nGłosujcie na stronie (Dashboard)! 👇',
       url: location.origin + location.pathname, color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
     }] });
@@ -7802,7 +7836,8 @@ function renderAwardsDashboard() {
     const mine = myAwardVotes[a.id] || {};
     return `<div style="background:linear-gradient(135deg,rgba(245,197,24,.10),rgba(245,197,24,.02));border:1px solid rgba(245,197,24,.4);border-radius:12px;padding:.9rem 1rem;margin-bottom:.75rem">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🗳 ${_h(a.title)}</div>
+        <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🗳 ${_h(a.title)}</div>
+          ${a.type === 'season' ? '<div style="font-size:.7rem;color:var(--muted)">Głos kapitana drużyny liczy się podwójnie</div>' : ''}</div>
         ${isAdmin ? `<div style="display:flex;gap:.3rem"><button onclick="closeAwards('${a.id}')" class="btn btn-primary" style="font-size:.72rem;padding:.25rem .6rem">🔒 Zakończ i ogłoś</button>
           <button onclick="removeAwards('${a.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .5rem">🗑</button></div>` : ''}
       </div>
@@ -7871,7 +7906,8 @@ async function closeAwards(id) {
     return { name: `${c.emoji || '🏅'} ${c.title}`, value: _trunc(`**${w.label}**${w.team ? ' (' + w.team + ')' : ''} · ${w.votes} ${_plVotes(w.votes)}${fl?.line ? '\n*' + fl.line + '*' : ''}`, 1020) };
   }));
   const ok = await _scheduleDiscordSend({ embeds: [{
-    title: `🏅 ${a.title} — zwycięzcy`, fields: lines.length ? lines : [{ name: 'Brak głosów', value: 'Nikt nie zagłosował 😢' }],
+    title: `🏅 ${a.title} — zwycięzcy`, fields: [...(lines.length ? lines : [{ name: 'Brak głosów', value: 'Nikt nie zagłosował 😢' }]),
+      ...(a.type === 'season' && _galaCandidates().team5.length ? [{ name: '🏀 Drużyna sezonu', value: _galaCandidates().team5.map(x => `• **${x.name}** (${x.team})`).join('\n') }] : [])],
     color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
   }] });
   showToast(ok ? '🏅 Zwycięzcy ogłoszeni' : '⚠ Głosowanie zamknięte, ale Discord nie przyjął wiadomości', ok ? 'success' : 'info');
@@ -7978,7 +8014,8 @@ async function sendPowerRanking(silent) {
 function renderTransfers(wrap) {
   const isAdmin = _isLoggedInSync();
   const list = transfersList || [];
-  wrap.innerHTML = _regTabsHtml(isAdmin ? `<button onclick="openTransferAdd()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Dodaj transfer</button>` : '') +
+  wrap.innerHTML = _regTabsHtml(isAdmin ? `<span style="font-size:.72rem;color:var(--muted);display:inline-flex;align-items:center;gap:.3rem">🔒 Okno transferowe do: <input type="date" id="roster-lock" value="${rosterLockDate || ''}" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.15rem .3rem;font-size:.72rem"><button onclick="saveRosterLock()" class="btn btn-ghost" style="font-size:.68rem;padding:.2rem .45rem">💾</button></span>
+      <button onclick="openTransferAdd()" class="btn btn-primary" style="font-size:.82rem;padding:.35rem .85rem">+ Dodaj transfer</button>` : (rosterLockDate ? `<span style="font-size:.74rem;color:var(--muted)">🔒 Okno transferowe do ${_ssFmt(rosterLockDate)}</span>` : '')) +
     (list.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.6rem">
       ${list.map(t => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem">
         <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start">
@@ -8762,7 +8799,710 @@ function renderQuickLinks() {
     ${b("document.getElementById('elo-wrap')?.scrollIntoView({behavior:'smooth'})", '⚡ Ranking siły')}
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
+    ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAKIET 3: kopie, dziennik, kary i walkowery, Mój panel, dostępność,
+//           karta zawodnika, transmisje i „na żywo”, akcje meczu,
+//           zmiany składu, scenariusze awansu, gala sezonu, pakiet tygodnia
+// ═══════════════════════════════════════════════════════════════
+let playersList = [];      // profile graczy (Mój panel / dostępność)
+let streamsData = {};      // { scheduleId: { team1: url, team2: url } }
+let clipsList = [];        // akcje meczu
+let myClipLikes = new Set();
+let myProfile = null;
+let penalties = [];        // kary (w danych ligi)
+let rosterLockDate = null; // okno transferowe — zmiany składu do tej daty
+
+const DOW = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'];
+function _plPL(n, one, few, many) { if(n === 1) return one; const d = n % 10, h = n % 100; return d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many; }
+function _today() { return new Date().toLocaleDateString('sv-SE'); }
+function _audit(action, details) {
+  if(!_isLoggedInSync()) return;
+  _api('/audit', 'POST', { actor: discordUser?.name ? 'Admin (' + discordUser.name + ')' : 'Admin', action, details: String(details || '').slice(0, 200) }, { admin: true }).catch(() => {});
+}
+
+// ═══ 💾 KOPIE ZAPASOWE ═══════════════════════════════════════════
+async function openBackups() {
+  const m = _fxModal('backup-modal', 600);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('backup-modal', '💾 Kopie zapasowe') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
+  m.classList.add('open');
+  const res = await _api('/backups', 'GET', null, { admin: true });
+  if(!res.ok) { box.innerHTML = _fxHead('backup-modal', '💾 Kopie zapasowe') + `<div style="color:var(--loss)">❌ ${_h(res.error)}</div>`; return; }
+  const list = res.backups || [];
+  box.innerHTML = _fxHead('backup-modal', '💾 Kopie zapasowe') + `
+    <div style="font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:.8rem">
+      Worker robi kopię całej ligi codziennie nad ranem (ok. 4:00–5:00) i trzyma 14 ostatnich. Przywrócenie zastępuje obecne dane — wcześniej robimy automatycznie kopię obecnego stanu.
+      ${list.length ? '' : '<br><b style="color:var(--accent)">Brak kopii — sprawdź, czy w Cloudflare jest ustawiony harmonogram (Cron) Workera.</b>'}
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.6rem"><button class="btn btn-primary" onclick="backupNow()" style="font-size:.78rem">💾 Zrób kopię teraz</button></div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;max-height:380px;overflow-y:auto">
+      ${list.map(b => `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-bottom:1px solid var(--border);font-size:.82rem">
+        <b style="flex:1">${_h(b.date)}</b>
+        <span style="color:var(--muted);font-size:.72rem">${b.size ? (b.size / 1e6).toFixed(2) + ' MB' : ''}</span>
+        <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="downloadBackup('${_h(b.date)}')">⬇ Pobierz</button>
+        <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem;color:var(--loss)" onclick="restoreBackup('${_h(b.date)}')">↩ Przywróć</button>
+      </div>`).join('') || '<div style="padding:1rem;text-align:center;color:var(--muted)">Brak kopii</div>'}
+    </div>`;
+}
+async function backupNow() {
+  const res = await _api('/backup/now', 'POST', {}, { admin: true });
+  showToast(res.ok ? '💾 Kopia zrobiona' : '❌ ' + res.error, res.ok ? 'success' : 'error');
+  if(res.ok) openBackups();
+}
+async function downloadBackup(date) {
+  try {
+    const r = await fetch(workerUrl.replace(/\/+$/, '') + '/backup?date=' + encodeURIComponent(date), { headers: { 'X-Admin-Token': _adminToken() } });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `liga-kopia-${date}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch(e) { showToast('❌ ' + e.message, 'error'); }
+}
+async function restoreBackup(date) {
+  if(!confirm(`Przywrócić dane ligi z kopii ${date}?\n\nWszystko, co zmieniło się od tamtej chwili, zostanie zastąpione.`)) return;
+  if(prompt('Na pewno? Wpisz PRZYWRÓĆ, aby potwierdzić.') !== 'PRZYWRÓĆ') return;
+  const res = await _api('/backup/restore', 'POST', { date }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  showToast('✅ Przywrócono — wczytuję dane…', 'success');
+  _fxClose('backup-modal');
+  await loadData(); renderDashboard(); renderSchedule();
+  setTimeout(() => saveData(true).catch(() => {}), 1500); // przelicz dane pochodne
+}
+
+// ═══ 📝 DZIENNIK ZMIAN ═══════════════════════════════════════════
+async function openAudit() {
+  const m = _fxModal('audit-modal', 760);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('audit-modal', '📝 Dziennik zmian') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
+  m.classList.add('open');
+  const res = await _api('/audit', 'GET', null, { admin: true });
+  if(!res.ok) { box.innerHTML = _fxHead('audit-modal', '📝 Dziennik zmian') + `<div style="color:var(--loss)">❌ ${_h(res.error)}</div>`; return; }
+  window._auditEntries = res.entries || [];
+  box.innerHTML = _fxHead('audit-modal', '📝 Dziennik zmian') + `
+    <input oninput="_renderAudit(this.value)" placeholder="Szukaj (drużyna, osoba, akcja)…" style="${_MODAL_INP};margin-bottom:.6rem">
+    <div id="audit-list" style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px"></div>`;
+  _renderAudit('');
+}
+function _renderAudit(q) {
+  const el = document.getElementById('audit-list');
+  if(!el) return;
+  const s = String(q || '').toLowerCase();
+  const rows = (window._auditEntries || []).filter(e => !s || [e.actor, e.action, e.details].join(' ').toLowerCase().includes(s)).slice(0, 300);
+  el.innerHTML = rows.map(e => `<div style="display:grid;grid-template-columns:120px 150px 1fr;gap:.6rem;padding:.4rem .7rem;border-bottom:1px solid var(--border);font-size:.78rem">
+    <span style="color:var(--muted)">${new Date(e.at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+    <b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(e.actor)}</b>
+    <span><b>${_h(e.action)}</b> <span style="color:var(--muted)">${_h(e.details)}</span></span>
+  </div>`).join('') || '<div style="padding:1rem;text-align:center;color:var(--muted)">Brak wpisów</div>';
+}
+
+// ═══ ⚖️ KARY ═════════════════════════════════════════════════════
+function _penaltiesFor(sid) { return (penalties || []).filter(p => (p.seasonId || null) === (sid || null)); }
+function openPenalties() {
+  const sid = currentSeasonId || null;
+  const teams = _knownTeams();
+  const list = _penaltiesFor(sid);
+  const m = _fxModal('pen-modal', 560);
+  m.querySelector('.modal').innerHTML = _fxHead('pen-modal', '⚖️ Kary') + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem">Kara odejmuje punkty w tabeli bieżącego sezonu. Walkower ustawisz przyciskiem <b>🏳 Walkower</b> przy meczu w terminarzu.</div>
+    ${list.map(p => `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.35rem;font-size:.82rem">
+      <b style="color:var(--loss)">−${p.points}</b><b>${_h(p.team)}</b><span style="flex:1;color:var(--muted)">${_h(p.reason)} · ${_ssFmt(p.date)}</span>
+      <button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .4rem" onclick="removePenalty('${p.id}')">🗑</button></div>`).join('') || '<div style="color:var(--muted);font-size:.82rem;margin-bottom:.6rem">Brak kar w tym sezonie.</div>'}
+    <div style="display:grid;grid-template-columns:1fr 80px;gap:.5rem;margin-top:.8rem">
+      <select id="pen-team" style="${_MODAL_INP}">${teams.map(t => `<option>${_h(t)}</option>`).join('')}</select>
+      <input id="pen-pts" type="number" min="1" max="20" value="1" style="${_MODAL_INP}" title="Punkty karne">
+    </div>
+    <input id="pen-reason" maxlength="120" placeholder="Powód (np. niestawienie się na mecz)" style="${_MODAL_INP};margin:.5rem 0 .8rem">
+    <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="addPenalty()">➕ Dodaj karę</button></div>`;
+  m.classList.add('open');
+}
+async function addPenalty() {
+  const team = document.getElementById('pen-team').value, points = Math.max(1, Math.min(20, +document.getElementById('pen-pts').value || 1));
+  const reason = document.getElementById('pen-reason').value.trim();
+  if(!reason) { showToast('Podaj powód kary', 'info'); return; }
+  const p = { id: 'pen_' + Date.now(), seasonId: currentSeasonId || null, team, points, reason, date: _today() };
+  penalties = [...(penalties || []), p];
+  if(!(await saveData())) { penalties = penalties.filter(x => x !== p); return; }
+  _audit('Kara', `${team}: −${points} (${reason})`);
+  openPenalties(); renderDashboard();
+}
+async function removePenalty(id) {
+  const p = penalties.find(x => x.id === id);
+  if(!p || !confirm(`Usunąć karę dla ${p.team} (−${p.points})?`)) return;
+  penalties = penalties.filter(x => x.id !== id);
+  if(!(await saveData())) { penalties.push(p); return; }
+  _audit('Usunięto karę', `${p.team}: −${p.points}`);
+  openPenalties(); renderDashboard();
+}
+function renderPenaltiesNote() {
+  const el = document.getElementById('penalties-note');
+  if(!el) return;
+  const list = _penaltiesFor(currentSeasonId || null);
+  el.innerHTML = list.length ? `<div style="font-size:.76rem;color:var(--muted);margin:-.75rem 0 1.25rem;padding:.4rem .2rem">⚖️ Kary: ${list.map(p => `<b style="color:var(--loss)">${_h(p.team)} −${p.points}</b> (${_h(p.reason)})`).join(' · ')}</div>` : '';
+}
+
+// ═══ 🏳 WALKOWER SPOTKANIA ════════════════════════════════════════
+function ssWalkover(k) {
+  const s = _ssItem(k);
+  if(!s) return;
+  const m = _fxModal('wo-modal', 420);
+  m.querySelector('.modal').innerHTML = _fxHead('wo-modal', '🏳 Walkower') + `
+    <div style="font-size:.82rem;margin-bottom:.8rem">${_h(s.team1)} vs ${_h(s.team2)} · Week ${s.week}${(s.bestOf || 1) > 1 ? ' · Bo' + s.bestOf : ''}</div>
+    <div style="font-size:.76rem;color:var(--muted);margin-bottom:.8rem">Każdy nierozegrany mecz spotkania zostanie zapisany jako 20:0 (walkower: zwycięzca 2 pkt, przegrany 0 pkt).</div>
+    <div style="display:flex;flex-direction:column;gap:.45rem">
+      <button class="btn btn-primary" onclick="confirmWalkover('${k}','team1')">Wygrywa ${_h(s.team1)}</button>
+      <button class="btn btn-primary" onclick="confirmWalkover('${k}','team2')">Wygrywa ${_h(s.team2)}</button>
+    </div>`;
+  m.classList.add('open');
+}
+async function confirmWalkover(k, side) {
+  const s = _ssItem(k);
+  const winner = s[side], loser = s[side === 'team1' ? 'team2' : 'team1'];
+  const linked = _ssMatchIds(s).length, need = Math.max(1, (s.bestOf || 1) - linked);
+  if(!confirm(`Zapisać walkower ${winner} 20:0 ${loser} (${need} ${need === 1 ? 'mecz' : 'mecze'})?`)) return;
+  const prev = { matchIds: s.matchIds, matchId: s.matchId, played: s.played, date: s.date };
+  let maxId = Math.max(0, ..._withAllMatches(() => matches.map(m => Number(m.id) || 0)));
+  const date = s.date || _today();
+  const added = [];
+  for(let i = 0; i < need; i++) {
+    const nm = { id: ++maxId, date, note: 'Walkower (W/O)', walkover: true, seasonId: s.seasonId || currentSeasonId || null,
+      team1: { name: winner, score: 20, players: [], quarters: [] }, team2: { name: loser, score: 0, players: [], quarters: [] } };
+    added.push(nm);
+  }
+  _withAllMatches(() => added.forEach(nm => matches.push(nm)));
+  s.matchIds = [..._ssMatchIds(s), ...added.map(x => x.id)];
+  s.matchId = s.matchIds[0]; s.played = true; s.date = date;
+  if(!(await saveData())) { _withAllMatches(() => { added.forEach(nm => { const i = matches.indexOf(nm); if(i >= 0) matches.splice(i, 1); }); }); Object.assign(s, prev); return; }
+  _audit('Walkower', `${winner} vs ${loser} (Week ${s.week})`);
+  _fxClose('wo-modal');
+  renderDashboard(); renderSchedule();
+  showToast('🏳 Walkower zapisany', 'success');
+}
+
+// ═══ 📺 TRANSMISJE i 🔴 NA ŻYWO ═══════════════════════════════════
+function _matchWindow(s) {
+  if(!s.date) return null;
+  const t = /^\d{2}:\d{2}$/.test(s.time || '') ? s.time : '20:00';
+  const start = new Date(s.date + 'T' + t).getTime();
+  return { start, end: start + (45 * (s.bestOf || 1) + 15) * 60e3 };
+}
+function _isLive(s) { const w = _matchWindow(s); const n = Date.now(); return !!w && n >= w.start - 5 * 60e3 && n <= w.end && !s.played; }
+function _streamLinks(s, small) {
+  const st = streamsData[String(s.id)] || {};
+  const links = ['team1', 'team2'].filter(sd => st[sd]).map(sd => `<a href="${_h(st[sd])}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:700">📺 ${_h(s[sd])}</a>`);
+  return links.length ? `<span style="font-size:${small ? '.7rem' : '.76rem'}">${links.join(' · ')}</span>` : '';
+}
+function openStreamModal(k) {
+  const s = _ssItem(k);
+  if(!s) return;
+  const ctx = _ssCtx();
+  const isAdmin = ctx.isAdmin;
+  const mySide = ctx.myTeam ? ['team1', 'team2'].find(sd => String(s[sd]).toLowerCase() === ctx.myTeam.toLowerCase()) : null;
+  if(!isAdmin && !mySide) return;
+  if(!isAdmin && !_ensureSession()) return;
+  const st = streamsData[k] || {};
+  const sides = isAdmin ? ['team1', 'team2'] : [mySide];
+  const m = _fxModal('stream-modal', 480);
+  m.querySelector('.modal').innerHTML = _fxHead('stream-modal', '📺 Link do transmisji') + `
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.8rem">${_h(s.team1)} vs ${_h(s.team2)}. Link pojawi się przy meczu, w ogłoszeniu „Za godzinę” na Discordzie i w powiadomieniu 🔴 NA ŻYWO. Twitch, YouTube, Kick, Facebook lub TikTok.</div>
+    ${sides.map(sd => `<label style="${_MODAL_LBL}">${_h(s[sd])}</label><input id="stream-${sd}" value="${_h(st[sd] || '')}" placeholder="https://twitch.tv/…" style="${_MODAL_INP};margin-bottom:.7rem">`).join('')}
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('stream-modal')">Anuluj</button>
+      <button class="btn btn-primary" onclick="saveStreamLinks('${k}', ${JSON.stringify(sides).replace(/"/g, '&quot;')})">💾 Zapisz</button></div>`;
+  m.classList.add('open');
+}
+async function saveStreamLinks(k, sides) {
+  const isAdmin = _isLoggedInSync();
+  for(const sd of sides) {
+    const url = document.getElementById('stream-' + sd).value.trim();
+    if((streamsData[k]?.[sd] || '') === url) continue;
+    const res = await _api('/stream-link', 'POST', { scheduleId: k, url, side: sd }, isAdmin ? { admin: true } : { session: true });
+    if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+    streamsData[k] = res.streams;
+  }
+  _fxClose('stream-modal');
+  renderSeasonSchedule(); renderLiveBanner();
+  showToast('📺 Zapisano', 'success');
+}
+function renderLiveBanner() {
+  const el = document.getElementById('live-wrap');
+  if(!el) return;
+  const live = schedule.filter(s => s.generated && _isLive(s));
+  el.innerHTML = live.length ? `<div style="background:linear-gradient(135deg,rgba(220,38,38,.22),rgba(220,38,38,.06));border:1px solid rgba(220,38,38,.6);border-radius:12px;padding:.7rem 1rem;margin-bottom:1rem">
+    ${live.map(s => `<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.2rem 0">
+      <span style="background:#dc2626;color:#fff;font-size:.68rem;font-weight:900;letter-spacing:1px;border-radius:4px;padding:.1rem .45rem;animation:livePulse 1.4s infinite">🔴 NA ŻYWO</span>
+      ${teamLogo(s.team1, 22, '.5rem')}<b>${_h(s.team1)}</b><span style="color:var(--muted)">vs</span><b>${_h(s.team2)}</b>${teamLogo(s.team2, 22, '.5rem')}
+      <span style="flex:1"></span>${_streamLinks(s) || '<span style="font-size:.72rem;color:var(--muted)">bez transmisji</span>'}
+    </div>`).join('')}
+  </div><style>@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.55}}</style>` : '';
+}
+setInterval(() => { try { renderLiveBanner(); } catch(e) {} }, 60000);
+
+// ═══ 🎬 AKCJE MECZU ══════════════════════════════════════════════
+function _clipsFor(k) { return clipsList.filter(c => String(c.scheduleId) === String(k)); }
+function _clipEmbed(url) {
+  const yt = url.match(/(?:youtu\.be\/|v=|shorts\/)([\w-]{11})/);
+  if(yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const tc = url.match(/clips\.twitch\.tv\/([\w-]+)/) || url.match(/twitch\.tv\/\w+\/clip\/([\w-]+)/);
+  if(tc) return `https://clips.twitch.tv/embed?clip=${tc[1]}&parent=${location.hostname || 'localhost'}`;
+  const st = url.match(/streamable\.com\/(\w+)/);
+  if(st) return `https://streamable.com/e/${st[1]}`;
+  return null;
+}
+function openClips(k) {
+  const s = _ssItem(k);
+  const list = _clipsFor(k).sort((a, b) => b.likes - a.likes);
+  const isAdmin = _isLoggedInSync();
+  const m = _fxModal('clips-modal', 720);
+  m.querySelector('.modal').innerHTML = _fxHead('clips-modal', `🎬 Akcje — ${_h(s ? s.team1 + ' vs ' + s.team2 : 'mecz')}`) + `
+    <div style="display:flex;flex-direction:column;gap:.7rem;max-height:55vh;overflow-y:auto;margin-bottom:1rem">
+      ${list.map(c => {
+        const emb = _clipEmbed(c.url);
+        return `<div style="border:1px solid var(--border);border-radius:10px;padding:.6rem .75rem">
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+            <b style="flex:1">${_h(c.title || 'Akcja')}</b>
+            <span style="font-size:.7rem;color:var(--muted)">dodał ${_h(c.by?.name || '?')}</span>
+            <button class="btn btn-ghost" style="font-size:.72rem;padding:.15rem .5rem" onclick="likeClip('${c.id}','${k}')">${myClipLikes.has(c.id) ? '❤️' : '🤍'} ${c.likes}</button>
+            ${isAdmin || c.by?.id === discordUser?.id ? `<button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .4rem" onclick="deleteClip('${c.id}','${k}')">🗑</button>` : ''}
+          </div>
+          <div id="clip-${c.id}" style="margin-top:.45rem">
+            ${emb ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="document.getElementById('clip-${c.id}').innerHTML='<iframe src=&quot;${emb}&quot; style=&quot;width:100%;aspect-ratio:16/9;border:0;border-radius:8px&quot; allowfullscreen></iframe>'">▶ Odtwórz</button>` : ''}
+            <a href="${_h(c.url)}" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--accent);margin-left:.4rem">otwórz ↗</a>
+          </div>
+        </div>`;
+      }).join('') || '<div style="color:var(--muted);text-align:center;padding:1rem">Jeszcze nikt nie dodał akcji z tego meczu</div>'}
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:.8rem">
+      <label style="${_MODAL_LBL}">Dodaj akcję (YouTube, Twitch, Medal, Streamable, X, TikTok)</label>
+      <input id="clip-url" placeholder="https://…" style="${_MODAL_INP};margin-bottom:.45rem">
+      <input id="clip-title" maxlength="80" placeholder="Opis, np. Wsad nad dwoma obrońcami" style="${_MODAL_INP};margin-bottom:.6rem">
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="addClip('${k}')">➕ Dodaj</button></div>
+    </div>`;
+  m.classList.add('open');
+}
+async function addClip(k) {
+  if(!_ensureSession()) return;
+  const url = document.getElementById('clip-url').value.trim(), title = document.getElementById('clip-title').value.trim();
+  if(!url) return;
+  const res = await _api('/clips', 'POST', { scheduleId: k, url, title }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  clipsList.unshift(res.clip);
+  openClips(k); renderSeasonSchedule();
+}
+async function likeClip(id, k) {
+  if(!_ensureSession()) return;
+  const res = await _api('/clips/like', 'POST', { id }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const c = clipsList.find(x => x.id === id); if(c) c.likes = res.likes;
+  res.liked ? myClipLikes.add(id) : myClipLikes.delete(id);
+  openClips(k);
+}
+async function deleteClip(id, k) {
+  if(!confirm('Usunąć tę akcję?')) return;
+  const isAdmin = _isLoggedInSync();
+  const res = await _api('/clips', 'DELETE', { id }, isAdmin ? { admin: true } : { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  clipsList = clipsList.filter(c => c.id !== id);
+  openClips(k); renderSeasonSchedule();
+}
+
+// ═══ 👥 DOSTĘPNOŚĆ SKŁADU ═════════════════════════════════════════
+function _teamPlayers(team, sid) {
+  return playersList.filter(p => p.team && String(p.team).toLowerCase() === String(team).toLowerCase() && (!sid || !p.seasonId || p.seasonId === sid));
+}
+function _availOn(p, week, dowIdx) { const d = (p.weeks && p.weeks[week]) || p.days || []; return !!d[dowIdx]; }
+function _availLine(team, s) {
+  const ps = _teamPlayers(team, s.seasonId);
+  if(!ps.length) return '';
+  const cnt = i => ps.filter(p => _availOn(p, s.week, i)).length;
+  return `<div title="Dostępność zgłoszona przez graczy w Moim panelu" style="font-size:.66rem;color:var(--muted);margin-top:.25rem">👥 Pn <b style="color:var(--text)">${cnt(0)}</b> · Śr <b style="color:var(--text)">${cnt(2)}</b> · Nd <b style="color:var(--text)">${cnt(6)}</b> <span>/ ${ps.length}</span></div>`;
+}
+
+// ═══ 👤 MÓJ PANEL ════════════════════════════════════════════════
+function _myPlayerName() {
+  if(myProfile?.gamertag) return myProfile.gamertag;
+  if(typeof discordPsnMap !== 'undefined' && discordUser) return discordPsnMap[discordUser.discordTag] || discordPsnMap[discordUser.name] || discordPsnMap[discordUser.username] || null;
+  return null;
+}
+function _myTeamName() {
+  const sid = currentSeasonId || null;
+  const cap = discordUser ? teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id && (!sid || !r.seasonId || r.seasonId === sid)) : null;
+  return cap?.teamName || myProfile?.team || null;
+}
+function openMyPanel() {
+  if(!discordUser) { loginWithDiscord(); return; }
+  const sid = currentSeasonId || null;
+  const team = _myTeamName(), me = _myPlayerName();
+  const isCaptain = !!(discordUser && teamRegistrations.some(r => r.status === 'approved' && r.captain?.id === discordUser.id));
+  const items = schedule.filter(s => s.generated && (s.seasonId || null) === sid);
+  const ctx = { demo: false };
+  // Do zrobienia
+  const todo = [];
+  if(team) {
+    items.filter(s => [s.team1, s.team2].includes(team) && !s.date && !_ssResult(ctx, s)).forEach(s => {
+      const side = s.team1 === team ? 'team1' : 'team2';
+      if(isCaptain && !scheduleDayPicks[String(s.id)]?.[side]) todo.push(`📅 Wybierz termin: vs <b>${_h(s[side === 'team1' ? 'team2' : 'team1'])}</b> (Week ${s.week})`);
+    });
+    pendingResults.filter(p => { const s = items.find(x => String(x.id) === String(p.scheduleId)); return s && [s.team1, s.team2].includes(team) && s[p.side] !== team; })
+      .forEach(p => todo.push(`📸 Potwierdź wynik: ${_h(p.matchData.team1.name)} ${p.matchData.team1.score}:${p.matchData.team2.score} ${_h(p.matchData.team2.name)}`));
+  }
+  awardsList.filter(a => a.status === 'open' && a.categories.some(c => !myAwardVotes[a.id]?.[c.key])).forEach(a => todo.push(`🗳 Zagłosuj: <b>${_h(a.title)}</b> (Dashboard)`));
+  const openVotes = items.filter(s => !_voteClosedClient(s) && !myVotes[String(s.id)] && !_ssResult(ctx, s)).length;
+  if(openVotes) todo.push(`🎯 Wytypuj zwycięzców: ${openVotes} ${openVotes === 1 ? 'mecz czeka' : 'mecze czekają'} na Twój typ`);
+  const po = typeof getActivePlayoff === 'function' ? getActivePlayoff() : null;
+  if(po && _bracketReady(po) && !bracketData[String(po.id)]?.locked && !myBracket[String(po.id)]) todo.push('🏆 Wypełnij drabinkę w Typerze playoffów');
+  if(!myProfile || !myProfile.days?.some(Boolean)) todo.push('👥 Ustaw swoją dostępność (niżej) — kapitan zobaczy, w które dni możesz grać');
+  // Najbliższe mecze drużyny
+  const next = team ? items.filter(s => [s.team1, s.team2].includes(team) && !_ssResult(ctx, s)?.done)
+    .sort((a, b) => (a.date || '9999') .localeCompare(b.date || '9999') || a.week - b.week).slice(0, 4) : [];
+  // Statystyki
+  let stats = null;
+  if(me) {
+    const ms = _seasonMatchesOf(sid);
+    let gp = 0, pts = 0, reb = 0, ast = 0;
+    ms.forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => { if(p.name === me) { gp++; pts += p.pts || 0; reb += p.reb || 0; ast += p.ast || 0; } })));
+    if(gp) stats = { gp, ppg: (pts / gp).toFixed(1), rpg: (reb / gp).toFixed(1), apg: (ast / gp).toFixed(1) };
+  }
+  const myTyper = (typerData[_seasonKey(sid)]?.overall || []).findIndex(x => x.id === discordUser.id);
+  const teamsOpts = teamRegistrations.filter(r => r.status === 'approved' && (!sid || !r.seasonId || r.seasonId === sid)).map(r => r.teamName);
+  const roster = team ? (teamRegistrations.find(r => r.teamName === team)?.players || []).map(p => p.gamertag) : [];
+  const days = myProfile?.days?.length ? myProfile.days : [false, false, false, false, false, false, false];
+  const curWeek = items.find(s => s.weekStart && s.weekStart <= _today() && _today() < _ssAddDays(s.weekStart, 7))?.week || null;
+  const nextWeek = curWeek ? curWeek + 1 : (items.length ? Math.min(...items.map(s => s.week)) : null);
+  const wkDays = w => (myProfile?.weeks?.[w]) || null;
+  const dayRow = (arr, key) => DOW.map((d, i) => `<button type="button" data-k="${key}" data-i="${i}" onclick="this.classList.toggle('on');this.style.background=this.classList.contains('on')?'var(--accent)':'var(--bg)';this.style.color=this.classList.contains('on')?'rgba(0,0,0,.88)':'var(--text)'"
+    class="${arr[i] ? 'on' : ''}" style="flex:1;min-width:38px;padding:.35rem 0;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-family:inherit;font-weight:800;font-size:.76rem;background:${arr[i] ? 'var(--accent)' : 'var(--bg)'};color:${arr[i] ? 'rgba(0,0,0,.88)' : 'var(--text)'}">${d}</button>`).join('');
+  const m = _fxModal('mypanel-modal', 720);
+  m.querySelector('.modal').innerHTML = _fxHead('mypanel-modal', `👤 Mój panel`) + `
+    <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1rem">
+      ${_avatarHtml(discordUser.avatar, 44)}
+      <div><div style="font-weight:900;font-size:1.05rem">${_h(discordUser.name)}${isCaptain ? ' <span style="font-size:.7rem;color:var(--accent)">🧢 KAPITAN</span>' : ''}</div>
+        <div style="font-size:.78rem;color:var(--muted)">${team ? '🏀 ' + _h(team) : 'Bez drużyny'}${me ? ' · 🎮 ' + _h(me) : ''}${myTyper >= 0 ? ` · 🎯 typer: ${myTyper + 1}. miejsce` : ''}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.8rem">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
+        <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">✅ DO ZROBIENIA</div>
+        ${todo.map(t => `<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px dashed rgba(127,127,127,.2)">${t}</div>`).join('') || '<div style="font-size:.8rem;color:var(--win)">Wszystko zrobione 👌</div>'}
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
+        <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📅 NAJBLIŻSZE MECZE${team ? ' — ' + _h(team).toUpperCase() : ''}</div>
+        ${next.map(s => `<div style="font-size:.8rem;padding:.25rem 0;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+          <b style="min-width:72px">${s.date ? _ssFmt(s.date) + ' ' + (s.time || '') : 'Week ' + s.week}</b>
+          vs <b>${_h(s.team1 === team ? s.team2 : s.team1)}</b> ${_isLive(s) ? '<span style="color:#dc2626;font-weight:900">🔴</span>' : ''} ${_streamLinks(s, true)}</div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">${team ? 'Brak zaplanowanych meczów' : 'Wybierz swoją drużynę niżej'}</div>`}
+        ${stats ? `<div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.7rem 0 .3rem">📊 MÓJ SEZON</div>
+          <div style="font-size:.84rem"><b>${stats.ppg}</b> PTS · <b>${stats.rpg}</b> REB · <b>${stats.apg}</b> AST <span style="color:var(--muted)">(${stats.gp} ${_plPL(stats.gp, 'mecz', 'mecze', 'meczów')})</span></div>
+          ${_playerAchievementsHtml(me)}
+          <div style="display:flex;gap:.35rem;margin-top:.5rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="openShareCard(this.dataset.p)" data-p="${_h(me)}">🪪 Moja karta</button>
+          <button class="btn btn-ghost" style="font-size:.72rem" onclick="openPlayerModal(this.dataset.p)" data-p="${_h(me)}">Profil</button></div>` : ''}
+      </div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem;margin-top:.8rem">
+      <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">🎮 MÓJ PROFIL GRACZA I DOSTĘPNOŚĆ</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem">
+        <div><label style="${_MODAL_LBL}">Drużyna</label><select id="me-team" style="${_MODAL_INP}" onchange="document.getElementById('me-gt-list').innerHTML=(teamRegistrations.find(r=>r.teamName===this.value)?.players||[]).map(p=>'<option value=&quot;'+p.gamertag+'&quot;>').join('')">
+          <option value="">— bez drużyny —</option>${teamsOpts.map(t => `<option ${t === (myProfile?.team || team) ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select></div>
+        <div><label style="${_MODAL_LBL}">Mój nick w grze</label><input id="me-gt" list="me-gt-list" value="${_h(myProfile?.gamertag || me || '')}" maxlength="32" style="${_MODAL_INP}">
+          <datalist id="me-gt-list">${roster.map(g => `<option value="${_h(g)}">`).join('')}</datalist></div>
+      </div>
+      <label style="${_MODAL_LBL}">W które dni zwykle mogę grać</label>
+      <div style="display:flex;gap:.3rem;margin-bottom:.7rem">${dayRow(days, 'g')}</div>
+      ${nextWeek ? `<label style="${_MODAL_LBL}">Wyjątek na Week ${curWeek || nextWeek} <span style="font-weight:400;text-transform:none;letter-spacing:0">(zostaw puste = jak zwykle)</span></label>
+        <div style="display:flex;gap:.3rem;margin-bottom:.8rem">${dayRow(wkDays(curWeek || nextWeek) || [false, false, false, false, false, false, false], 'w')}</div>` : ''}
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="saveMyProfile(${curWeek || nextWeek || 'null'})">💾 Zapisz</button></div>
+    </div>`;
+  m.classList.add('open');
+}
+async function saveMyProfile(week) {
+  if(!_ensureSession()) return;
+  const read = key => DOW.map((_, i) => !!document.querySelector(`#mypanel-modal button[data-k="${key}"][data-i="${i}"]`)?.classList.contains('on'));
+  const days = read('g'), wk = read('w');
+  const weeks = { ...(myProfile?.weeks || {}) };
+  if(week) { if(wk.some(Boolean)) weeks[week] = wk; else delete weeks[week]; }
+  const res = await _api('/me', 'POST', { team: document.getElementById('me-team').value, gamertag: document.getElementById('me-gt').value.trim(), days, weeks, seasonId: currentSeasonId || null }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  myProfile = res.me;
+  const i = playersList.findIndex(p => p.id === res.me.id);
+  if(i >= 0) playersList[i] = res.me; else playersList.push(res.me);
+  showToast('✅ Zapisano', 'success');
+  openMyPanel(); renderSeasonSchedule();
+}
+
+// ═══ 🪪 KARTA ZAWODNIKA ══════════════════════════════════════════
+async function _shareCardCanvas(name) {
+  const ed = _currentEdition();
+  const ms = _editionMatches(ed);
+  let gp = 0, team = {}, t = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0 }, best = null;
+  ms.forEach(m => [m.team1, m.team2].forEach(tm => (tm.players || []).forEach(p => {
+    if(p.name !== name) return;
+    gp++; team[tm.name] = (team[tm.name] || 0) + 1;
+    Object.keys(t).forEach(k => t[k] += p[k] || 0);
+    if(!best || (p.pts || 0) > best.pts) best = { pts: p.pts || 0, reb: p.reb || 0, ast: p.ast || 0, opp: tm === m.team1 ? m.team2.name : m.team1.name, date: m.date };
+  })));
+  if(!gp) return null;
+  const mainTeam = Object.entries(team).sort((a, b) => b[1] - a[1])[0][0];
+  // miejsce w lidze (PPG, min. 2 mecze)
+  const agg = {};
+  ms.forEach(m => [m.team1, m.team2].forEach(tm => (tm.players || []).forEach(p => { const a = agg[p.name] = agg[p.name] || { pts: 0, gp: 0 }; a.pts += p.pts || 0; a.gp++; })));
+  const ranked = Object.entries(agg).filter(([, a]) => a.gp >= 2).sort((a, b) => b[1].pts / b[1].gp - a[1].pts / a[1].gp);
+  const rank = ranked.findIndex(([n]) => n === name) + 1;
+  const ach = _achievements(ed).filter(e => e.player === name);
+  const achGroups = {}; ach.forEach(e => { achGroups[e.name] = achGroups[e.name] || { icon: e.icon, n: 0 }; achGroups[e.name].n++; });
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), font = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
+  const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#0d0f14'); bg.addColorStop(1, '#1d1230');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#8b0000'; g.fillRect(0, 0, W, 12); g.fillStyle = '#f5c518'; g.fillRect(0, 12, W, 4);
+  g.textAlign = 'center';
+  g.fillStyle = '#f5c518'; g.font = `900 34px ${font}`; g.fillText('2K PRO-AM EKSTRAKLASA · KARTA ZAWODNIKA', W / 2, 80);
+  g.fillStyle = '#8b90a0'; g.font = `700 28px ${font}`; g.fillText((ed || '').toUpperCase(), W / 2, 120);
+  // logo drużyny
+  const R = 120, cy = 300;
+  g.save(); g.beginPath(); g.arc(W / 2, cy, R, 0, Math.PI * 2); g.closePath(); g.fillStyle = typeof teamColor === 'function' ? teamColor(mainTeam) : '#333'; g.fill();
+  const img = await _ssLoadImg(_ssLogoSrc(mainTeam));
+  try { if(img) { g.clip(); const sc = Math.max(R * 2 / img.width, R * 2 / img.height); g.drawImage(img, W / 2 - img.width * sc / 2, cy - img.height * sc / 2, img.width * sc, img.height * sc); }
+        else { g.fillStyle = '#fff'; g.font = `900 90px ${font}`; g.textBaseline = 'middle'; g.fillText(typeof teamInitials === 'function' ? teamInitials(mainTeam) : mainTeam.slice(0, 2), W / 2, cy + 4); } } catch(e) {}
+  g.restore(); g.textBaseline = 'alphabetic';
+  g.lineWidth = 7; g.strokeStyle = '#f5c518'; g.beginPath(); g.arc(W / 2, cy, R, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#fff'; g.font = `900 92px ${font}`;
+  let nm = name; while(g.measureText(nm).width > 940 && nm.length > 3) nm = nm.slice(0, -2) + '…';
+  g.fillText(nm, W / 2, 530);
+  g.fillStyle = '#c9cdd8'; g.font = `700 36px ${font}`; g.fillText(mainTeam + (rank ? `  ·  #${rank} w lidze (PPG)` : ''), W / 2, 585);
+  // statystyki
+  const cells = [['PTS', t.pts / gp], ['REB', t.reb / gp], ['AST', t.ast / gp], ['STL', t.stl / gp], ['BLK', t.blk / gp], ['FG%', t.fga ? t.fgm / t.fga * 100 : 0]];
+  cells.forEach(([lab, v], i) => {
+    const col = i % 3, row = Math.floor(i / 3), x = 210 + col * 330, y = 700 + row * 190;
+    g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(x - 145, y - 95, 290, 165);
+    g.fillStyle = '#f5c518'; g.font = `900 84px ${font}`; g.fillText(lab === 'FG%' ? Math.round(v) + '%' : v.toFixed(1), x, y + 10);
+    g.fillStyle = '#8b90a0'; g.font = `800 28px ${font}`; g.fillText(lab, x, y + 52);
+  });
+  g.fillStyle = '#c9cdd8'; g.font = `700 30px ${font}`; g.fillText(`${gp} ${_plPL(gp, 'mecz', 'mecze', 'meczów')}${t.tpm ? ` · ${t.tpm} ${_plPL(t.tpm, 'trójka', 'trójki', 'trójek')}` : ''}`, W / 2, 1035);
+  if(best) { g.fillStyle = '#8b90a0'; g.font = `700 28px ${font}`; g.fillText(`Najlepszy mecz: ${best.pts} PTS · ${best.reb} REB · ${best.ast} AST vs ${best.opp}`, W / 2, 1085); }
+  const chips = Object.entries(achGroups).slice(0, 4).map(([n, x]) => `${x.icon} ${n.split(' (')[0]}${x.n > 1 ? ' ×' + x.n : ''}`);
+  if(chips.length) { g.fillStyle = '#a78bfa'; g.font = `800 30px ${font}`; g.fillText(chips.slice(0, 2).join('    '), W / 2, 1170); if(chips.length > 2) g.fillText(chips.slice(2).join('    '), W / 2, 1215); }
+  g.fillStyle = '#5a6070'; g.font = `600 24px ${font}`; g.fillText((location.host || 'chemik81.github.io') + location.pathname.replace(/index\.html$/, ''), W / 2, H - 30);
+  try { return c.toDataURL('image/png'); } catch(e) { return null; }
+}
+async function openShareCard(name) {
+  const m = _fxModal('sharecard-modal', 560);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('sharecard-modal', '🪪 Karta zawodnika') + '<div style="color:var(--muted)">⏳ Rysuję…</div>';
+  m.classList.add('open');
+  try { if(document.fonts?.ready) await document.fonts.ready; } catch(e) {}
+  const url = await _shareCardCanvas(name);
+  if(!url) { box.innerHTML = _fxHead('sharecard-modal', '🪪 Karta zawodnika') + `<div style="color:var(--muted)">Brak meczów gracza ${_h(name)} w tej edycji.</div>`; return; }
+  window._posterData = { url, m: null };
+  box.innerHTML = _fxHead('sharecard-modal', '🪪 Karta zawodnika') + `
+    <img src="${url}" alt="" style="width:100%;border-radius:10px;border:1px solid var(--border);margin-bottom:.8rem">
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
+      <a href="${url}" download="karta-${String(name).replace(/[^\w.-]+/g, '_')}.png" class="btn btn-primary" style="text-decoration:none">⬇ Pobierz PNG</a>
+      ${navigator.clipboard && window.ClipboardItem ? `<button class="btn btn-ghost" onclick="_copyPoster()">📋 Kopiuj</button>` : ''}
+    </div>`;
+}
+
+// ═══ ✏️ ZMIANY SKŁADU ════════════════════════════════════════════
+function _rosterBlock(r) {
+  const isAdmin = _isLoggedInSync();
+  const isCap = discordUser && r.captain?.id === discordUser.id && r.status === 'approved';
+  const pend = (r.rosterRequests || []).filter(q => q.status === 'pending');
+  const locked = rosterLockDate && _today() > rosterLockDate;
+  let html = pend.map(q => `<div style="margin-top:.5rem;font-size:.76rem;background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.45rem .6rem">
+    ⏳ <b>Prośba o zmianę składu</b>: ${q.add.length ? '➕ ' + q.add.map(p => _h(p.gamertag)).join(', ') : ''} ${q.remove.length ? '➖ ' + q.remove.map(_h).join(', ') : ''}
+    ${q.note ? `<div style="color:var(--muted)">${_h(q.note)}</div>` : ''}
+    ${isAdmin ? `<div style="display:flex;gap:.3rem;margin-top:.35rem"><button class="btn btn-primary" style="font-size:.7rem;padding:.2rem .5rem" onclick="decideRoster('${r.id}','${q.id}',true)">✅ Zatwierdź</button>
+      <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="decideRoster('${r.id}','${q.id}',false)">❌ Odrzuć</button></div>` : ''}
+  </div>`).join('');
+  if(isCap && !pend.length) html += `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin-top:.5rem" ${locked ? 'disabled title="Okno transferowe zamknięte"' : ''} onclick="openRosterChange('${r.id}')">✏️ Zmień skład${locked ? ' (okno zamknięte)' : ''}</button>`;
+  return html;
+}
+function openRosterChange(regId) {
+  const r = teamRegistrations.find(x => x.id === regId);
+  if(!r || !_ensureSession()) return;
+  const m = _fxModal('roster-modal', 520);
+  m.querySelector('.modal').innerHTML = _fxHead('roster-modal', `✏️ Zmiana składu — ${_h(r.teamName)}`) + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Zaznacz graczy do usunięcia i dopisz nowych. Zmianę zatwierdza admin — potem trafi do 🔁 Transferów.${rosterLockDate ? ` Okno transferowe do <b>${_ssFmt(rosterLockDate)}</b>.` : ''}</div>
+    <label style="${_MODAL_LBL}">Obecny skład (zaznacz do usunięcia)</label>
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.8rem">${(r.players || []).map(p => `<label style="font-size:.78rem;border:1px solid var(--border);border-radius:6px;padding:.2rem .5rem;cursor:pointer"><input type="checkbox" class="ro-rm" value="${_h(p.gamertag)}" style="accent-color:var(--loss)"> ${_h(p.gamertag)}</label>`).join('')}</div>
+    <label style="${_MODAL_LBL}">Nowi gracze (jeden nick w linii)</label>
+    <textarea id="ro-add" rows="3" placeholder="Nick1&#10;Nick2" style="${_MODAL_INP};margin-bottom:.6rem"></textarea>
+    <input id="ro-note" maxlength="200" placeholder="Notka dla admina (opcjonalnie)" style="${_MODAL_INP};margin-bottom:.9rem">
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('roster-modal')">Anuluj</button><button class="btn btn-primary" onclick="sendRosterChange('${regId}')">📤 Wyślij do admina</button></div>`;
+  m.classList.add('open');
+}
+async function sendRosterChange(regId) {
+  const remove = [...document.querySelectorAll('#roster-modal .ro-rm:checked')].map(x => x.value);
+  const add = document.getElementById('ro-add').value.split('\n').map(x => x.trim()).filter(Boolean).map(g => ({ gamertag: g }));
+  const res = await _api('/roster-change', 'POST', { regId, add, remove, note: document.getElementById('ro-note').value.trim() }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const i = teamRegistrations.findIndex(x => x.id === regId); if(i >= 0) teamRegistrations[i] = res.registration;
+  _fxClose('roster-modal'); renderTeamRegistrations();
+  showToast('📤 Wysłano — czeka na admina', 'success');
+}
+async function decideRoster(regId, reqId, approve) {
+  if(!confirm(approve ? 'Zatwierdzić zmianę składu? Utworzy wpisy w Transferach.' : 'Odrzucić zmianę składu?')) return;
+  const res = await _api('/roster-change', 'PATCH', { regId, reqId, approve }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const i = teamRegistrations.findIndex(x => x.id === regId); if(i >= 0) teamRegistrations[i] = res.registration;
+  if(approve) { await loadData(); renderDashboard(); } else renderTeamRegistrations();
+  showToast(approve ? '✅ Skład zaktualizowany' : 'Odrzucono', 'success');
+}
+async function saveRosterLock() {
+  const v = document.getElementById('roster-lock')?.value || null;
+  const prev = rosterLockDate; rosterLockDate = v;
+  if(!(await saveData())) { rosterLockDate = prev; return; }
+  _audit('Okno transferowe', v ? 'do ' + v : 'bez limitu');
+  showToast('✅ Zapisano okno transferowe', 'success'); renderTeamRegistrations();
+}
+
+// ═══ 🔮 SCENARIUSZE AWANSU ═══════════════════════════════════════
+function _seasonPoints(sid) {
+  const t = {};
+  const add = n => (t[n] = t[n] || { team: n, pts: 0, w: 0, l: 0, gp: 0 });
+  _seasonMatchesOf(sid).filter(m => !_isAnyPlayoffMatch(m)).forEach(m => {
+    const w1 = (m.team1.score || 0) > (m.team2.score || 0);
+    const W = add(w1 ? m.team1.name : m.team2.name), L = add(w1 ? m.team2.name : m.team1.name);
+    W.w++; W.gp++; W.pts += 2; L.l++; L.gp++; L.pts += m.walkover ? 0 : 1;
+  });
+  _penaltiesFor(sid).forEach(p => { add(p.team).pts -= p.points; });
+  return t;
+}
+function renderScenarios() {
+  const el = document.getElementById('scenario-wrap');
+  if(!el) return;
+  const sid = currentSeasonId || null;
+  const season = seasons.find(x => x.id === sid), fx = season?.fixture;
+  const items = schedule.filter(s => s.generated && s.seasonId === sid);
+  if(!fx || !items.length) { el.innerHTML = ''; return; }
+  const ctx = { demo: false };
+  const remaining = [];
+  items.forEach(s => { const left = (s.bestOf || 1) - (_ssResult(ctx, s)?.games.length || 0); for(let i = 0; i < left; i++) remaining.push(s); });
+  const played = items.some(s => _ssResult(ctx, s));
+  if(!played || !remaining.length) { el.innerHTML = ''; return; }
+  const groups = fx.format === 'groups' && fx.groups?.length ? fx.groups.map(g => ({ name: g.name, teams: g.teams })) : [{ name: '', teams: [...new Set(items.flatMap(s => [s.team1, s.team2]))] }];
+  const spots = fx.playoffSpots || (groups.length > 1 ? 2 : Math.min(4, groups[0].teams.length - 1));
+  const base = _seasonPoints(sid);
+  const pts0 = n => base[n]?.pts || 0;
+  const remBy = n => remaining.filter(s => s.team1 === n || s.team2 === n).length;
+  const sims = 2000, made = {};
+  const probs = remaining.map(s => _eloProb(s.team1, s.team2));
+  for(let k = 0; k < sims; k++) {
+    const p = {};
+    groups.forEach(g => g.teams.forEach(n => { p[n] = pts0(n) + Math.random() * 0.01; }));
+    remaining.forEach((s, i) => { const w1 = Math.random() < probs[i]; if(p[s.team1] !== undefined) p[s.team1] += w1 ? 2 : 1; if(p[s.team2] !== undefined) p[s.team2] += w1 ? 1 : 2; });
+    groups.forEach(g => [...g.teams].sort((a, b) => p[b] - p[a]).slice(0, spots).forEach(n => { made[n] = (made[n] || 0) + 1; }));
+  }
+  const isAdmin = _isLoggedInSync();
+  const rows = groups.map(g => {
+    const list = g.teams.map(n => ({ n, now: pts0(n), max: pts0(n) + 2 * remBy(n), min: pts0(n) + remBy(n), pct: Math.round((made[n] || 0) / sims * 100) }));
+    list.forEach(x => {
+      const others = list.filter(o => o !== x);
+      x.clinched = others.filter(o => o.max >= x.min).length < spots;
+      x.out = others.filter(o => o.min > x.max).length >= spots;
+    });
+    list.sort((a, b) => b.pct - a.pct || b.now - a.now);
+    return (g.name ? `<div style="padding:.4rem .9rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;color:var(--accent);background:var(--surface2)">${_h(g.name)}</div>` : '') +
+      list.map(x => `<div style="display:grid;grid-template-columns:26px 1fr 60px 60px 1fr 90px;gap:.6rem;align-items:center;padding:.4rem .9rem;border-bottom:1px solid var(--border);font-size:.82rem">
+        ${teamLogo(x.n, 24, '.5rem')}<b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(x.n)}</b>
+        <span style="text-align:right">${x.now} pkt</span><span style="text-align:right;color:var(--muted)">max ${x.max}</span>
+        <span style="height:7px;border-radius:4px;background:var(--surface2);overflow:hidden"><span style="display:block;height:100%;width:${x.pct}%;background:${x.clinched ? 'var(--win)' : x.out ? 'var(--loss)' : 'var(--accent)'}"></span></span>
+        <b style="text-align:right;color:${x.clinched ? 'var(--win)' : x.out ? 'var(--loss)' : 'var(--text)'}">${x.clinched ? '✅ pewny' : x.out ? '❌ odpadli' : x.pct + '%'}</b>
+      </div>`).join('');
+  }).join('');
+  el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+      <div class="section-title" style="margin-bottom:0;font-size:1.3rem">🔮 Walka o playoff</div>
+      <div style="font-size:.72rem;color:var(--muted)">Top ${spots}${groups.length > 1 ? ' z każdej grupy' : ''} awansuje · ${remaining.length} ${_plPL(remaining.length, 'mecz', 'mecze', 'meczów')} do rozegrania
+        ${isAdmin ? ` · <select onchange="setPlayoffSpots(+this.value)" style="width:auto;display:inline-block;padding:.1rem .3rem;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;font-size:.72rem">${[1, 2, 3, 4, 5, 6, 8].map(n => `<option ${n === spots ? 'selected' : ''}>${n}</option>`).join('')}</select> miejsc` : ''}</div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem">${rows}
+      <div style="padding:.4rem .9rem;font-size:.68rem;color:var(--muted)">Szansa = ${sims} symulacji reszty sezonu z prognozą rankingu siły. ✅/❌ = rozstrzygnięte matematycznie (punkty: wygrana 2, porażka 1, walkower 0).</div>
+    </div>`;
+}
+async function setPlayoffSpots(n) {
+  const season = seasons.find(x => x.id === currentSeasonId);
+  if(!season?.fixture) return;
+  const prev = season.fixture.playoffSpots;
+  season.fixture.playoffSpots = n;
+  if(!(await saveData())) { season.fixture.playoffSpots = prev; return; }
+  _audit('Miejsca w playoff', String(n));
+  renderScenarios();
+}
+
+// ═══ 🏆 GALA SEZONU ══════════════════════════════════════════════
+function _galaStats(ed) {
+  const agg = {};
+  _editionMatches(ed).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
+    if(!p.name) return;
+    const a = agg[p.name] = agg[p.name] || { name: p.name, teams: {}, gp: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0 };
+    a.gp++; a.teams[t.name] = (a.teams[t.name] || 0) + 1;
+    ['pts', 'reb', 'ast', 'stl', 'blk'].forEach(k => a[k] += p[k] || 0); a.to += p.to || p.tov || 0;
+  })));
+  return Object.values(agg).map(a => ({ ...a, team: Object.entries(a.teams).sort((x, y) => y[1] - x[1])[0]?.[0] || '', eff: (a.pts + a.reb * 1.2 + a.ast * 1.5 + a.stl * 2 + a.blk * 2 - a.to * 1.5) / a.gp }));
+}
+function _galaCandidates() {
+  const ed = _currentEdition();
+  const st = _galaStats(ed);
+  const maxGp = Math.max(0, ...st.map(x => x.gp));
+  const minGp = Math.max(2, Math.round(maxGp * 0.4));
+  const pool = st.filter(x => x.gp >= minGp);
+  const line = x => `${x.team} · ${(x.pts / x.gp).toFixed(1)} PTS · ${(x.reb / x.gp).toFixed(1)} REB · ${(x.ast / x.gp).toFixed(1)} AST`;
+  const cand = (list, sub) => list.slice(0, 4).map(x => ({ id: x.name + '|' + x.team, label: x.name, team: x.team, sub: sub(x) }));
+  const cats = [];
+  const mvp = [...pool].sort((a, b) => b.eff - a.eff);
+  if(mvp.length >= 2) cats.push({ key: 'mvp', emoji: '👑', title: 'MVP sezonu', candidates: cand(mvp, line) });
+  const dpoy = [...pool].sort((a, b) => (b.stl + b.blk) / b.gp - (a.stl + a.blk) / a.gp);
+  if(dpoy.length >= 2) cats.push({ key: 'dpoy', emoji: '🛡️', title: 'Obrońca sezonu', candidates: cand(dpoy, x => `${x.team} · ${(x.stl / x.gp).toFixed(1)} STL · ${(x.blk / x.gp).toFixed(1)} BLK`) });
+  // Odkrycie: pierwszy mecz w lidze w tej edycji
+  const firstEd = {};
+  _withAllMatches(() => [...matches].sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => { if(p.name && !firstEd[p.name]) firstEd[p.name] = _editionOf(m.seasonId); }))));
+  const roy = pool.filter(x => firstEd[x.name] === ed).sort((a, b) => b.eff - a.eff);
+  if(roy.length >= 2) cats.push({ key: 'roy', emoji: '🌱', title: 'Odkrycie sezonu', candidates: cand(roy, line) });
+  // Największy postęp: PPG względem poprzedniej edycji
+  const eds = _editionsList(); const prevEd = eds[eds.indexOf(ed) + 1];
+  if(prevEd) {
+    const prev = Object.fromEntries(_galaStats(prevEd).filter(x => x.gp >= 2).map(x => [x.name, x.pts / x.gp]));
+    const mip = pool.filter(x => prev[x.name] !== undefined).map(x => ({ ...x, d: x.pts / x.gp - prev[x.name] })).filter(x => x.d > 0).sort((a, b) => b.d - a.d);
+    if(mip.length >= 2) cats.push({ key: 'mip', emoji: '📈', title: 'Największy postęp', candidates: cand(mip, x => `${x.team} · +${x.d.toFixed(1)} PTS/mecz względem ${prevEd}`) });
+  }
+  const sClips = clipsList.filter(c => (c.seasonId || null) === (currentSeasonId || null)).sort((a, b) => b.likes - a.likes).slice(0, 4);
+  if(sClips.length >= 2) cats.push({ key: 'clip', emoji: '🎬', title: 'Akcja sezonu', candidates: sClips.map(c => ({ id: 'c' + c.id, label: c.title || 'Akcja', sub: `${(c.teams || []).join(' vs ')} · ❤️ ${c.likes}` })) });
+  const team5 = mvp.slice(0, 5);
+  return { cats, team5, ed };
+}
+function openGalaCreate() {
+  const { cats, team5, ed } = _galaCandidates();
+  window._awardDraft = { seasonId: currentSeasonId || null, week: null, cats, type: 'season', title: `Gala sezonu — ${_seasonName(currentSeasonId) || ed || ''}`.trim() };
+  const m = _fxModal('awards-create-modal', 640);
+  m.querySelector('.modal').innerHTML = _fxHead('awards-create-modal', '🏆 Gala sezonu') + (cats.length ? `
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.8rem">Kandydaci ze statystyk całego sezonu (min. ${Math.max(2, Math.round(Math.max(0, ..._galaStats(ed).map(x => x.gp)) * 0.4))} meczów). Głosują wszyscy zalogowani, <b>głos kapitana liczy się podwójnie</b>.</div>
+    ${cats.map((c, i) => `<label style="display:block;border:1px solid var(--border);border-radius:10px;padding:.6rem .8rem;margin-bottom:.5rem;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:.5rem;font-weight:800;margin-bottom:.3rem"><input type="checkbox" data-cat="${i}" checked style="accent-color:var(--accent)"> ${c.emoji} ${_h(c.title)}</div>
+      ${c.candidates.map(x => `<div style="font-size:.78rem;margin-left:1.5rem"><b>${_h(x.label)}</b> <span style="color:var(--muted)">${_h(x.sub)}</span></div>`).join('')}
+    </label>`).join('')}
+    ${team5.length ? `<div style="font-size:.78rem;margin:.6rem 0;padding:.5rem .7rem;background:var(--surface2);border-radius:8px">🏀 <b>Drużyna sezonu</b> (wybierana automatycznie, ogłoszona na gali): ${team5.map(x => _h(x.name)).join(', ')}</div>` : ''}
+    <label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;margin:.8rem 0 1rem;cursor:pointer"><input type="checkbox" id="aw-announce" checked style="accent-color:var(--accent)"> Ogłoś start głosowania na Discordzie</label>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-ghost" onclick="_fxClose('awards-create-modal')">Anuluj</button><button class="btn btn-primary" onclick="createAwards()">🗳 Otwórz głosowanie</button></div>`
+    : '<div style="color:var(--muted);text-align:center;padding:1.5rem">Za mało rozegranych meczów, żeby wybrać kandydatów.</div>');
+  m.classList.add('open');
+}
+
+// ═══ ⚡ PAKIET TYGODNIA ══════════════════════════════════════════
+async function runWeekPack() {
+  const ctx = _ssCtx(), week = _ssWeek, sid = ctx.seasonId;
+  if(!confirm(`Wykonać pakiet Week ${week}?\n\n• przypomnienia dla kapitanów\n• podsumowanie tygodnia → Discord\n• Power Ranking → Dashboard + Discord\n• głosowanie na nagrody tygodnia → Dashboard + Discord`)) return;
+  const m = _fxModal('pack-modal', 480);
+  const steps = [];
+  const draw = () => { m.querySelector('.modal').innerHTML = _fxHead('pack-modal', `⚡ Pakiet Week ${week}`) + steps.map(s => `<div style="font-size:.86rem;padding:.3rem 0">${s}</div>`).join(''); };
+  m.classList.add('open');
+  const step = async (label, fn) => { steps.push('⏳ ' + label); draw(); try { const r = await fn(); steps[steps.length - 1] = (r === false ? '⚠️ ' : '✅ ') + label + (typeof r === 'string' ? ' — ' + r : ''); } catch(e) { steps[steps.length - 1] = '❌ ' + label + ' — ' + e.message; } draw(); };
+  await step('Przypomnienia dla kapitanów', async () => { const r = await _api('/captain-remind', 'POST', { seasonId: sid, week }, { admin: true }); if(!r.ok) throw new Error(r.error); return r.captains ? `wysłano ${r.sent}` : 'wszyscy wybrali terminy'; });
+  await step('Podsumowanie tygodnia', async () => { await openWeekSummary(); _fxClose('summary-modal'); if(!window._summaryEmbed) return false; return (await _scheduleDiscordSend({ embeds: [JSON.parse(JSON.stringify(window._summaryEmbed))] })) ? 'wysłane' : false; });
+  await step('Power Ranking', async () => { await openPowerRankingCreate(); if(!window._powerDraft) return false; const pr = document.getElementById('pr-send'); if(pr) pr.checked = true; await savePowerRanking(); return 'opublikowany'; });
+  await step('Nagrody tygodnia', async () => { const cats = _awardCandidates(sid, week); if(!cats.length) return 'za mało meczów — pominięte'; window._awardDraft = { seasonId: sid, week, cats }; const m2 = _fxModal('awards-create-modal', 620); m2.querySelector('.modal').innerHTML = cats.map((c, i) => `<input type="checkbox" data-cat="${i}" checked><input type="checkbox" id="aw-announce" checked>`).join(''); await createAwards(); _fxClose('awards-create-modal'); return 'głosowanie otwarte'; });
+  _audit('Pakiet tygodnia', 'Week ' + week);
+  steps.push('<div style="margin-top:.6rem;color:var(--muted);font-size:.78rem">Gotowe. Możesz zamknąć to okno.</div>'); draw();
 }
 
 function goToTeamRegistrations() {
@@ -8997,6 +9737,7 @@ function renderTeamRegistrations() {
               </div>
               <div style="display:flex;flex-wrap:wrap;gap:.3rem">${playerPills}</div>
               ${rejectNote}
+              ${_rosterBlock(r)}
               ${adminBtns}
             </div>
           </div>
@@ -18627,6 +19368,34 @@ async function _dsLaunch() {
 
 
 // Dashboard: tabela, liderzy, drużyna tygodnia itd. liczone tylko z meczów bieżącego sezonu
+// Dziennik zmian: akcje admina wykonywane na stronie (wpis tylko, gdy akcja faktycznie się wykonała)
+(function() {
+  const wrap = (fn, describe) => {
+    if(typeof window[fn] !== 'function' || window[fn]._audited) return;
+    const orig = window[fn];
+    window[fn] = function(...args) {
+      let d = null;
+      try { d = describe(...args); } catch(e) {}
+      const out = orig.apply(this, args);
+      Promise.resolve(out).then(() => { try { if(d && d.done()) _audit(d.action, d.details); } catch(e) {} }).catch(() => {});
+      return out;
+    };
+    window[fn]._audited = true;
+  };
+  const sItem = k => { const s = _ssItem(k); return s ? `${s.team1} vs ${s.team2} (Week ${s.week})` : ''; };
+  const allCount = () => _withAllMatches(() => matches.length);
+  wrap('ssFinalize', (k, day) => ({ action: 'Zatwierdzono termin', details: `${sItem(k)}: ${day}`, done: () => !!_ssItem(k)?.date }));
+  wrap('ssUnfinalize', k => ({ action: 'Cofnięto termin', details: sItem(k), done: () => !_ssItem(k)?.date }));
+  wrap('ssConfirmLinkGames', k => { const before = JSON.stringify(_ssItem(k)?.matchIds || []); return { action: 'Przypięto wyniki', details: sItem(k), done: () => JSON.stringify(_ssItem(k)?.matchIds || []) !== before }; });
+  wrap('ssConfirmFixture', () => { const n = schedule.length; return { action: 'Wygenerowano terminarz', details: `${_ssGen?.teams?.length || ''} drużyn, ${_ssGen?.format === 'groups' ? 'grupy' : 'jedna grupa'}`, done: () => !_ssGen?.demo && schedule.length !== n }; });
+  wrap('toggleRegistrations', () => { const b = registrationsClosed; return { action: 'Zapisy drużyn', details: b ? 'otwarte' : 'zamknięte', done: () => registrationsClosed !== b }; });
+  wrap('saveMatch', () => { const n = allCount(); const pm = typeof pendingMatch !== 'undefined' && pendingMatch ? pendingMatch : null;
+    return { action: 'Dodano mecz', details: pm ? `${pm.team1?.name} ${pm.team1?.score}:${pm.team2?.score} ${pm.team2?.name}` : '', done: () => allCount() > n }; });
+  wrap('saveWalkover', () => { const n = allCount(); return { action: 'Walkower', details: `${document.getElementById('wo-winner')?.value || ''} vs ${document.getElementById('wo-loser')?.value || ''}`, done: () => allCount() > n }; });
+  wrap('deleteMatch', id => { const m = _withAllMatches(() => matches.find(x => String(x.id) === String(id)));
+    return { action: 'Usunięto mecz', details: m ? `${m.team1.name} ${m.team1.score}:${m.team2.score} ${m.team2.name} (${m.date})` : String(id), done: () => !_withAllMatches(() => matches.some(x => String(x.id) === String(id))) }; });
+})();
+
 // Profile i rekordy: dodatkowe sekcje (odznaki, gablota, rywalizacje, pobite rekordy)
 (function() {
   const inject = (fnName, elId, htmlFn, position) => {
@@ -18650,7 +19419,7 @@ async function _dsLaunch() {
     };
     window[fnName]._extended = true;
   };
-  inject('openPlayerModal', 'player-modal-content', name => _playerBadgesHtml(name), 'afterFirst');
+  inject('openPlayerModal', 'player-modal-content', name => `<div style="display:flex;justify-content:flex-end;margin-bottom:.5rem"><button class="btn btn-ghost" style="font-size:.74rem" onclick="openShareCard(this.dataset.p)" data-p="${_h(name)}">🪪 Karta do udostępnienia</button></div>` + _playerBadgesHtml(name), 'afterFirst');
   inject('openTeamModal', 'team-modal-content', tn => _teamExtrasHtml(tn), 'afterFirst');
   // Rekordy: liczone dla wybranej edycji gry (domyślnie bieżącej), z przełącznikiem edycji
   if(typeof window.openLeagueRecordsModal === 'function' && !window.openLeagueRecordsModal._extended) {
