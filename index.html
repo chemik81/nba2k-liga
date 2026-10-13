@@ -9207,7 +9207,7 @@ async function decideMember(playerId, approve, from) {
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   Object.assign(p, res.player);
   showToast(approve ? '✅ Potwierdzono' : 'Usunięto z drużyny', 'success');
-  if(from === 'panel') openMyPanel(); else renderTeamRegistrations();
+  if(from === 'panel') openMyPanel(); else if(from === 'roster') openTeamRoster(); else renderTeamRegistrations();
   renderSeasonSchedule();
 }
 function _membersHtml(team, canDecide, from) {
@@ -9280,6 +9280,7 @@ function openMyPanel() {
         ${next.map(s => `<div style="font-size:.8rem;padding:.25rem 0;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
           <b style="min-width:72px">${s.date ? _ssFmt(s.date) + ' ' + (s.time || '') : 'Week ' + s.week}</b>
           vs <b>${_h(s.team1 === team ? s.team2 : s.team1)}</b> ${_isLive(s) ? '<span style="color:#dc2626;font-weight:900">🔴</span>' : ''} ${_streamLinks(s, true)}</div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">${team ? 'Brak zaplanowanych meczów' : 'Wybierz swoją drużynę niżej'}</div>`}
+        ${team && !isCaptain ? `<button class="btn btn-ghost" style="font-size:.72rem;margin-top:.45rem" onclick="openTeamRoster(this.dataset.t, 'g')" data-t="${_h(team)}">👥 Dostępność drużyny</button>` : ''}
         ${stats ? `<div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.7rem 0 .3rem">📊 MÓJ SEZON</div>
           <div style="font-size:.84rem"><b>${stats.ppg}</b> PTS · <b>${stats.rpg}</b> REB · <b>${stats.apg}</b> AST <span style="color:var(--muted)">(${stats.gp} ${_plPL(stats.gp, 'mecz', 'mecze', 'meczów')})</span></div>
           ${_playerAchievementsHtml(me)}
@@ -9297,7 +9298,8 @@ function openMyPanel() {
           <option value="">— bez drużyny —</option>${teamsOpts.map(t => `<option ${t === (isCaptain ? team : myProfile?.team) ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select></div>
         <div><label style="${_MODAL_LBL}">Mój nick ze składu</label><select id="me-gt" style="${_MODAL_INP}"></select></div>
       </div>
-      ${isCaptain ? `<div style="margin-bottom:.7rem">${_membersHtml(team, true, 'panel') || '<div style="font-size:.74rem;color:var(--muted)">Nikt z drużyny nie połączył jeszcze konta.</div>'}</div>` : ''}
+      ${isCaptain ? `<div style="margin-bottom:.7rem">${_membersHtml(team, true, 'panel') || '<div style="font-size:.74rem;color:var(--muted)">Nikt z drużyny nie połączył jeszcze konta.</div>'}
+        <button class="btn btn-primary" style="font-size:.74rem;margin-top:.45rem" onclick="openTeamRoster(this.dataset.t, 'g')" data-t="${_h(team)}">👥 Skład i dostępność drużyny</button></div>` : ''}
       <label style="${_MODAL_LBL}">W które dni zwykle mogę grać</label>
       <div style="display:flex;gap:.3rem;margin-bottom:.45rem">${dayRow(days, 'g')}</div>
       ${(() => { const h = Object.values(myProfile?.hours || {})[0] || ['', ''];
@@ -9418,7 +9420,8 @@ async function openShareCard(name) {
 function _rosterBlock(r) {
   const isAdmin = _isLoggedInSync();
   const isCap = discordUser && r.captain?.id === discordUser.id && r.status === 'approved';
-  const membersHtml = r.status === 'approved' && (isAdmin || isCap) ? _membersHtml(r.teamName, true, 'card') : '';
+  const membersHtml = r.status === 'approved' && (isAdmin || isCap) ? _membersHtml(r.teamName, true, 'card') +
+    `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="openTeamRoster(this.dataset.t, 'g')" data-t="${_h(r.teamName)}">👥 Skład i dostępność</button>` : '';
   const pend = (r.rosterRequests || []).filter(q => q.status === 'pending');
   const locked = rosterLockDate && _today() > rosterLockDate;
   let html = pend.map(q => `<div style="margin-top:.5rem;font-size:.76rem;background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.45rem .6rem">
@@ -9615,6 +9618,75 @@ async function runWeekPack() {
   await step('Nagrody tygodnia', async () => { const cats = _awardCandidates(sid, week); if(!cats.length) return 'za mało meczów — pominięte'; window._awardDraft = { seasonId: sid, week, cats }; const m2 = _fxModal('awards-create-modal', 620); m2.querySelector('.modal').innerHTML = cats.map((c, i) => `<input type="checkbox" data-cat="${i}" checked><input type="checkbox" id="aw-announce" checked>`).join(''); await createAwards(); _fxClose('awards-create-modal'); return 'głosowanie otwarte'; });
   _audit('Pakiet tygodnia', 'Week ' + week);
   steps.push('<div style="margin-top:.6rem;color:var(--muted);font-size:.78rem">Gotowe. Możesz zamknąć to okno.</div>'); draw();
+}
+
+
+// ═══ 👥 SKŁAD I DOSTĘPNOŚĆ DRUŻYNY (kapitan / admin / gracze drużyny) ═══
+let _rosterView = { team: null, week: 'g' };
+function openTeamRoster(team, week) {
+  if(team) _rosterView.team = team;
+  if(week !== undefined) _rosterView.week = week;
+  team = _rosterView.team;
+  const reg = teamRegistrations.find(r => r.status === 'approved' && r.teamName === team);
+  if(!reg) return;
+  const isAdmin = _isLoggedInSync();
+  const isCap = !!(discordUser && reg.captain?.id === discordUser.id);
+  const sid = reg.seasonId || currentSeasonId || null;
+  const accounts = playersList.filter(p => p.team && String(p.team).toLowerCase() === team.toLowerCase());
+  const byNick = {};
+  accounts.forEach(a => { const k = String(a.gamertag || '').toLowerCase(); if(k && (!byNick[k] || a.status === 'confirmed')) byNick[k] = a; });
+  const weeks = [...new Set(schedule.filter(x => x.generated && (x.seasonId || null) === (sid || null)).map(x => x.week))].sort((a, b) => a - b);
+  const curWeek = schedule.find(x => x.generated && x.seasonId === sid && x.weekStart && x.weekStart <= _today() && _today() < _ssAddDays(x.weekStart, 7))?.week;
+  const wk = _rosterView.week;
+  const daysFor = a => wk === 'g' ? (a.days || []) : ((a.weeks && a.weeks[wk]) || a.days || []);
+  const cell = (a, i) => {
+    if(!a || a.status !== 'confirmed') return '<td style="text-align:center;color:rgba(127,127,127,.4)">·</td>';
+    const on = !!daysFor(a)[i], h = a.hours?.[i];
+    return on ? `<td style="text-align:center;background:rgba(22,163,74,.15)"><b style="color:var(--win)">✔</b>${h ? `<div style="font-size:.6rem;color:var(--muted)">${h[0].slice(0, 5)}–${h[1].slice(0, 5)}</div>` : ''}</td>`
+              : '<td style="text-align:center;color:var(--muted)">—</td>';
+  };
+  const decide = (a) => (isAdmin || isCap) && a.status === 'pending'
+    ? ` <button class="btn btn-primary" style="font-size:.62rem;padding:.08rem .35rem" onclick="decideMember('${a.id}',true,'roster')">✅</button><button class="btn btn-ghost" style="font-size:.62rem;padding:.08rem .35rem" onclick="decideMember('${a.id}',false,'roster')">❌</button>` : '';
+  const who = a => !a ? '<span style="color:var(--muted);font-size:.72rem">niepołączony</span>'
+    : `<span style="display:inline-flex;align-items:center;gap:.3rem">${_avatarHtml(a.avatar, 18)}<span style="font-size:.78rem">${_h(a.name)}</span>${a.status === 'confirmed' ? '<span title="potwierdzony" style="color:var(--win)">✅</span>' : '<span title="czeka na potwierdzenie" style="color:var(--accent)">⏳</span>'}${decide(a)}</span>`;
+  const rows = (reg.players || []).map(p => { const a = byNick[String(p.gamertag).toLowerCase()];
+    return `<tr><td style="font-weight:700;white-space:nowrap;text-align:left">${_h(p.gamertag)}</td><td style="text-align:left">${who(a)}</td>${DOW.map((_, i) => cell(a, i)).join('')}</tr>`; });
+  // kapitan bez nicku w składzie + konta z nickami spoza składu (np. po zmianie składu)
+  const capAcc = accounts.find(a => a.id === reg.captain?.id);
+  if(capAcc && !(reg.players || []).some(p => String(p.gamertag).toLowerCase() === String(capAcc.gamertag || '').toLowerCase()))
+    rows.push(`<tr><td style="font-weight:700;text-align:left">🧢 kapitan</td><td style="text-align:left">${who(capAcc)}</td>${DOW.map((_, i) => cell(capAcc, i)).join('')}</tr>`);
+  const confirmed = accounts.filter(a => a.status === 'confirmed');
+  const counts = DOW.map((_, i) => confirmed.filter(a => daysFor(a)[i]).length);
+  const linked = (reg.players || []).filter(p => byNick[String(p.gamertag).toLowerCase()]?.status === 'confirmed').length;
+  const pendingN = accounts.filter(a => a.status === 'pending').length;
+  const thS = 'font-size:.66rem;font-weight:800;letter-spacing:.5px;color:var(--muted);padding:.35rem .45rem;';
+  const th = `style="${thS}text-align:center"`, thL = `style="${thS}text-align:left"`;
+  const invite = `Połącz konto z drużyną ${team} na stronie ligi: zaloguj się przez Discord → kliknij swoją nazwę (Mój panel) → wybierz drużynę i swój nick → Zapisz. ${location.origin + location.pathname}`;
+  const m = _fxModal('team-roster-modal', 860);
+  m.querySelector('.modal').innerHTML = _fxHead('team-roster-modal', `👥 ${_h(team)} — skład i dostępność`) + `
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:.7rem;font-size:.78rem">
+      <span>🔗 Połączonych: <b style="color:${linked === (reg.players || []).length ? 'var(--win)' : 'var(--text)'}">${linked} / ${(reg.players || []).length}</b></span>
+      ${pendingN ? `<span style="color:var(--accent)">⏳ do potwierdzenia: <b>${pendingN}</b></span>` : ''}
+      <span style="flex:1"></span>
+      <label style="color:var(--muted)">Pokaż:
+        <select onchange="openTeamRoster(null, this.value === 'g' ? 'g' : +this.value)" style="width:auto;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.15rem .3rem;font-size:.76rem">
+          <option value="g" ${wk === 'g' ? 'selected' : ''}>zwykła dostępność</option>
+          ${weeks.map(w => `<option value="${w}" ${wk === w ? 'selected' : ''}>Week ${w}${w === curWeek ? ' (ten tydzień)' : ''}</option>`).join('')}
+        </select></label>
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem;min-width:620px">
+        <thead><tr style="background:var(--surface2)"><th ${thL}>NICK W GRZE</th><th ${thL}>KONTO NA STRONIE</th>${DOW.map(d => `<th ${th}>${d}</th>`).join('')}</tr></thead>
+        <tbody>${rows.join('').replace(/<tr>/g, '<tr style="border-top:1px solid var(--border)">').replace(/<td/g, '<td style="padding:.4rem .45rem"').replace(/style="padding:.4rem .45rem" style="/g, 'style="padding:.4rem .45rem;')}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--border);background:var(--surface2)"><td colspan="2" style="padding:.4rem .45rem;font-size:.72rem;color:var(--muted);font-weight:800">MOŻE GRAĆ (potwierdzeni)</td>
+          ${counts.map(n => `<td style="text-align:center;padding:.4rem;font-weight:900;color:${n >= 5 ? 'var(--win)' : n >= 3 ? 'var(--accent)' : 'var(--loss)'}">${n}</td>`).join('')}</tr></tfoot>
+      </table>
+    </div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.5rem">✔ = może grać (pod spodem godziny, jeśli gracz je podał) · ⏳ = konto czeka na Twoje potwierdzenie · liczą się tylko potwierdzeni gracze.</div>
+    ${isCap || isAdmin ? `<div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem">
+      <button class="btn btn-ghost" style="font-size:.76rem" onclick="navigator.clipboard?.writeText(${JSON.stringify(invite).replace(/"/g, '&quot;')}).then(()=>showToast('📋 Skopiowano zaproszenie — wklej je graczom na Discordzie','success'))">📋 Kopiuj zaproszenie dla graczy</button>
+    </div>` : ''}`;
+  m.classList.add('open');
 }
 
 function goToTeamRegistrations() {
