@@ -4186,10 +4186,24 @@ function renderScheduleDashboard() {
     <button onclick="showView('schedule')" style="font-size:.75rem;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.3rem .7rem;border-radius:6px;cursor:pointer;font-family:inherit">Wszystkie →</button>
   </div>` + upcoming.map(s=>{
     const dateStr = s.date ? new Date(s.date).toLocaleDateString('pl-PL',{weekday:'short',day:'numeric',month:'short'}) : '?';
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .9rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;cursor:pointer" onclick="showView('schedule')">
-      <div style="display:flex;align-items:center;gap:.4rem">${teamLogo(s.team1,24,'.65rem')}<span style="font-weight:700;font-size:.9rem">${s.team1}</span></div>
-      <div style="text-align:center"><div style="font-size:.65rem;color:var(--muted)">${dateStr}${s.time?' '+s.time:''}</div><div style="font-size:.75rem;font-weight:700;color:var(--muted)">VS</div></div>
-      <div style="display:flex;align-items:center;gap:.4rem"><span style="font-weight:700;font-size:.9rem">${s.team2}</span>${teamLogo(s.team2,24,'.65rem')}</div>
+    const live = typeof _isLive === 'function' && _isLive(s);
+    const today = s.date === new Date().toLocaleDateString('sv-SE');
+    // linki do transmisji: podane przez kapitanów (terminarz) albo stary link przy meczu
+    let streams = s.generated && typeof _streamLinks === 'function' ? _streamLinks(s, true) : '';
+    if(!streams && s.streamUrl) streams = `<a href="${_h(s.streamUrl)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:700;font-size:.7rem">📺 Transmisja</a>`;
+    const myTeam = discordUser ? teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id)?.teamName : null;
+    const canAdd = s.generated && !streams && (_isLoggedInSync() || (myTeam && [s.team1, s.team2].includes(myTeam)));
+    const extra = live || streams || canAdd ? `<div style="display:flex;gap:.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:.4rem;padding-top:.4rem;border-top:1px dashed rgba(127,127,127,.2)">
+        ${live ? '<span style="background:#dc2626;color:#fff;font-size:.6rem;font-weight:900;letter-spacing:1px;border-radius:4px;padding:.05rem .4rem">🔴 NA ŻYWO</span>' : ''}
+        ${streams}
+        ${canAdd ? `<button onclick="showView('schedule');_ssWeek=${s.week || 1};renderSchedule();setTimeout(()=>openStreamModal('${s.id}'),150)" style="font-size:.66rem;background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.1rem .45rem;cursor:pointer;font-family:inherit">📺 Dodaj transmisję</button>` : ''}
+      </div>` : '';
+    return `<div style="padding:.6rem .9rem;background:var(--surface);border:1px solid ${live ? 'rgba(220,38,38,.6)' : 'var(--border)'};border-radius:8px;margin-bottom:.4rem">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:.4rem">${teamLogo(s.team1,24,'.65rem')}<span style="font-weight:700;font-size:.9rem">${s.team1}</span></div>
+        <div style="text-align:center"><div style="font-size:.65rem;color:${today ? 'var(--accent)' : 'var(--muted)'};font-weight:${today ? 800 : 400}">${today ? 'DZIŚ' : dateStr}${s.time?' '+s.time:''}</div><div style="font-size:.75rem;font-weight:700;color:var(--muted)">VS</div></div>
+        <div style="display:flex;align-items:center;gap:.4rem"><span style="font-weight:700;font-size:.9rem">${s.team2}</span>${teamLogo(s.team2,24,'.65rem')}</div>
+      </div>${extra}
     </div>`;
   }).join('');
 }
@@ -10212,6 +10226,16 @@ function openMoreSheet() {
     const txt = b.textContent.trim();
     items.push({ ico: icon(txt), text: label(txt) || txt, act: `document.getElementById('more-sheet').classList.remove('open');document.getElementById('${b.id}').click()` });
   });
+  // skróty kapitana
+  const capReg = discordUser ? teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id) : null;
+  if(capReg) {
+    const tn = String(capReg.teamName).replace(/'/g, "\\'");
+    items.unshift(
+      { ico: '👥', text: 'Skład i dostępność', act: `document.getElementById('more-sheet').classList.remove('open');openTeamRoster('${tn}','g')` },
+      { ico: '✏️', text: 'Zmień skład', act: `document.getElementById('more-sheet').classList.remove('open');openRosterChange('${capReg.id}')` },
+      { ico: '📋', text: 'Kopiuj zaproszenie', act: `navigator.clipboard?.writeText('Połącz konto z drużyną ${tn} na stronie ligi: zaloguj się przez Discord → Mój panel → wybierz drużynę i swój nick → Zapisz. ' + location.origin + location.pathname + '#panel').then(()=>showToast('📋 Skopiowano zaproszenie','success'));document.getElementById('more-sheet').classList.remove('open')` }
+    );
+  }
   items.push({ ico: '📜', text: 'Kronika ligi', act: `document.getElementById('more-sheet').classList.remove('open');openChronicle()` });
   items.push({ ico: '🏛', text: 'Rekordy', act: `document.getElementById('more-sheet').classList.remove('open');_recordsEdition=undefined;openLeagueRecordsModal()` });
   if(!_isStandalone()) items.push({ ico: '📲', text: 'Zainstaluj aplikację', act: `document.getElementById('more-sheet').classList.remove('open');installApp()` });
@@ -10220,6 +10244,7 @@ function openMoreSheet() {
   const langs = ['pl', 'en', 'nl'].filter(l => document.getElementById('lang-' + l));
   sheet.querySelector('.ms-panel').innerHTML = `
     <div style="width:40px;height:4px;border-radius:2px;background:var(--border);margin:0 auto .8rem"></div>
+    ${capReg ? `<div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin:0 0 .45rem .2rem">🧢 KAPITAN · ${_h(capReg.teamName).toUpperCase()}</div>` : ''}
     <div class="ms-grid">
       ${items.map(it => it.href
         ? `<a class="ms-item" href="${it.href}" target="_blank" rel="noopener"><span class="ico">${it.ico}</span>${_h(it.text)}</a>`
