@@ -2833,12 +2833,11 @@ function teamInitials(name) {
   return name.substring(0,2).toUpperCase();
 }
 function teamLogo(name, size=40, fontSize='1rem') {
-  if(typeof teams !== 'undefined' && teams[name]?.logo)
-    return `<img src="${teams[name].logo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">`;
   const _regLogo = typeof teamRegistrations !== 'undefined'
     ? teamRegistrations.find(r => r.logo && r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(name).toLowerCase())?.logo : null;
-  if(_regLogo)
-    return `<img src="${_regLogo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">`;
+  const _src = _regLogo || (typeof teams !== 'undefined' && teams[name]?.logo) || null;
+  if(_src)
+    return `<img src="${_src}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">`;
   const color = teamColor(name);
   const initials = teamInitials(name);
   return `<div style="width:${size}px;height:${size}px;border-radius:8px;background:${color};display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${fontSize};color:#fff;flex-shrink:0;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,.4)">${initials}</div>`;
@@ -3931,6 +3930,8 @@ function uploadTeamLogo(teamName, input) {
       if(!teams[teamName]) teams[teamName] = {};
       teams[teamName].logo = compressed;
       saveTeams();
+      const _reg = teamRegistrations.find(r => r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(teamName).toLowerCase());
+      if(_reg) _api('/team-logo', 'POST', { regId: _reg.id, dataUrl: compressed }, { admin: true }).then(res => { if(res.ok) { Object.assign(_reg, res.registration); renderTeamsList(); } });
       renderTeamsList();
       showToast(`✅ Logo wgrane (${kb}KB) dla: ${teamName}`, 'success');
     };
@@ -3941,6 +3942,8 @@ function uploadTeamLogo(teamName, input) {
 
 function removeTeamLogo(teamName) {
   if(teams[teamName]) delete teams[teamName].logo;
+  const _reg = teamRegistrations.find(r => r.logo && r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(teamName).toLowerCase());
+  if(_reg) _api('/team-logo', 'POST', { regId: _reg.id, remove: true }, { admin: true }).then(res => { if(res.ok) { delete _reg.logo; renderTeamsList(); } });
 
   saveTeams();
   renderTeamsList();
@@ -6771,8 +6774,8 @@ function _ssLoadImg(src) {
   });
 }
 function _ssLogoSrc(name) {
-  if(typeof teams !== 'undefined' && teams[name]?.logo) return teams[name].logo;
-  return teamRegistrations.find(r => r.logo && r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(name).toLowerCase())?.logo || null;
+  return teamRegistrations.find(r => r.logo && r.status !== 'rejected' && String(r.teamName).toLowerCase() === String(name).toLowerCase())?.logo
+    || (typeof teams !== 'undefined' && teams[name]?.logo) || null;
 }
 async function _ssMatchBanner(s) {
   const W = 900, H = 340;
@@ -9217,6 +9220,49 @@ function openStreamModal(k) {
       <button class="btn btn-primary" onclick="saveStreamLinks('${k}', ${JSON.stringify(sides).replace(/"/g, '&quot;')})">💾 Zapisz</button></div>`;
   m.classList.add('open');
 }
+// ═══ 🖼 LOGO DRUŻYNY (kapitan swojej drużyny, admin każdej) ═══
+function _resizeLogo(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 256, sc = Math.min(MAX / img.width, MAX / img.height, 1);
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.onerror = () => reject(new Error('To nie jest obrazek'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Nie udało się odczytać pliku'));
+    reader.readAsDataURL(file);
+  });
+}
+function changeTeamLogo(regId) {
+  const reg = teamRegistrations.find(r => r.id === regId);
+  if(!reg) return;
+  const isAdmin = _isLoggedInSync();
+  if(!isAdmin && !_ensureSession()) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp,image/gif';
+  inp.onchange = async () => {
+    const f = inp.files?.[0];
+    if(!f) return;
+    try {
+      showToast('⏳ Wgrywam logo…', 'info');
+      const dataUrl = await _resizeLogo(f);
+      const res = await _api('/team-logo', 'POST', { regId, dataUrl }, isAdmin ? { admin: true } : { session: true });
+      if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+      Object.assign(reg, res.registration);
+      renderTeamRegistrations(); renderDashboard(); renderSchedule();
+      showToast(`🖼 Nowe logo: ${reg.teamName}`, 'success');
+    } catch(e) { showToast('❌ ' + e.message, 'error'); }
+  };
+  inp.click();
+}
+
 function openTeamStreamModal(regId) {
   const reg = teamRegistrations.find(r => r.id === regId);
   if(!reg) return;
@@ -9645,7 +9691,8 @@ function _rosterBlock(r) {
   const isAdmin = _isLoggedInSync();
   const isCap = discordUser && r.captain?.id === discordUser.id && r.status === 'approved';
   const membersHtml = r.status === 'approved' && (isAdmin || isCap) ? _membersHtml(r.teamName, true, 'card') +
-    `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="openTeamRoster(this.dataset.t, 'g')" data-t="${_h(r.teamName)}">👥 Skład i dostępność</button>` : '';
+    `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="openTeamRoster(this.dataset.t, 'g')" data-t="${_h(r.teamName)}">👥 Skład i dostępność</button>` +
+    `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="changeTeamLogo('${r.id}')">🖼 Zmień logo</button>` : '';
   const pend = (r.rosterRequests || []).filter(q => q.status === 'pending');
   const locked = rosterLockDate && _today() > rosterLockDate;
   let html = pend.map(q => `<div style="margin-top:.5rem;font-size:.76rem;background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.45rem .6rem">
@@ -10250,6 +10297,7 @@ function openMoreSheet() {
       { ico: '👥', text: 'Skład i dostępność', act: `document.getElementById('more-sheet').classList.remove('open');openTeamRoster('${tn}','g')` },
       { ico: '✏️', text: 'Zmień skład', act: `document.getElementById('more-sheet').classList.remove('open');openRosterChange('${capReg.id}')` },
       { ico: '📺', text: 'Kanał transmisji', act: `document.getElementById('more-sheet').classList.remove('open');openTeamStreamModal('${capReg.id}')` },
+      { ico: '🖼', text: 'Logo drużyny', act: `document.getElementById('more-sheet').classList.remove('open');changeTeamLogo('${capReg.id}')` },
       { ico: '📋', text: 'Kopiuj zaproszenie', act: `navigator.clipboard?.writeText('Połącz konto z drużyną ${tn} na stronie ligi: zaloguj się przez Discord → Mój panel → wybierz drużynę i swój nick → Zapisz. ' + location.origin + location.pathname + '#panel').then(()=>showToast('📋 Skopiowano zaproszenie','success'));document.getElementById('more-sheet').classList.remove('open')` }
     );
   }
