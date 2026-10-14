@@ -6545,7 +6545,15 @@ function _ssDaySection(ctx, s) {
     const isMine = ctx.myTeam && ctx.myTeam.toLowerCase() === String(s[side]).toLowerCase();
     const head = `<div style="font-size:.66rem;color:var(--muted);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isMine ? '🏀 Ty · ' : ''}${_h(s[side])}</div>`;
     const av = ctx.demo ? '' : _availLine(s[side], s);
-    if(isMine && !isFinal) return head + _ssPicker(ctx, s, side) + av;
+    if(isMine && !isFinal) {
+      const op = p[side === 'team1' ? 'team2' : 'team1'];
+      const acc = !ctx.demo && op ? `<div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.45);border-radius:8px;padding:.4rem .5rem;margin-bottom:.45rem">
+        <div style="font-size:.64rem;font-weight:800;letter-spacing:.5px;color:var(--win);margin-bottom:.25rem">PASUJE WAM TERMIN RYWALA?</div>
+        ${['primary', 'backup'].filter(w => op[w]).map(w => `<button onclick="acceptTerm('${k}','${w}')" class="btn btn-primary" style="width:100%;font-size:.7rem;padding:.25rem .3rem;margin-bottom:.2rem">✅ Akceptuj ${w === 'primary' ? '⭐' : '↺'} ${_ssPickLabel(ws, op[w])}${op[w + 'From'] ? ' ' + op[w + 'From'] : ''}</button>`).join('')}
+        <div style="font-size:.6rem;color:var(--muted)">Akceptacja od razu ustala termin — bez czekania na admina.</div>
+      </div>` : '';
+      return head + acc + _ssPicker(ctx, s, side) + av;
+    }
     return head + (pk ? chip(pk.primary, 'primary', pk) + chip(pk.backup, 'backup', pk) : `<span style="font-size:.72rem;color:var(--muted)">— czeka na wybór —</span>`) + av;
   };
 
@@ -6914,6 +6922,25 @@ function ssPickDraft(k, kind, val) {
   renderSeasonSchedule();
 }
 
+async function acceptTerm(k, which) {
+  const s = _ssItem(k);
+  if(!s || !_ensureSession()) return;
+  const side = _ssMySide(k);
+  const op = scheduleDayPicks[k]?.[side === 'team1' ? 'team2' : 'team1'];
+  if(!op?.[which]) return;
+  if(!confirm(`Akceptujesz termin: ${s.team1} vs ${s.team2}
+${_ssPickFull(op[which], s.weekStart)}${op[which + 'From'] ? ', ' + op[which + 'From'] : ''}
+
+Termin zostanie od razu ustalony.`)) return;
+  const res = await _api('/schedule-accept', 'POST', { scheduleId: k, which }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  Object.assign(s, { date: res.schedule.date, time: res.schedule.time, finalDay: res.schedule.finalDay });
+  scheduleDayPicks[k] = res.picks;
+  delete _ssDraft[k];
+  renderSchedule(); renderScheduleDashboard();
+  showToast('✅ Termin ustalony — rywal i kanał Discord dostali informację', 'success');
+}
+
 function ssPickTime(k, kind, which, val) {
   if(!_ssDraft[k]) ssPickDraft(k, kind, _ssCtx().picks[k]?.[_ssMySide(k)]?.[kind] || '');
   const d = _ssDraft[k];
@@ -6930,7 +6957,16 @@ function _ssMySide(k) {
 function ssPickCustom(k, kind) {
   const d = _ssDraft[k];
   if(!d) return;
-  const date = document.getElementById(`ss-c-${k}-${kind}-d`)?.value || '';
+  const el = document.getElementById(`ss-c-${k}-${kind}-d`);
+  const date = el?.value || '';
+  const y = +date.slice(0, 4), nowY = new Date().getFullYear();
+  if(date && (y < nowY - 1 || y > nowY + 1)) {
+    showToast(`Sprawdź rok w dacie (${date.slice(0, 4)}) — wybierz datę z kalendarza`, 'error');
+    if(el) el.value = '';
+    d[kind] = '';
+    renderSeasonSchedule();
+    return;
+  }
   d[kind] = date || '';
   if(kind === 'primary' && d.backup && d.backup === d.primary) d.backup = '';
   renderSeasonSchedule();
