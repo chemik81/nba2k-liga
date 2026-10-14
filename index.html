@@ -6619,7 +6619,7 @@ function _ssCard(ctx, s, groupName) {
         return `<div style="display:flex;gap:.45rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:.45rem">
           ${live ? '<span style="background:#dc2626;color:#fff;font-size:.62rem;font-weight:900;letter-spacing:1px;border-radius:4px;padding:.05rem .4rem">🔴 NA ŻYWO</span>' : ''}
           ${sl}
-          ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Zmień' : 'Dodaj'} transmisję</button>` : ''}
+          ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Transmisja' : 'Dodaj transmisję'}</button>` : ''}
           <button onclick="openClips('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🎬 Akcje${nClips ? ' (' + nClips + ')' : ''}</button>
         </div>`;
       })() : ''}
@@ -9214,9 +9214,16 @@ function _matchWindow(s) {
   return { start, end: start + (45 * (s.bestOf || 1) + 15) * 60e3 };
 }
 function _isLive(s) { const w = _matchWindow(s); const n = Date.now(); return !!w && n >= w.start - 5 * 60e3 && n <= w.end && !s.played; }
+function _teamRegByName(name) { return teamRegistrations.find(r => r.status === 'approved' && String(r.teamName).toLowerCase() === String(name).toLowerCase()); }
+// Link do transmisji dla strony meczu: własny link meczu → stały kanał drużyny; „-” = mecz bez transmisji
+function _effStream(s, side) {
+  const v = (streamsData[String(s.id)] || {})[side];
+  if(v === '-') return null;
+  return v || _teamRegByName(s[side])?.streamUrl || null;
+}
 function _streamLinks(s, small) {
-  const st = streamsData[String(s.id)] || {};
-  const links = ['team1', 'team2'].filter(sd => st[sd]).map(sd => `<a href="${_h(st[sd])}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:700">📺 ${_h(s[sd])}</a>`);
+  const links = ['team1', 'team2'].map(sd => [sd, _effStream(s, sd)]).filter(x => x[1])
+    .map(([sd, u]) => `<a href="${_h(u)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:700">📺 ${_h(s[sd])}</a>`);
   return links.length ? `<span style="font-size:${small ? '.7rem' : '.76rem'}">${links.join(' · ')}</span>` : '';
 }
 function openStreamModal(k) {
@@ -9229,27 +9236,78 @@ function openStreamModal(k) {
   if(!isAdmin && !_ensureSession()) return;
   const st = streamsData[k] || {};
   const sides = isAdmin ? ['team1', 'team2'] : [mySide];
-  const m = _fxModal('stream-modal', 480);
-  m.querySelector('.modal').innerHTML = _fxHead('stream-modal', '📺 Link do transmisji') + `
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.8rem">${_h(s.team1)} vs ${_h(s.team2)}. Link pojawi się przy meczu, w ogłoszeniu „Za godzinę” na Discordzie i w powiadomieniu 🔴 NA ŻYWO. Twitch, YouTube, Kick, Facebook lub TikTok.</div>
-    ${sides.map(sd => `<label style="${_MODAL_LBL}">${_h(s[sd])}</label><input id="stream-${sd}" value="${_h(st[sd] || '')}" placeholder="https://twitch.tv/…" style="${_MODAL_INP};margin-bottom:.7rem">`).join('')}
+  const block = sd => {
+    const reg = _teamRegByName(s[sd]);
+    const v = st[sd];
+    const mode = v === '-' ? 'none' : v ? 'custom' : 'default';
+    const r = (val, label) => `<label style="display:flex;align-items:center;justify-content:flex-start;gap:.5rem;font-size:.82rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:.3rem 0;cursor:pointer"><input type="radio" name="sm-${sd}" value="${val}" ${mode === val ? 'checked' : ''} style="width:auto;margin:0;accent-color:var(--accent)"> <span>${label}</span></label>`;
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:.65rem .8rem;margin-bottom:.7rem">
+      <div style="display:flex;align-items:center;gap:.45rem;font-weight:800;margin-bottom:.5rem">${teamLogo(s[sd], 22, '.5rem')}<span>${_h(s[sd])}</span></div>
+      <label style="${_MODAL_LBL}">📺 Stały kanał drużyny <span style="font-weight:400;text-transform:none;letter-spacing:0">(pokazuje się przy każdym meczu)</span></label>
+      <input id="team-stream-${sd}" value="${_h(reg?.streamUrl || '')}" ${reg ? '' : 'disabled'} placeholder="https://twitch.tv/nazwa_kanalu" style="${_MODAL_INP};margin-bottom:.5rem">
+      ${r('default', 'Ten mecz na stałym kanale')}
+      ${r('custom', 'Inny link tylko dla tego meczu:')}
+      <input id="stream-${sd}" value="${_h(mode === 'custom' ? v : '')}" placeholder="https://…" oninput="document.querySelector('input[name=sm-${sd}][value=custom]').checked=true" style="${_MODAL_INP};margin:.15rem 0 .3rem">
+      ${r('none', '🚫 Tego meczu nie transmitujemy')}
+    </div>`;
+  };
+  const m = _fxModal('stream-modal', 500);
+  m.querySelector('.modal').innerHTML = _fxHead('stream-modal', '📺 Transmisja meczu') + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem">${_h(s.team1)} vs ${_h(s.team2)}. Wystarczy raz podać stały kanał drużyny — będzie automatycznie przy każdym meczu, w ogłoszeniu „Za godzinę” i w 🔴 NA ŻYWO. Twitch, YouTube, Kick, Facebook lub TikTok.</div>
+    ${sides.map(block).join('')}
     <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('stream-modal')">Anuluj</button>
       <button class="btn btn-primary" onclick="saveStreamLinks('${k}', ${JSON.stringify(sides).replace(/"/g, '&quot;')})">💾 Zapisz</button></div>`;
   m.classList.add('open');
 }
+function openTeamStreamModal(regId) {
+  const reg = teamRegistrations.find(r => r.id === regId);
+  if(!reg) return;
+  const m = _fxModal('team-stream-modal', 460);
+  m.querySelector('.modal').innerHTML = _fxHead('team-stream-modal', `📺 Kanał transmisji — ${_h(reg.teamName)}`) + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Link pokaże się automatycznie przy każdym meczu drużyny, w ogłoszeniu „Za godzinę” i w 🔴 NA ŻYWO. Inny link albo „bez transmisji” ustawisz przy konkretnym meczu w terminarzu.</div>
+    <input id="tsm-url" value="${_h(reg.streamUrl || '')}" placeholder="https://twitch.tv/nazwa_kanalu" style="${_MODAL_INP};margin-bottom:.9rem">
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('team-stream-modal')">Anuluj</button>
+      <button class="btn btn-primary" onclick="saveTeamStream('${regId}')">💾 Zapisz</button></div>`;
+  m.classList.add('open');
+}
+async function saveTeamStream(regId) {
+  const reg = teamRegistrations.find(r => r.id === regId);
+  const url = document.getElementById('tsm-url').value.trim();
+  const res = await _api('/team-stream', 'POST', { regId, url }, _isLoggedInSync() ? { admin: true } : { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  Object.assign(reg, res.registration); if(!res.registration.streamUrl) delete reg.streamUrl;
+  _fxClose('team-stream-modal'); renderScheduleDashboard(); renderSeasonSchedule(); renderLiveBanner();
+  showToast(url ? '📺 Kanał drużyny zapisany' : 'Kanał usunięty', 'success');
+}
 async function saveStreamLinks(k, sides) {
+  const s = _ssItem(k);
   const isAdmin = _isLoggedInSync();
+  const auth = isAdmin ? { admin: true } : { session: true };
   for(const sd of sides) {
-    const url = document.getElementById('stream-' + sd).value.trim();
-    if((streamsData[k]?.[sd] || '') === url) continue;
-    const res = await _api('/stream-link', 'POST', { scheduleId: k, url, side: sd }, isAdmin ? { admin: true } : { session: true });
-    if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
-    streamsData[k] = res.streams;
+    const reg = _teamRegByName(s[sd]);
+    // stały kanał drużyny
+    const teamUrl = (document.getElementById('team-stream-' + sd)?.value || '').trim();
+    if(reg && teamUrl !== (reg.streamUrl || '')) {
+      const res = await _api('/team-stream', 'POST', { regId: reg.id, url: teamUrl }, auth);
+      if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+      Object.assign(reg, res.registration); if(!res.registration.streamUrl) delete reg.streamUrl;
+    }
+    // ten mecz
+    const mode = document.querySelector(`input[name="sm-${sd}"]:checked`)?.value || 'default';
+    const custom = (document.getElementById('stream-' + sd)?.value || '').trim();
+    const want = mode === 'none' ? '-' : mode === 'custom' ? custom : '';
+    if(mode === 'custom' && !custom) { showToast('Wpisz link dla tego meczu albo wybierz stały kanał', 'info'); return; }
+    if((streamsData[k]?.[sd] || '') !== want) {
+      const res = await _api('/stream-link', 'POST', { scheduleId: k, url: want, side: sd }, auth);
+      if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+      streamsData[k] = res.streams;
+    }
   }
   _fxClose('stream-modal');
-  renderSeasonSchedule(); renderLiveBanner();
+  renderSeasonSchedule(); renderLiveBanner(); renderScheduleDashboard();
   showToast('📺 Zapisano', 'success');
 }
+
 function renderLiveBanner() {
   const el = document.getElementById('live-wrap');
   if(!el) return;
@@ -10233,6 +10291,7 @@ function openMoreSheet() {
     items.unshift(
       { ico: '👥', text: 'Skład i dostępność', act: `document.getElementById('more-sheet').classList.remove('open');openTeamRoster('${tn}','g')` },
       { ico: '✏️', text: 'Zmień skład', act: `document.getElementById('more-sheet').classList.remove('open');openRosterChange('${capReg.id}')` },
+      { ico: '📺', text: 'Kanał transmisji', act: `document.getElementById('more-sheet').classList.remove('open');openTeamStreamModal('${capReg.id}')` },
       { ico: '📋', text: 'Kopiuj zaproszenie', act: `navigator.clipboard?.writeText('Połącz konto z drużyną ${tn} na stronie ligi: zaloguj się przez Discord → Mój panel → wybierz drużynę i swój nick → Zapisz. ' + location.origin + location.pathname + '#panel').then(()=>showToast('📋 Skopiowano zaproszenie','success'));document.getElementById('more-sheet').classList.remove('open')` }
     );
   }
