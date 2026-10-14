@@ -9773,6 +9773,26 @@ async function runWeekPack() {
 
 // ═══ 👥 SKŁAD I DOSTĘPNOŚĆ DRUŻYNY (kapitan / admin / gracze drużyny) ═══
 let _rosterView = { team: null, week: 'g' };
+async function linkCaptainNick(team, captainId) {
+  const nick = document.getElementById('cap-nick-sel')?.value;
+  if(!nick) { showToast('Wybierz nick z listy', 'info'); return; }
+  const reg = teamRegistrations.find(r => r.teamName === team);
+  let res;
+  if(discordUser && discordUser.id === captainId) {
+    if(!_ensureSession()) return;
+    const me = playersList.find(p => p.id === captainId) || myProfile || {};
+    res = await _api('/me', 'POST', { team, gamertag: nick, days: me.days || [], weeks: me.weeks || {}, hours: me.hours || {}, seasonId: currentSeasonId || null }, { session: true });
+    if(res.ok) myProfile = res.me;
+  } else if(_isLoggedInSync()) {
+    res = await _api('/me/admin-link', 'POST', { userId: captainId, team, gamertag: nick, name: reg?.captain?.name, avatar: reg?.captain?.avatar }, { admin: true });
+  } else return;
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const pl = res.me || res.player;
+  const i = playersList.findIndex(p => p.id === pl.id); if(i >= 0) playersList[i] = pl; else playersList.push(pl);
+  showToast(`✅ ${nick} połączony z kontem kapitana`, 'success');
+  openTeamRoster(); updateMyPanelBadge();
+}
+
 function openTeamRoster(team, week) {
   if(team) _rosterView.team = team;
   if(week !== undefined) _rosterView.week = week;
@@ -9804,8 +9824,17 @@ function openTeamRoster(team, week) {
   // kapitan bez nicku w składzie + konta z nickami spoza składu (np. po zmianie składu)
   // kapitan jest połączony przez zgłoszenie drużyny — nawet bez profilu
   const capAcc = accounts.find(a => a.id === reg.captain?.id) || (reg.captain?.id ? { id: reg.captain.id, name: reg.captain.name, avatar: reg.captain.avatar, status: 'confirmed', days: [], captainOnly: true } : null);
-  if(capAcc && !(reg.players || []).some(p => String(p.gamertag).toLowerCase() === String(capAcc.gamertag || '').toLowerCase()))
-    rows.push(`<tr><td style="font-weight:700;text-align:left">🧢 kapitan</td><td style="text-align:left">${who(capAcc)}${capAcc.captainOnly ? ' <span style="font-size:.66rem;color:var(--muted)">(nie ustawił jeszcze dostępności)</span>' : ''}</td>${DOW.map((_, i) => cell(capAcc, i)).join('')}</tr>`);
+  if(capAcc && !(reg.players || []).some(p => String(p.gamertag).toLowerCase() === String(capAcc.gamertag || '').toLowerCase())) {
+    // kapitan bez nicku: wybór „który nick to ja” (kapitan sam albo admin)
+    const free = (reg.players || []).map(p => p.gamertag).filter(g => !byNick[String(g).toLowerCase()]);
+    const canLink = (isCap || isAdmin) && free.length;
+    const linkSel = canLink ? `<div style="margin-top:.3rem;display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
+        <select id="cap-nick-sel" style="width:auto;background:var(--bg);border:1px solid var(--accent);color:var(--text);border-radius:5px;padding:.15rem .3rem;font-size:.72rem">
+          <option value="">${isCap ? 'Który nick to Ty?' : 'Nick kapitana…'}</option>${free.map(g => `<option>${_h(g)}</option>`).join('')}</select>
+        <button class="btn btn-primary" style="font-size:.64rem;padding:.12rem .45rem" onclick="linkCaptainNick(this.dataset.t, this.dataset.u)" data-t="${_h(team)}" data-u="${_h(reg.captain.id)}">🔗 Połącz</button>
+      </div>` : '';
+    rows.push(`<tr><td style="font-weight:700;text-align:left">🧢 kapitan</td><td style="text-align:left">${who(capAcc)}${capAcc.captainOnly ? ' <span style="font-size:.66rem;color:var(--muted)">(nie ustawił jeszcze dostępności)</span>' : ''}${linkSel}</td>${DOW.map((_, i) => cell(capAcc, i)).join('')}</tr>`);
+  }
   const confirmed = accounts.filter(a => a.status === 'confirmed');
   const counts = DOW.map((_, i) => confirmed.filter(a => daysFor(a)[i]).length);
   const linked = (reg.players || []).filter(p => byNick[String(p.gamertag).toLowerCase()]?.status === 'confirmed').length;
