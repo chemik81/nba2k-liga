@@ -7701,7 +7701,7 @@ function _ssResultsBlock(ctx, s) {
   const pend = pendingResults.filter(p => String(p.scheduleId) === k);
   const mySide = ctx.myTeam ? ['team1', 'team2'].find(sd => String(s[sd]).toLowerCase() === ctx.myTeam.toLowerCase()) : null;
   const linked = res ? res.games.length : 0;
-  const canReport = mySide && linked + pend.length < (s.bestOf || 1);
+  const canReport = (mySide || ctx.isAdmin) && linked + pend.length < (s.bestOf || 1);
   if(!pend.length && !canReport) return '';
   const rows = pend.map(p => {
     const md = p.matchData;
@@ -7717,20 +7717,27 @@ function _ssResultsBlock(ctx, s) {
     </div>`;
   }).join('');
   return `<div style="margin-top:.65rem">${rows}
-    ${canReport ? `<button onclick="openReportResult('${k}')" class="btn btn-ghost" style="width:100%;margin-top:.45rem;font-size:.74rem;padding:.3rem 0">📸 Zgłoś wynik${(s.bestOf || 1) > 1 ? ` (mecz ${linked + pend.length + 1}/${s.bestOf})` : ''}</button>` : ''}
+    ${canReport ? `<button onclick="openReportResult('${k}')" class="btn btn-ghost" style="width:100%;margin-top:.45rem;font-size:.74rem;padding:.3rem 0">📸 ${mySide ? 'Zgłoś wynik' : 'Dodaj wynik ze screena'}${(s.bestOf || 1) > 1 ? ` (mecz ${linked + pend.length + 1}/${s.bestOf})` : ''}</button>` : ''}
   </div>`;
 }
 
+function _reportAsAdmin(k) {
+  // admin bez własnej drużyny w tym meczu → wynik zapisuje się od razu
+  const ctx = _ssCtx(), s = _ssItem(k);
+  const mine = ctx.myTeam && s && [s.team1, s.team2].some(t => String(t).toLowerCase() === ctx.myTeam.toLowerCase());
+  return _isLoggedInSync() && !mine;
+}
 function openReportResult(k) {
   const s = _ssItem(k);
   if(!s) return;
-  if(!_ensureSession()) return;
+  const asAdmin = _reportAsAdmin(k);
+  if(!asAdmin && !_ensureSession()) return;
   const m = _fxModal('report-modal', 520);
   m.querySelector('.modal').innerHTML = _fxHead('report-modal', '📸 Zgłoś wynik meczu') + `
     <div style="font-size:.84rem;margin-bottom:.9rem">${_h(s.team1)} vs ${_h(s.team2)} · Week ${s.week}${(s.bestOf || 1) > 1 ? ' · Bo' + s.bestOf : ''}</div>
     <div style="font-size:.78rem;color:var(--muted);line-height:1.5;margin-bottom:.9rem">
-      Wrzuć zrzut ekranu <b>Game Stats</b> po meczu (jeden mecz = jeden screen). AI odczyta wynik i statystyki, a kapitan rywala dostanie prośbę o potwierdzenie.
-      Wynik trafi do ligi dopiero po jego akceptacji.
+      Wrzuć zrzut ekranu <b>Game Stats</b> po meczu (jeden mecz = jeden screen). AI odczyta wynik i statystyki.
+      ${asAdmin ? '<b>Jako admin</b> — wynik zapisze się od razu (bez potwierdzania przez kapitanów).' : 'Kapitan rywala dostanie prośbę o potwierdzenie — wynik trafi do ligi po jego akceptacji.'}
     </div>
     <label style="display:block;border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer;margin-bottom:.9rem">
       <input type="file" id="report-file" accept="image/*" style="display:none" onchange="_reportPreview(this)">
@@ -7772,7 +7779,16 @@ async function sendReportResult(k) {
   const btn = document.getElementById('report-send'), st = document.getElementById('report-status');
   btn.disabled = true; btn.style.opacity = '.45';
   st.style.color = 'var(--muted)'; st.textContent = '⏳ AI odczytuje screen… (do 30 s)';
-  const res = await _api('/captain-result', 'POST', { scheduleId: k, imageBase64: _reportImage.split(',')[1], mimeType: 'image/jpeg' }, { session: true });
+  const asAdmin = _reportAsAdmin(k);
+  const res = await _api('/captain-result', 'POST', { scheduleId: k, imageBase64: _reportImage.split(',')[1], mimeType: 'image/jpeg' }, asAdmin ? { admin: true } : { session: true });
+  if(res.ok && res.accepted) {
+    _reportImage = null;
+    _fxClose('report-modal');
+    const md = res.match;
+    showToast(`✅ Zapisano: ${md.team1.name} ${md.team1.score}:${md.team2.score} ${md.team2.name}`, 'success');
+    await loadData(); renderDashboard(); renderSchedule();
+    return;
+  }
   if(!res.ok || !res.pending) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + (res.error || 'Błąd'); btn.disabled = false; btn.style.opacity = ''; return; }
   pendingResults.push(res.pending);
   _reportImage = null;
@@ -9459,6 +9475,18 @@ function _myTodo() {
       const side = s.team1 === team ? 'team1' : 'team2';
       if(isCaptain && !scheduleDayPicks[String(s.id)]?.[side]) todo.push({ urgent: true, html: `📅 Wybierz termin: vs <b>${_h(s[side === 'team1' ? 'team2' : 'team1'])}</b> (Week ${s.week})`, go: `showView('schedule');_ssWeek=${s.week};renderSchedule()` });
     });
+    if(isCaptain) {
+      const nowMs = Date.now();
+      items.filter(s => [s.team1, s.team2].includes(team) && s.date).forEach(s => {
+        const w = _matchWindow(s);
+        if(!w || nowMs < w.start + 30 * 60e3) return; // jeszcze przed / w trakcie meczu
+        const linked = _ssResult(ctx, s)?.games.length || 0;
+        const pend = pendingResults.filter(p => String(p.scheduleId) === String(s.id)).length;
+        if(linked + pend >= (s.bestOf || 1)) return;
+        todo.push({ urgent: true, html: `📸 Zgłoś wynik: vs <b>${_h(s.team1 === team ? s.team2 : s.team1)}</b> (Week ${s.week}${(s.bestOf || 1) > 1 ? ` · mecz ${linked + pend + 1}/${s.bestOf}` : ''})`,
+          go: `showView('schedule');_ssWeek=${s.week};renderSchedule();setTimeout(()=>openReportResult('${s.id}'),200)` });
+      });
+    }
     pendingResults.filter(p => { const s = items.find(x => String(x.id) === String(p.scheduleId)); return s && [s.team1, s.team2].includes(team) && s[p.side] !== team; })
       .forEach(p => { const s = items.find(x => String(x.id) === String(p.scheduleId));
         todo.push({ urgent: true, html: `📸 Potwierdź wynik: ${_h(p.matchData.team1.name)} ${p.matchData.team1.score}:${p.matchData.team2.score} ${_h(p.matchData.team2.name)}`, go: `showView('schedule');_ssWeek=${s?.week || 1};renderSchedule()` }); });
