@@ -9927,8 +9927,31 @@ async function installApp() {
 
 
 // ═══ 🎭 ROLE DISCORD (admin) ═════════════════════════════════════
-function openRolesSettings() {
-  const c = discordRoleCfg;
+let _rolesOpts = null; // { guilds, roles, bot }
+async function _loadRoleOptions(guildId) {
+  const res = await _api('/discord-roles/options', 'POST', { guildId: guildId || null }, { admin: true });
+  if(!res.ok) { _rolesOpts = { error: res.error }; return; }
+  _rolesOpts = { guilds: res.guilds || [], roles: res.roles || null, bot: res.bot || null, guildId: guildId || null };
+}
+async function rolesPickGuild(gid) {
+  const f = _rolesForm(); f.guildId = gid; discordRoleCfgDraft = f;
+  await _loadRoleOptions(gid); openRolesSettings(true);
+}
+let discordRoleCfgDraft = null;
+async function openRolesSettings(keepDraft) {
+  if(!keepDraft) { discordRoleCfgDraft = null; _rolesOpts = null; }
+  if(!_rolesOpts) {
+    const m0 = _fxModal('roles-modal', 600); m0.classList.add('open');
+    m0.querySelector('.modal').innerHTML = _fxHead('roles-modal', '🎭 Role Discord') + '<div style="color:var(--muted)">⏳ Pobieram serwery i role od bota…</div>';
+    await _loadRoleOptions(discordRoleCfg.guildId || null);
+    if(_rolesOpts.guilds?.length === 1 && !discordRoleCfg.guildId) await _loadRoleOptions(_rolesOpts.guilds[0].id);
+  }
+  const c = discordRoleCfgDraft || { ...discordRoleCfg, guildId: discordRoleCfg.guildId || _rolesOpts.guildId || '' };
+  const o = _rolesOpts || {};
+  const roleSel = (id, val, placeholder) => o.roles ? `<select id="${id}" style="${_MODAL_INP}">
+      <option value="">${placeholder}</option>
+      ${o.roles.map(r => `<option value="${r.id}" ${r.id === val ? 'selected' : ''} ${r.assignable ? '' : 'style="color:#888"'}>${_h(r.name)}${r.assignable ? '' : '  ⚠ wyżej niż bot'}</option>`).join('')}
+    </select>` : `<input id="${id}" value="${_h(val)}" inputmode="numeric" placeholder="ID roli" style="${_MODAL_INP}">`;
   const m = _fxModal('roles-modal', 600);
   const step = (n, t) => `<div style="display:flex;gap:.55rem;margin-bottom:.45rem;font-size:.8rem;line-height:1.45"><b style="background:var(--accent);color:rgba(0,0,0,.88);border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:.7rem">${n}</b><span>${t}</span></div>`;
   m.querySelector('.modal').innerHTML = _fxHead('roles-modal', '🎭 Role Discord') + `
@@ -9936,17 +9959,21 @@ function openRolesSettings() {
     <details style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .8rem;margin-bottom:.9rem">
       <summary style="cursor:pointer;font-size:.8rem;font-weight:700">Jak przygotować serwer (jednorazowo)</summary>
       <div style="margin-top:.6rem">
-        ${step(1, 'Discord → Ustawienia użytkownika → Zaawansowane → włącz <b>Tryb dewelopera</b>.')}
-        ${step(2, 'Prawy klik na ikonę serwera ligi → <b>Kopiuj ID serwera</b> → wklej niżej.')}
-        ${step(3, 'Ustawienia serwera → Role → prawy klik na rolę (np. „League Member”) → <b>Kopiuj ID roli</b>.')}
-        ${step(4, 'Ustawienia serwera → Role: przeciągnij <b>rolę bota</b> NAD role, które ma nadawać, i daj jej uprawnienie <b>Zarządzanie rolami</b>.')}
+        ${step(1, 'Utwórz role na serwerze (np. „League Member” i opcjonalnie „Kapitan”).')}
+        ${step(2, 'Ustawienia serwera → Role: przeciągnij <b>rolę bota</b> NAD te role i daj jej uprawnienie <b>Zarządzanie rolami</b>.')}
+        ${step(3, 'Tutaj wybierz serwer i role z listy, kliknij <b>Sprawdź</b> i <b>Zapisz</b>.')}
       </div>
     </details>
-    <label style="${_MODAL_LBL}">ID serwera</label><input id="rl-guild" value="${_h(c.guildId)}" inputmode="numeric" placeholder="np. 112233445566778899" style="${_MODAL_INP};margin-bottom:.6rem">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem">
-      <div><label style="${_MODAL_LBL}">Rola gracza ligi</label><input id="rl-member" value="${_h(c.member)}" inputmode="numeric" placeholder="ID roli „League Member”" style="${_MODAL_INP}"></div>
-      <div><label style="${_MODAL_LBL}">Rola kapitana (opcjonalnie)</label><input id="rl-captain" value="${_h(c.captain)}" inputmode="numeric" placeholder="ID roli „Kapitan”" style="${_MODAL_INP}"></div>
+    ${o.error ? `<div style="font-size:.8rem;color:var(--loss);margin-bottom:.6rem">❌ ${_h(o.error)} — możesz wpisać ID ręcznie.</div>` : ''}
+    <label style="${_MODAL_LBL}">Serwer</label>
+    ${o.guilds?.length ? `<select id="rl-guild" onchange="rolesPickGuild(this.value)" style="${_MODAL_INP};margin-bottom:.6rem">
+        <option value="">— wybierz serwer —</option>${o.guilds.map(g => `<option value="${g.id}" ${g.id === c.guildId ? 'selected' : ''}>${_h(g.name)}</option>`).join('')}</select>`
+      : `<input id="rl-guild" value="${_h(c.guildId)}" inputmode="numeric" placeholder="ID serwera" style="${_MODAL_INP};margin-bottom:.6rem">`}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.4rem">
+      <div><label style="${_MODAL_LBL}">Rola gracza ligi</label>${roleSel('rl-member', c.member, '— wybierz rolę —')}</div>
+      <div><label style="${_MODAL_LBL}">Rola kapitana (opcjonalnie)</label>${roleSel('rl-captain', c.captain, '— bez roli kapitana —')}</div>
     </div>
+    ${o.roles ? `<div style="font-size:.7rem;color:var(--muted);margin-bottom:.7rem">Role oznaczone „⚠ wyżej niż bot” bot nie może nadać — przeciągnij rolę bota${o.bot ? ' (' + _h(o.bot) + ')' : ''} wyżej w Ustawieniach serwera → Role.</div>` : ''}
     <div id="rl-status" style="font-size:.8rem;min-height:1.2em;margin-bottom:.7rem;line-height:1.5"></div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="testRoles()">🧪 Sprawdź</button>
@@ -9972,11 +9999,11 @@ async function testRoles() {
 async function saveRoles() {
   const f = _rolesForm(), st = document.getElementById('rl-status');
   if(f.guildId && !/^\d{15,21}$/.test(f.guildId) || f.member && !/^\d{15,21}$/.test(f.member) || f.captain && !/^\d{15,21}$/.test(f.captain)) { st.style.color = 'var(--loss)'; st.textContent = '❌ ID to same cyfry (15–21 znaków)'; return; }
-  const prev = discordRoleCfg; discordRoleCfg = f;
+  const prev = discordRoleCfg; discordRoleCfg = f; discordRoleCfgDraft = f;
   if(!(await saveData())) { discordRoleCfg = prev; return; }
   _audit('Ustawienia ról Discord', `serwer ${f.guildId || '—'}, gracz ${f.member || '—'}, kapitan ${f.captain || '—'}`);
   showToast('✅ Zapisano — od teraz role nadają się automatycznie', 'success');
-  openRolesSettings();
+  openRolesSettings(true);
 }
 async function syncRoles() {
   if(!confirm('Nadać role wszystkim potwierdzonym graczom i kapitanom?')) return;
