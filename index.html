@@ -2076,7 +2076,9 @@ async function saveData(silent = false) {
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
       ovrMethod, ovrOverrides, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
-      powerRankings, penalties, rosterLockDate, _loadedAt: _dataLoadedAt,
+      powerRankings, penalties, rosterLockDate,
+      discordGuildId: discordRoleCfg.guildId, discordMemberRoleId: discordRoleCfg.member, discordCaptainRoleId: discordRoleCfg.captain,
+      _loadedAt: _dataLoadedAt,
       _savedAt: Date.now() };
     const payload = JSON.stringify({ record });
     const sizeKB = (new Blob([payload]).size / 1024).toFixed(1);
@@ -2239,6 +2241,7 @@ async function loadData() {
     clipsList = record.clips || [];
     penalties = record.penalties || [];
     rosterLockDate = record.rosterLockDate || null;
+    discordRoleCfg = { guildId: record.discordGuildId || '', member: record.discordMemberRoleId || '', captain: record.discordCaptainRoleId || '' };
     _dataLoadedAt = new Date().toISOString();
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
@@ -8878,7 +8881,7 @@ function renderQuickLinks() {
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
     ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
-    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
   </div>`;
 }
 
@@ -8894,6 +8897,7 @@ let myClipLikes = new Set();
 let myProfile = null;
 let penalties = [];        // kary (w danych ligi)
 let rosterLockDate = null; // okno transferowe — zmiany składu do tej daty
+let discordRoleCfg = { guildId: '', member: '', captain: '' }; // role Discord nadawane automatycznie
 
 const DOW = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'];
 function _plPL(n, one, few, many) { if(n === 1) return one; const d = n % 10, h = n % 100; return d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many; }
@@ -9919,6 +9923,74 @@ async function installApp() {
           : step(1, 'Otwórz menu przeglądarki <b>⋮</b> (prawy górny róg w Chrome).') + step(2, 'Wybierz <b>Zainstaluj aplikację</b> albo <b>Dodaj do ekranu głównego</b>.') + step(3, 'Potwierdź — ikona pojawi się na ekranie telefonu.')}
     <div style="font-size:.74rem;color:var(--muted);margin-top:.4rem">Po instalacji zaloguj się raz przez Discord w aplikacji.</div>`;
   m.classList.add('open');
+}
+
+
+// ═══ 🎭 ROLE DISCORD (admin) ═════════════════════════════════════
+function openRolesSettings() {
+  const c = discordRoleCfg;
+  const m = _fxModal('roles-modal', 600);
+  const step = (n, t) => `<div style="display:flex;gap:.55rem;margin-bottom:.45rem;font-size:.8rem;line-height:1.45"><b style="background:var(--accent);color:rgba(0,0,0,.88);border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:.7rem">${n}</b><span>${t}</span></div>`;
+  m.querySelector('.modal').innerHTML = _fxHead('roles-modal', '🎭 Role Discord') + `
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.8rem">Bot sam nadaje rolę, gdy kapitan (albo admin) <b>potwierdzi gracza w drużynie</b>, i zabiera ją po odłączeniu. Kapitanowie dostają role po zatwierdzeniu drużyny. Gracz musi być na serwerze Discord ligi.</div>
+    <details style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .8rem;margin-bottom:.9rem">
+      <summary style="cursor:pointer;font-size:.8rem;font-weight:700">Jak przygotować serwer (jednorazowo)</summary>
+      <div style="margin-top:.6rem">
+        ${step(1, 'Discord → Ustawienia użytkownika → Zaawansowane → włącz <b>Tryb dewelopera</b>.')}
+        ${step(2, 'Prawy klik na ikonę serwera ligi → <b>Kopiuj ID serwera</b> → wklej niżej.')}
+        ${step(3, 'Ustawienia serwera → Role → prawy klik na rolę (np. „League Member”) → <b>Kopiuj ID roli</b>.')}
+        ${step(4, 'Ustawienia serwera → Role: przeciągnij <b>rolę bota</b> NAD role, które ma nadawać, i daj jej uprawnienie <b>Zarządzanie rolami</b>.')}
+      </div>
+    </details>
+    <label style="${_MODAL_LBL}">ID serwera</label><input id="rl-guild" value="${_h(c.guildId)}" inputmode="numeric" placeholder="np. 112233445566778899" style="${_MODAL_INP};margin-bottom:.6rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem">
+      <div><label style="${_MODAL_LBL}">Rola gracza ligi</label><input id="rl-member" value="${_h(c.member)}" inputmode="numeric" placeholder="ID roli „League Member”" style="${_MODAL_INP}"></div>
+      <div><label style="${_MODAL_LBL}">Rola kapitana (opcjonalnie)</label><input id="rl-captain" value="${_h(c.captain)}" inputmode="numeric" placeholder="ID roli „Kapitan”" style="${_MODAL_INP}"></div>
+    </div>
+    <div id="rl-status" style="font-size:.8rem;min-height:1.2em;margin-bottom:.7rem;line-height:1.5"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="testRoles()">🧪 Sprawdź</button>
+      <button class="btn btn-primary" onclick="saveRoles()">💾 Zapisz</button>
+      <button class="btn btn-ghost" onclick="syncRoles()" ${c.guildId ? '' : 'disabled title="Najpierw zapisz ustawienia"'}>🔄 Nadaj role wszystkim połączonym</button>
+    </div>`;
+  m.classList.add('open');
+}
+function _rolesForm() {
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  return { guildId: v('rl-guild'), member: v('rl-member'), captain: v('rl-captain') };
+}
+async function testRoles() {
+  const f = _rolesForm(), st = document.getElementById('rl-status');
+  if(!/^\d{15,21}$/.test(f.guildId) || !/^\d{15,21}$/.test(f.member)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Wpisz poprawne ID serwera i roli gracza (same cyfry)'; return; }
+  st.style.color = 'var(--muted)'; st.textContent = '⏳ Sprawdzam…';
+  const res = await _api('/discord-roles/test', 'POST', f, { admin: true });
+  if(!res.ok) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + res.error; return; }
+  const line = (label, r) => !r ? '' : r.name === null ? `<div>❌ ${label}: nie ma takiej roli na serwerze</div>` : r.ok ? `<div>✅ ${label}: <b>${_h(r.name || 'OK')}</b></div>` : `<div>⚠️ ${label}: <b>${_h(r.name || '')}</b> jest wyżej niż rola bota — przeciągnij rolę bota nad nią</div>`;
+  st.style.color = 'var(--text)';
+  st.innerHTML = `<div>${res.canManage ? '✅' : '❌'} Bot <b>${_h(res.bot)}</b> ${res.canManage ? 'ma uprawnienie Zarządzanie rolami' : 'NIE ma uprawnienia Zarządzanie rolami'}</div>` + line('Rola gracza', res.member) + line('Rola kapitana', res.captain);
+}
+async function saveRoles() {
+  const f = _rolesForm(), st = document.getElementById('rl-status');
+  if(f.guildId && !/^\d{15,21}$/.test(f.guildId) || f.member && !/^\d{15,21}$/.test(f.member) || f.captain && !/^\d{15,21}$/.test(f.captain)) { st.style.color = 'var(--loss)'; st.textContent = '❌ ID to same cyfry (15–21 znaków)'; return; }
+  const prev = discordRoleCfg; discordRoleCfg = f;
+  if(!(await saveData())) { discordRoleCfg = prev; return; }
+  _audit('Ustawienia ról Discord', `serwer ${f.guildId || '—'}, gracz ${f.member || '—'}, kapitan ${f.captain || '—'}`);
+  showToast('✅ Zapisano — od teraz role nadają się automatycznie', 'success');
+  openRolesSettings();
+}
+async function syncRoles() {
+  if(!confirm('Nadać role wszystkim potwierdzonym graczom i kapitanom?')) return;
+  const st = document.getElementById('rl-status');
+  let offset = 0, success = 0, notOn = 0, failed = 0, total = 0;
+  for(let i = 0; i < 30; i++) {
+    st.style.color = 'var(--muted)'; st.textContent = `⏳ Nadaję role… ${offset}${total ? ' / ' + total : ''}`;
+    const res = await _api('/discord-roles/sync', 'POST', { offset }, { admin: true });
+    if(!res.ok) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + res.error; return; }
+    success += res.success; notOn += res.notOnServer; failed += res.failed; total = res.total; offset = res.done;
+    if(!res.more) break;
+  }
+  st.style.color = 'var(--text)';
+  st.innerHTML = `✅ Gotowe: ${success} / ${total}${notOn ? ` · <span style="color:var(--accent)">${notOn} nie ma na serwerze</span>` : ''}${failed ? ` · <span style="color:var(--loss)">${failed} błędów (sprawdź uprawnienia bota)</span>` : ''}`;
 }
 
 function goToTeamRegistrations() {
