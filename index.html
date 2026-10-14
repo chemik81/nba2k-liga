@@ -2111,7 +2111,7 @@ async function _pushDerived() {
       schedule: (schedule || []).map(s => { const { prediction, ...rest } = s; return rest; }),
       matches: [...need].map(id => byId.get(id)).filter(Boolean).map(lite),
       playoffs: (playoffs || []).map(po => ({ id: po.id, seasonId: po.seasonId || null, format: po.format, startDate: po.startDate || null, createdAt: po.createdAt || null, champion: po.champion || null, rounds: po.rounds || [] })),
-      registrationsClosed, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, rosterLockDate, currentSeasonId,
+      registrationsClosed, rosterLockDate, currentSeasonId,
       discordGuildId: discordRoleCfg.guildId, discordMemberRoleId: discordRoleCfg.member, discordCaptainRoleId: discordRoleCfg.captain
     };
     await _api('/derived', 'POST', body, { admin: true });
@@ -2158,7 +2158,7 @@ async function saveData(silent = false) {
     const record = { matches: compactMatches, aliases, seasons,
       currentSeasonId, schedule: compactSchedule, teams,
       rounds, pendingScreenshots, events, playoffs, discordPsnMap,
-      ovrMethod, ovrOverrides, discordTeamRegWebhookUrl, discordFreeAgentsWebhookUrl, discordScheduleWebhookUrl, registrationsClosed,
+      ovrMethod, ovrOverrides, registrationsClosed,
       powerRankings, penalties, rosterLockDate,
       discordGuildId: discordRoleCfg.guildId, discordMemberRoleId: discordRoleCfg.member, discordCaptainRoleId: discordRoleCfg.captain,
       _savedAt: Date.now() };
@@ -4871,6 +4871,7 @@ async function saveSetup() {
   try { _bnSync(document.querySelector('.view.active')?.id?.replace('view-', '') || 'dashboard'); } catch(e) {}
   // Jednorazowo po aktualizacji Workera: admin zapisuje dane, żeby Worker przeliczył dane pochodne
   if(window._needDerived && _isLoggedInSync()) setTimeout(() => _pushDerived(), 1500);
+  if(_isLoggedInSync()) setTimeout(() => _migrateWebhooks().then(() => { try { renderSeasonSchedule(); } catch(e) {} }), 2500);
   applyLangOnLoad();
   if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
   checkEventUrlParam();
@@ -5664,127 +5665,105 @@ function _dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
-async function _teamRegDiscordSend(payload, logo, webhookOverride) {
-  const url = webhookOverride || discordTeamRegWebhookUrl;
-  const embed = payload.embeds?.[0];
-
-  if(!url) {
-    if(embed && logo && /^https?:/.test(logo)) embed.thumbnail = { url: logo };
-    return _discordNotify(payload);
-  }
-
-  const fd = new FormData();
-  if(embed && logo) {
-    if(/^data:image\//.test(logo)) {
-      const blob = _dataUrlToBlob(logo);
-      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
-      const filename = 'logo.' + ext;
-      embed.thumbnail = { url: 'attachment://' + filename };
-      payload.attachments = [{ id: 0, filename }];
-      fd.append('files[0]', blob, filename);
-    } else if(/^https?:/.test(logo)) {
-      embed.thumbnail = { url: logo };
-    }
-  }
-  fd.append('payload_json', JSON.stringify(payload));
+// Wysyłka na kanał Discord przez Workera — linki webhooków są tylko w Workerze (niewidoczne publicznie)
+async function _discordPost(channel, payload, fileDataUrl, fileName) {
+  if(!workerUrl) return false;
+  const body = { ...payload, channel };
+  if(fileDataUrl) body.__file = { name: fileName || 'obraz.png', dataUrl: fileDataUrl };
+  const headers = { 'Content-Type': 'application/json', 'X-Admin-Token': _adminToken() };
+  if(discordUser?.session) headers['X-Discord-Session'] = discordUser.session;
   try {
-    const r = await fetch(url, { method: 'POST', body: fd });
-    if(r.ok || r.status === 204) return true;
-    console.warn('Team reg webhook returned', r.status, await r.text().catch(() => ''));
-  } catch(e) { console.warn('Team reg webhook error:', e); }
+    const r = await fetch(workerUrl.replace(/\/+$/, '') + '/discord-notify', { method: 'POST', headers, body: JSON.stringify(body) });
+    if(r.ok) return true;
+    console.warn('discord-notify', channel, r.status, await r.text().catch(() => ''));
+  } catch(e) { console.warn('discord-notify error', e); }
   return false;
 }
 
-const _WEBHOOK_KINDS = {
-  teams: {
-    title: '⚙ Kanał Discord — zgłoszenia drużyn',
-    hint: 'Puste = powiadomienia idą na główny kanał ligi (bez logo).',
-    get: () => discordTeamRegWebhookUrl, set: v => { discordTeamRegWebhookUrl = v; }
-  },
-  schedule: {
-    title: '⚙ Kanał Discord — terminarz',
-    hint: 'Ogłoszenia terminarza, składu grup i ustalonych terminów meczów. Puste = główny kanał ligi.',
-    get: () => discordScheduleWebhookUrl, set: v => { discordScheduleWebhookUrl = v; }
-  },
-  fa: {
-    title: '⚙ Kanał Discord — wolni agenci',
-    hint: 'Kanał forum: każdy agent dostaje własny wątek. Kanał tekstowy: zwykły post. Puste = sekret DISCORD_WEBHOOK_FREE_AGENTS w Workerze (jeśli ustawiony).',
-    get: () => discordFreeAgentsWebhookUrl, set: v => { discordFreeAgentsWebhookUrl = v; }
+// Zgłoszenia drużyn (logo jako miniatura)
+async function _teamRegDiscordSend(payload, logo, channel) {
+  const embed = payload.embeds?.[0];
+  let file = null, fname = null;
+  if(embed && logo) {
+    if(/^data:image\//.test(logo)) {
+      const ext = ((logo.match(/data:image\/([\w+]+)/) || [])[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+      fname = 'logo.' + ext; file = logo;
+      embed.thumbnail = { url: 'attachment://' + fname };
+    } else if(/^https?:/.test(logo)) embed.thumbnail = { url: logo };
   }
+  return _discordPost(channel || 'teams', payload, file, fname);
+}
+
+// ── Ustawienia kanałów Discord (webhooki zapisane tylko w Workerze) ──
+let _whStatus = null; // { teams:{set,masked}, fa:{…}, schedule:{…}, streams:{…} }
+async function _loadWebhookStatus() {
+  if(!_isLoggedInSync()) return null;
+  const r = await _api('/settings', 'GET', null, { admin: true });
+  if(r.ok) _whStatus = r;
+  return _whStatus;
+}
+const _WEBHOOK_KINDS = {
+  teams: { title: '⚙ Kanał Discord — zgłoszenia drużyn', hint: 'Puste = powiadomienia idą na główny kanał ligi.' },
+  schedule: { title: '⚙ Kanał Discord — terminarz', hint: 'Ogłoszenia terminarza, zapowiedzi meczów, podsumowania, nagrody, Power Ranking. Puste = główny kanał ligi.' },
+  fa: { title: '⚙ Kanał Discord — wolni agenci', hint: 'Kanał forum: każdy agent dostaje własny wątek. Kanał tekstowy: zwykły post. Puste = sekret DISCORD_WEBHOOK_FREE_AGENTS (jeśli ustawiony).' },
+  streams: { title: '📺 Kanał Discord — transmisje', hint: 'Powiadomienia 🔴 NA ŻYWO z linkami do streamów. Puste = kanał terminarza.' }
 };
 let _webhookKind = 'teams';
-
 function openTeamRegWebhookModal() { openWebhookModal('teams'); }
-
-function openWebhookModal(kind) {
+function openStreamsChannel() { openWebhookModal('streams'); }
+async function openWebhookModal(kind) {
   _webhookKind = kind;
   const cfg = _WEBHOOK_KINDS[kind];
-  let m = document.getElementById('team-reg-webhook-modal');
-  if(!m) {
-    m = document.createElement('div');
-    m.id = 'team-reg-webhook-modal';
-    m.className = 'modal-overlay';
-    m.style.zIndex = '1250';
-    m.onclick = e => { if(e.target === m) m.classList.remove('open'); };
-    m.innerHTML = `
-      <div class="modal" style="max-width:520px">
-        <button class="modal-close" onclick="document.getElementById('team-reg-webhook-modal').classList.remove('open')">&#x2715;</button>
-        <div id="team-reg-webhook-title" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;letter-spacing:1px;margin-bottom:1rem"></div>
-        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem">Webhook URL</label>
-        <input type="text" id="team-reg-webhook-input" placeholder="https://discord.com/api/webhooks/..." style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.5rem .7rem;font-family:inherit;font-size:.85rem;width:100%;box-sizing:border-box">
-        <div id="team-reg-webhook-hint" style="font-size:.75rem;color:var(--muted);margin-top:.4rem;line-height:1.4"></div>
-        <div id="team-reg-webhook-status" style="font-size:.8rem;margin-top:.6rem;min-height:1.1em"></div>
-        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-          <button class="btn btn-ghost" onclick="testTeamRegWebhook()">🧪 Testuj</button>
-          <button class="btn btn-primary" onclick="saveTeamRegWebhook()">💾 Zapisz</button>
-        </div>
-      </div>`;
-    document.body.appendChild(m);
-  }
-  document.getElementById('team-reg-webhook-title').textContent = cfg.title;
-  document.getElementById('team-reg-webhook-hint').textContent = cfg.hint;
-  document.getElementById('team-reg-webhook-input').value = cfg.get() || '';
-  document.getElementById('team-reg-webhook-status').textContent = '';
+  const m = _fxModal('wh-modal', 520);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('wh-modal', cfg.title) + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
   m.classList.add('open');
+  await _loadWebhookStatus();
+  const st = _whStatus?.[kind] || {};
+  box.innerHTML = _fxHead('wh-modal', cfg.title) + `
+    <div style="font-size:.8rem;margin-bottom:.6rem">Status: ${st.set ? `<b style="color:var(--win)">✅ ustawiony</b> <span style="color:var(--muted);font-size:.72rem">${_h(st.masked)}</span>` : '<b style="color:var(--loss)">● nieustawiony</b>'}</div>
+    <div style="font-size:.76rem;color:var(--muted);line-height:1.45;margin-bottom:.7rem">${_h(cfg.hint)}<br>🔒 Link webhooka jest zapisywany <b>tylko w Workerze</b> — nie trafia na publiczną stronę.</div>
+    <label style="${_MODAL_LBL}">${st.set ? 'Nowy link webhooka (zastąpi obecny)' : 'Link webhooka'}</label>
+    <input id="wh-input" placeholder="https://discord.com/api/webhooks/…" style="${_MODAL_INP};margin-bottom:.35rem">
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.8rem">Discord → Ustawienia kanału → Integracje → Webhooki → Nowy webhook → Kopiuj URL webhooka.</div>
+    <div id="wh-status" style="font-size:.8rem;min-height:1.1em;margin-bottom:.6rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
+      ${st.set ? `<button class="btn btn-ghost" style="color:var(--loss)" onclick="saveWebhookSetting('')">🗑 Usuń</button>` : ''}
+      ${st.set ? `<button class="btn btn-ghost" onclick="testWebhookSetting()">🧪 Wyślij test</button>` : ''}
+      <button class="btn btn-primary" onclick="saveWebhookSetting()">💾 Zapisz</button>
+    </div>`;
 }
-
-function _validTeamRegWebhook(url) {
-  return /^https:\/\/(canary\.|ptb\.)?(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url);
+const _WH_FIELD = { teams: 'teamsWebhook', fa: 'faWebhook', schedule: 'scheduleWebhook', streams: 'streamsWebhook' };
+async function saveWebhookSetting(force) {
+  const el = document.getElementById('wh-status');
+  const url = force !== undefined ? force : (document.getElementById('wh-input')?.value || '').trim();
+  if(force === undefined && !url) { el.style.color = 'var(--loss)'; el.textContent = 'Wklej link webhooka'; return; }
+  if(force === '' && !confirm('Usunąć ten webhook? Powiadomienia wrócą na kanał domyślny.')) return;
+  const res = await _api('/settings', 'POST', { [_WH_FIELD[_webhookKind]]: url, ...(url ? { test: _webhookKind } : {}) }, { admin: true });
+  if(!res.ok) { el.style.color = 'var(--loss)'; el.textContent = '❌ ' + res.error; return; }
+  _whStatus = res;
+  showToast(url ? '✅ Zapisano — na kanał poszła wiadomość testowa' : 'Usunięto', 'success');
+  openWebhookModal(_webhookKind);
+  try { renderSeasonSchedule(); renderTeamRegistrations(); } catch(e) {}
 }
-
-async function testTeamRegWebhook() {
-  const url = document.getElementById('team-reg-webhook-input').value.trim();
-  const st = document.getElementById('team-reg-webhook-status');
-  if(!_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
-  st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłanie...';
-  const isFa = _webhookKind === 'fa';
-  const sample = _webhookKind === 'teams' ? teamRegistrations.find(r => r.logo) : null;
-  const payload = { embeds: [{
-    title: isFa ? '🧪 Test — kanał wolnych agentów' : _webhookKind === 'schedule' ? '🧪 Test — kanał terminarza' : '🧪 Test — kanał zgłoszeń drużyn',
-    description: sample ? `Logo testowe: **${sample.teamName}**` : 'Webhook działa.',
-    color: 0xf5c518,
-    footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
-    timestamp: new Date().toISOString()
-  }] };
-  if(isFa) payload.thread_name = '🧪 Test webhooka';
-  let ok = await _teamRegDiscordSend(payload, sample?.logo || null, url);
-  if(!ok && isFa) { delete payload.thread_name; ok = await _teamRegDiscordSend(payload, null, url); } // kanał tekstowy
-  st.style.color = ok ? 'var(--win)' : 'var(--loss)';
-  st.textContent = ok ? '✅ Wysłano — sprawdź kanał' : '❌ Discord odrzucił wiadomość (szczegóły w konsoli)';
+async function testWebhookSetting() {
+  const res = await _api('/settings', 'POST', { test: _webhookKind }, { admin: true });
+  const el = document.getElementById('wh-status');
+  el.style.color = res.ok ? 'var(--win)' : 'var(--loss)';
+  el.textContent = res.ok ? '✅ Wysłano — sprawdź kanał' : '❌ ' + res.error;
 }
-
-async function saveTeamRegWebhook() {
-  const cfg = _WEBHOOK_KINDS[_webhookKind];
-  const url = document.getElementById('team-reg-webhook-input').value.trim();
-  const st = document.getElementById('team-reg-webhook-status');
-  if(url && !_validTeamRegWebhook(url)) { st.style.color = 'var(--loss)'; st.textContent = '❌ Nieprawidłowy URL webhooka'; return; }
-  const prev = cfg.get();
-  cfg.set(url);
-  const saved = await saveData();
-  if(!saved) { cfg.set(prev); st.style.color = 'var(--loss)'; st.textContent = '❌ Błąd zapisu'; return; }
-  document.getElementById('team-reg-webhook-modal').classList.remove('open');
-  renderTeamRegistrations();
-  showToast(url ? '✅ Zapisano kanał Discord' : '✅ Kanał wyczyszczony', 'success');
+// Jednorazowo: przenieś stare webhooki z publicznych danych ligi do Workera
+async function _migrateWebhooks() {
+  if(!_isLoggedInSync()) return;
+  const legacy = { teamsWebhook: discordTeamRegWebhookUrl, faWebhook: discordFreeAgentsWebhookUrl, scheduleWebhook: discordScheduleWebhookUrl };
+  if(!Object.values(legacy).some(Boolean)) { await _loadWebhookStatus(); return; }
+  const body = { onlyIfEmpty: true };
+  Object.entries(legacy).forEach(([k, v]) => { if(v) body[k] = v; });
+  const res = await _api('/settings', 'POST', body, { admin: true });
+  if(!res.ok) return;
+  _whStatus = res;
+  discordTeamRegWebhookUrl = ''; discordFreeAgentsWebhookUrl = ''; discordScheduleWebhookUrl = '';
+  if(await saveData(true)) showToast('🔒 Webhooki Discord przeniesione do Workera', 'success');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -6457,7 +6436,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (discordScheduleWebhookUrl ? '' : ' <span style="color:var(--loss)">●</span>'), false) + btn('openStreamsChannel()', '📺 Kanał transmisji', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -6774,31 +6753,10 @@ function _ssAdminActions(ctx, s, res) {
 async function _scheduleDiscordSend(payload, imageDataUrl) {
   const embed = payload.embeds?.[0];
   if(imageDataUrl && embed) embed.image = { url: 'attachment://mecz.png' };
-  if(discordScheduleWebhookUrl) {
-    try {
-      const fd = new FormData();
-      if(imageDataUrl) {
-        payload.attachments = [{ id: 0, filename: 'mecz.png' }];
-        fd.append('files[0]', _dataUrlToBlob(imageDataUrl), 'mecz.png');
-      }
-      fd.append('payload_json', JSON.stringify(payload));
-      const r = await fetch(discordScheduleWebhookUrl, { method: 'POST', body: fd });
-      if(r.ok || r.status === 204) return true;
-      console.warn('Schedule webhook returned', r.status, await r.text().catch(() => ''));
-    } catch(e) { console.warn('Schedule webhook error:', e); }
-    return false;
-  }
-  if(imageDataUrl && workerUrl) {
-    try {
-      const r = await fetch(workerUrl.replace(/\/$/, '') + '/discord-notify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': _adminToken() },
-        body: JSON.stringify({ ...payload, __file: { name: 'mecz.png', dataUrl: imageDataUrl } })
-      });
-      if(r.ok || r.status === 204) return true;
-    } catch(e) {}
-  }
-  if(embed) delete embed.image;
-  return _discordNotify(payload);
+  const ok = await _discordPost('schedule', payload, imageDataUrl || null, 'mecz.png');
+  if(ok || !imageDataUrl) return ok;
+  if(embed) delete embed.image; // ostatnia próba bez obrazka
+  return _discordPost('schedule', payload);
 }
 
 // Baner meczu: logo — VS — logo (PNG do wiadomości na Discordzie)
@@ -9259,40 +9217,6 @@ function openStreamModal(k) {
       <button class="btn btn-primary" onclick="saveStreamLinks('${k}', ${JSON.stringify(sides).replace(/"/g, '&quot;')})">💾 Zapisz</button></div>`;
   m.classList.add('open');
 }
-async function openStreamsChannel() {
-  const m = _fxModal('streams-ch-modal', 520);
-  const box = m.querySelector('.modal');
-  box.innerHTML = _fxHead('streams-ch-modal', '📺 Kanał transmisji (Discord)') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
-  m.classList.add('open');
-  const st = await _api('/settings', 'GET', null, { admin: true });
-  box.innerHTML = _fxHead('streams-ch-modal', '📺 Kanał transmisji (Discord)') + `
-    <div style="font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:.8rem">Na ten kanał trafiają powiadomienia <b>🔴 NA ŻYWO</b> z linkami do streamów, gdy mecz się zaczyna. Ogłoszenie „⏰ Za godzinę” z pingiem kapitanów zostaje na kanale terminarza.
-      <br>Link webhooka jest zapisywany <b>tylko w Workerze</b> — nie trafia na publiczną stronę.</div>
-    <div style="font-size:.82rem;margin-bottom:.6rem">Status: ${st.ok && st.streamsWebhookSet ? `<b style="color:var(--win)">✅ ustawiony</b> <span style="color:var(--muted);font-size:.72rem">${_h(st.streamsWebhookMasked)}</span>` : '<b style="color:var(--loss)">● nieustawiony</b> (powiadomienia idą na kanał terminarza)'}</div>
-    <label style="${_MODAL_LBL}">Nowy link webhooka</label>
-    <input id="sch-wh" placeholder="https://discord.com/api/webhooks/…" style="${_MODAL_INP};margin-bottom:.4rem">
-    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.9rem">Discord → Ustawienia kanału → Integracje → Webhooki → Nowy webhook → Kopiuj URL webhooka.</div>
-    <div id="sch-wh-st" style="font-size:.8rem;min-height:1.1em;margin-bottom:.6rem"></div>
-    <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
-      ${st.streamsWebhookSet ? `<button class="btn btn-ghost" style="color:var(--loss)" onclick="saveStreamsChannel('')">🗑 Usuń</button>` : ''}
-      <button class="btn btn-ghost" onclick="saveStreamsChannel(null, true)">🧪 Wyślij test</button>
-      <button class="btn btn-primary" onclick="saveStreamsChannel()">💾 Zapisz</button>
-    </div>`;
-}
-async function saveStreamsChannel(forceVal, testOnly) {
-  const el = document.getElementById('sch-wh-st');
-  const val = forceVal !== undefined && forceVal !== null ? forceVal : (document.getElementById('sch-wh')?.value || '').trim();
-  const body = {};
-  if(!testOnly || val) body.streamsWebhook = val;
-  if(testOnly) body.test = true;
-  if(!testOnly && forceVal === undefined && !val) { el.style.color = 'var(--loss)'; el.textContent = 'Wklej link webhooka'; return; }
-  if(forceVal === '' && !confirm('Usunąć webhook kanału transmisji?')) return;
-  const res = await _api('/settings', 'POST', body, { admin: true });
-  if(!res.ok) { el.style.color = 'var(--loss)'; el.textContent = '❌ ' + res.error; return; }
-  showToast(testOnly ? '🧪 Test wysłany — sprawdź kanał na Discordzie' : forceVal === '' ? 'Usunięto' : '✅ Zapisano', 'success');
-  openStreamsChannel();
-}
-
 function openTeamStreamModal(regId) {
   const reg = teamRegistrations.find(r => r.id === regId);
   if(!reg) return;
