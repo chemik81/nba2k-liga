@@ -9480,22 +9480,27 @@ function _rosterBlock(r) {
   const pend = (r.rosterRequests || []).filter(q => q.status === 'pending');
   const locked = rosterLockDate && _today() > rosterLockDate;
   let html = pend.map(q => `<div style="margin-top:.5rem;font-size:.76rem;background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.45rem .6rem">
-    ⏳ <b>Prośba o zmianę składu</b>: ${q.add.length ? '➕ ' + q.add.map(p => _h(p.gamertag)).join(', ') : ''} ${q.remove.length ? '➖ ' + q.remove.map(_h).join(', ') : ''}
+    ⏳ <b>Prośba o zmianę składu</b>: ${q.add.length ? '➕ ' + q.add.map(p => _h(p.gamertag)).join(', ') : ''} ${q.remove.length ? '➖ ' + q.remove.map(_h).join(', ') : ''} ${(q.rename || []).length ? '✏️ ' + q.rename.map(x => _h(x.from) + ' → ' + _h(x.to)).join(', ') : ''}
     ${q.note ? `<div style="color:var(--muted)">${_h(q.note)}</div>` : ''}
     ${isAdmin ? `<div style="display:flex;gap:.3rem;margin-top:.35rem"><button class="btn btn-primary" style="font-size:.7rem;padding:.2rem .5rem" onclick="decideRoster('${r.id}','${q.id}',true)">✅ Zatwierdź</button>
       <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="decideRoster('${r.id}','${q.id}',false)">❌ Odrzuć</button></div>` : ''}
   </div>`).join('');
-  if(isCap && !pend.length) html += `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin-top:.5rem" ${locked ? 'disabled title="Okno transferowe zamknięte"' : ''} onclick="openRosterChange('${r.id}')">✏️ Zmień skład${locked ? ' (okno zamknięte)' : ''}</button>`;
+  if(isCap && !pend.length) html += `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin-top:.5rem" onclick="openRosterChange('${r.id}')">✏️ ${locked ? 'Popraw nicki (okno transferowe zamknięte)' : 'Zmień skład / popraw nicki'}</button>`;
   return membersHtml + html;
 }
 function openRosterChange(regId) {
   const r = teamRegistrations.find(x => x.id === regId);
   if(!r || !_ensureSession()) return;
-  const m = _fxModal('roster-modal', 520);
+  const m = _fxModal('roster-modal', 560);
   m.querySelector('.modal').innerHTML = _fxHead('roster-modal', `✏️ Zmiana składu — ${_h(r.teamName)}`) + `
-    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Zaznacz graczy do usunięcia i dopisz nowych. Zmianę zatwierdza admin — potem trafi do 🔁 Transferów.${rosterLockDate ? ` Okno transferowe do <b>${_ssFmt(rosterLockDate)}</b>.` : ''}</div>
-    <label style="${_MODAL_LBL}">Obecny skład (zaznacz do usunięcia)</label>
-    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.8rem">${(r.players || []).map(p => `<label style="font-size:.78rem;border:1px solid var(--border);border-radius:6px;padding:.2rem .5rem;cursor:pointer"><input type="checkbox" class="ro-rm" value="${_h(p.gamertag)}" style="accent-color:var(--loss)"> ${_h(p.gamertag)}</label>`).join('')}</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Popraw literówki w nickach, zaznacz graczy do usunięcia i dopisz nowych. Zmiany zatwierdza admin. Poprawki nicków nie tworzą transferów — połączone konta graczy przepną się na poprawiony nick.${rosterLockDate ? ` Okno transferowe (dopisywanie / usuwanie) do <b>${_ssFmt(rosterLockDate)}</b>.` : ''}</div>
+    <label style="${_MODAL_LBL}">Obecny skład</label>
+    <div style="display:flex;flex-direction:column;gap:.3rem;margin-bottom:.8rem">
+      ${(r.players || []).map(p => `<div style="display:grid;grid-template-columns:1fr auto;gap:.4rem;align-items:center">
+        <input class="ro-nick" data-orig="${_h(p.gamertag)}" value="${_h(p.gamertag)}" maxlength="32" style="${_MODAL_INP};padding:.35rem .55rem">
+        <label style="font-size:.74rem;white-space:nowrap;cursor:pointer;color:var(--loss)"><input type="checkbox" class="ro-rm" value="${_h(p.gamertag)}" style="accent-color:var(--loss)"> usuń</label>
+      </div>`).join('')}
+    </div>
     <label style="${_MODAL_LBL}">Nowi gracze (jeden nick w linii)</label>
     <textarea id="ro-add" rows="3" placeholder="Nick1&#10;Nick2" style="${_MODAL_INP};margin-bottom:.6rem"></textarea>
     <input id="ro-note" maxlength="200" placeholder="Notka dla admina (opcjonalnie)" style="${_MODAL_INP};margin-bottom:.9rem">
@@ -9504,13 +9509,58 @@ function openRosterChange(regId) {
 }
 async function sendRosterChange(regId) {
   const remove = [...document.querySelectorAll('#roster-modal .ro-rm:checked')].map(x => x.value);
+  const rename = [...document.querySelectorAll('#roster-modal .ro-nick')].map(x => ({ from: x.dataset.orig, to: x.value.trim() }))
+    .filter(x => x.to && x.to !== x.from && !remove.includes(x.from));
+  if([...document.querySelectorAll('#roster-modal .ro-nick')].some(x => !x.value.trim() && !remove.includes(x.dataset.orig))) { showToast('Nick nie może być pusty — zaznacz „usuń”, jeśli gracz odchodzi', 'info'); return; }
   const add = document.getElementById('ro-add').value.split('\n').map(x => x.trim()).filter(Boolean).map(g => ({ gamertag: g }));
-  const res = await _api('/roster-change', 'POST', { regId, add, remove, note: document.getElementById('ro-note').value.trim() }, { session: true });
+  const res = await _api('/roster-change', 'POST', { regId, add, remove, rename, note: document.getElementById('ro-note').value.trim() }, { session: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   const i = teamRegistrations.findIndex(x => x.id === regId); if(i >= 0) teamRegistrations[i] = res.registration;
   _fxClose('roster-modal'); renderTeamRegistrations();
   showToast('📤 Wysłano — czeka na admina', 'success');
 }
+
+// ── admin: bezpośrednia edycja składu ──
+function openRosterEditor(regId) {
+  const r = teamRegistrations.find(x => x.id === regId);
+  if(!r) return;
+  window._rosterEd = { regId, rows: (r.players || []).map(p => ({ orig: p.gamertag, gamertag: p.gamertag, platform: p.platform || 'psn', experience: p.experience || '' })) };
+  _renderRosterEditor();
+  _fxModal('roster-ed-modal', 640).classList.add('open');
+}
+function _renderRosterEditor() {
+  const ed = window._rosterEd, r = teamRegistrations.find(x => x.id === ed.regId);
+  const box = _fxModal('roster-ed-modal', 640).querySelector('.modal');
+  const sel = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem;font-family:inherit;font-size:.78rem';
+  box.innerHTML = _fxHead('roster-ed-modal', `✏️ Edycja składu — ${_h(r.teamName)}`) + `
+    <div style="font-size:.76rem;color:var(--muted);margin-bottom:.7rem">Edycja admina zapisuje się od razu (bez prośby i bez wpisów w Transferach). Zmiana nicku przepina połączone konto gracza na nowy nick. Każda zmiana trafia do 📝 Dziennika zmian.</div>
+    <div style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.7rem">
+      ${ed.rows.map((p, i) => `<div style="display:grid;grid-template-columns:1fr 80px 150px 32px;gap:.35rem;align-items:center">
+        <input value="${_h(p.gamertag)}" maxlength="32" oninput="_rosterEd.rows[${i}].gamertag=this.value" style="${_MODAL_INP};padding:.35rem .55rem;${p.orig && p.orig !== p.gamertag ? 'border-color:var(--accent)' : ''}" placeholder="nick">
+        <select onchange="_rosterEd.rows[${i}].platform=this.value" style="${sel}"><option value="psn" ${p.platform !== 'xbox' ? 'selected' : ''}>PSN</option><option value="xbox" ${p.platform === 'xbox' ? 'selected' : ''}>Xbox</option></select>
+        <select onchange="_rosterEd.rows[${i}].experience=this.value" style="${sel}"><option value="">— poziom —</option>${Object.entries(_expLabels).map(([k, v]) => `<option value="${k}" ${p.experience === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="btn btn-ghost" title="Usuń z składu" style="padding:.2rem" onclick="_rosterEd.rows.splice(${i},1);_renderRosterEditor()">🗑</button>
+      </div>${p.orig && p.orig !== p.gamertag.trim() && p.gamertag.trim() ? `<div style="font-size:.66rem;color:var(--accent);margin:-.15rem 0 .1rem">✏️ ${_h(p.orig)} → ${_h(p.gamertag.trim())}</div>` : ''}`).join('')}
+    </div>
+    <button class="btn btn-ghost" style="font-size:.76rem;margin-bottom:1rem" onclick="_rosterEd.rows.push({orig:'',gamertag:'',platform:'psn',experience:''});_renderRosterEditor()">➕ Dodaj gracza</button>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('roster-ed-modal')">Anuluj</button><button class="btn btn-primary" onclick="saveRosterEditor()">💾 Zapisz skład</button></div>`;
+}
+async function saveRosterEditor() {
+  const ed = window._rosterEd;
+  const rows = ed.rows.map(p => ({ ...p, gamertag: p.gamertag.trim() })).filter(p => p.gamertag);
+  if(!rows.length) { showToast('Skład nie może być pusty', 'info'); return; }
+  const low = rows.map(p => p.gamertag.toLowerCase());
+  if(new Set(low).size !== low.length) { showToast('Nicki w składzie się powtarzają', 'info'); return; }
+  const renames = rows.filter(p => p.orig && p.orig !== p.gamertag).map(p => ({ from: p.orig, to: p.gamertag }));
+  const res = await _api('/team-registration', 'PATCH', { id: ed.regId, players: rows.map(({ gamertag, platform, experience }) => ({ gamertag, platform, experience })), renames }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  const i = teamRegistrations.findIndex(x => x.id === ed.regId); if(i >= 0) teamRegistrations[i] = res.registration;
+  // przepnij lokalnie połączone konta
+  playersList.forEach(p => { const x = renames.find(y => y.from.toLowerCase() === String(p.gamertag || '').toLowerCase() && String(p.team).toLowerCase() === res.registration.teamName.toLowerCase()); if(x) p.gamertag = x.to; });
+  _fxClose('roster-ed-modal'); renderTeamRegistrations();
+  showToast('✅ Skład zapisany', 'success');
+}
+
 async function decideRoster(regId, reqId, approve) {
   if(!confirm(approve ? 'Zatwierdzić zmianę składu? Utworzy wpisy w Transferach.' : 'Odrzucić zmianę składu?')) return;
   const res = await _api('/roster-change', 'PATCH', { regId, reqId, approve }, { admin: true });
@@ -10074,6 +10124,7 @@ function renderTeamRegistrations() {
           ${r.status !== 'approved' ? btn('approved','✅ Zatwierdź','var(--win)') : ''}
           ${r.status !== 'rejected' ? btn('rejected','❌ Odrzuć','var(--loss)') : ''}
           ${r.status !== 'pending'  ? btn('pending','↩ Cofnij do oczekujących','var(--muted)') : ''}
+          <button onclick="openRosterEditor('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">✏️ Edytuj skład</button>
           <button onclick="openCaptainChange('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">👤 Zmień kapitana</button>
           <button onclick="teamRegDelete('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">🗑 Usuń</button>
         </div>` : '';
