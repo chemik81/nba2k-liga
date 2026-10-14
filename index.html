@@ -6457,7 +6457,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (discordScheduleWebhookUrl ? '' : ' <span style="color:var(--loss)">●</span>'), false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (discordScheduleWebhookUrl ? '' : ' <span style="color:var(--loss)">●</span>'), false) + btn('openStreamsChannel()', '📺 Kanał transmisji', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -9259,6 +9259,40 @@ function openStreamModal(k) {
       <button class="btn btn-primary" onclick="saveStreamLinks('${k}', ${JSON.stringify(sides).replace(/"/g, '&quot;')})">💾 Zapisz</button></div>`;
   m.classList.add('open');
 }
+async function openStreamsChannel() {
+  const m = _fxModal('streams-ch-modal', 520);
+  const box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('streams-ch-modal', '📺 Kanał transmisji (Discord)') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
+  m.classList.add('open');
+  const st = await _api('/settings', 'GET', null, { admin: true });
+  box.innerHTML = _fxHead('streams-ch-modal', '📺 Kanał transmisji (Discord)') + `
+    <div style="font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:.8rem">Na ten kanał trafiają powiadomienia <b>🔴 NA ŻYWO</b> z linkami do streamów, gdy mecz się zaczyna. Ogłoszenie „⏰ Za godzinę” z pingiem kapitanów zostaje na kanale terminarza.
+      <br>Link webhooka jest zapisywany <b>tylko w Workerze</b> — nie trafia na publiczną stronę.</div>
+    <div style="font-size:.82rem;margin-bottom:.6rem">Status: ${st.ok && st.streamsWebhookSet ? `<b style="color:var(--win)">✅ ustawiony</b> <span style="color:var(--muted);font-size:.72rem">${_h(st.streamsWebhookMasked)}</span>` : '<b style="color:var(--loss)">● nieustawiony</b> (powiadomienia idą na kanał terminarza)'}</div>
+    <label style="${_MODAL_LBL}">Nowy link webhooka</label>
+    <input id="sch-wh" placeholder="https://discord.com/api/webhooks/…" style="${_MODAL_INP};margin-bottom:.4rem">
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.9rem">Discord → Ustawienia kanału → Integracje → Webhooki → Nowy webhook → Kopiuj URL webhooka.</div>
+    <div id="sch-wh-st" style="font-size:.8rem;min-height:1.1em;margin-bottom:.6rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
+      ${st.streamsWebhookSet ? `<button class="btn btn-ghost" style="color:var(--loss)" onclick="saveStreamsChannel('')">🗑 Usuń</button>` : ''}
+      <button class="btn btn-ghost" onclick="saveStreamsChannel(null, true)">🧪 Wyślij test</button>
+      <button class="btn btn-primary" onclick="saveStreamsChannel()">💾 Zapisz</button>
+    </div>`;
+}
+async function saveStreamsChannel(forceVal, testOnly) {
+  const el = document.getElementById('sch-wh-st');
+  const val = forceVal !== undefined && forceVal !== null ? forceVal : (document.getElementById('sch-wh')?.value || '').trim();
+  const body = {};
+  if(!testOnly || val) body.streamsWebhook = val;
+  if(testOnly) body.test = true;
+  if(!testOnly && forceVal === undefined && !val) { el.style.color = 'var(--loss)'; el.textContent = 'Wklej link webhooka'; return; }
+  if(forceVal === '' && !confirm('Usunąć webhook kanału transmisji?')) return;
+  const res = await _api('/settings', 'POST', body, { admin: true });
+  if(!res.ok) { el.style.color = 'var(--loss)'; el.textContent = '❌ ' + res.error; return; }
+  showToast(testOnly ? '🧪 Test wysłany — sprawdź kanał na Discordzie' : forceVal === '' ? 'Usunięto' : '✅ Zapisano', 'success');
+  openStreamsChannel();
+}
+
 function openTeamStreamModal(regId) {
   const reg = teamRegistrations.find(r => r.id === regId);
   if(!reg) return;
