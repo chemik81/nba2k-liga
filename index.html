@@ -6820,11 +6820,12 @@ function _ssMatchEmbed(s, title) {
 }
 
 // Pełne ogłoszenie meczu: embed + zapowiedź AI + baner z logotypami
-async function _ssAnnounceMatch(s, title) {
+async function _ssAnnounceMatch(s, title, extraLine) {
   const embed = _ssMatchEmbed(s, title);
+  if(extraLine) embed.description += '\n' + extraLine;
   const [fl, banner] = await Promise.all([
     Promise.race([
-      _api('/fun-line', 'POST', { kind: 'match', data: _ssMatchAiData(s) }, { admin: true }),
+      _api('/fun-line', 'POST', { kind: 'match', data: _ssMatchAiData(s) }, _isLoggedInSync() ? { admin: true } : { session: true }),
       new Promise(r => setTimeout(() => r({}), 10000))
     ]).catch(() => ({})),
     _ssMatchBanner(s)
@@ -6938,7 +6939,11 @@ Termin zostanie od razu ustalony.`)) return;
   scheduleDayPicks[k] = res.picks;
   delete _ssDraft[k];
   renderSchedule(); renderScheduleDashboard();
-  showToast('✅ Termin ustalony — rywal i kanał Discord dostali informację', 'success');
+  showToast('✅ Termin ustalony — wysyłam zapowiedź na Discord…', 'success');
+  // pełna zapowiedź: baner z logotypami, tekst AI, bilans — tak jak przy zatwierdzeniu przez admina
+  let ok = false;
+  try { ok = await _ssAnnounceMatch(s, null, '🤝 Uzgodnione przez kapitanów'); } catch(e) { console.warn(e); }
+  showToast(ok ? '📣 Zapowiedź meczu wysłana na Discord' : '⚠ Termin ustalony, ale zapowiedź nie wyszła — admin może ją wysłać przyciskiem 📣', ok ? 'success' : 'info');
 }
 
 function ssPickTime(k, kind, which, val) {
