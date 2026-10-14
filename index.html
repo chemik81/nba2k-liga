@@ -9335,11 +9335,11 @@ function renderMyPanelView() {
     </div>
     <div id="me-profile-box" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem;margin-top:.8rem">
       <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">🎮 MÓJ PROFIL GRACZA I DOSTĘPNOŚĆ</div>
-      ${isCaptain ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.6rem">🧢 Jako kapitan jesteś przypisany do <b>${_h(team)}</b> automatycznie.</div>`
+      ${isCaptain ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.6rem">🧢 Jako kapitan jesteś połączony z <b>${_h(team)}</b> automatycznie (przez zgłoszenie drużyny). Jeśli sam grasz, wybierz swój nick ze składu — wtedy pojawisz się przy nim w tabeli dostępności.</div>`
         : `<div style="font-size:.74rem;color:var(--muted);margin-bottom:.6rem">Wybierz drużynę i swój nick ze składu — przypisanie potwierdza kapitan drużyny. Nie ma Cię w składzie? Poproś kapitana o dopisanie.
           ${myProfile?.team ? `<br>Status: ${myProfile.status === 'confirmed' ? '<b style="color:var(--win)">✅ potwierdzony</b>' : '<b style="color:var(--accent)">⏳ czeka na kapitana</b>'}` : ''}</div>`}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem;${isCaptain ? 'display:none' : ''}">
-        <div><label style="${_MODAL_LBL}">Drużyna</label><select id="me-team" style="${_MODAL_INP}" onchange="_meFillRoster(this.value)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.7rem">
+        <div><label style="${_MODAL_LBL}">Drużyna</label><select id="me-team" ${isCaptain ? 'disabled' : ''} style="${_MODAL_INP}" onchange="_meFillRoster(this.value)">
           <option value="">— bez drużyny —</option>${teamsOpts.map(t => `<option ${t === (isCaptain ? team : myProfile?.team) ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select></div>
         <div><label style="${_MODAL_LBL}">Mój nick ze składu</label><select id="me-gt" style="${_MODAL_INP}"></select></div>
       </div>
@@ -9365,7 +9365,8 @@ function _meFillRoster(teamName, sel) {
   if(!el) return;
   const roster = (teamRegistrations.find(r => r.teamName === teamName)?.players || []).map(p => p.gamertag);
   const cur = sel !== undefined ? sel : el.value;
-  el.innerHTML = teamName ? '<option value="">— wybierz swój nick —</option>' + roster.map(g => `<option ${g === cur ? 'selected' : ''}>${_h(g)}</option>`).join('') : '<option value="">—</option>';
+  const capHere = discordUser && teamRegistrations.some(r => r.teamName === teamName && r.captain?.id === discordUser.id);
+  el.innerHTML = teamName ? `<option value="">${capHere ? '— nie gram / bez nicku —' : '— wybierz swój nick —'}</option>` + roster.map(g => `<option ${g === cur ? 'selected' : ''}>${_h(g)}</option>`).join('') : '<option value="">—</option>';
   el.disabled = !teamName;
 }
 async function saveMyProfile(week) {
@@ -9380,7 +9381,7 @@ async function saveMyProfile(week) {
   if(week) { if(wk.some(Boolean)) weeks[week] = wk; else delete weeks[week]; }
   const isCaptainNow = discordUser && teamRegistrations.some(r => r.status === 'approved' && r.captain?.id === discordUser.id);
   const capTeam = isCaptainNow ? _myTeamName() : null;
-  const res = await _api('/me', 'POST', { team: capTeam || document.getElementById('me-team').value, gamertag: capTeam ? (myProfile?.gamertag || '') : (document.getElementById('me-gt').value || '').trim(), days, weeks, hours, seasonId: currentSeasonId || null }, { session: true });
+  const res = await _api('/me', 'POST', { team: capTeam || document.getElementById('me-team').value, gamertag: (document.getElementById('me-gt')?.value || '').trim(), days, weeks, hours, seasonId: currentSeasonId || null }, { session: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   myProfile = res.me;
   const i = playersList.findIndex(p => p.id === res.me.id);
@@ -9693,13 +9694,14 @@ function openTeamRoster(team, week) {
   const decide = (a) => (isAdmin || isCap) && a.status === 'pending'
     ? ` <button class="btn btn-primary" style="font-size:.62rem;padding:.08rem .35rem" onclick="decideMember('${a.id}',true,'roster')">✅</button><button class="btn btn-ghost" style="font-size:.62rem;padding:.08rem .35rem" onclick="decideMember('${a.id}',false,'roster')">❌</button>` : '';
   const who = a => !a ? '<span style="color:var(--muted);font-size:.72rem">niepołączony</span>'
-    : `<span style="display:inline-flex;align-items:center;gap:.3rem">${_avatarHtml(a.avatar, 18)}<span style="font-size:.78rem">${_h(a.name)}</span>${a.status === 'confirmed' ? '<span title="potwierdzony" style="color:var(--win)">✅</span>' : '<span title="czeka na potwierdzenie" style="color:var(--accent)">⏳</span>'}${decide(a)}</span>`;
+    : `<span style="display:inline-flex;align-items:center;gap:.3rem">${_avatarHtml(a.avatar, 18)}<span style="font-size:.78rem">${a.id === reg.captain?.id ? '🧢 ' : ''}${_h(a.name)}</span>${a.status === 'confirmed' ? '<span title="potwierdzony" style="color:var(--win)">✅</span>' : '<span title="czeka na potwierdzenie" style="color:var(--accent)">⏳</span>'}${decide(a)}</span>`;
   const rows = (reg.players || []).map(p => { const a = byNick[String(p.gamertag).toLowerCase()];
     return `<tr><td style="font-weight:700;white-space:nowrap;text-align:left">${_h(p.gamertag)}</td><td style="text-align:left">${who(a)}</td>${DOW.map((_, i) => cell(a, i)).join('')}</tr>`; });
   // kapitan bez nicku w składzie + konta z nickami spoza składu (np. po zmianie składu)
-  const capAcc = accounts.find(a => a.id === reg.captain?.id);
+  // kapitan jest połączony przez zgłoszenie drużyny — nawet bez profilu
+  const capAcc = accounts.find(a => a.id === reg.captain?.id) || (reg.captain?.id ? { id: reg.captain.id, name: reg.captain.name, avatar: reg.captain.avatar, status: 'confirmed', days: [], captainOnly: true } : null);
   if(capAcc && !(reg.players || []).some(p => String(p.gamertag).toLowerCase() === String(capAcc.gamertag || '').toLowerCase()))
-    rows.push(`<tr><td style="font-weight:700;text-align:left">🧢 kapitan</td><td style="text-align:left">${who(capAcc)}</td>${DOW.map((_, i) => cell(capAcc, i)).join('')}</tr>`);
+    rows.push(`<tr><td style="font-weight:700;text-align:left">🧢 kapitan</td><td style="text-align:left">${who(capAcc)}${capAcc.captainOnly ? ' <span style="font-size:.66rem;color:var(--muted)">(nie ustawił jeszcze dostępności)</span>' : ''}</td>${DOW.map((_, i) => cell(capAcc, i)).join('')}</tr>`);
   const confirmed = accounts.filter(a => a.status === 'confirmed');
   const counts = DOW.map((_, i) => confirmed.filter(a => daysFor(a)[i]).length);
   const linked = (reg.players || []).filter(p => byNick[String(p.gamertag).toLowerCase()]?.status === 'confirmed').length;
@@ -9769,7 +9771,7 @@ function _renderUsersOverview() {
       const col = n => `<b style="color:${n >= 5 ? 'var(--win)' : n >= 3 ? 'var(--accent)' : n ? 'var(--loss)' : 'var(--muted)'}">${n}</b>`;
       return `<tr style="cursor:pointer" onclick="openTeamRoster(this.dataset.t,'g')" data-t="${_h(r.teamName)}">
         <td ${td}><span style="display:inline-flex;align-items:center;gap:.4rem">${teamLogo(r.teamName, 22, '.5rem')}<b>${_h(r.teamName)}</b></span></td>
-        <td ${td}>${_h(r.captain?.name || '?')}${conf.some(p => p.id === r.captain?.id) ? ' <span title="kapitan zalogowany na stronie">✅</span>' : ''}</td>
+        <td ${td}>${_h(r.captain?.name || '?')} <span title="kapitan połączony przez zgłoszenie drużyny">✅</span>${conf.some(p => p.id === r.captain?.id && (p.days || []).some(Boolean)) ? '' : ' <span title="kapitan nie ustawił jeszcze swojej dostępności" style="font-size:.66rem;color:var(--muted)">(bez dostępności)</span>'}</td>
         <td ${td} style="text-align:center">${rosterN}</td>
         <td ${td} style="text-align:center"><b style="color:${linked === rosterN && rosterN ? 'var(--win)' : 'var(--text)'}">${linked}</b> / ${rosterN}</td>
         <td ${td} style="text-align:center">${pend.length ? `<b style="color:var(--accent)">⏳ ${pend.length}</b>` : '—'}</td>
@@ -9801,7 +9803,7 @@ function _renderUsersOverview() {
     const active7 = [...map.values()].filter(u => u.lastSeen && Date.now() - new Date(u.lastSeen) < 7 * 864e5).length;
     const chip = (id, label) => `<button onclick="_uo.filter='${id}';_renderUsersOverview()" style="font-size:.72rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer;font-family:inherit;border:1px solid ${_uo.filter === id ? 'var(--accent)' : 'var(--border)'};background:${_uo.filter === id ? 'rgba(245,197,24,.15)' : 'transparent'};color:${_uo.filter === id ? 'var(--accent)' : 'var(--text)'}">${label}</button>`;
     const role = u => [
-      ...(u.captainOf || []).map(t => `<span style="color:var(--accent)">🧢 ${_h(t)}</span>`),
+      ...(u.captainOf || []).map(t => `<span style="color:var(--accent)">🧢 kapitan ${_h(t)}</span> <span title="połączony przez zgłoszenie drużyny">✅</span>`),
       u.profile?.team && !(u.captainOf || []).includes(u.profile.team) ? `${u.profile.status === 'confirmed' ? '✅' : '⏳'} ${_h(u.profile.team)} <span style="color:var(--muted)">(${_h(u.profile.gamertag || '—')})</span>` : '',
       u.fa ? `🆓 wolny agent (${_h(u.fa.pos1)})` : ''
     ].filter(Boolean).join('<br>') || '<span style="color:var(--muted)">kibic</span>';
