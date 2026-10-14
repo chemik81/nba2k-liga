@@ -9420,7 +9420,14 @@ function _meFillRoster(teamName, sel) {
   const roster = (teamRegistrations.find(r => r.teamName === teamName)?.players || []).map(p => p.gamertag);
   const cur = sel !== undefined ? sel : el.value;
   const capHere = discordUser && teamRegistrations.some(r => r.teamName === teamName && r.captain?.id === discordUser.id);
-  el.innerHTML = teamName ? `<option value="">${capHere ? '— nie gram / bez nicku —' : '— wybierz swój nick —'}</option>` + roster.map(g => `<option ${g === cur ? 'selected' : ''}>${_h(g)}</option>`).join('') : '<option value="">—</option>';
+  // tylko nicki, których nikt inny nie ma już potwierdzonych (zgłoszone przez kogoś — z dopiskiem)
+  const others = playersList.filter(p => p.id !== discordUser?.id && p.team && String(p.team).toLowerCase() === String(teamName).toLowerCase());
+  const owner = g => others.find(p => String(p.gamertag || '').toLowerCase() === String(g).toLowerCase());
+  const free = roster.filter(g => g === cur || owner(g)?.status !== 'confirmed');
+  el.innerHTML = teamName
+    ? `<option value="">${capHere ? '— nie gram / bez nicku —' : free.length ? '— wybierz swój nick —' : '— wszystkie nicki są już połączone —'}</option>` +
+      free.map(g => `<option value="${_h(g)}" ${g === cur ? 'selected' : ''}>${_h(g)}${owner(g)?.status === 'pending' ? ' (ktoś już zgłosił — zdecyduje kapitan)' : ''}</option>`).join('')
+    : '<option value="">—</option>';
   el.disabled = !teamName;
 }
 async function saveMyProfile(week) {
