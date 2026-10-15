@@ -10401,32 +10401,59 @@ function _lev(a, b) {
   return d[m][n];
 }
 function _approvedTeamNames() { return teamRegistrations.filter(r => r.status === 'approved').map(r => r.teamName); }
-function _guessTeamByRoster(players, exclude) {
+function _rosterIdx() {
   const idx = new Map();
   teamRegistrations.filter(r => r.status === 'approved').forEach(r => (r.players || []).forEach(p => { const k = _normNick(p.gamertag); if(k) idx.set(k, r.teamName); }));
   playersList.filter(p => p.status === 'confirmed' && p.team && p.gamertag).forEach(p => idx.set(_normNick(p.gamertag), p.team));
+  return idx;
+}
+function _rosterHits(players, idx) {
   const counts = {}, who = {};
   (players || []).forEach(pl => {
     const k = _normNick(pl.name || pl.n); if(!k) return;
     let team = idx.get(k);
     if(!team && k.length >= 5) for(const [nick, t] of idx) { if(nick.length >= 5 && _lev(nick, k) <= 1) { team = t; break; } }
-    if(team && team !== exclude) { counts[team] = (counts[team] || 0) + 1; (who[team] = who[team] || []).push(pl.name || pl.n); }
+    if(team) { counts[team] = (counts[team] || 0) + 1; (who[team] = who[team] || []).push(pl.name || pl.n); }
   });
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return { counts, who };
+}
+function _guessTeamByRoster(players, exclude) {
+  const { counts, who } = _rosterHits(players, _rosterIdx());
+  const sorted = Object.entries(counts).filter(([t]) => t !== exclude).sort((a, b) => b[1] - a[1]);
   if(!sorted.length) return null;
   const [team, hits] = sorted[0], second = sorted[1]?.[1] || 0;
   return hits >= 2 && hits >= second * 2 ? { team, hits, total: (players || []).length, who: who[team] } : null;
 }
-function _fixMatchTeams(m) {
-  const known = new Set(_approvedTeamNames().map(n => n.toLowerCase()));
+// Skład ma pierwszeństwo przed nazwą odczytaną ze screena (ta sama logika co w Workerze)
+function _fixMatchTeams(m, dryRun) {
+  const idx = _rosterIdx();
+  const names = _approvedTeamNames();
+  const canon = n => names.find(x => x.toLowerCase() === String(n || '').toLowerCase()) || null;
+  const plan = {};
+  ['team1', 'team2'].forEach(sd => {
+    const t = m[sd] || {};
+    const { counts } = _rosterHits(t.players, idx);
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const best = sorted[0] ? { team: sorted[0][0], hits: sorted[0][1] } : null;
+    const second = sorted[1]?.[1] || 0;
+    const strong = best && best.hits >= 2 && best.hits >= second * 2;
+    const named = canon(t.name) || canon(teamAliasMap[String(t.name || '').toLowerCase()]);
+    const namedHits = named ? (counts[named] || 0) : 0;
+    let target = named;
+    if(!named && strong) target = best.team;
+    else if(named && strong && best.team !== named && best.hits >= 3 && namedHits <= 1) target = best.team;
+    plan[sd] = { target, counts };
+  });
+  if(plan.team1.target && plan.team1.target === plan.team2.target) {
+    const tgt = plan.team1.target;
+    const loser = (plan.team1.counts[tgt] || 0) >= (plan.team2.counts[tgt] || 0) ? 'team2' : 'team1';
+    const alt = Object.entries(plan[loser].counts).filter(([t]) => t !== tgt).sort((a, b) => b[1] - a[1])[0];
+    plan[loser].target = alt && alt[1] >= 2 ? alt[0] : null;
+  }
   const fixes = [];
   ['team1', 'team2'].forEach(sd => {
-    const t = m[sd]; if(!t?.name || known.has(String(t.name).toLowerCase())) return;
-    const other = m[sd === 'team1' ? 'team2' : 'team1']?.name;
-    const al = teamAliasMap[String(t.name).toLowerCase()];
-    if(al && al !== other) { fixes.push({ from: t.name, to: al }); t.name = al; return; }
-    const g = _guessTeamByRoster(t.players, other);
-    if(g) { fixes.push({ from: t.name, to: g.team }); t.name = g.team; }
+    const t = m[sd], tg = plan[sd].target;
+    if(t && tg && tg !== t.name) { fixes.push({ side: sd, from: t.name, to: tg, hits: plan[sd].counts[tg] || 0 }); if(!dryRun) t.name = tg; }
   });
   return fixes;
 }
@@ -10442,12 +10469,27 @@ function openTeamNameFixer() {
   const list = Object.values(groups).map(g => ({ ...g, guess: _guessTeamByRoster(g.players.filter((p, i, a) => a.findIndex(x => _normNick(x.name || x.n) === _normNick(p.name || p.n)) === i)) }))
     .sort((a, b) => (!!b.guess - !!a.guess) || b.matches.length - a.matches.length);
   window._tnf = list;
+  // mecze z nazwami z ligi, w których skład wskazuje inną drużynę (np. AI źle odczytało nazwę ze screena)
+  const suspicious = all.filter(m => known.has(String(m.team1?.name).toLowerCase()) && known.has(String(m.team2?.name).toLowerCase()))
+    .map(m => ({ m, fixes: _fixMatchTeams(m, true) })).filter(x => x.fixes.length)
+    .sort((a, b) => String(b.m.date).localeCompare(String(a.m.date)));
+  window._tnfSus = suspicious;
   const teams = _approvedTeamNames().sort((a, b) => a.localeCompare(b, 'pl'));
   const m = _fxModal('tnf-modal', 760);
   m.querySelector('.modal').innerHTML = _fxHead('tnf-modal', '🔄 Nazwy drużyn wg składów') + `
     <div style="font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:.8rem">Mecze, w których drużyna ma nazwę spoza ligi (np. nazwa z Pro-Am). Strona rozpoznaje drużynę po <b>graczach ze składów</b>.
       „Zamień” poprawia mecze i zapamiętuje nazwę — kolejne mecze (bot, kapitanowie, admin) dopasują się już same.</div>
-    ${list.length ? `<div style="display:flex;flex-direction:column;gap:.5rem;max-height:60vh;overflow-y:auto">
+    ${suspicious.length ? `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--loss);margin-bottom:.4rem">⚠️ SKŁAD NIE PASUJE DO NAZWY (${suspicious.length})</div>
+      <div style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:1rem">
+        ${suspicious.map((x, i) => `<div style="border:1px solid rgba(220,38,38,.45);border-radius:10px;padding:.55rem .8rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <span style="font-size:.72rem;color:var(--muted)">${_ssFmt(x.m.date)}</span>
+          <b style="font-size:.85rem">${_h(x.m.team1.name)} ${x.m.team1.score}:${x.m.team2.score} ${_h(x.m.team2.name)}</b>
+          <span style="flex:1;font-size:.76rem;color:var(--muted)">${x.fixes.map(f => `${_h(f.from)} → <b style="color:var(--win)">${_h(f.to)}</b> (${f.hits} graczy ze składu)`).join(' · ')}</span>
+          <button class="btn btn-primary" style="font-size:.72rem;padding:.25rem .6rem" onclick="applySuspiciousFix(${i})">Popraw</button>
+        </div>`).join('')}
+        ${suspicious.length > 1 ? `<div style="text-align:right"><button class="btn btn-ghost" style="font-size:.74rem" onclick="applySuspiciousFix('all')">Popraw wszystkie (${suspicious.length})</button></div>` : ''}
+      </div>` : ''}
+    ${list.length ? `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">NAZWY SPOZA LIGI</div><div style="display:flex;flex-direction:column;gap:.5rem;max-height:60vh;overflow-y:auto">
       ${list.map((g, i) => `<div style="border:1px solid ${g.guess ? 'rgba(22,163,74,.5)' : 'var(--border)'};border-radius:10px;padding:.6rem .8rem">
         <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
           <b style="font-size:.95rem">${_h(g.name)}</b><span style="font-size:.72rem;color:var(--muted)">${g.matches.length} ${_plPL(g.matches.length, 'mecz', 'mecze', 'meczów')}</span>
@@ -10458,9 +10500,20 @@ function openTeamNameFixer() {
           <button class="btn btn-primary" style="font-size:.72rem;padding:.25rem .6rem" onclick="applyTeamNameFix(${i})">Zamień</button>
         </div>
         <div style="font-size:.7rem;color:var(--muted);margin-top:.3rem">${g.guess ? `✅ Rozpoznano po składzie: <b style="color:var(--win)">${_h(g.guess.team)}</b> (${g.guess.hits} graczy: ${g.guess.who.slice(0, 5).map(_h).join(', ')})` : 'Nie rozpoznano automatycznie — wybierz drużynę ręcznie albo zostaw (np. drużyna spoza ligi).'}</div>
-      </div>`).join('')}</div>` : '<div style="text-align:center;color:var(--muted);padding:1.5rem">✅ Wszystkie mecze mają nazwy drużyn z ligi.</div>'}
+      </div>`).join('')}</div>` : (suspicious.length ? '' : '<div style="text-align:center;color:var(--muted);padding:1.5rem">✅ Wszystkie mecze mają poprawne nazwy drużyn.</div>')}
     ${Object.keys(teamAliasMap).length ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.9rem">Zapamiętane nazwy: ${Object.entries(teamAliasMap).map(([k, v]) => `<span style="margin-right:.5rem">${_h(k)} → <b>${_h(v)}</b> <a href="#" onclick="delete teamAliasMap['${k.replace(/'/g, "\\'")}'];saveData().then(openTeamNameFixer);return false" style="color:var(--loss)">✕</a></span>`).join('')}</div>` : ''}`;
   m.classList.add('open');
+}
+async function applySuspiciousFix(i) {
+  const items = i === 'all' ? (window._tnfSus || []) : [window._tnfSus?.[i]].filter(Boolean);
+  if(!items.length) return;
+  if(!confirm(`Poprawić nazwy drużyn w ${items.length} ${_plPL(items.length, 'meczu', 'meczach', 'meczach')} według składów?`)) return;
+  const log = [];
+  items.forEach(x => { const f = _fixMatchTeams(x.m); f.forEach(z => log.push(`${z.from} → ${z.to}`)); });
+  if(!(await saveData())) return;
+  _audit('Nazwy drużyn wg składów', `${items.length} meczów: ${log.join(', ')}`.slice(0, 190));
+  showToast(`✅ Poprawiono ${items.length} ${_plPL(items.length, 'mecz', 'mecze', 'meczów')}`, 'success');
+  renderDashboard(); openTeamNameFixer();
 }
 async function applyTeamNameFix(i) {
   const g = window._tnf?.[i];
@@ -16408,7 +16461,7 @@ async function generateRecap(id) {
   const zs2 = zeroShotsNote(m.team2);
   const zeroShotsText = [zs1 && `${m.team1.name}: ${zs1}`, zs2 && `${m.team2.name}: ${zs2}`].filter(Boolean).join('; ');
 
-  const prompt = `Napisz recap meczu NBA 2K26 po polsku — około 150 słów. Pisz prostym, codziennym językiem jakbyś opowiadał znajomym. Bez kwiecistego stylu. Opisz: jak wyglądał mecz i przebieg kluczowych kwart, kto był MVP z uzasadnieniem, jeden ciekawy moment lub pojedynek. Jeden akapit, bez nagłówków i list.
+  const prompt = `Napisz recap meczu ${_editionOf(m.seasonId) || 'NBA 2K'} po polsku — około 150 słów. Nie określaj, kiedy był mecz (bez „wczoraj”, „dziś”). Pisz prostym, codziennym językiem jakbyś opowiadał znajomym. Bez kwiecistego stylu. Opisz: jak wyglądał mecz i przebieg kluczowych kwart, kto był MVP z uzasadnieniem, jeden ciekawy moment lub pojedynek. Jeden akapit, bez nagłówków i list.
 
 WAŻNE ZASADY:
 - Jeśli gracz miał FGA=0 i FTA=0: napisz że nie otrzymał ani jednej piłki od kolegów i zadaj refleksyjne pytanie czy gdyby go częściej szukali wynik mógłby być inny. NIE pisz "dramat" ani "słaby".
