@@ -817,6 +817,7 @@
     <button onclick="showView('stats')" data-i18n="nav_stats">Statystyki</button>
     <button onclick="showView('add-match')" data-i18n="nav_add_match">+ Dodaj Mecz</button>
     <button onclick="showView('schedule')" data-i18n="nav_schedule">📅 Harmonogram</button>
+    <button onclick="showView('fantasy')">🏀 Fantasy</button>
     <button onclick="showView('aliases')" data-i18n="nav_aliases">⚙ Aliasy</button>
   </nav>
   <div id="hdr-tools" style="display:flex;gap:0.5rem;align-items:center">
@@ -1064,6 +1065,10 @@
   <!-- SCHEDULE -->
   <div id="view-mypanel" class="view">
     <div id="mypanel-view"></div>
+  </div>
+
+  <div id="view-fantasy" class="view">
+    <div id="fantasy-view"></div>
   </div>
 
   <div id="view-schedule" class="view">
@@ -2111,7 +2116,13 @@ async function _pushDerived() {
       schedule: (schedule || []).map(s => { const { prediction, ...rest } = s; return rest; }),
       matches: [...need].map(id => byId.get(id)).filter(Boolean).map(lite),
       playoffs: (playoffs || []).map(po => ({ id: po.id, seasonId: po.seasonId || null, format: po.format, startDate: po.startDate || null, createdAt: po.createdAt || null, champion: po.champion || null, rounds: po.rounds || [] })),
-      registrationsClosed, rosterLockDate, currentSeasonId,
+      registrationsClosed, rosterLockDate, currentSeasonId, seasons,
+      fantasyMatches: (() => {
+        const eds = _editionsList(); const keep = new Set(eds.slice(0, 2));
+        return all.filter(m => keep.has(_editionOf(m.seasonId))).map(m => ({ id: m.id, date: m.date, seasonId: m.seasonId || null, walkover: m.walkover || undefined,
+          team1: { name: m.team1?.name, score: m.team1?.score, players: (m.team1?.players || []).map(p => ({ n: p.name, p: p.pts || 0, r: p.reb || 0, a: p.ast || 0, s: p.stl || 0, b: p.blk || 0, t: p.to || 0, g: p.grade || '' })) },
+          team2: { name: m.team2?.name, score: m.team2?.score, players: (m.team2?.players || []).map(p => ({ n: p.name, p: p.pts || 0, r: p.reb || 0, a: p.ast || 0, s: p.stl || 0, b: p.blk || 0, t: p.to || 0, g: p.grade || '' })) } }));
+      })(),
       discordGuildId: discordRoleCfg.guildId, discordMemberRoleId: discordRoleCfg.member, discordCaptainRoleId: discordRoleCfg.captain
     };
     await _api('/derived', 'POST', body, { admin: true });
@@ -2245,7 +2256,7 @@ async function loadData() {
           window._dataLoadedAt = record._savedAt || Date.now();
           const extras = await extrasP;
           if(extras && !extras.error) Object.assign(record, extras);
-          window._needDerived = !!(extras && !extras.error && !extras.derivedAt);
+          window._needDerived = !!(extras && !extras.error && (!extras.derivedAt || (!extras.fantasy && (record.schedule || []).some(x => x.generated))));
         }
       }
     }
@@ -2326,6 +2337,7 @@ async function loadData() {
     rosterLockDate = record.rosterLockDate || null;
     discordRoleCfg = { guildId: record.discordGuildId || '', member: record.discordMemberRoleId || '', captain: record.discordCaptainRoleId || '' };
     teamAliasMap = record.teamAliasMap || {};
+    fantasyData = record.fantasy || null;
     _dataLoadedAt = new Date().toISOString();
     _loadMyVotes();
     if(record.ovrMethod) { ovrMethod = record.ovrMethod; localStorage.setItem('nba2k_ovr_method', ovrMethod); }
@@ -2452,6 +2464,7 @@ function _doShowView(id) {
     b.classList.toggle('active', !!m && m[1] === id);
   });
   if(id==='mypanel') renderMyPanelView();
+  if(id==='fantasy') renderFantasy();
   try { _bnSync(id); } catch(e) {}
   if(id==='dashboard') renderDashboard();
   if(id==='matches') renderMatches();
@@ -6108,6 +6121,8 @@ async function _loadMyVotes() {
     myBracket = res.bracket || {};
     myClipLikes = new Set(res.clipLikes || []);
     myProfile = res.me || null;
+    mySquad = res.fantasySquad || null; _fx.draft = null;
+    if(document.getElementById('view-fantasy')?.classList.contains('active')) renderFantasy();
     if(typeof updateMyPanelBadge === 'function') updateMyPanelBadge();
     if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView();
     if(typeof renderBracketDashboard === 'function') renderBracketDashboard();
@@ -7430,6 +7445,7 @@ function openDeepLink() {
   }
   if(h === 'kronika') { showView('dashboard'); setTimeout(openChronicle, 300); return; }
   if(h === 'panel' || h === 'moj-panel') { showView('mypanel'); return; }
+  if(h === 'fantasy') { showView('fantasy'); return; }
   if(h === 'zapisy' || h === 'wolni-agenci' || h === 'transfery') {
     _regTab = h === 'zapisy' ? 'teams' : h === 'transfery' ? 'tr' : 'fa';
     showView('dashboard');
@@ -10362,7 +10378,7 @@ function openMoreSheet() {
     const m = (b.getAttribute('onclick') || '').match(/showView\('([\w-]+)'\)/);
     if(!m || ['dashboard', 'schedule', 'mypanel', 'matches'].includes(m[1]) || b.style.display === 'none') return;
     const txt = b.textContent.trim();
-    const ico = { stats: '📊', 'add-match': '➕', aliases: '⚙️', events: '🏆' }[m[1]] || icon(txt);
+    const ico = { stats: '📊', 'add-match': '➕', aliases: '⚙️', events: '🏆', fantasy: '🏀' }[m[1]] || icon(txt);
     items.push({ ico, text: (label(txt) || txt).replace(/^\+\s*/, ''), act: `document.getElementById('more-sheet').classList.remove('open');bnGo('${m[1]}')` });
   });
   // narzędzia z prawej strony nagłówka (admin, logowanie, język)
@@ -10538,6 +10554,218 @@ async function applyTeamNameFix(i) {
   _audit('Nazwa drużyny z Pro-Am', `${g.name} → ${target} (${n} meczów)`);
   showToast(`✅ ${g.name} → ${target} (${n})`, 'success');
   renderDashboard(); openTeamNameFixer();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🏀 FANTASY EKSTRAKLASA (zakładka)
+// ═══════════════════════════════════════════════════════════════
+let fantasyData = null;   // z Workera: ceny, tygodnie, rankingi
+let mySquad = null;       // mój ostatni zapisany skład
+let _fx = { tab: 'squad', draft: null, slot: null, q: '', team: '', sort: 'price', board: 'season', open: null };
+
+function _fxP(key) { return fantasyData?.players?.find(p => p.key === key) || null; }
+function _fxDraft() {
+  if(!_fx.draft) _fx.draft = mySquad ? { starters: [...mySquad.starters], bench: [...mySquad.bench], captain: mySquad.captain } : { starters: [], bench: [], captain: null };
+  return _fx.draft;
+}
+function _fxCost(d) { return Math.round([...d.starters, ...d.bench].reduce((s, k) => s + (_fxP(k)?.price || 0), 0) * 10) / 10; }
+function _fxTeamCount(d) { const c = {}; [...d.starters, ...d.bench].forEach(k => { const t = _fxP(k)?.team; if(t) c[t] = (c[t] || 0) + 1; }); return c; }
+function _fxDirty() { const d = _fxDraft(); return !mySquad || JSON.stringify([d.starters, d.bench, d.captain]) !== JSON.stringify([mySquad.starters, mySquad.bench, mySquad.captain]); }
+function _fxLockText() {
+  const nx = fantasyData?.weeks?.find(w => w.week === fantasyData.nextWeek);
+  if(!nx) return 'Sezon fantasy zakończony';
+  const ms = new Date(nx.lock) - Date.now();
+  const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+  return `Skład na <b>Week ${nx.week}</b> zamyka się ${new Date(nx.lock).toLocaleString('pl-PL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' })} · za ${d ? d + ' d ' : ''}${h} h ${d ? '' : m + ' min'}`;
+}
+
+function renderFantasy() {
+  const el = document.getElementById('fantasy-view');
+  if(!el) return;
+  const R = fantasyData?.rules || { budget: 60, maxPerTeam: 2 };
+  if(!fantasyData?.players?.length) {
+    el.innerHTML = `<div class="section-title">🏀 Fantasy Ekstraklasa</div><div class="card" style="padding:2rem;text-align:center;color:var(--muted)">Fantasy ruszy, gdy terminarz sezonu będzie gotowy.</div>`;
+    return;
+  }
+  const tab = (id, label) => `<button onclick="_fx.tab='${id}';renderFantasy()" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1rem;letter-spacing:1px;text-transform:uppercase;padding:.4rem .9rem;border-radius:8px;border:none;cursor:pointer;background:${_fx.tab === id ? 'var(--accent)' : 'transparent'};color:${_fx.tab === id ? 'rgba(0,0,0,.88)' : 'var(--muted)'}">${label}</button>`;
+  const cw = fantasyData.currentWeek;
+  el.innerHTML = `
+    <div class="section-title">🏀 Fantasy Ekstraklasa</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.9rem">
+      <div style="font-size:.82rem;color:var(--muted)">${cw ? `Trwa <b style="color:var(--text)">Week ${cw}</b> · ` : ''}${_fxLockText()}</div>
+      <details style="font-size:.78rem"><summary style="cursor:pointer;color:var(--accent);font-weight:700">📖 Zasady</summary>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;margin-top:.4rem;line-height:1.55;max-width:560px">
+          <b>Skład:</b> 5 w piątce + 2 rezerwowych · <b>budżet ${R.budget} mln</b> · max <b>${R.maxPerTeam}</b> z jednej drużyny · <b>kapitan</b> (z piątki) ×2.<br>
+          <b>Kolejka</b> = tydzień terminarza. Skład zamyka się w poniedziałek o 00:00 — kto nic nie zmieni, gra poprzednim. Zmiany po zamknięciu obowiązują od następnej kolejki.<br>
+          <b>Rezerwowy</b> wchodzi sam, gdy ktoś z piątki nie zagrał w danym tygodniu (najpierw pierwszy, potem drugi).<br>
+          <b>Punkty za mecz:</b> punkt 1 · zbiórka 1,2 · asysta 1,5 · przechwyt 3 · blok 3 · strata −1 · wygrana drużyny +2 · double-double +3 / triple-double +5 · ocena 2K od +3 (A+) do −2 (F). Punkty z wszystkich meczów tygodnia się sumują.<br>
+          <b>Ceny</b> 4–15 mln z formy (ostatnie 10 meczów, świeższe ważą więcej), aktualizowane w poniedziałek. Debiutant bez meczów: 5 mln.
+        </div></details>
+    </div>
+    <div style="display:flex;gap:.2rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.2rem;margin-bottom:1rem;width:fit-content">
+      ${tab('squad', '🧩 Mój skład')}${tab('market', '💰 Rynek')}${tab('board', '🏆 Ranking')}
+    </div>
+    <div id="fx-body"></div>`;
+  const body = document.getElementById('fx-body');
+  if(_fx.tab === 'squad') body.innerHTML = _fxSquadHtml();
+  else if(_fx.tab === 'market') body.innerHTML = _fxMarketHtml();
+  else body.innerHTML = _fxBoardHtml();
+}
+
+function _fxCard(k, where, idx) {
+  const d = _fxDraft();
+  if(!k) return `<button onclick="_fx.slot={where:'${where}',idx:${idx}};_fx.tab='market';renderFantasy()" style="min-height:118px;border:2px dashed var(--border);border-radius:12px;background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;font-size:.8rem">➕<br>${where === 'starters' ? 'Dodaj do piątki' : 'Dodaj rezerwowego'}</button>`;
+  const p = _fxP(k);
+  if(!p) return `<div style="min-height:118px;border:1px solid var(--loss);border-radius:12px;padding:.5rem;font-size:.75rem;color:var(--loss)">Zawodnik spoza ligi<br><button class="btn btn-ghost" style="font-size:.7rem" onclick="fxRemove('${k}')">Usuń</button></div>`;
+  const cap = d.captain === k;
+  const delta = p.price - p.prevPrice;
+  return `<div style="position:relative;min-height:118px;border:1px solid ${cap ? 'var(--accent)' : 'var(--border)'};background:${cap ? 'rgba(245,197,24,.08)' : 'var(--surface)'};border-radius:12px;padding:.55rem .5rem;text-align:center;display:flex;flex-direction:column;align-items:center;gap:.2rem">
+    <button onclick="fxRemove('${k}')" title="Usuń" style="position:absolute;top:4px;right:6px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">✕</button>
+    ${teamLogo(p.team, 30, '.6rem')}
+    <div style="font-weight:800;font-size:.82rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(p.name)}</div>
+    <div style="font-size:.66rem;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(p.team)}</div>
+    <div style="font-size:.72rem"><b style="color:var(--accent)">${p.price} mln</b>${delta ? ` <span style="color:${delta > 0 ? 'var(--win)' : 'var(--loss)'}">${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}</span>` : ''} · ⌀ ${p.avg}</div>
+    ${where === 'starters' ? `<button onclick="fxCaptain('${k}')" style="margin-top:.15rem;font-size:.66rem;font-weight:800;border-radius:999px;padding:.08rem .5rem;cursor:pointer;font-family:inherit;border:1px solid ${cap ? 'var(--accent)' : 'var(--border)'};background:${cap ? 'var(--accent)' : 'transparent'};color:${cap ? 'rgba(0,0,0,.88)' : 'var(--muted)'}">${cap ? 'Ⓒ KAPITAN ×2' : 'Ⓒ zrób kapitanem'}</button>`
+      : `<div style="display:flex;gap:.2rem;margin-top:.15rem"><button onclick="fxBenchMove(${idx},-1)" ${idx === 0 ? 'disabled' : ''} class="btn btn-ghost" style="font-size:.6rem;padding:.05rem .35rem">▲</button><span style="font-size:.62rem;color:var(--muted)">${idx + 1}. zmiennik</span><button onclick="fxBenchMove(${idx},1)" ${idx === 1 ? 'disabled' : ''} class="btn btn-ghost" style="font-size:.6rem;padding:.05rem .35rem">▼</button></div>`}
+  </div>`;
+}
+
+function _fxSquadHtml() {
+  if(!discordUser) return `<div class="card" style="padding:1.6rem;text-align:center"><div style="font-size:.88rem;color:var(--muted);margin-bottom:.8rem">Zaloguj się przez Discord, żeby zbudować swój skład.</div><button class="btn btn-primary" onclick="loginWithDiscord()">Zaloguj przez Discord</button></div>`;
+  const R = fantasyData.rules, d = _fxDraft();
+  const cost = _fxCost(d), left = Math.round((R.budget - cost) * 10) / 10;
+  const tc = _fxTeamCount(d);
+  const errs = [];
+  if(cost > R.budget) errs.push(`Przekroczony budżet o ${Math.round((cost - R.budget) * 10) / 10} mln`);
+  Object.entries(tc).filter(([, n]) => n > R.maxPerTeam).forEach(([t]) => errs.push(`Za dużo zawodników z ${t} (max ${R.maxPerTeam})`));
+  if(d.starters.length === 5 && !d.starters.includes(d.captain)) errs.push('Wybierz kapitana z piątki (Ⓒ)');
+  const complete = d.starters.length === 5 && d.bench.length === 2;
+  const canSave = complete && !errs.length && _fxDirty();
+  const me = fantasyData.season?.find(x => x.id === discordUser.id);
+  const rank = fantasyData.season ? fantasyData.season.findIndex(x => x.id === discordUser.id) + 1 : 0;
+  const cw = fantasyData.currentWeek;
+  const myWeek = cw ? fantasyData.weekBoards?.[cw]?.find(x => x.id === discordUser.id) : null;
+  const pct = Math.min(100, cost / R.budget * 100);
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem;margin-bottom:1rem">
+      <div class="card" style="padding:.7rem .9rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted)">SEZON</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:900;color:var(--accent)">${me ? me.pts : 0} pkt</div><div style="font-size:.72rem;color:var(--muted)">${rank ? rank + '. miejsce z ' + fantasyData.season.length : 'jeszcze bez punktów'}</div></div>
+      <div class="card" style="padding:.7rem .9rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted)">${cw ? 'WEEK ' + cw + ' (NA ŻYWO)' : 'TEN TYDZIEŃ'}</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:900">${myWeek ? myWeek.pts : '—'} ${myWeek ? 'pkt' : ''}</div><div style="font-size:.72rem;color:var(--muted)">${myWeek ? 'skład zamknięty w poniedziałek' : 'skład zacznie punktować od kolejnej kolejki'}</div></div>
+      <div class="card" style="padding:.7rem .9rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted)">BUDŻET</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:900;color:${cost > R.budget ? 'var(--loss)' : 'var(--text)'}">${cost} / ${R.budget} mln</div>
+        <div style="height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-top:.25rem"><div style="height:100%;width:${pct}%;background:${cost > R.budget ? 'var(--loss)' : 'var(--accent)'}"></div></div><div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">zostało ${left} mln</div></div>
+    </div>
+    ${myWeek ? `<div class="card" style="padding:.6rem .9rem;margin-bottom:1rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">TWOJA PIĄTKA W WEEK ${cw}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem">${myWeek.lineup.map(l => `<span style="font-size:.76rem;border:1px solid ${l.cap ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:.12rem .55rem">${l.cap ? 'Ⓒ ' : ''}${l.sub ? '🔄 ' : ''}${_h(_fxP(l.key)?.name || l.key)} <b>${l.pts}</b></span>`).join('')}</div></div>` : ''}
+    <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">PIERWSZA PIĄTKA</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.5rem;margin-bottom:.8rem">
+      ${[0, 1, 2, 3, 4].map(i => _fxCard(d.starters[i], 'starters', i)).join('')}
+    </div>
+    <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">REZERWOWI</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.5rem;margin-bottom:.8rem;max-width:280px">
+      ${[0, 1].map(i => _fxCard(d.bench[i], 'bench', i)).join('')}
+    </div>
+    ${errs.length ? `<div style="font-size:.78rem;color:var(--loss);margin-bottom:.5rem">⚠️ ${errs.map(_h).join(' · ')}</div>` : ''}
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" ${canSave ? '' : 'disabled style="opacity:.45"'} onclick="fxSave()">💾 Zapisz skład</button>
+      ${mySquad && _fxDirty() ? `<button class="btn btn-ghost" onclick="_fx.draft=null;renderFantasy()">↩ Cofnij zmiany</button>` : ''}
+      <span style="font-size:.74rem;color:var(--muted)">${mySquad && !_fxDirty() ? `✓ Zapisany ${new Date(mySquad.at).toLocaleString('pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : complete ? '' : 'Uzupełnij 5 + 2 zawodników'} ${fantasyData.nextWeek ? `· zapis obowiązuje od Week ${fantasyData.nextWeek}` : ''}</span>
+    </div>`;
+}
+
+function _fxMarketHtml() {
+  const R = fantasyData.rules, d = _fxDraft();
+  const inSquad = new Set([...d.starters, ...d.bench]);
+  const tc = _fxTeamCount(d), cost = _fxCost(d);
+  const teamsL = [...new Set(fantasyData.players.map(p => p.team))].sort((a, b) => a.localeCompare(b, 'pl'));
+  let list = fantasyData.players.filter(p => (!_fx.team || p.team === _fx.team) && (!_fx.q || p.name.toLowerCase().includes(_fx.q.toLowerCase())));
+  const sorters = { price: (a, b) => b.price - a.price, cheap: (a, b) => a.price - b.price, avg: (a, b) => b.avg - a.avg, value: (a, b) => (b.avg / b.price) - (a.avg / a.price), last: (a, b) => (b.last ?? -99) - (a.last ?? -99) };
+  list.sort(sorters[_fx.sort] || sorters.price);
+  const slot = _fx.slot;
+  const target = slot?.where || (d.starters.length < 5 ? 'starters' : 'bench');
+  const sel = 'width:auto;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .4rem;font-size:.78rem';
+  return `
+    ${discordUser ? `<div style="font-size:.78rem;margin-bottom:.6rem">Dodajesz do: <b>${target === 'starters' ? 'pierwszej piątki' : 'rezerwowych'}</b> · budżet: <b style="color:${cost > R.budget ? 'var(--loss)' : 'var(--accent)'}">${cost}/${R.budget} mln</b> · skład ${d.starters.length + d.bench.length}/7
+      <button class="btn btn-ghost" style="font-size:.7rem;padding:.15rem .5rem;margin-left:.3rem" onclick="_fx.tab='squad';_fx.slot=null;renderFantasy()">← Mój skład</button></div>` : ''}
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
+      <input value="${_h(_fx.q)}" oninput="_fx.q=this.value;clearTimeout(window._fxT);window._fxT=setTimeout(renderFantasy,250)" placeholder="Szukaj zawodnika…" style="${_MODAL_INP};max-width:200px">
+      <select onchange="_fx.team=this.value;renderFantasy()" style="${sel}"><option value="">Wszystkie drużyny</option>${teamsL.map(t => `<option ${t === _fx.team ? 'selected' : ''}>${_h(t)}</option>`).join('')}</select>
+      <select onchange="_fx.sort=this.value;renderFantasy()" style="${sel}">
+        ${[['price', 'Najdrożsi'], ['cheap', 'Najtańsi'], ['avg', 'Najlepsza średnia'], ['value', 'Punkty za mln'], ['last', 'Ostatni mecz']].map(([v, l]) => `<option value="${v}" ${_fx.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${list.slice(0, 200).map(p => {
+        const delta = p.price - p.prevPrice;
+        let why = '';
+        if(inSquad.has(p.key)) why = 'w składzie';
+        else if(d.starters.length + d.bench.length >= 7 && !slot) why = 'skład pełny';
+        else if((tc[p.team] || 0) >= R.maxPerTeam) why = `już ${R.maxPerTeam} z ${p.team}`;
+        else if(cost + p.price > R.budget + 1e-9) why = 'za drogi';
+        return `<div style="display:grid;grid-template-columns:26px 1fr auto auto;gap:.55rem;align-items:center;padding:.45rem .7rem;border-bottom:1px solid var(--border)">
+          ${teamLogo(p.team, 24, '.5rem')}
+          <div style="min-width:0"><div style="font-weight:700;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(p.name)}</div>
+            <div style="font-size:.68rem;color:var(--muted)">${_h(p.team)} · ⌀ ${p.avg} pkt · ${p.gp} ${_plPL(p.gp, 'mecz', 'mecze', 'meczów')} w sezonie${p.last != null ? ' · ostatni ' + p.last : ''}${p.gp === 0 && !p.avg ? ' · 🐴 debiutant' : ''}</div></div>
+          <div style="text-align:right;font-size:.82rem"><b style="color:var(--accent)">${p.price} mln</b>${delta ? `<div style="font-size:.66rem;color:${delta > 0 ? 'var(--win)' : 'var(--loss)'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}</div>` : ''}</div>
+          ${discordUser ? (why ? `<span style="font-size:.66rem;color:var(--muted);min-width:70px;text-align:right">${why}</span>`
+            : `<button class="btn btn-primary" style="font-size:.7rem;padding:.2rem .55rem;min-width:70px" onclick="fxAdd('${p.key}')">+ Dodaj</button>`) : ''}
+        </div>`;
+      }).join('') || '<div style="padding:1rem;text-align:center;color:var(--muted)">Brak zawodników</div>'}
+    </div>`;
+}
+
+function _fxBoardHtml() {
+  const weeksStarted = (fantasyData.weeks || []).filter(w => new Date(w.lock) <= Date.now()).map(w => w.week);
+  const sel = _fx.board;
+  const list = sel === 'season' ? (fantasyData.season || []) : (fantasyData.weekBoards?.[sel] || []);
+  const me = discordUser?.id;
+  const chip = (v, l) => `<button onclick="_fx.board=${v === 'season' ? "'season'" : v};_fx.open=null;renderFantasy()" style="font-size:.74rem;padding:.25rem .65rem;border-radius:999px;cursor:pointer;font-family:inherit;border:1px solid ${sel === v ? 'var(--accent)' : 'var(--border)'};background:${sel === v ? 'rgba(245,197,24,.15)' : 'transparent'};color:${sel === v ? 'var(--accent)' : 'var(--text)'}">${l}</button>`;
+  return `<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.7rem">${chip('season', '🏆 Sezon')}${weeksStarted.map(w => chip(w, 'Week ' + w + (w === fantasyData.currentWeek ? ' 🔴' : ''))).join('')}</div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${list.map((x, i) => {
+        const open = _fx.open === x.id && x.lineup;
+        return `<div onclick="${x.lineup ? `_fx.open=_fx.open==='${x.id}'?null:'${x.id}';renderFantasy()` : ''}" style="cursor:${x.lineup ? 'pointer' : 'default'};padding:.45rem .8rem;border-bottom:1px solid var(--border);${x.id === me ? 'background:rgba(245,197,24,.08)' : ''}">
+          <div style="display:grid;grid-template-columns:30px 26px 1fr auto;gap:.55rem;align-items:center">
+            <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'}">${['🥇', '🥈', '🥉'][i] || i + 1}</b>${_avatarHtml(x.avatar, 24)}
+            <span style="font-weight:${x.id === me ? 800 : 600};font-size:.86rem">${_h(x.name)}${x.id === me ? ' (Ty)' : ''}</span>
+            <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.15rem;color:var(--accent)">${x.pts}</b>
+          </div>
+          ${open ? `<div style="display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0 .1rem 3.5rem">${x.lineup.map(l => `<span style="font-size:.72rem;border:1px solid ${l.cap ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:.1rem .5rem">${l.cap ? 'Ⓒ ' : ''}${l.sub ? '🔄 ' : ''}${_h(_fxP(l.key)?.name || l.key)} <b>${l.pts}</b></span>`).join('')}</div>` : ''}
+        </div>`;
+      }).join('') || `<div style="padding:1.2rem;text-align:center;color:var(--muted)">${sel === 'season' ? 'Jeszcze nikt nie zbudował składu — bądź pierwszy!' : 'Brak wyników w tej kolejce'}</div>`}
+    </div>
+    ${sel !== 'season' ? '<div style="font-size:.68rem;color:var(--muted);margin-top:.4rem">Kliknij gracza, żeby zobaczyć jego piątkę (Ⓒ kapitan ×2, 🔄 zmiennik).</div>' : ''}`;
+}
+
+function fxAdd(key) {
+  if(!_ensureSession()) return;
+  const d = _fxDraft(), slot = _fx.slot;
+  const where = slot?.where || (d.starters.length < 5 ? 'starters' : 'bench');
+  if(slot && d[where][slot.idx]) d[where][slot.idx] = key;
+  else if(d[where].length < (where === 'starters' ? 5 : 2)) d[where].push(key);
+  else if(where === 'starters' && d.bench.length < 2) d.bench.push(key);
+  else { showToast('Skład jest pełny — usuń kogoś albo kliknij puste miejsce', 'info'); return; }
+  if(where === 'starters' && !d.captain) d.captain = key;
+  _fx.slot = null;
+  const full = d.starters.length === 5 && d.bench.length === 2;
+  if(full) _fx.tab = 'squad';
+  renderFantasy();
+  showToast(`➕ ${_fxP(key)?.name} — ${full ? 'skład kompletny, zapisz go' : 'dodany'}`, 'success');
+}
+function fxRemove(key) {
+  const d = _fxDraft();
+  d.starters = d.starters.filter(k => k !== key); d.bench = d.bench.filter(k => k !== key);
+  if(d.captain === key) d.captain = d.starters[0] || null;
+  renderFantasy();
+}
+function fxCaptain(key) { _fxDraft().captain = key; renderFantasy(); }
+function fxBenchMove(i, dir) { const b = _fxDraft().bench; const j = i + dir; if(j < 0 || j >= b.length) return; [b[i], b[j]] = [b[j], b[i]]; renderFantasy(); }
+async function fxSave() {
+  if(!_ensureSession()) return;
+  const d = _fxDraft();
+  const res = await _api('/fantasy-squad', 'POST', { starters: d.starters, bench: d.bench, captain: d.captain }, { session: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  mySquad = res.squad; _fx.draft = null;
+  if(fantasyData && !fantasyData.season.some(x => x.id === discordUser.id)) fantasyData.season.push({ id: discordUser.id, name: discordUser.name, avatar: discordUser.avatar, pts: 0, perWeek: {} });
+  renderFantasy();
+  showToast(`✅ Skład zapisany — obowiązuje od Week ${res.appliesFrom}`, 'success');
 }
 
 function goToTeamRegistrations() {
