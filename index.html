@@ -2790,6 +2790,14 @@ function saveMatch() {
   }
   saveData().then(() => {
     showToast('✅ Mecz zapisany!', 'success');
+    try {
+      const names = new Set([_savedMatch.team1, _savedMatch.team2].flatMap(t => (t.players || []).map(p => _normNick(p.name))));
+      const history = _withAllMatches(() => matches.filter(x => x !== _savedMatch && !x.walkover)).map(x => ({ id: x.id, date: x.date,
+        team1: { name: x.team1.name, score: x.team1.score, players: (x.team1.players || []).filter(p => names.has(_normNick(p.name))).map(p => ({ n: p.name, p: p.pts || 0 })) },
+        team2: { name: x.team2.name, score: x.team2.score, players: (x.team2.players || []).filter(p => names.has(_normNick(p.name))).map(p => ({ n: p.name, p: p.pts || 0 })) } }))
+        .filter(x => x.team1.players.length || x.team2.players.length);
+      _api('/achievements/announce', 'POST', { match: _savedMatch, history }, { admin: true }).catch(() => {});
+    } catch(e) {}
     sendMatchWebhook(_savedMatch);
     if(hasAI()) {
       setStatus('success', t('match_saved_recap'));
@@ -5728,7 +5736,8 @@ const _WEBHOOK_KINDS = {
   schedule: { title: '⚙ Kanał Discord — terminarz', hint: 'Ogłoszenia terminarza, zapowiedzi meczów, podsumowania, nagrody, Power Ranking. Puste = główny kanał ligi.' },
   fa: { title: '⚙ Kanał Discord — wolni agenci', hint: 'Kanał forum: każdy agent dostaje własny wątek. Kanał tekstowy: zwykły post. Puste = sekret DISCORD_WEBHOOK_FREE_AGENTS (jeśli ustawiony).' },
   streams: { title: '📺 Kanał Discord — transmisje', hint: 'Powiadomienia 🔴 NA ŻYWO z linkami do streamów. Puste = kanał terminarza.' },
-  results: { title: '🏀 Kanał Discord — wyniki', hint: 'Ogłoszenie z plakatem po zapisaniu wyniku (potwierdzenie przez kapitana albo wynik dodany przez admina). Puste = brak ogłoszeń wyników.' }
+  results: { title: '🏀 Kanał Discord — wyniki', hint: 'Ogłoszenie z plakatem po zapisaniu wyniku (potwierdzenie przez kapitana albo wynik dodany przez admina). Puste = brak ogłoszeń wyników.' },
+  achievements: { title: '🎖 Kanał Discord — osiągnięcia', hint: 'Automatyczne ogłoszenia osiągnięć zaraz po zapisaniu meczu. Puste = kanał wyników (a gdy go nie ma — kanał terminarza).' }
 };
 let _webhookKind = 'teams';
 function openTeamRegWebhookModal() { openWebhookModal('teams'); }
@@ -5745,6 +5754,10 @@ async function openWebhookModal(kind) {
   box.innerHTML = _fxHead('wh-modal', cfg.title) + `
     <div style="font-size:.8rem;margin-bottom:.6rem">Status: ${st.set ? `<b style="color:var(--win)">✅ ustawiony</b> <span style="color:var(--muted);font-size:.72rem">${_h(st.masked)}</span>` : '<b style="color:var(--loss)">● nieustawiony</b>'}</div>
     <div style="font-size:.76rem;color:var(--muted);line-height:1.45;margin-bottom:.7rem">${_h(cfg.hint)}<br>🔒 Link webhooka jest zapisywany <b>tylko w Workerze</b> — nie trafia na publiczną stronę.</div>
+    ${kind === 'achievements' ? `<label style="${_MODAL_LBL}">Automatyczne ogłoszenia</label>
+      <select onchange="_api('/settings','POST',{achAuto:this.value},{admin:true}).then(r=>{if(r.ok){_whStatus=r;showToast('✅ Zapisano','success');}else showToast('❌ '+r.error,'error');})" style="${_MODAL_INP};margin-bottom:.8rem">
+        ${[['rare', '⭐ Tylko rzadkie (triple-double, 40+ pkt, 8+ trójek, 100% z gry, kamienie milowe)'], ['all', '🎖 Wszystkie osiągnięcia'], ['off', '⏸ Wyłączone (ogłaszam ręcznie 📣)']].map(([v, l]) => `<option value="${v}" ${(_whStatus?.achAuto || 'rare') === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>` : ''}
     <label style="${_MODAL_LBL}">${st.set ? 'Nowy link webhooka (zastąpi obecny)' : 'Link webhooka'}</label>
     <input id="wh-input" placeholder="https://discord.com/api/webhooks/…" style="${_MODAL_INP};margin-bottom:.35rem">
     <div style="font-size:.7rem;color:var(--muted);margin-bottom:.8rem">Discord → Ustawienia kanału → Integracje → Webhooki → Nowy webhook → Kopiuj URL webhooka.</div>
@@ -5755,7 +5768,7 @@ async function openWebhookModal(kind) {
       <button class="btn btn-primary" onclick="saveWebhookSetting()">💾 Zapisz</button>
     </div>`;
 }
-const _WH_FIELD = { teams: 'teamsWebhook', fa: 'faWebhook', schedule: 'scheduleWebhook', streams: 'streamsWebhook', results: 'resultsWebhook' };
+const _WH_FIELD = { teams: 'teamsWebhook', fa: 'faWebhook', schedule: 'scheduleWebhook', streams: 'streamsWebhook', results: 'resultsWebhook', achievements: 'achievementsWebhook' };
 async function saveWebhookSetting(force) {
   const el = document.getElementById('wh-status');
   const url = force !== undefined ? force : (document.getElementById('wh-input')?.value || '').trim();
@@ -6460,7 +6473,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -8860,7 +8873,8 @@ function renderAchievementsDashboard() {
   window._recentAch = recent;
   const admin = _isLoggedInSync();
   el.innerHTML = recent.length ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.6rem .9rem;margin-bottom:1rem">
-    <div style="font-size:.66rem;font-weight:800;letter-spacing:2px;color:var(--muted);margin-bottom:.35rem">🎖 NOWE OSIĄGNIĘCIA</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:2px;color:var(--muted)">🎖 NOWE OSIĄGNIĘCIA</div>
+      ${admin ? `<button onclick="openWebhookModal('achievements')" class="btn btn-ghost" style="font-size:.64rem;padding:.12rem .45rem">⚙ ${_whStatus?.achAuto === 'off' ? 'ogłaszanie wyłączone' : 'ogłaszają się same'}</button>` : ''}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:.35rem .8rem">
       ${recent.map((e, i) => `<div style="display:flex;align-items:center;gap:.5rem;padding:.25rem 0">
         <span style="font-size:1.15rem">${e.icon}</span>
