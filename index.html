@@ -6707,7 +6707,7 @@ function _ssPicker(ctx, s, side) {
       <button onclick="ssPickDraft('${k}','${kind}','custom')" title="Inny termin uzgodniony z rywalem" style="${btnStyle(custom, false, kind)}">📅 Inny</button>
     </div>
     ${custom ? `
-      <input type="date" id="ss-c-${k}-${kind}-d" min="${today}" value="${_ssIsCustom(d[kind]) ? d[kind].slice(0, 10) : ''}" onchange="ssPickCustom('${k}','${kind}')"
+      <input type="date" id="ss-c-${k}-${kind}-d" min="${today}" value="${_ssIsCustom(d[kind]) ? d[kind].slice(0, 10) : ''}" oninput="ssPickCustomInput('${k}','${kind}',this)" onblur="ssPickCustom('${k}','${kind}')"
         style="width:100%;box-sizing:border-box;margin-top:.25rem;background:var(--bg);border:1px solid var(--accent);color:var(--text);border-radius:5px;padding:.2rem .3rem;font-family:inherit;font-size:.7rem">
       ${_ssIsCustom(d[kind]) && (d[kind].slice(0, 10) < s.weekStart || d[kind].slice(0, 10) > _ssAddDays(s.weekStart, 6))
         ? `<div style="font-size:.62rem;color:var(--accent);margin-top:.15rem">⚠ Poza tygodniem ${s.week} — upewnij się, że rywal się zgadza</div>` : ''}` : ''}
@@ -7025,11 +7025,22 @@ function _ssMySide(k) {
   return ctx.myTeam && s && (String(s.team1).toLowerCase() === ctx.myTeam.toLowerCase() ? 'team1' : 'team2');
 }
 
+// Podczas wpisywania daty z klawiatury (telefon) nie przerysowuj karty i nie sprawdzaj roku przy każdym znaku —
+// dopiero gdy data jest kompletna i sensowna (albo po wyjściu z pola).
+function ssPickCustomInput(k, kind, el) {
+  const d = _ssDraft[k]; if(!d) return;
+  const v = el.value || '';
+  const y = +v.slice(0, 4), nowY = new Date().getFullYear();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v) && y >= nowY - 1 && y <= nowY + 1) {
+    if(d[kind] !== v) { d[kind] = v; renderSeasonSchedule(); }
+  }
+}
 function ssPickCustom(k, kind) {
   const d = _ssDraft[k];
   if(!d) return;
   const el = document.getElementById(`ss-c-${k}-${kind}-d`);
   const date = el?.value || '';
+  if(date === (d[kind] || '')) return; // nic się nie zmieniło — nie przerysowuj (nie gub kliknięcia w inne pole)
   const y = +date.slice(0, 4), nowY = new Date().getFullYear();
   if(date && (y < nowY - 1 || y > nowY + 1)) {
     showToast(`Sprawdź rok w dacie (${date.slice(0, 4)}) — wybierz datę z kalendarza`, 'error');
