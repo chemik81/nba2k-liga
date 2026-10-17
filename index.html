@@ -4657,7 +4657,8 @@ function updateEventsAuthUI() {
   } else {
     btn.textContent = '🏆 Eventy admin';
     btn.onclick = () => document.getElementById('events-auth-modal').classList.add('open');
-    btn.style.display = 'inline-flex';
+    if(location.hash === '#eventy-admin') localStorage.setItem('nba2k_show_events_login', '1');
+    btn.style.display = localStorage.getItem('nba2k_show_events_login') === '1' ? 'inline-flex' : 'none';
   }
 }
 
@@ -4704,10 +4705,9 @@ async function checkLogin() {
   } else {
     // ── Fallback: local hash check (no Worker configured) ──
     const _PW_SALT = 'nba2k26liga2025';
-    const STORED_HASH = localStorage.getItem('nba2k_pw_hash')
-      || 'c8b583e26e557d2231acf77e064362620471401652ec527b7be7bfdd3a4c06e8';
+    const STORED_HASH = localStorage.getItem('nba2k_pw_hash') || '';
     const hash = await sha256(_PW_SALT + val);
-    if(hash === STORED_HASH) {
+    if(STORED_HASH && hash === STORED_HASH) {
       localStorage.setItem('nba2k_auth', 'ok');
       localStorage.setItem('nba2k_admin_token_hash', hash);
       document.getElementById('auth-modal').classList.remove('open');
@@ -4763,6 +4763,9 @@ function updateAuthUI() {
     if(psnMapBtn) psnMapBtn.style.display = logged ? 'inline-flex' : 'none';
     const teamRegBtn = document.getElementById('team-reg-admin-btn');
     if(teamRegBtn) teamRegBtn.style.display = logged ? 'inline-flex' : 'none';
+    document.querySelectorAll('header nav button').forEach(b => {
+      if(/showView\('(add-match|aliases)'\)/.test(b.getAttribute('onclick') || '')) b.style.display = logged ? '' : 'none';
+    });
     // Re-render matches to show/hide delete buttons
     if(document.getElementById('view-matches')?.classList.contains('active')) renderMatches();
     // Update events admin button
@@ -4773,6 +4776,7 @@ function updateAuthUI() {
 
 let pendingAuthView = null;
 const PROTECTED_VIEWS = ['add-match', 'aliases'];
+try { document.querySelectorAll('header nav button').forEach(b => { if(/showView\('(add-match|aliases)'\)/.test(b.getAttribute('onclick') || '') && localStorage.getItem('nba2k_auth') !== 'ok') b.style.display = 'none'; }); } catch(e) {}
 
 // Set today's date
 document.getElementById('match-date').value = new Date().toISOString().split('T')[0];
@@ -6242,6 +6246,7 @@ async function _loadMyVotes() {
     myClipLikes = new Set(res.clipLikes || []);
     myProfile = res.me || null;
     mySquad = res.fantasySquad || null; _fx.draft = null;
+    if(res.isAdmin && !_isLoggedInSync()) _adminViaDiscord();
     if(document.getElementById('view-fantasy')?.classList.contains('active')) renderFantasy();
     if(typeof updateMyPanelBadge === 'function') updateMyPanelBadge();
     if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView();
@@ -7570,6 +7575,8 @@ function openDeepLink() {
   if(h === 'kronika') { showView('dashboard'); setTimeout(openChronicle, 300); return; }
   if(h === 'panel' || h === 'moj-panel') { showView('mypanel'); return; }
   if(h === 'fantasy') { showView('fantasy'); return; }
+  if(h === 'admin') { if(!_isLoggedInSync()) document.getElementById('auth-modal')?.classList.add('open'); return; }
+  if(h === 'eventy-admin') { localStorage.setItem('nba2k_show_events_login', '1'); updateEventsAuthUI(); if(!_isEventsAdminSync() && !_isLoggedInSync()) document.getElementById('events-auth-modal')?.classList.add('open'); return; }
   if(h === 'zapisy' || h === 'wolni-agenci' || h === 'transfery') {
     _regTab = h === 'zapisy' ? 'teams' : h === 'transfery' ? 'tr' : 'fa';
     showView('dashboard');
@@ -13508,7 +13515,18 @@ async function cancelSignup(eventId) {
   } catch(e) { showToast('❌ Błąd sieci: ' + e.message, 'error'); }
 }
 
+// Admin logowany kontem Discord (lista ID w sekrecie Workera ADMIN_DISCORD_IDS) — bez hasła
+async function _adminViaDiscord() {
+  const r = await _api('/admin-login', 'POST', {}, { session: true });
+  if(!r.ok || !r.token) return;
+  localStorage.setItem('nba2k_auth', 'ok');
+  localStorage.setItem('nba2k_admin_token_hash', r.token);
+  localStorage.setItem('nba2k_admin_via_discord', '1');
+  updateAuthUI(); renderDashboard();
+  showToast('👑 Zalogowano jako admin (Discord)', 'success');
+}
 function logoutDiscord() {
+  if(localStorage.getItem('nba2k_admin_via_discord') === '1') { localStorage.removeItem('nba2k_admin_via_discord'); try { logout(); } catch(e) {} }
   discordUser = null;
   myVotes = {};
   localStorage.removeItem('nba2k_discord_user');
