@@ -2199,6 +2199,85 @@ function renderAliases() {
   </table>`;
 }
 
+// ═══ 🏀 Fantasy: ceny, pozycje i punkty zawodników liczone w przeglądarce admina (Worker liczy tylko ranking) ═══
+const _FXB = { lastN: 10, newPrice: 5, minPrice: 4, maxPrice: 15 };
+const _FX_GRADE = { 'A+': 3, 'A': 2.5, 'A-': 2, 'B+': 1.5, 'B': 1, 'B-': 0.5, 'C+': 0, 'C': -0.5, 'C-': -1, 'D+': -1.25, 'D': -1.5, 'D-': -1.75, 'F': -2 };
+const _FX_POSSET = new Set(['PG', 'SG', 'SF', 'PF', 'C']);
+function _fxNormPos(x) {
+  let v = String(x || '').trim().toUpperCase().split(/[\/,\s]/)[0];
+  v = { '1': 'PG', '2': 'SG', '3': 'SF', '4': 'PF', '5': 'C', 'CE': 'C', 'CENTER': 'C' }[v] || v;
+  return _FX_POSSET.has(v) ? v : '';
+}
+function _fxPoints(p, won) {
+  let fp = p.pts + p.reb * 1.2 + p.ast * 1.5 + p.stl * 3 + p.blk * 3 - p.to + (won ? 2 : 0);
+  const tens = [p.pts, p.reb, p.ast, p.stl, p.blk].filter(x => x >= 10).length;
+  fp += tens >= 3 ? 5 : tens >= 2 ? 3 : 0;
+  fp += _FX_GRADE[String(p.grade || '').trim().toUpperCase()] ?? 0;
+  return Math.round(fp * 10) / 10;
+}
+function _fxPrice(games) {
+  if(!games.length) return _FXB.newPrice;
+  const last = games.slice(-_FXB.lastN);
+  let sw = 0, s = 0;
+  last.forEach((g, i) => { const w = i + 1; sw += w; s += w * g.fp; });
+  let avg = s / sw;
+  if(last.length < 3) avg = (avg * last.length + 18 * (3 - last.length)) / 3;
+  return Math.max(_FXB.minPrice, Math.min(_FXB.maxPrice, Math.round((4 + (avg - 8) * 0.27) * 2) / 2));
+}
+function _fxBuild() {
+  const sid = currentSeasonId || null;
+  const wk = {};
+  (schedule || []).filter(s => s.generated && (s.seasonId || null) === sid && s.week && s.weekStart).forEach(s => { if(!wk[s.week] || s.weekStart < wk[s.week]) wk[s.week] = s.weekStart; });
+  const weeks = Object.entries(wk).map(([w, ws]) => ({ week: +w, weekStart: ws })).sort((a, b) => a.week - b.week);
+  if(!weeks.length) return null;
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+  const started = weeks.filter(w => w.weekStart <= today);
+  const current = started[started.length - 1] || null;
+  const priceCut = (current || weeks[0]).weekStart;
+  const prevCut = current ? (started[started.length - 2]?.weekStart || _ssAddDays(current.weekStart, -7)) : null;
+  // nicki ze składów zatwierdzonych drużyn sezonu
+  const rosterTeam = {};
+  teamRegistrations.filter(r => r.status === 'approved' && (!r.seasonId || r.seasonId === sid)).forEach(r => (r.players || []).forEach(p => { const k = _normNick(p.gamertag); if(k) rosterTeam[k] = { team: r.teamName, name: p.gamertag }; }));
+  const rosterKeys = Object.keys(rosterTeam), cache = {};
+  const canon = k => { if(rosterTeam[k] || k.length < 5) return k; if(k in cache) return cache[k]; const hit = rosterKeys.find(r => r.length >= 5 && _lev(r, k) <= 1); return (cache[k] = hit || k); };
+  // występy (bieżąca + poprzednia edycja — do cen; pozycje: najpierw bieżący sezon)
+  const eds = new Set(_editionsList().slice(0, 2));
+  const games = [];
+  _withAllMatches(() => matches.slice()).filter(m => !m.walkover && eds.has(_editionOf(m.seasonId))).forEach(m => {
+    const s1 = +m.team1?.score || 0, s2 = +m.team2?.score || 0;
+    [[m.team1, s1 > s2], [m.team2, s2 > s1]].forEach(([t, won]) => (t?.players || []).forEach(raw => {
+      const key = canon(_normNick(raw.name)); if(!key) return;
+      const p = { pts: +raw.pts || 0, reb: +raw.reb || 0, ast: +raw.ast || 0, stl: +raw.stl || 0, blk: +raw.blk || 0, to: +raw.to || 0, grade: raw.grade };
+      games.push({ key, name: raw.name, team: t.name, date: m.date || '', seasonId: m.seasonId || null, fp: _fxPoints(p, won), pos: _fxNormPos(raw.pos), mid: m.id });
+    }));
+  });
+  games.sort((a, b) => String(a.date).localeCompare(String(b.date)) || (+a.mid - +b.mid));
+  const byKey = {};
+  games.forEach(g => (byKey[g.key] = byKey[g.key] || []).push(g));
+  const pool = new Set([...rosterKeys, ...games.filter(g => g.seasonId === sid).map(g => g.key)]);
+  const players = [...pool].map(key => {
+    const all = byKey[key] || [], season = all.filter(g => g.seasonId === sid), lastS = season[season.length - 1];
+    const team = rosterTeam[key]?.team || lastS?.team || '';
+    const name = rosterTeam[key]?.name || lastS?.name || all[all.length - 1]?.name || key;
+    const before = c => all.filter(g => g.date < c);
+    const recent = all.slice(-_FXB.lastN);
+    const seasonPos = season.filter(g => g.pos), withPos = seasonPos.length ? seasonPos.slice(-20) : all.slice(-20).filter(g => g.pos);
+    const pc = {}; withPos.forEach(g => { pc[g.pos] = (pc[g.pos] || 0) + 1; });
+    return { key, name, team,
+      price: _fxPrice(before(priceCut)), prevPrice: prevCut ? _fxPrice(before(prevCut)) : _fxPrice(before(priceCut)),
+      avg: recent.length ? Math.round(recent.reduce((s, g) => s + g.fp, 0) / recent.length * 10) / 10 : 0,
+      gp: season.length, last: lastS ? lastS.fp : null,
+      pos: Object.entries(pc).filter(([, n]) => n / withPos.length >= 0.25).sort((a, b) => b[1] - a[1]).map(x => x[0]) };
+  }).filter(p => p.team).sort((a, b) => b.price - a.price || b.avg - a.avg);
+  // punkty zawodników w rozpoczętych tygodniach
+  const weekFp = {};
+  started.forEach(w => {
+    const end = _ssAddDays(w.weekStart, 7), o = weekFp[w.week] = {};
+    games.filter(g => g.seasonId === sid && g.date >= w.weekStart && g.date < end).forEach(g => { o[g.key] = Math.round(((o[g.key] || 0) + g.fp) * 10) / 10; });
+  });
+  return { seasonId: sid, weeks, players, weekFp, pricesAt: priceCut };
+}
+
 // Logotypy wgrane jako obrazki z dysku (data:) → osobne pliki w Workerze, żeby baza była lekka
 async function _externalizeLogos() {
   if(!workerUrl || typeof teams === 'undefined') return;
@@ -2227,15 +2306,11 @@ async function _pushDerived() {
       matches: [...need].map(id => byId.get(id)).filter(Boolean).map(lite),
       playoffs: (playoffs || []).map(po => ({ id: po.id, seasonId: po.seasonId || null, format: po.format, startDate: po.startDate || null, createdAt: po.createdAt || null, champion: po.champion || null, rounds: po.rounds || [] })),
       registrationsClosed, rosterLockDate, currentSeasonId, seasons,
-      fantasyMatches: (() => {
-        const eds = _editionsList(); const keep = new Set(eds.slice(0, 2));
-        return all.filter(m => keep.has(_editionOf(m.seasonId))).map(m => ({ id: m.id, date: m.date, seasonId: m.seasonId || null, walkover: m.walkover || undefined,
-          team1: { name: m.team1?.name, score: m.team1?.score, players: (m.team1?.players || []).map(p => ({ n: p.name, p: p.pts || 0, r: p.reb || 0, a: p.ast || 0, s: p.stl || 0, b: p.blk || 0, t: p.to || 0, g: p.grade || '', po: p.pos || '' })) },
-          team2: { name: m.team2?.name, score: m.team2?.score, players: (m.team2?.players || []).map(p => ({ n: p.name, p: p.pts || 0, r: p.reb || 0, a: p.ast || 0, s: p.stl || 0, b: p.blk || 0, t: p.to || 0, g: p.grade || '', po: p.pos || '' })) } }));
-      })(),
+      fantasyPre: (() => { try { return _fxBuild(); } catch(e) { console.warn('fxBuild', e); return null; } })(),
       discordGuildId: discordRoleCfg.guildId, discordMemberRoleId: discordRoleCfg.member, discordCaptainRoleId: discordRoleCfg.captain
     };
     await _api('/derived', 'POST', body, { admin: true });
+    try { const ex = await _api('/extras', 'GET', null, {}); if(ex?.fantasy) { fantasyData = ex.fantasy; if(document.getElementById('view-fantasy')?.classList.contains('active')) renderFantasy(); } } catch(e) {}
     // stare logotypy zgłoszeń drużyn → osobne obrazki (po kilka naraz)
     for(let i = 0; i < 6; i++) { const r = await _api('/logo-migrate', 'POST', {}, { admin: true }); if(!r.ok || !r.remaining) break; }
   } catch(e) { console.warn('pushDerived', e); }
@@ -2366,7 +2441,7 @@ async function loadData() {
           window._dataLoadedAt = record._savedAt || Date.now();
           const extras = await extrasP;
           if(extras && !extras.error) Object.assign(record, extras);
-          window._needDerived = !!(extras && !extras.error && (!extras.derivedAt || ((!extras.fantasy || (extras.fantasy.rules?.v || 0) < 3) && (record.schedule || []).some(x => x.generated))));
+          window._needDerived = !!(extras && !extras.error && (!extras.derivedAt || ((!extras.fantasy || (extras.fantasy.rules?.v || 0) < 4 || !extras.fantasy.players?.some(p => p.pos?.length)) && (record.schedule || []).some(x => x.generated))));
         }
       }
     }
@@ -10956,7 +11031,8 @@ function renderFantasy() {
     <div class="section-title">🏀 Fantasy Ekstraklasa</div>
     <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.9rem">
       <div style="font-size:.82rem;color:var(--muted)">${cw ? `Trwa <b style="color:var(--text)">Week ${cw}</b> · ` : ''}${_fxLockText()}</div>
-      ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem" onclick="fxNotifyPositions()">📨 Przypomnij o pozycjach</button>` : ''}
+      ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem" onclick="showToast('⏳ Przeliczam…','info');_pushDerived().then(()=>showToast('✅ Fantasy przeliczone: ' + (fantasyData?.players?.filter(p=>p.pos?.length).length||0) + ' zawodników z pozycją','success'))">🔄 Przelicz</button>
+        <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem" onclick="fxNotifyPositions()">📨 Przypomnij o pozycjach</button>` : ''}
       <details style="font-size:.78rem"><summary style="cursor:pointer;color:var(--accent);font-weight:700">📖 Zasady</summary>
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;margin-top:.4rem;line-height:1.55;max-width:560px">
           <b>Skład:</b> piątka po pozycjach — <b>PG, SG, SF, PF, C</b> — + 2 rezerwowych (dowolne pozycje) · <b>budżet ${R.budget} mln</b> · max <b>${R.maxPerTeam}</b> z jednej drużyny · <b>kapitan</b> (z piątki) ×2.<br>
