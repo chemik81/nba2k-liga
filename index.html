@@ -6691,7 +6691,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('openRemindersStatus()', '🩺 Przypomnienia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -11989,6 +11989,28 @@ function _fixPlayerNames(m) {
     });
   });
   return fixes;
+}
+
+async function openRemindersStatus() {
+  const m = _fxModal('rem-modal', 640), box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('rem-modal', '🩺 Przypomnienia i 🔴 NA ŻYWO') + '<div style="color:var(--muted)">⏳ Sprawdzam…</div>';
+  m.classList.add('open');
+  const r = await _api('/reminders/status', 'GET', null, { admin: true });
+  if(!r.ok) { box.innerHTML = _fxHead('rem-modal', '🩺 Przypomnienia') + `<div style="color:var(--loss)">❌ ${_h(r.error)}</div>`; return; }
+  const ago = r.lastCron ? Math.round((Date.now() - Date.parse(r.lastCron)) / 60000) : null;
+  const t = iso => new Date(iso).toLocaleString('pl-PL', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
+  const ok = (v, y, n) => `<span style="color:${v ? 'var(--win)' : 'var(--muted)'}">${v ? '✅ ' + y : '— ' + n}</span>`;
+  box.innerHTML = _fxHead('rem-modal', '🩺 Przypomnienia i 🔴 NA ŻYWO') + `
+    <div style="font-size:.8rem;line-height:1.6;margin-bottom:.7rem">
+      <div>${ago != null && ago < 90 ? '✅' : '⚠️'} Harmonogram Workera (Cron): ${ago != null ? `ostatnio <b>${ago} min temu</b>` : '<b>brak śladu uruchomienia</b> — sprawdź Cloudflare → Worker → Settings → Triggers (Cron: <code>*/15 * * * *</code>)'}</div>
+      <div>${r.webhooks.schedule ? '✅' : '❌'} Kanał terminarza (⏰ Za godzinę) · ${r.webhooks.streams ? '✅ osobny 📺 kanał transmisji (tam idzie 🔴 NA ŻYWO)' : '🔴 NA ŻYWO idzie na kanał terminarza'}</div>
+    </div>
+    ${r.matches.length ? `<div style="display:flex;flex-direction:column;gap:.4rem">${r.matches.map(x => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;font-size:.78rem;line-height:1.55">
+      <b>${_h(x.team1)} vs ${_h(x.team2)}</b> · ${t(x.start)}${x.hasTime ? '' : ' <span style="color:var(--loss)">(brak godziny — przyjęto 20:00)</span>'}${x.played ? ' · rozegrany' : ''}<br>
+      📺 Linki: ${x.links.length ? x.links.map(l => `${_h(l.team)}`).join(', ') : '<b style="color:var(--loss)">brak — 🔴 NA ŻYWO nie zostanie wysłane</b>'}<br>
+      ⏰ Za godzinę: ${ok(x.pre, 'wysłane', 'jeszcze nie')} · 🔴 Na żywo: ${ok(x.live && x.links.length, 'wysłane', x.live ? 'pominięte (brak linków)' : 'jeszcze nie')}
+    </div>`).join('')}</div>` : '<div style="color:var(--muted);font-size:.8rem">Brak meczów z ustalonym terminem w ciągu ±36 h.</div>'}
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.7rem">⏰ wysyła się ok. 1 h przed meczem, 🔴 w oknie od 5 min przed do 30 min po starcie (harmonogram co 15 min).</div>`;
 }
 
 function goToTeamRegistrations() {
