@@ -12281,7 +12281,8 @@ async function podRecord() {
     if(_pod.url) URL.revokeObjectURL(_pod.url);
     _pod.url = URL.createObjectURL(_pcmToWav(pcm, rate));
     document.getElementById('pod-out').innerHTML = _podOutHtml();
-    st.style.color = 'var(--win)'; st.textContent = `✅ Gotowe — ${Math.round(pcm.length / 2 / rate)} s nagrania (${r.headers.get('X-TTS-Model') || 'Gemini TTS'})`;
+    const mdl = r.headers.get('X-TTS-Model') || 'Gemini TTS';
+    st.style.color = 'var(--win)'; st.textContent = `✅ Gotowe — ${Math.round(pcm.length / 2 / rate)} s nagrania (${mdl.split(' | ')[0]}${/free-key/.test(mdl) ? ', darmowy klucz 🆓' : /paid-key/.test(mdl) ? ', klucz płatny' : ''})`;
   } catch(e) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + e.message; }
 }
 async function _podMp3() {
