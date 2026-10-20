@@ -11602,7 +11602,7 @@ async function wrappedCard() {
   g.fillStyle = 'rgba(255,255,255,.85)'; g.font = `700 38px ${font}`;
   const foot = P ? (P.victim && P.victim[1].w ? `😈 Ulubiona ofiara: ${P.victim[0]}` : '') : (F.bestWeek ? `🏀 Najlepsza kolejka fantasy: Week ${F.bestWeek[0]} (${F.bestWeek[1]} pkt)` : '');
   if(foot) g.fillText(foot, 70, 1150);
-  g.fillStyle = 'rgba(255,255,255,.45)'; g.font = `700 30px ${font}`; g.fillText('chemik81.github.io/nba2k-liga', 70, 1270);
+  g.fillStyle = 'rgba(255,255,255,.45)'; g.font = `700 30px ${font}`; g.fillText(((location.host || 'pl.chemikleagues.com') + location.pathname.replace(/index\.html$/, '')).replace(/\/$/, ''), 70, 1270);
   const a = document.createElement('a'); a.download = 'wrapped.png'; a.href = c.toDataURL('image/png'); a.click();
   showToast('🪪 Karta pobrana — wrzuć ją na Discorda!', 'success');
 }
