@@ -9325,7 +9325,7 @@ function renderQuickLinks() {
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
     ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
-    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openPodcastStudio()', '🎙 Podcast')}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
   </div>`;
 }
 
@@ -12154,6 +12154,157 @@ function _firstStepsHtml() {
       ${steps.map(x => `<div ${x.done ? '' : `onclick="${x.go}"`} style="font-size:.78rem;padding:.15rem 0;${x.done ? 'color:var(--muted);text-decoration:line-through' : 'cursor:pointer'}">${x.done ? '✅' : '⬜'} ${x.t}</div>`).join('')}
     </div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🎙 PODCAST LIGI — scenariusz z danych + nagranie naturalnymi głosami (Gemini TTS)
+// ═══════════════════════════════════════════════════════════════
+const POD_VOICES = [['Puck', 'Puck — energiczny (M)'], ['Fenrir', 'Fenrir — emocjonalny (M)'], ['Charon', 'Charon — spokojny narrator (M)'], ['Orus', 'Orus — zdecydowany (M)'],
+  ['Kore', 'Kore — pewna siebie (K)'], ['Zephyr', 'Zephyr — jasna, pogodna (K)'], ['Aoede', 'Aoede — swobodna (K)'], ['Leda', 'Leda — młodzieżowa (K)']];
+const POD_SAMPLE = `Kuba: Cześć, tu Kuba — i zaczynamy Ekstraklasa Weekly, czyli wszystko, co ważne z ostatniego tygodnia ligi 2K Pro-Am.
+Ola: A ja jestem Ola. Kuba, powiem ci jedno: ten tydzień był pełen niespodzianek. Zaczynamy od hitu?
+Kuba: Jasne. Polish Boars kontra Polish Aliens, klasyk tej ligi, i znowu było nerwowo. Boarsi wygrali pierwszy mecz, ale w drugim Aliens odpowiedzieli i skończyło się remisem jeden do jednego.
+Ola: I tu ukłon dla kibiców, bo ponad połowa typowała właśnie remis. Nowa opcja w typerze od razu zrobiła robotę!
+Kuba: Bohater tygodnia? Dla mnie Stachu. Dziewiętnaście punktów, dwanaście zbiórek i osiem na dziewięć z gry. To nie był mecz, to był pokaz.
+Ola: Zgoda, ale muszę dorzucić qLechu — ponad dwadzieścia punktów na mecz i najlepszy strzelec Boarsów. Na fantasy kosztuje już piętnaście milionów i chyba nikt nie żałuje.
+Kuba: W przyszłym tygodniu czeka nas starcie Illegal Esports z Polish Boars. Ola, typuj.
+Ola: Stawiam na Boarsów, dwa do zera. A ty?
+Kuba: Idę pod prąd — Illegal Esports. Sprawdzimy za tydzień, kto miał rację.
+Ola: To wszystko na dziś. Wyniki, statystyki i transmisje znajdziecie na chemikleagues kropka com.
+Kuba: Do usłyszenia za tydzień — i powodzenia w meczach!`;
+let _pod = { script: null, n1: 'Kuba', n2: 'Ola', v1: 'Puck', v2: 'Kore', wav: null, mp3: null, url: null };
+function openPodcastStudio() {
+  if(_pod.script === null) _pod.script = localStorage.getItem('nba2k_pod_script') || POD_SAMPLE;
+  const vsel = (id, val) => `<select id="${id}" style="${_MODAL_INP};font-size:.78rem;padding:.3rem .4rem">${POD_VOICES.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const m = _fxModal('pod-modal', 760);
+  m.querySelector('.modal').innerHTML = _fxHead('pod-modal', '🎙 Podcast ligi') + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Scenariusz: każda linijka to <b>Imię: tekst</b>. Napisz go sam, wklej albo poproś AI o odcinek z prawdziwych danych ligi. Nagranie robią naturalne głosy Gemini (ok. 30–90 s czekania).</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem;margin-bottom:.6rem">
+      <div><label style="${_MODAL_LBL}">Prowadzący 1</label><input id="pod-n1" value="${_h(_pod.n1)}" style="${_MODAL_INP};font-size:.8rem;padding:.3rem .45rem"></div>
+      <div><label style="${_MODAL_LBL}">Głos</label>${vsel('pod-v1', _pod.v1)}</div>
+      <div><label style="${_MODAL_LBL}">Prowadzący 2</label><input id="pod-n2" value="${_h(_pod.n2)}" style="${_MODAL_INP};font-size:.8rem;padding:.3rem .45rem"></div>
+      <div><label style="${_MODAL_LBL}">Głos</label>${vsel('pod-v2', _pod.v2)}</div>
+    </div>
+    <textarea id="pod-script" rows="12" style="${_MODAL_INP};font-size:.8rem;line-height:1.5;resize:vertical">${_h(_pod.script)}</textarea>
+    <div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.6rem 0">
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="podWriteScript()">✍️ Napisz z danych ligi (AI)</button>
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="document.getElementById('pod-script').value=POD_SAMPLE">↺ Przykładowy scenariusz</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary" style="font-size:.78rem" onclick="podRecord()">🎙 Nagraj odcinek</button>
+    </div>
+    <div id="pod-status" style="font-size:.8rem;min-height:1.1em;margin-bottom:.4rem"></div>
+    <div id="pod-out">${_pod.url ? _podOutHtml() : ''}</div>`;
+  m.classList.add('open');
+}
+function _podOutHtml() {
+  return `<audio controls src="${_pod.url}" style="width:100%;margin:.3rem 0 .5rem"></audio>
+    <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+      <button class="btn btn-primary" style="font-size:.74rem" onclick="podDownload()">⬇ Pobierz MP3</button>
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="podToDiscord()">📣 Wyślij na Discord</button>
+    </div>`;
+}
+function _podReadForm() {
+  _pod.n1 = document.getElementById('pod-n1').value.trim() || 'Kuba';
+  _pod.n2 = document.getElementById('pod-n2').value.trim() || 'Ola';
+  _pod.v1 = document.getElementById('pod-v1').value; _pod.v2 = document.getElementById('pod-v2').value;
+  _pod.script = document.getElementById('pod-script').value;
+  localStorage.setItem('nba2k_pod_script', _pod.script);
+}
+function _podLines() {
+  const n1 = _pod.n1.toLowerCase(), n2 = _pod.n2.toLowerCase();
+  let last = 1;
+  return _pod.script.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.match(/^([^:]{1,24}):\s*(.+)$/);
+    if(m) { const who = m[1].trim().toLowerCase(); last = who === n2 ? 2 : who === n1 ? 1 : (last === 1 ? 2 : 1); return { h: last, t: m[2] }; }
+    return { h: last, t: l };
+  });
+}
+// dane z ostatnich 7 dni do scenariusza
+function _podFacts() {
+  const sid = currentSeasonId || null, today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }), from = _ssAddDays(today, -7);
+  const ms = _withAllMatches(() => matches.filter(m => (m.seasonId || null) === sid && m.date >= from && !m.walkover));
+  const res = ms.map(m => `${m.team1.name} ${m.team1.score}:${m.team2.score} ${m.team2.name}`);
+  const perf = ms.flatMap(m => [m.team1, m.team2].flatMap(t => (t.players || []).map(p => ({ n: p.name, t: t.name, p: p.pts || 0, r: p.reb || 0, a: p.ast || 0 })))).sort((a, b) => (b.p + b.r + b.a) - (a.p + a.r + a.a)).slice(0, 5)
+    .map(x => `${x.n} (${x.t}): ${x.p} PTS, ${x.r} REB, ${x.a} AST`);
+  const table = (_seasonTable(sid) || []).slice(0, 6).map((x, i) => `${i + 1}. ${x.team} ${x.w}-${x.l}`);
+  const pr = (powerRankings || []).filter(p => (p.seasonId || null) === sid).slice(-1)[0];
+  const typ = (typerData[_seasonKey(sid)]?.overall || []).slice(0, 3).map(x => `${x.name} ${x.pts} pkt`);
+  const fx = (fantasyData?.season || []).slice(0, 3).map(x => `${x.name} ${x.pts} pkt`);
+  const next = schedule.filter(s => s.generated && (s.seasonId || null) === sid && !s.played && (!s.date || s.date >= today)).slice(0, 4).map(s => `${s.team1} vs ${s.team2}${s.date ? ' (' + s.date + ')' : ''}`);
+  return [`Wyniki ostatniego tygodnia: ${res.join('; ') || 'brak'}`, `Najlepsze występy: ${perf.join('; ') || 'brak'}`, `Tabela: ${table.join(', ') || 'brak'}`,
+    pr ? `Power Ranking: ${(pr.items || pr.ranking || []).slice(0, 5).map((x, i) => `${i + 1}. ${x.team || x.name || x}`).join(', ')}` : '',
+    `Typer (prowadzący): ${typ.join(', ') || 'brak'}`, `Fantasy (prowadzący): ${fx.join(', ') || 'brak'}`, `Najbliższe mecze: ${next.join('; ') || 'brak'}`].filter(Boolean).join('\n');
+}
+async function podWriteScript() {
+  _podReadForm();
+  const st = document.getElementById('pod-status'); st.style.color = 'var(--muted)'; st.textContent = '⏳ AI pisze scenariusz…';
+  const prompt = `Napisz scenariusz krótkiego podcastu (ok. 2–3 minuty czytania, 14–18 wypowiedzi) o polskiej lidze NBA 2K „2K Pro-Am Ekstraklasa”.
+Prowadzą: ${_pod.n1} i ${_pod.n2} — luźno, z humorem, z emocjami, jak kumple komentujący mecze. Liczby zapisuj słownie (np. „sześćdziesiąt osiem do czterdziestu siedmiu”), nicki graczy zostaw w oryginalnej pisowni.
+Bloki: powitanie, hit tygodnia, bohater tygodnia, krótko tabela/Power Ranking, typer i fantasy, zapowiedź najbliższych meczów z typami prowadzących, pożegnanie z adresem chemikleagues kropka com.
+Używaj TYLKO faktów z danych poniżej — nic nie zmyślaj.
+Format: każda linijka „${_pod.n1}: tekst” albo „${_pod.n2}: tekst”, bez nagłówków i komentarzy.
+
+DANE:
+${_podFacts()}`;
+  const r = await _api('/gemini', 'POST', { model: 'gemini-2.5-flash', max_tokens: 4000, messages: [{ role: 'user', content: prompt }] }, { admin: true });
+  const txt = r?.content?.[0]?.text || '';
+  if(!txt.trim()) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + (r?.error || 'AI nie zwróciło scenariusza'); return; }
+  document.getElementById('pod-script').value = txt.trim().replace(/^```\w*|```$/g, '').trim();
+  _podReadForm();
+  st.style.color = 'var(--win)'; st.textContent = '✅ Scenariusz gotowy — przeczytaj, popraw jeśli trzeba, i nagraj.';
+}
+function _pcmToWav(pcm, rate) {
+  const buf = new ArrayBuffer(44 + pcm.length), v = new DataView(buf), w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, pcm.length, true);
+  new Uint8Array(buf, 44).set(pcm);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+async function podRecord() {
+  _podReadForm();
+  const lines = _podLines();
+  const st = document.getElementById('pod-status');
+  if(!lines.length) { st.style.color = 'var(--loss)'; st.textContent = 'Scenariusz jest pusty'; return; }
+  st.style.color = 'var(--muted)'; st.textContent = `⏳ Nagrywam ${lines.length} wypowiedzi… (zwykle 30–90 s)`;
+  try {
+    const r = await fetch(workerUrl.replace(/\/+$/, '') + '/podcast/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': _adminToken() },
+      body: JSON.stringify({ lines, name1: _pod.n1, name2: _pod.n2, voice1: _pod.v1, voice2: _pod.v2 }) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error || 'Błąd ' + r.status);
+    const part = (j.candidates?.[0]?.content?.parts || []).find(p => p.inlineData || p.inline_data);
+    const inl = part?.inlineData || part?.inline_data;
+    if(!inl?.data) throw new Error('Gemini nie zwróciło dźwięku');
+    const rate = +(String(inl.mimeType || inl.mime_type || '').match(/rate=(\d+)/)?.[1] || 24000);
+    const bin = atob(inl.data), pcm = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) pcm[i] = bin.charCodeAt(i);
+    _pod.pcm = pcm; _pod.rate = rate; _pod.mp3 = null;
+    if(_pod.url) URL.revokeObjectURL(_pod.url);
+    _pod.url = URL.createObjectURL(_pcmToWav(pcm, rate));
+    document.getElementById('pod-out').innerHTML = _podOutHtml();
+    st.style.color = 'var(--win)'; st.textContent = `✅ Gotowe — ${Math.round(pcm.length / 2 / rate)} s nagrania (${r.headers.get('X-TTS-Model') || 'Gemini TTS'})`;
+  } catch(e) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + e.message; }
+}
+async function _podMp3() {
+  if(_pod.mp3) return _pod.mp3;
+  if(!window.lamejs) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js'; s.onload = ok; s.onerror = () => bad(new Error('Nie udało się wczytać kodera MP3')); document.head.appendChild(s); });
+  const samples = new Int16Array(_pod.pcm.buffer, _pod.pcm.byteOffset, Math.floor(_pod.pcm.length / 2));
+  const enc = new lamejs.Mp3Encoder(1, _pod.rate, 64), out = [];
+  for(let i = 0; i < samples.length; i += 1152) { const b = enc.encodeBuffer(samples.subarray(i, i + 1152)); if(b.length) out.push(b); }
+  const end = enc.flush(); if(end.length) out.push(end);
+  return (_pod.mp3 = new Blob(out, { type: 'audio/mpeg' }));
+}
+async function podDownload() {
+  try { const b = await _podMp3(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'ekstraklasa-weekly.mp3'; a.click(); }
+  catch(e) { showToast('❌ ' + e.message, 'error'); }
+}
+async function podToDiscord() {
+  if(!confirm('Wysłać odcinek na kanał terminarza na Discordzie?')) return;
+  try {
+    const b = await _podMp3();
+    const dataUrl = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); });
+    const ok = await _discordPost('schedule', { content: `🎙 **Ekstraklasa Weekly** — podcast ligi! Posłuchajcie podsumowania tygodnia 🏀` }, dataUrl, 'ekstraklasa-weekly.mp3');
+    showToast(ok ? '📣 Odcinek wysłany na Discord' : '❌ Discord nie przyjął pliku', ok ? 'success' : 'error');
+  } catch(e) { showToast('❌ ' + e.message, 'error'); }
 }
 
 function goToTeamRegistrations() {
