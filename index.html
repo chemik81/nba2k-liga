@@ -5114,6 +5114,10 @@ async function saveSetup() {
   try { _bnSync(document.querySelector('.view.active')?.id?.replace('view-', '') || 'dashboard'); } catch(e) {}
   // Jednorazowo po aktualizacji Workera: admin zapisuje dane, żeby Worker przeliczył dane pochodne
   if(window._needDerived && _isLoggedInSync()) setTimeout(() => _pushDerived(), 1500);
+  if(_isLoggedInSync() && (events || []).some(e => e.eventsToken)) setTimeout(async () => {
+    (events || []).forEach(e => { delete e.eventsToken; });
+    if(await saveData(true)) showToast('🔒 Usunięto stare tokeny z danych eventów', 'success');
+  }, 3000);
   if(_isLoggedInSync()) setTimeout(() => _migrateWebhooks().then(() => { try { renderSeasonSchedule(); } catch(e) {} }), 2500);
   applyLangOnLoad();
   if(discordUser) showToast('👋 Witaj ' + discordUser.name + '!', 'success');
@@ -15799,7 +15803,7 @@ async function draftPickPlayer(eventId, playerId) {
   if(playerIdx === -1) return;
 
   // Auto-apply events token from event data if not already set
-  if(!localStorage.getItem('nba2k_admin_token_hash') && !localStorage.getItem('nba2k_events_token_hash') && ev.eventsToken) {
+  if(false && ev.eventsToken) { // wyłączone: token nie może pochodzić z publicznych danych
     localStorage.setItem('nba2k_events_token_hash', ev.eventsToken);
     localStorage.setItem('nba2k_events_auth', 'ok');
   }
@@ -16015,7 +16019,7 @@ async function _openGMPanelCore(eventId) {
   if(!ev || !discordUser) return;
   const myTeam = (ev.teams||[]).find(t => t.captain?.id === discordUser.id);
   // Auto-apply events token from event data so captains can pick without entering a password
-  if(!localStorage.getItem('nba2k_admin_token_hash') && !localStorage.getItem('nba2k_events_token_hash') && ev.eventsToken) {
+  if(false && ev.eventsToken) { // wyłączone: token nie może pochodzić z publicznych danych
     localStorage.setItem('nba2k_events_token_hash', ev.eventsToken);
     localStorage.setItem('nba2k_events_auth', 'ok');
   }
@@ -22178,9 +22182,8 @@ async function _dsLaunch() {
   ev.status='draft';
   ev.draftPaused=true;
   ev.timerEnd=null;
-  // Embed events token (or admin token as fallback) so captains can auto-authenticate
-  const _launchEvTok = localStorage.getItem('nba2k_events_token_hash') || localStorage.getItem('nba2k_admin_token_hash') || '';
-  if(_launchEvTok) ev.eventsToken = _launchEvTok;
+  // Tokenów NIE zapisujemy w danych eventu (dane ligi są publiczne) — GM loguje się hasłem draftu
+  delete ev.eventsToken;
   await saveData();
   if (_ds._pollId) { clearInterval(_ds._pollId); _ds._pollId=null; }
   document.getElementById('draft-setup-modal').classList.remove('open');
