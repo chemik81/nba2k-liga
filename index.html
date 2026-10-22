@@ -6109,6 +6109,14 @@ async function _api(path, method, body, opts = {}) {
     delete discordUser.session;
     localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
   }
+  // nieaktualny token eventów (np. po zmianie ADMIN_TOKEN_EVENTS) — usuń i zaloguj event managera od nowa przez Discord
+  if(res.status === 401 && opts.admin && !localStorage.getItem('nba2k_admin_token_hash') && localStorage.getItem('nba2k_events_token_hash') && !window._evTokRefreshing) {
+    window._evTokRefreshing = true;
+    localStorage.removeItem('nba2k_events_token_hash'); localStorage.removeItem('nba2k_events_auth');
+    if(discordUser?.session) { _eventsViaDiscord().finally(() => { window._evTokRefreshing = false; if(_isEventsAdminSync()) showToast('🔄 Odświeżono uprawnienia event managera — spróbuj jeszcze raz', 'info'); }); }
+    else { window._evTokRefreshing = false; showToast('🔒 Uprawnienia event managera wygasły — zaloguj się przez Discord', 'error'); }
+    try { if(typeof updateEventsAuthUI === 'function') updateEventsAuthUI(); } catch(e) {}
+  }
   return { ...data, ok: res.ok, status: res.status, error: data.error || (res.ok ? null : 'HTTP ' + res.status) };
 }
 
@@ -15918,7 +15926,15 @@ function renderDraftView(eventId) {
     </div>
     <div class="dv-wrap" style="max-width:1400px;margin:0 auto;padding:20px;color:#e8eaf0;font-family:'Barlow',sans-serif">
       ${topContentHtml}
-      ${tickerHtml}
+      ${window._evdLastErr ? `<div style="background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.5);border-radius:8px;padding:8px 12px;margin:-6px 0 14px;font-size:13px;color:#fca5a5">❌ Ostatni pick się nie udał (${window._evdLastErr.at}): <b>${_h(window._evdLastErr.msg)}</b> <a href="#" onclick="window._evdLastErr=null;renderDraftView('${eventId}');return false" style="color:#fca5a5;margin-left:6px">✕</a></div>` : ''}
+    ${isAdmin ? `<details style="margin:-6px 0 14px;font-size:12px;color:#8a93a8"><summary style="cursor:pointer">🩺 Diagnostyka draftu</summary>
+      <div style="background:#10131a;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 12px;margin-top:6px;line-height:1.7">
+        Tura serwera: <b style="color:#e8eaf0">${(ev.draftTurn || 0) + 1} / ${order.length}</b> · wybiera: <b style="color:#e8eaf0">${_h(ev.teams?.[order[ev.draftTurn || 0]]?.name || '—')}</b> (kapitan ID ${_h(ev.teams?.[order[ev.draftTurn || 0]]?.captain?.id || '—')})<br>
+        Pauza: <b style="color:#e8eaf0">${ev.draftPaused ? 'tak' : 'nie'}</b> · timer: <b style="color:#e8eaf0">${ev.timerEnd ? new Date(ev.timerEnd).toLocaleTimeString('pl-PL') : '—'}</b> · w puli: <b style="color:#e8eaf0">${(ev.draftPool || []).length}</b> · wersja stanu: ${ev._evdV ?? '—'}<br>
+        Ty: ${discordUser ? `${_h(discordUser.name)} (${_h(discordUser.id)})` : 'niezalogowany przez Discord'} · rola: <b style="color:#e8eaf0">${_isLoggedInSync() ? 'admin' : _isEventsAdminSync() ? 'event manager' : 'gracz'}</b>
+        <div style="margin-top:4px"><button onclick="_evdFetch('${eventId}').then(st=>{const e=events.find(x=>x.id==='${eventId}'); if(st&&e){_evdApply(e,st);} renderDraftView('${eventId}'); showToast(st?'🔄 Stan pobrany z serwera':'⚠️ Brak stanu draftu na serwerze', st?'success':'error');})" class="btn btn-ghost" style="font-size:11px;padding:2px 8px">🔄 Pobierz stan z serwera</button></div>
+      </div></details>` : ''}
+    ${tickerHtml}
       ${(isDone || notStarted)
         ? boardHtml
         : `<div class="dv-tabs"><button class="${(window._dvTab || 'pool') === 'pool' ? 'on' : ''}" onclick="window._dvTab='pool';renderDraftView('${eventId}')">👥 Dostępni (${pool.length})</button><button class="${window._dvTab === 'board' ? 'on' : ''}" onclick="window._dvTab='board';renderDraftView('${eventId}')">🏀 Tablica</button></div>
@@ -15978,6 +15994,7 @@ async function draftPickPlayer(eventId, playerId) {
   let r = await send();
   if(!r.ok && /nie jest uruchomiony/.test(r.error || '') && isAdmin) { if(await _evdInit(ev)) r = await send(); } // draft rozpoczęty przed aktualizacją
   if(r.state) _evdApply(ev, r.state);
+  window._evdLastErr = r.ok ? null : { msg: r.error || ('HTTP ' + r.status), at: new Date().toLocaleTimeString('pl-PL'), status: r.status };
   if(!r.ok) showToast('❌ ' + (r.error || 'Nie udało się wybrać'), 'error');
   else if(ev.lastPick) showToast(`✅ ${ev.lastPick.teamName} wybiera ${ev.lastPick.playerName}`, 'success');
   _evdRefreshViews(eventId);
