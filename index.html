@@ -12246,7 +12246,21 @@ function openPodcastStudio() {
   if(_pod.script === null) _pod.script = localStorage.getItem('nba2k_pod_script') || POD_SAMPLE;
   const vsel = (id, val) => `<select id="${id}" style="${_MODAL_INP};font-size:.78rem;padding:.3rem .4rem">${POD_VOICES.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   const m = _fxModal('pod-modal', 760);
+  const _wk = [...new Set(schedule.filter(x => x.generated && (x.seasonId || null) === (currentSeasonId || null) && x.week).map(x => +x.week))].sort((a, b) => a - b);
+  const _wkDone = w => schedule.filter(x => x.generated && (x.seasonId || null) === (currentSeasonId || null) && +x.week === w).every(x => x.played || x.walkover || _ssResult({ demo: false }, x)?.done);
   m.querySelector('.modal').innerHTML = _fxHead('pod-modal', '🎙 Podcast ligi') + `
+    <div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.4);border-radius:10px;padding:.65rem .8rem;margin-bottom:.9rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:#a78bfa;margin-bottom:.35rem">📅 PODCAST TYGODNIA — AUTOMATYCZNIE</div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.5;margin-bottom:.5rem">Gdy wszystkie mecze kolejki mają wyniki, bot sam przygotuje odcinek (statystyki tygodnia, bohaterowie, „cegły”, tabela, fantasy, zapowiedź — maks. ok. 5 min) i opublikuje go na kanale „Podcast tygodnia” z 📣 Kanałów powiadomień.</div>
+      <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+        <select id="pw-week" style="${_MODAL_INP};width:auto;font-size:.78rem;padding:.25rem .4rem">${_wk.map(w => `<option value="${w}">Week ${w}${_wkDone(w) ? ' ✓' : ' (niekompletna)'}</option>`).join('') || '<option value="">brak kolejek</option>'}</select>
+        <button class="btn btn-primary" style="font-size:.72rem" onclick="podcastWeek(true)">🧪 Próbka do mnie (DM)</button>
+        <button class="btn btn-ghost" style="font-size:.72rem" onclick="podcastWeek(false)">📣 Opublikuj na kanale</button>
+        <label style="display:flex;align-items:center;gap:.35rem;font-size:.74rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:0 0 0 auto;cursor:pointer"><input type="checkbox" id="pw-auto" checked onchange="podcastAutoToggle(this.checked)" style="width:auto;margin:0;accent-color:var(--accent)"> automatycznie po kolejce</label>
+      </div>
+      <div id="pw-status" style="font-size:.76rem;min-height:1em;margin-top:.4rem"></div>
+    </div>
+    <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">✍️ WŁASNY ODCINEK (w przeglądarce)</div>
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Scenariusz: każda linijka to <b>Imię: tekst</b>. Napisz go sam, wklej albo poproś AI o odcinek z prawdziwych danych ligi. Nagranie robią naturalne głosy Gemini (ok. 30–90 s czekania).</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem;margin-bottom:.6rem">
       <div><label style="${_MODAL_LBL}">Prowadzący 1</label><input id="pod-n1" value="${_h(_pod.n1)}" style="${_MODAL_INP};font-size:.8rem;padding:.3rem .45rem"></div>
@@ -12266,12 +12280,27 @@ function openPodcastStudio() {
     <div id="pod-out">${_pod.url ? _podOutHtml() : ''}</div>`;
   m.classList.add('open');
   aiModelsInfo();
+  _api('/podcast/week', 'POST', { status: true }, { admin: true }).then(r => { const c = document.getElementById('pw-auto'); if(c && r.ok) c.checked = r.auto; if(r.ok && !r.bot) { const st = document.getElementById('pw-status'); if(st) { st.style.color = 'var(--loss)'; st.textContent = 'Worker nie ma BOT_URL — automatyczne odcinki nie zadziałają.'; } } });
 }
 // jakich modeli Gemini używa Worker (wybierane automatycznie z listy Google)
 async function aiModelsInfo(refresh) {
   const el = document.getElementById('ai-models'); if(!el) return;
   const r = await _api('/ai/models' + (refresh ? '?refresh=1' : ''), 'GET', null, { admin: true });
   el.innerHTML = r.ok ? `🤖 Modele Gemini (wybierane automatycznie): tekst i screeny <b>${_h(r.text || '—')}</b> · głosy <b>${_h(r.tts || 'brak modelu TTS')}</b> · klucze: ${r.keys} <a href="#" onclick="aiModelsInfo(true);return false" style="color:var(--accent)">🔄 sprawdź ponownie</a>` : '';
+}
+async function podcastWeek(test) {
+  const week = document.getElementById('pw-week')?.value, st = document.getElementById('pw-status');
+  if(!week) return;
+  if(test && !_ensureSession()) return;
+  if(!test && !confirm(`Opublikować podcast Week ${week} na kanale Discord?`)) return;
+  st.style.color = 'var(--muted)'; st.textContent = '⏳ Zlecam nagranie…';
+  const r = await _api('/podcast/week', 'POST', { week: +week, test, seasonId: currentSeasonId || null }, { admin: true, session: true });
+  st.style.color = r.ok ? 'var(--win)' : 'var(--loss)';
+  st.textContent = r.ok ? `✅ Bot nagrywa odcinek Week ${week} — za 1–3 min ${test ? 'przyjdzie w prywatnej wiadomości (z plikiem scenariusza)' : 'pojawi się na kanale'}.` : '❌ ' + (r.error || 'Błąd');
+}
+async function podcastAutoToggle(on) {
+  const r = await _api('/podcast/week', 'POST', { auto: on }, { admin: true });
+  showToast(r.ok ? (on ? '🎙 Automatyczne odcinki włączone' : 'Automatyczne odcinki wyłączone') : '❌ ' + r.error, r.ok ? 'success' : 'error');
 }
 function _podOutHtml() {
   return `<audio controls src="${_pod.url}" style="width:100%;margin:.3rem 0 .5rem"></audio>
