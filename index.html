@@ -6758,7 +6758,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('openRemindersStatus()', '🩺 Przypomnienia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('openRoutesModal()', '📣 Kanały powiadomień', false) + btn('openRemindersStatus()', '🩺 Przypomnienia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -7078,6 +7078,7 @@ function _ssAdminActions(ctx, s, res) {
 
 // ── Discord: terminarz ──
 // Wysyłka z opcjonalnym obrazkiem (baner meczu) — kanał terminarza albo główny kanał przez Workera
+async function _scheduleDiscordSendR(route, payload, imageDataUrl) { payload.route = route; return _scheduleDiscordSend(payload, imageDataUrl); }
 async function _scheduleDiscordSend(payload, imageDataUrl) {
   const embed = payload.embeds?.[0];
   if(imageDataUrl && embed) embed.image = { url: 'attachment://mecz.png' };
@@ -8340,7 +8341,7 @@ async function openWeekSummary() {
 
 async function sendWeekSummary() {
   if(!window._summaryEmbed) return;
-  const ok = await _scheduleDiscordSend({ embeds: [JSON.parse(JSON.stringify(window._summaryEmbed))] });
+  const ok = await _scheduleDiscordSendR('weekSummary', { embeds: [JSON.parse(JSON.stringify(window._summaryEmbed))] });
   showToast(ok ? '📣 Podsumowanie wysłane' : '❌ Discord nie przyjął wiadomości', ok ? 'success' : 'error');
   if(ok) _fxClose('summary-modal');
 }
@@ -8399,7 +8400,7 @@ async function createAwards() {
   renderAwardsDashboard();
   showToast('🗳 Głosowanie otwarte — jest na Dashboardzie', 'success');
   if(document.getElementById('aw-announce')?.checked) {
-    await _scheduleDiscordSend({ embeds: [{
+    await _scheduleDiscordSendR('awardsVote', { embeds: [{
       title: `🗳 Głosowanie: ${d.title || 'Nagrody Week ' + d.week}`,
       description: chosen.map(c => `**${c.emoji} ${c.title}**\n` + c.candidates.map(x => `• ${x.label}`).join('\n')).join('\n\n') + '\n\nGłosujcie na stronie (Dashboard)! 👇',
       url: location.origin + location.pathname, color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
@@ -8488,7 +8489,7 @@ async function closeAwards(id) {
     const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'award', data: { label: c.title, holder: w.label, week: a.week, value: w.team, names: [w.label, w.team] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
     return { name: `${c.emoji || '🏅'} ${c.title}`, value: _trunc(`**${w.label}**${w.team ? ' (' + w.team + ')' : ''} · ${w.votes} ${_plVotes(w.votes)}${fl?.line ? '\n*' + fl.line + '*' : ''}`, 1020) };
   }));
-  const ok = await _scheduleDiscordSend({ embeds: [{
+  const ok = await _scheduleDiscordSendR('awardsWinners', { embeds: [{
     title: `🏅 ${a.title} — zwycięzcy`, fields: [...(lines.length ? lines : [{ name: 'Brak głosów', value: 'Nikt nie zagłosował 😢' }]),
       ...(a.type === 'season' && _galaCandidates().team5.length ? [{ name: '🏀 Drużyna sezonu', value: _galaCandidates().team5.map(x => `• **${x.name}** (${x.team})`).join('\n') }] : [])],
     color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
@@ -8586,7 +8587,7 @@ async function sendPowerRanking(silent) {
   if(!pr) return;
   const arrow = e => !e.prev ? '🆕' : e.prev > e.rank ? `🔼${e.prev - e.rank}` : e.prev < e.rank ? `🔽${e.rank - e.prev}` : '➖';
   const desc = pr.entries.map(e => `**${e.rank}. ${e.team}** ${arrow(e)} · ${e.w}-${e.l}\n*${e.line || ''}*`).join('\n');
-  const ok = await _scheduleDiscordSend({ embeds: [{
+  const ok = await _scheduleDiscordSendR('powerRanking', { embeds: [{
     title: `📊 Power Ranking — Week ${pr.week}`, description: _trunc(desc, 4000),
     url: location.origin + location.pathname, color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
   }] });
@@ -8756,7 +8757,7 @@ async function announceRecord(i, fromAll) {
   const e = (fromAll ? window._allRecordEvents : window._recentRecords)?.[i];
   if(!e || !confirm(`Ogłosić na Discordzie rekord: ${e.label} — ${e.holder} (${e.value})?`)) return;
   const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'record', data: { label: e.label, holder: e.holder, value: e.value + ' ' + e.unit, prevHolder: e.prevHolder, prevValue: e.prevValue, opp: e.opp, names: [e.holder, e.team, e.prevHolder, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
-  const ok = await _scheduleDiscordSend({ embeds: [{
+  const ok = await _scheduleDiscordSendR('leagueRecord', { embeds: [{
     title: `${e.emoji} Nowy rekord ligi!`,
     description: `**${e.label}**\n${e.holder}${e.team && e.team !== e.holder ? ' (' + e.team + ')' : ''} — **${e.value} ${e.unit}** vs ${e.opp}\nPoprzedni rekord: ${e.prevHolder} (${e.prevValue})${fl?.line ? `\n\n🎙️ *${fl.line}*` : ''}`,
     color: 0xdc2626, footer: { text: 'NBA 2K Pro-Am Ekstraklasa · Rekordy' }, timestamp: new Date().toISOString()
@@ -9196,7 +9197,7 @@ async function announceAchievement(i) {
   const e = window._recentAch?.[i];
   if(!e || !confirm(`Ogłosić na Discordzie: ${e.player} — ${e.name}?`)) return;
   const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'achievement', data: { label: e.name, holder: e.player, team: e.team, opp: e.opp, value: e.value, names: [e.player, e.team, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
-  const ok = await _scheduleDiscordSend({ embeds: [{
+  const ok = await _scheduleDiscordSendR('achievement', { embeds: [{
     title: `${e.icon} Osiągnięcie: ${e.name}`,
     description: `**${e.player}** (${e.team})${e.career ? '' : ' vs ' + e.opp}${e.value ? '\n' + e.value : ''}${fl?.line ? `\n\n🎙️ *${fl.line}*` : ''}`,
     color: 0xa78bfa, footer: { text: 'NBA 2K Pro-Am Ekstraklasa · Osiągnięcia' }, timestamp: new Date().toISOString()
@@ -9308,7 +9309,7 @@ async function _copyPoster() {
 async function _sendPoster() {
   const { url, m } = window._posterData || {};
   if(!url) return;
-  const ok = await _scheduleDiscordSend({ embeds: [{
+  const ok = await _scheduleDiscordSendR('matchPoster', { embeds: [{
     title: `🏀 ${m.team1.name} ${m.team1.score} : ${m.team2.score} ${m.team2.name}`,
     color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
   }] }, url);
@@ -10568,7 +10569,7 @@ async function runWeekPack() {
   m.classList.add('open');
   const step = async (label, fn) => { steps.push('⏳ ' + label); draw(); try { const r = await fn(); steps[steps.length - 1] = (r === false ? '⚠️ ' : '✅ ') + label + (typeof r === 'string' ? ' — ' + r : ''); } catch(e) { steps[steps.length - 1] = '❌ ' + label + ' — ' + e.message; } draw(); };
   await step('Przypomnienia dla kapitanów', async () => { const r = await _api('/captain-remind', 'POST', { seasonId: sid, week }, { admin: true }); if(!r.ok) throw new Error(r.error); return r.captains ? `wysłano ${r.sent}` : 'wszyscy wybrali terminy'; });
-  await step('Podsumowanie tygodnia', async () => { await openWeekSummary(); _fxClose('summary-modal'); if(!window._summaryEmbed) return false; return (await _scheduleDiscordSend({ embeds: [JSON.parse(JSON.stringify(window._summaryEmbed))] })) ? 'wysłane' : false; });
+  await step('Podsumowanie tygodnia', async () => { await openWeekSummary(); _fxClose('summary-modal'); if(!window._summaryEmbed) return false; return (await _scheduleDiscordSendR('weekSummary', { embeds: [JSON.parse(JSON.stringify(window._summaryEmbed))] })) ? 'wysłane' : false; });
   await step('Power Ranking', async () => { await openPowerRankingCreate(); if(!window._powerDraft) return false; const pr = document.getElementById('pr-send'); if(pr) pr.checked = true; await savePowerRanking(); return 'opublikowany'; });
   await step('Nagrody tygodnia', async () => { const cats = _awardCandidates(sid, week); if(!cats.length) return 'za mało meczów — pominięte'; window._awardDraft = { seasonId: sid, week, cats }; const m2 = _fxModal('awards-create-modal', 620); m2.querySelector('.modal').innerHTML = cats.map((c, i) => `<input type="checkbox" data-cat="${i}" checked><input type="checkbox" id="aw-announce" checked>`).join(''); await createAwards(); _fxClose('awards-create-modal'); return 'głosowanie otwarte'; });
   _audit('Pakiet tygodnia', 'Week ' + week);
@@ -12704,6 +12705,7 @@ async function teamRegSetStatus(id, status) {
     payload.allowed_mentions = { users: [captainId] };
   }
   let sent = false;
+  payload.route = status === 'approved' ? 'teamApproved' : 'teamRejected';
   try { sent = await _teamRegDiscordSend(payload, reg.logo); } catch(e) { console.warn('Discord notify failed', e); }
   showToast(
     (status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona') + (sent ? ' · wysłano na Discord' : ' · ⚠ Discord nie odpowiedział'),
@@ -14474,7 +14476,7 @@ async function sendDraftNotification() {
   try {
     const res = await fetch(workerUrl.replace(/\/+$/, '') + '/notify-event', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': _adminToken() },
       body: JSON.stringify({ eventId, title: ev.title, date: dateStr, message })
     });
     const data = await res.json().catch(() => ({}));
@@ -16597,7 +16599,7 @@ async function postDraftGrades(eventId) {
   const ev = events.find(e => e.id === eventId); if(!ev) return false;
   if(!ev.draftGrades?.length) await draftGrade(eventId, true);
   const img = await _draftGradesImage(ev);
-  const ok = await _discordPost('main', { content: `🏆 **Draft zakończony — ${ev.title || ''}**\n` + (ev.draftGrades || []).map(g => `**${g.team}**: ${g.grade} — ${g.comment}`).join('\n') + '\n\n🎮 Róbcie screeny z wynikami meczów. Powodzenia!' }, img, 'oceny-draftu.png');
+  const ok = await _discordPost('main', { route: 'eventDone', content: `🏆 **Draft zakończony — ${ev.title || ''}**\n` + (ev.draftGrades || []).map(g => `**${g.team}**: ${g.grade} — ${g.comment}`).join('\n') + '\n\n🎮 Róbcie screeny z wynikami meczów. Powodzenia!' }, img, 'oceny-draftu.png');
   return ok;
 }
 
@@ -18690,10 +18692,44 @@ async function sendMatchWebhook(match) {
   } catch(e) { console.warn('Webhook error:', e); }
 }
 
+
+// ═══ 📣 KANAŁY POWIADOMIEŃ (rodzaj → ID kanału Discord; wysyła bot ligi) ═══
+async function openRoutesModal() {
+  const m = _fxModal('routes-modal', 720), box = m.querySelector('.modal');
+  box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
+  m.classList.add('open');
+  const r = await _api('/routes', 'GET', null, { admin: true });
+  if(!r.ok) { box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + `<div style="color:var(--loss)">❌ ${_h(r.error)}</div>`; return; }
+  const groups = { teams: '🧢 DRUŻYNY', fa: '🆓 WOLNI AGENCI I TRANSFERY', schedule: '📅 TERMINARZ I SEZON', main: '🎪 EVENTY' };
+  const rows = Object.entries(r.routes);
+  box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem;line-height:1.5">Wpisz <b>ID kanału</b> (Discord: prawy klik na kanał → Kopiuj ID kanału), <b>off</b> żeby wyłączyć, albo zostaw puste — wtedy jak dotąd (webhook). Na kanały po ID pisze bot ligi, więc musi mieć do nich dostęp i prawo wysyłania wiadomości (na forum: tworzenia postów).</div>
+    ${Object.entries(groups).map(([g, label]) => `<div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.7rem 0 .3rem">${label}</div>
+      ${rows.filter(([, v]) => v.base === g).map(([k, v]) => `<div style="display:grid;grid-template-columns:1fr 210px auto;gap:.4rem;align-items:center;margin-bottom:.3rem">
+        <span style="font-size:.8rem">${_h(v.label)}</span>
+        <input data-route="${k}" value="${_h(v.value || '')}" placeholder="jak dotąd (webhook)" style="${_MODAL_INP};font-size:.76rem;padding:.25rem .4rem;font-family:monospace">
+        <button class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem" onclick="routeTest('${k}')">🧪 Test</button></div>`).join('')}`).join('')}
+    <div id="routes-status" style="font-size:.8rem;min-height:1.1em;margin:.6rem 0"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-primary" onclick="routesSave()">💾 Zapisz</button></div>`;
+}
+async function routesSave() {
+  const routes = {}; document.querySelectorAll('#routes-modal [data-route]').forEach(i => { routes[i.dataset.route] = i.value.trim(); });
+  const bad = Object.entries(routes).filter(([, v]) => v && v !== 'off' && !/^\d{15,21}$/.test(v));
+  const st = document.getElementById('routes-status');
+  if(bad.length) { st.style.color = 'var(--loss)'; st.textContent = '❌ Niepoprawne ID: ' + bad.map(x => x[1]).join(', '); return; }
+  const r = await _api('/routes', 'POST', { routes }, { admin: true });
+  st.style.color = r.ok ? 'var(--win)' : 'var(--loss)'; st.textContent = r.ok ? '✅ Zapisano' : '❌ ' + r.error;
+}
+async function routeTest(k) {
+  const st = document.getElementById('routes-status'); st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłam test… (najpierw zapisz zmiany)';
+  const r = await _api('/routes', 'POST', { test: k }, { admin: true });
+  st.style.color = r.ok ? 'var(--win)' : 'var(--loss)'; st.textContent = r.ok ? '✅ Test wysłany — sprawdź kanał na Discordzie' : '❌ ' + (r.error || 'Błąd');
+}
+
 async function sendEventWebhook(title, description, color) {
   if(!workerUrl && !discordWebhookUrl) return;
   try {
-    await _discordNotify({ embeds: [{ title, description, color: color||0xf5c518, footer: { text: 'NBA 2K Liga' }, timestamp: new Date().toISOString() }] });
+    await _discordNotify({ route: 'eventDone', embeds: [{ title, description, color: color||0xf5c518, footer: { text: 'NBA 2K Liga' }, timestamp: new Date().toISOString() }] });
   } catch(e) { console.warn('Webhook error:', e); }
 }
 
@@ -18808,10 +18844,15 @@ async function sendCaptainNotifWebhook(eventId) {
   const btn = document.getElementById('cn-send-btn');
   if(btn) { btn.disabled = true; btn.textContent = '⏳ Wysyłanie...'; }
   try {
-    const ok = await _discordNotify({ content: msg });
-    if(!ok) throw new Error('no webhook');
+    const ok = await _discordNotify({ route: 'eventCaptains', content: msg });
+    // prywatna wiadomość do każdego kapitana eventu
+    const ev = events.find(e => e.id === eventId);
+    const caps = [...new Set((ev?.teams || []).map(t => t.captain?.id).filter(id => /^\d{15,21}$/.test(String(id || ''))))];
+    let dm = 0;
+    for(const id of caps) { const r = await _api('/draft-notify', 'POST', { discordUserId: id, message: `📣 **${ev?.title || 'Event'}** — wiadomość dla kapitanów:\n${msg}` }, { admin: true }); if(r.ok) dm++; }
+    if(!ok && !dm) throw new Error('no webhook');
     document.getElementById('captain-notif-modal').classList.remove('open');
-    showToast('✅ Powiadomienie wysłane na Discord!', 'success');
+    showToast(`✅ Wysłano${ok ? ' na Discord' : ''}${caps.length ? ` · DM: ${dm}/${caps.length} kapitanów` : ''}`, 'success');
   } catch(e) {
     showToast('❌ Błąd wysyłania: ' + e.message, 'error');
     if(btn) { btn.disabled = false; btn.textContent = '🎮 Wyślij na Discord'; }
