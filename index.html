@@ -18703,7 +18703,7 @@ async function openRoutesModal() {
   const groups = { teams: '🧢 DRUŻYNY', fa: '🆓 WOLNI AGENCI I TRANSFERY', schedule: '📅 TERMINARZ I SEZON', main: '🎪 EVENTY' };
   const rows = Object.entries(r.routes);
   box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + `
-    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem;line-height:1.5">Wpisz <b>ID kanału</b> (Discord: prawy klik na kanał → Kopiuj ID kanału), <b>off</b> żeby wyłączyć, albo zostaw puste — wtedy jak dotąd (webhook). Na kanały po ID pisze bot ligi, więc musi mieć do nich dostęp i prawo wysyłania wiadomości (na forum: tworzenia postów).</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem;line-height:1.5">Wpisz <b>ID kanału</b> (Discord: prawy klik na kanał → Kopiuj ID kanału), <b>off</b> żeby wyłączyć, albo zostaw puste — wtedy jak dotąd (webhook). Bot ligi sam zakłada w każdym kanale webhook z nazwą i logo ligi — potrzebuje tam uprawnień <b>Wyświetlanie kanału</b> i <b>Zarządzanie webhookami</b>. Bez tego wiadomość pójdzie jako bot.</div>
     ${Object.entries(groups).map(([g, label]) => `<div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.7rem 0 .3rem">${label}</div>
       ${rows.filter(([, v]) => v.base === g).map(([k, v]) => `<div style="display:grid;grid-template-columns:1fr 210px auto;gap:.4rem;align-items:center;margin-bottom:.3rem">
         <span style="font-size:.8rem">${_h(v.label)}</span>
@@ -18723,7 +18723,8 @@ async function routesSave() {
 async function routeTest(k) {
   const st = document.getElementById('routes-status'); st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłam test… (najpierw zapisz zmiany)';
   const r = await _api('/routes', 'POST', { test: k }, { admin: true });
-  st.style.color = r.ok ? 'var(--win)' : 'var(--loss)'; st.textContent = r.ok ? '✅ Test wysłany — sprawdź kanał na Discordzie' : '❌ ' + (r.error || 'Błąd');
+  st.style.color = r.ok ? (r.via === 'bot' ? '#f59e0b' : 'var(--win)') : 'var(--loss)';
+  st.textContent = r.ok ? (r.via === 'bot' ? '⚠️ ' : '✅ ') + (r.note || 'Test wysłany — sprawdź kanał na Discordzie') : '❌ ' + (r.error || 'Błąd');
 }
 
 async function sendEventWebhook(title, description, color) {
