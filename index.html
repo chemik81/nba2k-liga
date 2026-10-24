@@ -12892,8 +12892,10 @@ function renderKordle() {
     </div>`).join('');
   el.innerHTML = `<div class="section-title">🧩 2Kordle <span style="font-size:.9rem;color:var(--muted)">#${n}</span></div>
     <div class="card" style="padding:.9rem 1rem;margin-bottom:.8rem">
-      <div style="font-size:.82rem;color:var(--muted);line-height:1.5;margin-bottom:.6rem">Zgadnij dzisiejszego zawodnika ligi (${_h(_editionOf(currentSeasonId))}, min. 3 mecze) w 6 próbach. 🟩 trafione · 🟨 pozycja poboczna · ⬆️⬇️ wartość jest wyższa/niższa (statystyki średnio na mecz). Nowa zagadka codziennie o północy.</div>
-      ${over ? '' : `<div style="display:flex;gap:.4rem;margin-bottom:.7rem"><input id="k-in" list="k-list" placeholder="Wpisz nick zawodnika… (${6 - st.guesses.length} prób)" onkeydown="if(event.key==='Enter')kordleGuess()" style="${_MODAL_INP}">
+      <div style="font-size:.82rem;color:var(--muted);line-height:1.5;margin-bottom:.6rem" data-notr>${currentLang === 'en'
+        ? `Guess today's league player (${_h(_editionOf(currentSeasonId))}, min. 3 games) in 6 tries. 🟩 correct · 🟨 secondary position · ⬆️⬇️ the answer is higher/lower (per-game averages). A new puzzle every day at midnight.`
+        : `Zgadnij dzisiejszego zawodnika ligi (${_h(_editionOf(currentSeasonId))}, min. 3 mecze) w 6 próbach. 🟩 trafione · 🟨 pozycja poboczna · ⬆️⬇️ wartość jest wyższa/niższa (statystyki średnio na mecz). Nowa zagadka codziennie o północy.`}</div>
+      ${over ? '' : `<div style="display:flex;gap:.4rem;margin-bottom:.7rem"><input id="k-in" list="k-list" placeholder="${currentLang === 'en' ? `Type a player's nick… (${6 - st.guesses.length} tries left)` : `Wpisz nick zawodnika… (${6 - st.guesses.length} prób)`}" data-notr onkeydown="if(event.key==='Enter')kordleGuess()" style="${_MODAL_INP}">
         <datalist id="k-list">${pool.filter(p => !st.guesses.includes(p.k)).map(p => `<option value="${_h(p.name)}">`).join('')}</datalist>
         <button class="btn btn-primary" onclick="kordleGuess()">Zgadnij</button></div>`}
       <div style="display:grid;grid-template-columns:1.4fr repeat(6,1fr);gap:.3rem;margin-bottom:.3rem;font-size:.6rem;font-weight:800;letter-spacing:.5px;color:var(--muted);text-align:center"><div style="text-align:left">ZAWODNIK</div>${fields.map(f => `<div>${f[1]}</div>`).join('')}</div>
@@ -12902,12 +12904,12 @@ function renderKordle() {
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:${won ? 'var(--win)' : 'var(--loss)'}">${won ? `🎉 Brawo! ${st.guesses.length}/6` : '😵 Tym razem nie'}</div>
         <div style="font-size:.86rem;margin:.2rem 0 .6rem">Dzisiejszy zawodnik: <b>${_h(target.name)}</b> (${_h(target.team)}, ${target.pos}) — ${target.ppg} pkt · ${target.rpg} zb. · ${target.apg} as.</div>
         <button class="btn btn-primary" style="font-size:.76rem" onclick="kordleShare()">📋 Udostępnij wynik</button>
-        <div style="font-size:.74rem;color:var(--muted);margin-top:.5rem">Twoja seria: <b>${stats.streak}</b> · rekord serii: ${stats.best} · rozegrane: ${stats.played} · wygrane: ${stats.won}</div></div>` : ''}
+        <div style="font-size:.74rem;color:var(--muted);margin-top:.5rem" data-notr>${currentLang === 'en' ? `Your streak: <b>${stats.streak}</b> · best streak: ${stats.best} · played: ${stats.played} · won: ${stats.won}` : `Twoja seria: <b>${stats.streak}</b> · rekord serii: ${stats.best} · rozegrane: ${stats.played} · wygrane: ${stats.won}`}</div></div>` : ''}
     </div>
     <div class="card" style="padding:.8rem 1rem" id="k-board"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🏆 RANKING MIESIĄCA</div><div style="color:var(--muted);font-size:.8rem;margin-top:.4rem">⏳</div></div>`;
   _api('/kordle/board', 'GET', null, {}).then(r => {
     const b = document.getElementById('k-board'); if(!b || !r.ok) return;
-    b.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🏆 RANKING MIESIĄCA</div><div style="font-size:.7rem;color:var(--muted)">dziś: ${r.today.solved}/${r.today.players} odgadło</div></div>
+    b.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🏆 RANKING MIESIĄCA</div><div style="font-size:.7rem;color:var(--muted)" data-notr>${currentLang === 'en' ? `today: ${r.today.solved}/${r.today.players} solved` : `dziś: ${r.today.solved}/${r.today.players} odgadło`}</div></div>
       ${(r.board || []).slice(0, 15).map((x, i) => `<div style="display:grid;grid-template-columns:26px 24px 1fr auto auto;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.8rem${x.id === discordUser?.id ? ';font-weight:800' : ''}">
         <b style="color:${i < 3 ? 'var(--accent)' : 'var(--muted)'}">${['🥇', '🥈', '🥉'][i] || i + 1}</b>${_avatarHtml(x.avatar, 22)}<span>${_h(x.name)}</span><span>✅ ${x.solved}/${x.played}</span><span style="color:var(--muted)">⌀ ${x.avg ?? '—'}</span></div>`).join('') || '<div style="font-size:.8rem;color:var(--muted);margin-top:.4rem">Zaloguj się przez Discord i zagraj — wyniki zalogowanych trafiają do rankingu.</div>'}`;
   });
