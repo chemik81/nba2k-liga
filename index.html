@@ -2598,6 +2598,7 @@ async function loadData() {
     window._challengesOff = !!record.challengesOff;
     window._emojiMap = record.emojiMap || {};
     window._teamRoles = record.teamRoles || {};
+    window._dj = record.dj || null; try { djMount(); } catch(e) {}
     events = record.events || []
     window._lastEventSignups = record.eventSignups || {};
     try { _evsMerge(record.eventSignups); } catch(e) { console.warn('evsMerge', e); }
@@ -9531,7 +9532,7 @@ function renderQuickLinks() {
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
     ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
-    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openPodcastStudio()', '🎙 Podcast')}${pendingResults.length ? `<button onclick="openPendingResults()" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem;border-color:#f59e0b;color:#f59e0b;font-weight:800">📸 Czekające wyniki (${pendingResults.length})</button>` : b('openPendingResults()', '📸 Czekające wyniki')}${b('openTrades()', '🔁 Okno transferowe')}${b('openRules()', '📜 Regulamin terminów')}${b('openHealth()', '🩺 Stan systemu')}${b('openShortMaker()', '🎬 Short')}${b('openWeekGraphics()', '🖼 Podsumowanie kolejki')}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openPodcastStudio()', '🎙 Podcast')}${pendingResults.length ? `<button onclick="openPendingResults()" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem;border-color:#f59e0b;color:#f59e0b;font-weight:800">📸 Czekające wyniki (${pendingResults.length})</button>` : b('openPendingResults()', '📸 Czekające wyniki')}${b('openTrades()', '🔁 Okno transferowe')}${b('openRules()', '📜 Regulamin terminów')}${b('openHealth()', '🩺 Stan systemu')}${b('openDjSettings()', '🎧 DJ')}${b('openShortMaker()', '🎬 Short')}${b('openWeekGraphics()', '🖼 Podsumowanie kolejki')}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
   </div>`;
 }
 
@@ -13805,6 +13806,7 @@ function _gmDraftHtml(st, admin) {
   const c = st.config, evId = 'gmd_' + String(currentSeasonId || 'x').replace(/\W/g, ''), ev = events.find(e => e.id === evId), me = discordUser ? (st.gms || []).find(g => g.id === discordUser.id) : null;
   if(st.rosters) return _gmSeasonHtml(st) + _gmMarketHtml(st) + `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📋 ${_g('SKŁADY GM-ÓW', 'GM ROSTERS')}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.5rem">${(st.gms || []).map(g => `<div style="background:var(--surface2);border-radius:10px;padding:.5rem .65rem;cursor:pointer${g.id === discordUser?.id ? ';border:1px solid var(--accent)' : ''}" onclick="openGmTeam('${g.id}')"><b>${_h(g.teamName)}</b> <span style="font-size:.7rem;color:var(--muted)">${_h(g.name)}</span>
+      ${_isLoggedInSync() ? `<a href="#" onclick="event.stopPropagation();openGmRosterEdit('${g.id}');return false" style="float:right;font-size:.72rem">✏️</a>` : ''}
       <div style="font-size:.68rem;color:${_gmPay(st, g.id) > _gmCap(st) ? 'var(--loss)' : 'var(--muted)'};margin:.1rem 0 .25rem">💵 ${_gmPay(st, g.id)} / ${_gmCap(st)}${st.market?.dead?.[g.id] ? ` (${_g('martwe', 'dead')} ${st.market.dead[g.id]})` : ''}</div>
       ${(st.rosters[g.id] || []).map(p => `<div style="font-size:.78rem;display:flex;justify-content:space-between"><span>${_h(p.name)}</span><span style="color:var(--muted)">${_h(p.team || '')}${p.price ? ' · 💵' + p.price : ''}</span></div>`).join('')}</div>`).join('')}</div></div>`;
   const live = c.draftMode === 'snake' ? !!ev : true;
@@ -13829,6 +13831,8 @@ function _gmAdminHtml(c, pool, maxByPool, fa) {
       <div><label style="${_MODAL_LBL}">${_g('Draft', 'Draft')}</label><select id="gmc-draft" style="${_MODAL_INP};font-size:.8rem">${opt('auction', c.draftMode, _g('💰 Aukcja', '💰 Auction'))}${opt('snake', c.draftMode, _g('🐍 Snake (po kolei)', '🐍 Snake'))}</select></div>
       <div><label style="${_MODAL_LBL}">${_g('Budżet aukcji', 'Auction budget')}</label>${num('gmc-budget', c.budget, 50, 1000)}</div>
       <div><label style="${_MODAL_LBL}">💵 Salary cap</label>${num('gmc-cap', c.cap ?? c.budget ?? 200, 50, 2000)}</div>
+      <div><label style="${_MODAL_LBL}">🏆 ${_g('Play-offy (drużyn)', 'Playoffs (teams)')}</label><select id="gmc-po" style="${_MODAL_INP};font-size:.8rem">${[0, 2, 4, 6, 8].map(v => opt(v, c.playoffTeams ?? 4, v ? 'top ' + v : _g('bez play-offów', 'no playoffs'))).join('')}</select></div>
+      <div><label style="${_MODAL_LBL}">${_g('Play-offy od kolejki (Week)', 'Playoffs from week')}</label>${num('gmc-pos', c.playoffStart || 0, 0, 60)}</div>
       <div><label style="${_MODAL_LBL}">${_g('Tabela', 'Standings')}</label><select id="gmc-table" style="${_MODAL_INP};font-size:.8rem">${opt('h2h', c.tableMode, _g('⚔️ Pojedynki tygodniowe', '⚔️ Weekly head-to-head'))}${opt('total', c.tableMode, _g('📈 Suma sezonu', '📈 Season total'))}</select></div>
     </div>
     <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem;font-size:.8rem">
@@ -13854,7 +13858,7 @@ function gmCalc() {
 async function gmSaveConfig(extra = {}, announce) {
   const v = id => document.getElementById(id);
   const config = { maxGm: +v('gmc-max').value, roster: +v('gmc-roster').value, starters: +v('gmc-starters').value, draftMode: v('gmc-draft').value, budget: +v('gmc-budget').value,
-    tableMode: v('gmc-table').value, cap: +v('gmc-cap').value, deadMoney: v('gmc-dead').checked, keeperRaise: +v('gmc-raise').value, ratings: Object.fromEntries([...document.querySelectorAll('.gmc-rt')].map(i => [i.dataset.k, +i.value])), noSelf: v('gmc-noself').checked, dynasty: v('gmc-dyn').checked, keepers: +v('gmc-keep').value, ...extra };
+    tableMode: v('gmc-table').value, cap: +v('gmc-cap').value, playoffTeams: +v('gmc-po').value, playoffStart: +v('gmc-pos').value, deadMoney: v('gmc-dead').checked, keeperRaise: +v('gmc-raise').value, ratings: Object.fromEntries([...document.querySelectorAll('.gmc-rt')].map(i => [i.dataset.k, +i.value])), noSelf: v('gmc-noself').checked, dynasty: v('gmc-dyn').checked, keepers: +v('gmc-keep').value, ...extra };
   const r = await _api('/gm/admin', 'POST', { seasonId: currentSeasonId || '_', config, announce: !!announce }, { admin: true });
   showToast(r.ok ? _g('💾 Zapisano', '💾 Saved') : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) renderGmView();
 }
@@ -13941,6 +13945,9 @@ function renderGmAuction() {
   if(!s) { ov.innerHTML = `<div style="padding:2rem;text-align:center">${_g('Aukcja nie jest utworzona.', 'The auction has not been created.')} <button class="btn btn-ghost" onclick="closeGmAuction()">✕</button></div>`; return; }
   const nom = s.gms[s.nomIdx], cur = s.current, pl = cur ? s.pool.find(p => p.id === cur.playerId) : null, lead = cur ? s.gms.find(g => g.id === cur.bidder) : null;
   const myTurnNom = me && !cur && nom?.id === me.id && s.status === 'live', myMax = me ? _gmaMax(s, me) : 0;
+  const turnKey = myTurnNom ? s.nomIdx + ':' + s.history.length : null;
+  if(turnKey && window._gmaTurnKey !== turnKey) { try { _gmTurnAlert(); } catch(e) { try { navigator.vibrate?.([200, 100, 200]); } catch(_) {} } }
+  window._gmaTurnKey = turnKey;
   const canBid = me && cur && s.status === 'live' && cur.bidder !== me.id && me.self !== cur.playerId && myMax > cur.bid;
   const stTxt = { live: _g('🔴 NA ŻYWO', '🔴 LIVE'), paused: _g('⏸ PAUZA', '⏸ PAUSED'), done: _g('🏁 ZAKOŃCZONA', '🏁 FINISHED') }[s.status];
   const q = (document.getElementById('gma-q')?.value || '').toLowerCase();
@@ -14043,9 +14050,13 @@ function _gmSeason(st) {
   const ids = gms.map(g => g.id), n = ids.length, arr = n % 2 ? [...ids, null] : [...ids], rounds = [];
   for(let r = 0; r < arr.length - 1; r++) { const pairs = []; for(let i = 0; i < arr.length / 2; i++) pairs.push([arr[i], arr[arr.length - 1 - i]]); rounds.push(pairs); arr.splice(1, 0, arr.pop()); }
   const table = Object.fromEntries(gms.map(g => [g.id, { id: g.id, team: g.teamName, gm: g.name, w: 0, l: 0, t: 0, pf: 0, pa: 0 }]));
-  const weekData = weeks.map((w, k) => {
+  const poN = c.tableMode === 'h2h' ? (+c.playoffTeams || 0) : 0, poStart = +c.playoffStart || 0, isPO = w => poN >= 2 && poStart > 0 && w.week >= poStart;
+  let regIdx = 0;
+  const weekData = weeks.map(w => {
     const live = today >= w.start && today < w.end, done = today >= w.end;
     const sc = Object.fromEntries(gms.map(g => [g.id, score(g.id, w.week)]));
+    if(isPO(w)) return { ...w, live, done, sc, pairs: [], playoff: true };
+    const k = regIdx++;
     const pairs = c.tableMode === 'h2h' && rounds.length ? rounds[k % rounds.length].map(([a, b]) => ({ a, b, sa: a ? sc[a].total : null, sb: b ? sc[b].total : null })) : [];
     if(done || live) {
       gms.forEach(g => { table[g.id].pf = Math.round((table[g.id].pf + sc[g.id].total) * 10) / 10; });
@@ -14054,7 +14065,24 @@ function _gmSeason(st) {
     return { ...w, live, done, sc, pairs };
   });
   const standings = Object.values(table).sort((x, y) => c.tableMode === 'h2h' ? (y.w + y.t / 2) - (x.w + x.t / 2) || y.pf - x.pf : y.pf - x.pf);
-  return { weeks: weekData, standings };
+  // play-offy: najlepsi z sezonu zasadniczego; rundy = kolejne tygodnie; remis wygrywa wyżej rozstawiony; przy 6 drużynach 1. i 2. mają wolny los
+  let playoffs = null;
+  if(poN >= 2 && poStart > 0 && standings.length >= poN) {
+    const poWeeks = weekData.filter(w => w.playoff), rounds2 = []; let alive = standings.slice(0, poN).map((r, i) => ({ id: r.id, seed: i + 1 })), byes = [], champion = null;
+    if(poN === 6) { byes = alive.slice(0, 2); alive = alive.slice(2); }
+    for(let r = 0; r < 4; r++) {
+      const W = poWeeks[r], srt = [...alive].sort((a, b) => a.seed - b.seed), pairs = [];
+      for(let i = 0; i < srt.length / 2; i++) { const a = srt[i], b = srt[srt.length - 1 - i], sa = W ? W.sc[a.id]?.total ?? 0 : null, sb = W ? W.sc[b.id]?.total ?? 0 : null;
+        pairs.push({ a: a.id, b: b.id, seedA: a.seed, seedB: b.seed, sa, sb, live: !!W?.live, win: W?.done ? ((sa > sb || (sa === sb && a.seed < b.seed)) ? a : b) : null }); }
+      rounds2.push({ week: W?.week ?? null, pairs, byes: byes.map(x => x.id) });
+      if(W) W.pairs = pairs.map(p => ({ a: p.a, b: p.b, sa: p.sa, sb: p.sb }));
+      if(pairs.some(p => !p.win)) break;
+      alive = pairs.map(p => p.win).concat(byes); byes = [];
+      if(alive.length === 1) { champion = alive[0].id; break; }
+    }
+    playoffs = { teams: poN, start: poStart, rounds: rounds2, champion };
+  }
+  return { weeks: weekData, standings, playoffs };
 }
 function _gmSeasonHtml(st) {
   const c = st.config, S = _gmSeason(st), gm = Object.fromEntries((st.gms || []).map(g => [g.id, g]));
@@ -14063,11 +14091,11 @@ function _gmSeasonHtml(st) {
   const selW = +(window._gmWeekSel || cur.week), W = S.weeks.find(w => w.week === selW) || cur;
   const f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
   const tName = id => id ? `<a href="#" onclick="openGmTeam('${id}');return false" style="color:inherit;font-weight:800">${_h(gm[id]?.teamName || '?')}</a>` : `<span style="color:var(--muted)">${_g('pauza', 'bye')}</span>`;
-  return `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem">
+  return _gmPlayoffsHtml(st, S, gm) + `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem">
     ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="float:right;font-size:.7rem;padding:.15rem .5rem" onclick="openGmWeekGraphic()">🖼 ${_g('Grafika tygodnia', 'Weekly graphic')}</button>` : ''}
     <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📊 ${_g('TABELA LIGI GM', 'GM LEAGUE STANDINGS')} · ${c.tableMode === 'h2h' ? _g('pojedynki tygodniowe', 'weekly head-to-head') : _g('suma punktów', 'points total')}</div>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead><tr style="color:var(--muted);font-size:.68rem"><th style="text-align:left">#</th><th style="text-align:left">${_g('Drużyna', 'Team')}</th>${c.tableMode === 'h2h' ? `<th>W</th><th>L</th><th>${_g('R', 'T')}</th>` : ''}<th style="text-align:right">${_g('Pkt', 'PF')}</th>${c.tableMode === 'h2h' ? `<th style="text-align:right">${_g('Str.', 'PA')}</th>` : ''}</tr></thead>
-    <tbody>${S.standings.map((r, i) => `<tr style="border-top:1px solid var(--border)${r.id === discordUser?.id ? ';background:rgba(245,197,24,.08)' : ''}"><td style="padding:.35rem .2rem;text-align:left;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'};font-weight:800">${i + 1}</td><td style="text-align:left">${tName(r.id)} <span style="font-size:.7rem;color:var(--muted)">${_h(r.gm)}</span></td>${c.tableMode === 'h2h' ? `<td>${r.w}</td><td>${r.l}</td><td>${r.t}</td>` : ''}<td style="text-align:right;font-weight:800">${f1(r.pf)}</td>${c.tableMode === 'h2h' ? `<td style="text-align:right;color:var(--muted)">${f1(r.pa)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+    <tbody>${S.standings.map((r, i) => `<tr style="border-top:${i && i === (+c.playoffTeams || 0) && c.tableMode === 'h2h' && c.playoffStart ? '2px dashed var(--accent)' : '1px solid var(--border)'}${r.id === discordUser?.id ? ';background:rgba(245,197,24,.08)' : ''}"><td style="padding:.35rem .2rem;text-align:left;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'};font-weight:800">${i + 1}</td><td style="text-align:left">${tName(r.id)} <span style="font-size:.7rem;color:var(--muted)">${_h(r.gm)}</span></td>${c.tableMode === 'h2h' ? `<td>${r.w}</td><td>${r.l}</td><td>${r.t}</td>` : ''}<td style="text-align:right;font-weight:800">${f1(r.pf)}</td>${c.tableMode === 'h2h' ? `<td style="text-align:right;color:var(--muted)">${f1(r.pa)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
   </div>
   <div class="card" style="padding:.7rem 1rem;margin-bottom:1rem">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
@@ -14082,6 +14110,63 @@ function _gmSeasonHtml(st) {
       : Object.entries(W.sc).sort((a, b) => b[1].total - a[1].total).map(([id, s], i) => `<div style="display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border)"><span><b style="color:var(--muted)">${i + 1}.</b> ${tName(id)}</span><b>${f1(s.total)}</b></div>`).join('')}
     <div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">${_g(`Liczy się ${c.starters} najlepszych występów z ${c.roster} zawodników w tygodniu (punkty fantasy z prawdziwych meczów ligi).${W.live ? ' Tydzień trwa — wyniki aktualizują się po każdym meczu.' : ''}`, `The best ${c.starters} of ${c.roster} players' weekly performances count (fantasy points from real league games).${W.live ? ' The week is live — scores update after every game.' : ''}`)}</div>
   </div>`;
+}
+function _gmPlayoffsHtml(st, S, gm) {
+  const P = S.playoffs; if(!P) return '';
+  const f1 = v => v == null ? '—' : (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ','), nm = id => _h(gm[id]?.teamName || '?');
+  const rName = (i, n) => { const left = n - i; return left === 1 ? _g('Finał', 'Final') : left === 2 ? _g('Półfinały', 'Semifinals') : left === 3 ? _g('Ćwierćfinały', 'Quarterfinals') : _g('Runda', 'Round') + ' ' + (i + 1); };
+  const nRounds = P.teams === 8 ? 3 : P.teams === 6 ? 3 : P.teams === 4 ? 2 : 1, champ = P.champion;
+  return `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;border-color:var(--accent)">
+    <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin-bottom:.5rem">🏆 ${_g('PLAY-OFFY', 'PLAYOFFS')} · top ${P.teams} · ${_g('od', 'from')} Week ${P.start}</div>
+    ${champ ? `<div style="text-align:center;padding:.6rem;margin-bottom:.6rem;border-radius:12px;background:rgba(245,197,24,.12)"><div style="font-size:.8rem;color:var(--muted)">${_g('MISTRZ LIGI GM', 'GM LEAGUE CHAMPION')}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.8rem;color:var(--accent)">👑 ${nm(champ)}</div><div style="font-size:.8rem">GM: ${_h(gm[champ]?.name || '')}</div>
+      ${_isLoggedInSync() && !st.champion ? `<button class="btn btn-primary" style="font-size:.74rem;margin-top:.4rem" onclick="gmAnnounceChampion('${champ}')">📣 ${_g('Ogłoś mistrza na Discordzie', 'Announce the champion on Discord')}</button>` : ''}</div>` : ''}
+    <div style="display:grid;grid-template-columns:repeat(${nRounds},minmax(170px,1fr));gap:.6rem;overflow-x:auto">
+      ${Array.from({ length: nRounds }, (_, i) => { const R = P.rounds[i]; return `<div><div style="font-size:.7rem;color:var(--muted);font-weight:800;margin-bottom:.3rem">${rName(i, nRounds)}${R?.week ? ' · W' + R.week : ''}</div>
+        ${R ? R.pairs.map(p => `<div style="background:var(--surface2);border-radius:8px;padding:.35rem .5rem;margin-bottom:.35rem;font-size:.78rem">
+          <div style="display:flex;justify-content:space-between;${p.win?.id === p.a ? 'color:var(--win);font-weight:800' : ''}"><span>${p.seedA}. ${nm(p.a)}</span><span>${f1(p.sa)}</span></div>
+          <div style="display:flex;justify-content:space-between;${p.win?.id === p.b ? 'color:var(--win);font-weight:800' : ''}"><span>${p.seedB}. ${nm(p.b)}</span><span>${f1(p.sb)}</span></div></div>`).join('') + (R.byes.length ? `<div style="font-size:.7rem;color:var(--muted)">${_g('wolny los', 'bye')}: ${R.byes.map(nm).join(', ')}</div>` : '')
+          : `<div style="font-size:.74rem;color:var(--muted)">${_g('czeka na poprzednią rundę', 'waiting for the previous round')}</div>`}</div>`; }).join('')}
+    </div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">${_g('Każda runda to jeden tydzień ligi; przy remisie awansuje wyżej rozstawiony.', 'Each round is one league week; ties go to the higher seed.')}</div>
+  </div>`;
+}
+function openGmRosterEdit(gid) {
+  const st = _gmState, g = (st.gms || []).find(x => x.id === gid); if(!g) return;
+  const m = _fxModal('gmre-modal', 600), R = (st.rosters?.[gid] || []).map(p => ({ ...p }));
+  window._gmRe = { gid, R };
+  const draw = () => { m.querySelector('.modal').innerHTML = _fxHead('gmre-modal', '✏️ ' + _h(g.teamName)) + `<div data-notr>
+    ${window._gmRe.R.map((p, i) => `<div style="display:grid;grid-template-columns:1fr 80px auto;gap:.4rem;align-items:center;margin-bottom:.3rem"><b style="font-size:.84rem">${_h(p.name)} <span style="font-size:.72rem;color:var(--muted);font-weight:400">${_h(p.team || '')}</span></b>
+      <input type="number" min="0" value="${p.price || 0}" onchange="window._gmRe.R[${i}].price=+this.value" style="${_MODAL_INP};font-size:.8rem;padding:.2rem .35rem" title="${_g('Pensja', 'Salary')}">
+      <button class="btn btn-ghost" style="font-size:.7rem;padding:.15rem .45rem;color:var(--loss)" onclick="window._gmRe.R.splice(${i},1);window._gmReDraw()">✕</button></div>`).join('')}
+    <div style="display:flex;gap:.4rem;margin:.5rem 0"><input id="gmre-add" list="gmre-list" placeholder="${_g('Dodaj zawodnika…', 'Add a player…')}" style="${_MODAL_INP};font-size:.8rem"><datalist id="gmre-list">${_gmPool().map(p => `<option value="${_h(p.name)}">`).join('')}</datalist>
+      <input id="gmre-price" type="number" min="0" value="1" style="${_MODAL_INP};width:80px;font-size:.8rem"><button class="btn btn-ghost" style="font-size:.74rem" onclick="gmReAdd()">➕</button></div>
+    <label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:.3rem 0"><input type="checkbox" id="gmre-retro" style="width:auto;margin:0"> ${_g('Korekta wstecz (zmienia też wyniki minionych tygodni — np. poprawka pomyłki)', 'Retroactive fix (also changes past weeks — e.g. correcting a mistake)')}</label>
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.5rem">${_g('Bez zaznaczenia zmiana obowiązuje od najbliższego poniedziałku.', 'Unchecked, the change applies from next Monday.')}</div>
+    <button class="btn btn-primary" onclick="gmReSave()">💾 ${_g('Zapisz skład', 'Save roster')}</button>
+    <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.6rem;font-size:.78rem"><b>🔄 ${_g('Zmiana GM-a (rezygnacja)', 'Change GM (resignation)')}</b>
+      <div style="display:flex;gap:.4rem;margin-top:.3rem;flex-wrap:wrap"><input id="gmre-nid" placeholder="${_g('Discord ID nowego GM-a', 'New GM\'s Discord ID')}" style="${_MODAL_INP};font-size:.78rem;flex:1"><input id="gmre-nname" placeholder="${_g('Nazwa', 'Name')}" style="${_MODAL_INP};font-size:.78rem;width:130px">
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="gmReTransfer()">🔄 ${_g('Przekaż drużynę', 'Hand over the team')}</button></div></div></div>`; };
+  window._gmReDraw = draw; draw(); m.classList.add('open');
+}
+function gmReAdd() { const n = document.getElementById('gmre-add').value.trim(); if(!n) return; const p = _gmPool().find(x => x.name === n); window._gmRe.R.push({ name: n, team: p?.team || '', price: +document.getElementById('gmre-price').value || 1 }); window._gmReDraw(); }
+async function gmReSave() {
+  const { gid, R } = window._gmRe, retro = document.getElementById('gmre-retro').checked;
+  if(!confirm(retro ? _g('Zapisać korektę wstecz? Zmienią się wyniki minionych tygodni.', 'Save a retroactive fix? Past weeks\' scores will change.') : _g('Zapisać skład? Obowiązuje od poniedziałku.', 'Save the roster? It applies from Monday.'))) return;
+  const r = await _api('/gm/admin', 'POST', { seasonId: currentSeasonId || '_', setRoster: { gmId: gid, players: R, retro } }, { admin: true });
+  showToast(r.ok ? _g('💾 Zapisano skład', '💾 Roster saved') : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) { _fxClose('gmre-modal'); renderGmView(); }
+}
+async function gmReTransfer() {
+  const toId = document.getElementById('gmre-nid').value.trim(), name = document.getElementById('gmre-nname').value.trim();
+  if(!/^\d{15,21}$/.test(toId)) { showToast(_g('Podaj poprawne Discord ID', 'Enter a valid Discord ID'), 'info'); return; }
+  if(!confirm(_g('Przekazać drużynę nowemu GM-owi? Skład, pensje i historia zostają.', 'Hand the team to the new GM? Roster, salaries and history stay.'))) return;
+  const r = await _api('/gm/admin', 'POST', { seasonId: currentSeasonId || '_', transferGm: { fromId: window._gmRe.gid, toId, name } }, { admin: true });
+  showToast(r.ok ? _g('🔄 Drużyna przekazana', '🔄 Team handed over') : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) { _fxClose('gmre-modal'); renderGmView(); }
+}
+async function gmAnnounceChampion(id) {
+  const st = _gmState, g = (st.gms || []).find(x => x.id === id); if(!g || !confirm(_g(`Ogłosić ${g.teamName} mistrzem Ligi GM?`, `Announce ${g.teamName} as GM League champion?`))) return;
+  const r = await _api('/gm/admin', 'POST', { seasonId: currentSeasonId || '_', champion: { gmId: id, teamName: g.teamName, gm: g.name } }, { admin: true });
+  const ok = r.ok && await _discordPost('schedule', { route: 'weekSummary', content: `👑 **Mistrz Ligi GM / GM League champion: ${g.teamName}** (GM: ${g.name})\n${_seasonName(currentSeasonId) || ''} 🏆` });
+  showToast(ok ? _g('👑 Ogłoszono mistrza', '👑 Champion announced') : '❌', ok ? 'success' : 'error'); renderGmView();
 }
 function openGmTeam(id) {
   const st = _gmState; if(!st) return;
@@ -14294,6 +14379,54 @@ async function gmKeepSave(max) {
   const r = await _api('/gm/keepers', 'POST', { seasonId: currentSeasonId || '_', prevSeasonId: _gmPrevSeasonId(), keep }, { session: true });
   showToast(r.ok ? _g('👑 Zapisano zatrzymanych', '👑 Keepers saved') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); if(r.ok) renderGmView();
 }
+
+// ═══ 🎧 DJ — mini-odtwarzacz SoundCloud (gra dalej przy zmianie zakładek) + ustawienia admina ═══
+function _djSrc(url) { return 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(url) + '&color=%23f5c518&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false'; }
+function _djLabel(url) { try { const p = new URL(url).pathname.split('/').filter(Boolean); return p.length > 1 ? decodeURIComponent(p[p.length - 1]).replace(/[-_]+/g, ' ') : _g('Wszystkie sety', 'All sets'); } catch(e) { return url; } }
+function djMount() {
+  const dj = window._dj; let btn = document.getElementById('dj-fab');
+  if(!dj?.profile && !(dj?.sets || []).length) { btn?.remove(); document.getElementById('dj-panel')?.remove(); return; }
+  if(!btn) {
+    btn = document.createElement('button'); btn.id = 'dj-fab'; btn.title = '🎧 ' + (dj.name || 'DJ');
+    btn.style.cssText = 'position:fixed;left:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:880;width:48px;height:48px;border-radius:50%;border:2px solid var(--accent);background:var(--surface);color:var(--text);font-size:1.35rem;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4)';
+    btn.textContent = '🎧'; btn.onclick = djToggle; document.body.appendChild(btn);
+  }
+}
+function djToggle() {
+  const dj = window._dj; let pn = document.getElementById('dj-panel');
+  if(pn) { const hide = pn.dataset.min !== '1'; pn.dataset.min = hide ? '1' : '0'; pn.style.transform = hide ? 'translateY(calc(100% + 120px))' : 'none'; document.getElementById('dj-fab').style.borderColor = hide && pn.querySelector('iframe') ? 'var(--win)' : 'var(--accent)'; return; }
+  const sources = [...(dj.latest?.link ? [{ url: dj.latest.link, label: '🆕 ' + dj.latest.title }] : []), ...(dj.sets || []).filter(u => u !== dj.latest?.link).map(u => ({ url: u, label: '🎵 ' + _djLabel(u) })), ...(dj.profile ? [{ url: dj.profile, label: '📀 ' + _g('Wszystkie sety', 'All sets') }] : [])];
+  pn = document.createElement('div'); pn.id = 'dj-panel'; pn.dataset.min = '0'; pn.setAttribute('data-notr', '');
+  pn.style.cssText = 'position:fixed;left:14px;bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:881;width:min(360px,calc(100vw - 28px));background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.5);padding:.6rem;transition:transform .25s';
+  pn.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:.4rem;margin-bottom:.4rem"><b style="font-size:.85rem">🎧 ${_h(dj.name || 'DJ')}</b>
+      <span style="display:flex;gap:.3rem"><button class="btn btn-ghost" style="font-size:.68rem;padding:.1rem .45rem" onclick="djToggle()" title="${_g('Zwiń — muzyka gra dalej', 'Minimise — music keeps playing')}">▾</button><button class="btn btn-ghost" style="font-size:.68rem;padding:.1rem .45rem" onclick="djClose()" title="${_g('Wyłącz', 'Turn off')}">✕</button></span></div>
+    <select id="dj-src" onchange="djPlay(this.value)" style="width:100%;font-size:.78rem;padding:.3rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);margin-bottom:.4rem">${sources.map(s => `<option value="${_h(s.url)}">${_h(s.label)}</option>`).join('')}</select>
+    <div id="dj-frame" style="border-radius:10px;overflow:hidden;min-height:120px;display:flex;align-items:center;justify-content:center;background:var(--surface2)"><button class="btn btn-primary" onclick="djPlay(document.getElementById('dj-src').value)">▶ ${_g('Odtwórz', 'Play')}</button></div>
+    ${dj.profile ? `<a href="${_h(dj.profile)}" target="_blank" rel="noopener" style="display:block;font-size:.7rem;color:var(--muted);margin-top:.35rem;text-align:right">SoundCloud ↗</a>` : ''}`;
+  document.body.appendChild(pn);
+}
+function djPlay(url) { if(!url) return; document.getElementById('dj-frame').innerHTML = `<iframe width="100%" height="${/soundcloud\.com\/[^/]+\/?$/.test(url) ? 300 : 120}" scrolling="no" frameborder="no" allow="autoplay" src="${_djSrc(url)}"></iframe>`; }
+function djClose() { document.getElementById('dj-panel')?.remove(); const b = document.getElementById('dj-fab'); if(b) b.style.borderColor = 'var(--accent)'; }
+async function openDjSettings() {
+  const r = await _api('/dj-settings', 'POST', {}, { admin: true }); if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
+  const d = r.dj || {}, m = _fxModal('dj-modal', 600);
+  m.querySelector('.modal').innerHTML = _fxHead('dj-modal', '🎧 DJ / SoundCloud') + `<div data-notr style="font-size:.8rem">
+    <label style="display:flex;align-items:center;gap:.4rem;font-weight:700;text-transform:none;letter-spacing:0;color:var(--text);margin:0 0 .6rem"><input type="checkbox" id="dj-on" ${d.enabled ? 'checked' : ''} style="width:auto;margin:0;accent-color:var(--accent)"> ${_g('Pokaż odtwarzacz 🎧 na stronie', 'Show the 🎧 player on the website')}</label>
+    <label style="${_MODAL_LBL}">${_g('Nazwa DJ-a', 'DJ name')}</label><input id="dj-name" value="${_h(d.name || '')}" style="${_MODAL_INP}">
+    <label style="${_MODAL_LBL}">${_g('Profil SoundCloud', 'SoundCloud profile')}</label><input id="dj-profile" value="${_h(d.profile || '')}" placeholder="https://soundcloud.com/twoj-profil" style="${_MODAL_INP}">
+    <label style="${_MODAL_LBL}">${_g('Wyróżnione sety (link w każdej linii, opcjonalnie)', 'Featured sets (one link per line, optional)')}</label><textarea id="dj-sets" rows="3" style="${_MODAL_INP};font-size:.78rem">${_h((d.sets || []).join('\n'))}</textarea>
+    <label style="${_MODAL_LBL}">${_g('Kanał RSS (do ogłaszania nowych setów)', 'RSS feed (to announce new sets)')}</label><input id="dj-rss" value="${_h(d.rss || '')}" placeholder="https://feeds.soundcloud.com/users/soundcloud:users:…/sounds.rss" style="${_MODAL_INP}">
+    <div style="font-size:.7rem;color:var(--muted);margin:.2rem 0 .5rem">${_g('Gdzie go znaleźć: SoundCloud → Settings → Content → „RSS feed” (skopiuj adres).', 'Where to find it: SoundCloud → Settings → Content → “RSS feed” (copy the address).')}</div>
+    <label style="display:flex;align-items:center;gap:.4rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:0 0 .6rem"><input type="checkbox" id="dj-ann" ${d.announce ? 'checked' : ''} style="width:auto;margin:0;accent-color:var(--accent)"> ${_g('Ogłaszaj nowe sety na Discordzie (kanał „Nowy set DJ” w 📣 Kanałach powiadomień; bot sprawdza co godzinę)', 'Announce new sets on Discord (“New DJ set” channel in 📣 Notification channels; checked hourly)')}</label>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn btn-primary" onclick="djSave()">💾 ${_g('Zapisz', 'Save')}</button><button class="btn btn-ghost" onclick="djTest()">🔎 ${_g('Sprawdź RSS', 'Check RSS')}</button></div>
+    <div id="dj-st" style="margin-top:.5rem;min-height:1em"></div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">${_g('Na Discordzie działa też komenda /set — pokazuje najnowszy set.', 'On Discord, the /set command shows the latest set.')}</div></div>`;
+  m.classList.add('open');
+}
+function _djForm() { const v = id => document.getElementById(id); return { save: true, enabled: v('dj-on').checked, name: v('dj-name').value.trim(), profile: v('dj-profile').value.trim(), rss: v('dj-rss').value.trim(), sets: v('dj-sets').value.split('\n').map(x => x.trim()).filter(Boolean), announce: v('dj-ann').checked }; }
+async function djSave() { const r = await _api('/dj-settings', 'POST', _djForm(), { admin: true }); showToast(r.ok ? _g('💾 Zapisano — odśwież stronę, żeby zobaczyć odtwarzacz', '💾 Saved — reload to see the player') : '❌ ' + r.error, r.ok ? 'success' : 'error'); }
+async function djTest() { const st = document.getElementById('dj-st'); st.textContent = '⏳'; const r = await _api('/dj-settings', 'POST', { ..._djForm(), test: true }, { admin: true });
+  st.innerHTML = r.latest ? `✅ ${_g('Najnowszy set', 'Latest set')}: <b>${_h(r.latest.title)}</b>` : `<span style="color:var(--loss)">❌ ${_h(r.error || 'Błąd')}</span>`; }
 
 function goToTeamRegistrations() {
   showView('dashboard');
