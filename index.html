@@ -821,7 +821,7 @@
     <button onclick="showView('teams')">👥 Drużyny</button>
     <button onclick="showView('kordle')">🧩 2Kordle</button>
     <button onclick="showView('fans')">🏅 Kibice</button>
-    <button onclick="showView('gm')">🏆 Liga GM</button>
+    <button id="nav-gm" style="display:none" onclick="showView('gm')">🏆 Liga GM</button>
     <button onclick="showView('fantasy')">🏀 Fantasy</button>
     <button onclick="showView('aliases')" data-i18n="nav_aliases">⚙ Aliasy</button>
   </nav>
@@ -2727,6 +2727,8 @@ function applyAliasesToMatch(match) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
+  try { _gmNavSync(); } catch(e) {}
+  if(id === 'gm' && typeof _gmVisible === 'function' && !_gmVisible()) id = 'dashboard';
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
   if(id==='events') { setTimeout(renderEvents, 50); }
   if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel||'gemini-2.5-flash'), 50); setTimeout(initDiscordQueue, 100); }
@@ -7817,7 +7819,7 @@ function openDeepLink() {
   if(h.startsWith('druzyna/')) { const n = decodeURIComponent(h.slice(8)); setTimeout(() => { try { openTeamModal(n); } catch(e) {} }, 400); return; }
   if(h === '2kordle' || h === 'kordle') { showView('kordle'); return; }
   if(h === 'kibice' || h === 'liga-kibicow') { showView('fans'); return; }
-  if(h === 'liga-gm' || h === 'gm') { showView('gm'); return; }
+  if((h === 'liga-gm' || h === 'gm') && _gmVisible()) { showView('gm'); return; }
   if(h === 'admin') { if(!_isLoggedInSync()) document.getElementById('auth-modal')?.classList.add('open'); return; }
   if(h === 'eventy-admin') { localStorage.setItem('nba2k_show_events_login', '1'); updateEventsAuthUI(); if(!_isEventsAdminSync() && !_isLoggedInSync()) document.getElementById('events-auth-modal')?.classList.add('open'); return; }
   if(h === 'zapisy' || h === 'wolni-agenci' || h === 'transfery') {
@@ -9522,7 +9524,7 @@ function renderQuickLinks() {
     ${b("showView('podcast')", '🎧 Podcast')}
     ${b("showView('kordle')", '🧩 2Kordle')}
     ${b("showView('fans')", '🏅 Liga kibiców')}
-    ${b("showView('gm')", '🏆 Liga GM')}
+    ${_gmVisible() ? b("showView('gm')", '🏆 Liga GM') : ''}
     ${discordUser ? b('_wr.tab=null;openWrapped()', '🎁 Mój Wrapped') : ''}
     ${b('openChronicle()', '📜 Kronika ligi')}
     ${b("document.getElementById('elo-wrap')?.scrollIntoView({behavior:'smooth'})", '⚡ Ranking siły')}
@@ -11080,7 +11082,7 @@ function openMoreSheet() {
       { ico: '📋', text: 'Kopiuj zaproszenie', act: `navigator.clipboard?.writeText('Połącz konto z drużyną ${tn} na stronie ligi: zaloguj się przez Discord → Mój panel → wybierz drużynę i swój nick → Zapisz. ' + location.origin + location.pathname + '#panel').then(()=>showToast('📋 Skopiowano zaproszenie','success'));document.getElementById('more-sheet').classList.remove('open')` }
     );
   }
-  items.push({ ico: '🏆', text: currentLang === 'en' ? 'GM League' : 'Liga GM', act: `document.getElementById('more-sheet').classList.remove('open');showView('gm')` });
+  if(_gmVisible()) items.push({ ico: '🏆', text: currentLang === 'en' ? 'GM League' : 'Liga GM', act: `document.getElementById('more-sheet').classList.remove('open');showView('gm')` });
   items.push({ ico: '🏅', text: 'Liga kibiców', act: `document.getElementById('more-sheet').classList.remove('open');showView('fans')` });
   items.push({ ico: '🔁', text: 'Okno transferowe', act: `document.getElementById('more-sheet').classList.remove('open');openTrades()` });
   items.push({ ico: '🧩', text: '2Kordle — zagadka dnia', act: `document.getElementById('more-sheet').classList.remove('open');showView('kordle')` });
@@ -13750,6 +13752,10 @@ function _fansMeHtml(me, pos, d) {
 }
 
 // ═══ 🏆 LIGA GM (Fantasy+) — ustawienia i zapisy ═══
+// W BUDOWIE: false = Liga GM widoczna tylko dla admina (menu, ☰ Więcej, Dashboard, #liga-gm). Ustaw true, żeby pokazać ją wszystkim.
+const GM_LEAGUE_PUBLIC = false;
+function _gmVisible() { return GM_LEAGUE_PUBLIC || _isLoggedInSync(); }
+function _gmNavSync() { const el = document.getElementById('nav-gm'); if(el) el.style.display = _gmVisible() ? '' : 'none'; }
 const _g = (pl, en) => currentLang === 'en' ? en : pl;
 let _gmState = null;
 async function _gmLoad() { const r = await _api('/gm?season=' + encodeURIComponent(currentSeasonId || '_'), 'GET', null, {}); if(r.ok) _gmState = r; return _gmState; }
