@@ -14487,6 +14487,7 @@ function _xqDraw() {
   const pend = _xq.filter(d => d.status === 'pending'), done = _xq.filter(d => d.status !== 'pending').slice(0, 10);
   const img = (d, n) => `${workerUrl.replace(/\/+$/, '')}/x-drafts/img/${d.id}/${n}.jpg`;
   box.innerHTML = _fxHead('xq-modal', '🐦 ' + _g('Kolejka X', 'X queue')) + `<div data-notr>
+    ${_xEditorsHtml()}
     ${pend.map(d => `<div style="background:var(--surface2);border:1px solid var(--accent);border-radius:12px;padding:.7rem .85rem;margin-bottom:.8rem">
       <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap"><b>${_h(d.title)}</b><span style="font-size:.72rem;color:var(--muted)">${new Date(d.createdAt).toLocaleString(currentLang === 'en' ? 'en-GB' : 'pl-PL')}${d.editedBy ? ' · ✏️ ' + _h(d.editedBy) : ''}</span></div>
       ${d.parts.map((p, pi) => `<div style="margin-top:.6rem">
@@ -14503,6 +14504,36 @@ function _xqDraw() {
       </div></div>`).join('') || `<div style="font-size:.84rem;color:var(--muted);margin-bottom:.8rem">${_g('Nic nie czeka na publikację 👍', 'Nothing waiting to be posted 👍')}</div>`}
     ${done.length ? `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.5rem 0 .3rem">${_g('HISTORIA', 'HISTORY')}</div>${done.map(d => `<div style="font-size:.78rem;padding:.3rem 0;border-bottom:1px solid var(--border)">${d.status === 'published' ? '✅' : '🗑'} <b>${_h(d.title)}</b> <span style="color:var(--muted)">· ${_h(d.by || '')}</span>${(d.links || []).map((l, i) => ` · <a href="${_h(l)}" target="_blank" rel="noopener" style="color:var(--accent)">${_g('wpis', 'post')} ${i + 1} ↗</a>`).join('')}</div>`).join('')}` : ''}
   </div>`;
+}
+// 👥 redaktorzy X (admin): lista z nazwami, dodawanie z listy znanych osób albo po Discord ID
+function _xKnownUsers() {
+  const m = new Map();
+  (playersList || []).forEach(p => p.id && m.set(p.id, p.name || p.gamertag));
+  (teamRegistrations || []).forEach(r => r.captain?.id && !m.has(r.captain.id) && m.set(r.captain.id, r.captain.name));
+  (freeAgents || []).forEach(f => f.discordId && !m.has(f.discordId) && m.set(f.discordId, f.name));
+  return m;
+}
+function _xEditorsHtml() {
+  if(!_isLoggedInSync()) return '';
+  const known = _xKnownUsers(), eds = window._xEditors || [];
+  return `<div style="background:var(--surface2);border-radius:12px;padding:.6rem .8rem;margin-bottom:.8rem">
+    <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">👥 ${_g('REDAKTORZY X — kto może sprawdzać i publikować', 'X EDITORS — who can review and post')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.45rem">${eds.map(id => `<span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.2rem .55rem;font-size:.78rem">✍️ ${_h(known.get(id) || id)}<a href="#" onclick="xEditorsSet((window._xEditors||[]).filter(x=>x!=='${id}'));return false" style="color:var(--loss);text-decoration:none">✕</a></span>`).join('') || `<span style="font-size:.78rem;color:var(--muted)">${_g('Brak redaktorów — kolejkę widzą tylko admini.', 'No editors — only admins see the queue.')}</span>`}</div>
+    <div style="display:flex;gap:.35rem;flex-wrap:wrap"><input id="xed-add" list="xed-list" placeholder="${_g('Wpisz nick albo Discord ID…', 'Type a nick or Discord ID…')}" style="${_MODAL_INP};flex:1;min-width:220px;font-size:.78rem;padding:.3rem .5rem">
+      <datalist id="xed-list">${[...known].filter(([id]) => !eds.includes(id)).map(([id, n]) => `<option value="${_h(n)} · ${id}">`).join('')}</datalist>
+      <button class="btn btn-primary" style="font-size:.74rem" onclick="xEditorAdd()">➕ ${_g('Dodaj redaktora', 'Add editor')}</button></div>
+    <div style="font-size:.68rem;color:var(--muted);margin-top:.3rem">${_g('Redaktor dostaje DM o każdym nowym wpisie i widzi kolejkę w swoim Moim panelu. Discord ID: prawy klik na osobę → Kopiuj ID użytkownika.', 'Editors get a DM about every new post and see the queue in My panel. Discord ID: right-click a user → Copy User ID.')}</div>
+  </div>`;
+}
+async function xEditorsSet(list) {
+  const r = await _api('/x-settings', 'POST', { editors: list }, { admin: true });
+  if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
+  window._xEditors = r.settings?.editors || list; _xqDraw(); showToast(_g('👥 Zapisano redaktorów', '👥 Editors saved'), 'success');
+}
+function xEditorAdd() {
+  const v = document.getElementById('xed-add').value.trim(), id = (v.match(/(\d{15,21})\s*$/) || [])[1] || [..._xKnownUsers()].find(([, n]) => (n || '').toLowerCase() === v.toLowerCase())?.[0];
+  if(!id) { showToast(_g('Wybierz osobę z listy albo wpisz Discord ID', 'Pick someone from the list or enter a Discord ID'), 'info'); return; }
+  xEditorsSet([...new Set([...(window._xEditors || []), id])]);
 }
 function _xqCount(id, pi) { const t = document.getElementById(`xq-t-${id}-${pi}`).value, n = _xLen(t), el = document.getElementById(`xq-c-${id}-${pi}`); el.textContent = n + '/280'; el.style.color = n > 280 ? 'var(--loss)' : 'var(--muted)'; }
 async function xqAct(id, action) {
