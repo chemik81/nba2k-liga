@@ -3794,6 +3794,7 @@ function openPlayerModal(playerName, teamName) {
   _pmEl.innerHTML=_hotBanner+_pmEl.innerHTML;
   const _pmGrid=_pmEl.querySelector('[style*="display:grid"]');
   if(_pmGrid) _pmGrid.insertAdjacentHTML('beforebegin',_bestRow);
+  try { if(_pmGrid) _pmGrid.insertAdjacentHTML('beforebegin', _pcSkillsHtml(playerName)); } catch(e) { console.warn('skills', e); }
   try { _pmEl.insertAdjacentHTML('beforeend', _advPlayerHtml(playerName)); } catch(e) { console.warn('adv', e); }
   document.getElementById('player-modal').classList.add('open');
   // Render form chart
@@ -13439,11 +13440,62 @@ function _pcData(name, scope = 'season') {
   const best = [...games].sort((a, b) => gs(b) - gs(a))[0];
   const prof = (typeof playersList !== 'undefined' ? playersList : []).find(p => p.gamertag && _normNick(p.gamertag) === key);
   const av = prof?.avatar ? (/^https?:/.test(prof.avatar) ? prof.avatar : `https://cdn.discordapp.com/avatars/${prof.id}/${prof.avatar}.png?size=256`) : null;
-  return { avatar: av, name: best.p.name, team, pos: Object.entries(pos).sort((a, b) => b[1] - a[1]).map(x => x[0]).slice(0, 2).join('/') || '—', scope: scopeLbl, gp,
+  let sk = null; try { sk = _pcSkills(name, scope, games); } catch(e) {}
+  return { sk, avatar: av, name: best.p.name, team, pos: Object.entries(pos).sort((a, b) => b[1] - a[1]).map(x => x[0]).slice(0, 2).join('/') || '—', scope: scopeLbl, gp,
     w: games.filter(g => g.won).length, ppg: sum('pts') / gp, rpg: sum('reb') / gp, apg: sum('ast') / gp, spg: sum('stl') / gp, bpg: sum('blk') / gp, tpg: sum('to') / gp,
     fg: sum('fga') ? sum('fgm') / sum('fga') : null, tp: sum('tpa') ? sum('tpm') / sum('tpa') : null, rating, tier,
     dd: games.filter(g => tens(g.p) === 2).length, td: games.filter(g => tens(g.p) >= 3).length, high: Math.max(...games.map(g => +g.p.pts || 0)),
     best: { line: `${best.p.pts} PTS · ${best.p.reb} REB · ${best.p.ast} AST`, vs: best.o.name, score: `${best.t.score}:${best.o.score}` } };
+}
+// ── 📊 umiejętności (A+…F względem ligi), 🏅 odznaki, 🧬 archetyp, 🔥 forma ──
+const _PC_GR = [[.95, 'A+'], [.88, 'A'], [.80, 'A-'], [.70, 'B+'], [.60, 'B'], [.50, 'B-'], [.40, 'C+'], [.30, 'C'], [.22, 'C-'], [.15, 'D+'], [.09, 'D'], [.04, 'D-'], [-1, 'F']];
+const _PC_SK = [['shoot', '🎯', 'RZUT', 'SHOOT'], ['three', '🏹', 'ZA 3', '3PT'], ['inside', '🏀', 'POD KOSZEM', 'INSIDE'], ['play', '🧠', 'ROZGRYWANIE', 'PLAYMAKING'], ['def', '🛡️', 'OBRONA', 'DEFENSE'], ['reb', '💪', 'ZBIÓRKI', 'REBOUND'], ['ball', '🔒', 'KONTROLA', 'BALL CTRL']];
+const _PC_GCOL = g => g[0] === 'A' ? '#22c55e' : g[0] === 'B' ? '#a3e635' : g[0] === 'C' ? '#f5c518' : g[0] === 'D' ? '#f97316' : '#ef4444';
+let _pcLgCache = {};
+function _pcLeague(scope) {
+  const sid = currentSeasonId || null, all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
+  const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
+  const pool = scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
+  const key = scope + ':' + sid + ':' + all.length; if(_pcLgCache[key]) return _pcLgCache[key];
+  const P = {};
+  pool.forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => (t.players || []).forEach(p => {
+    const k = _normNick(p.name), x = P[k] = P[k] || { gp: 0, w: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, dd: 0 };
+    x.gp++; if(+t.score > +o.score) x.w++; ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'fgm', 'fga', 'tpm', 'tpa'].forEach(f => x[f] += +p[f] || 0);
+    if(['pts', 'reb', 'ast', 'stl', 'blk'].filter(f => (+p[f] || 0) >= 10).length >= 2) x.dd++;
+  })));
+  const T = Object.values(P).reduce((a, x) => { ['fgm', 'fga', 'tpm', 'tpa'].forEach(f => a[f] += x[f]); return a; }, { fgm: 0, fga: 0, tpm: 0, tpa: 0 });
+  const lg = { fg: T.fga ? T.fgm / T.fga : .45, tp: T.tpa ? T.tpm / T.tpa : .33, two: (T.fga - T.tpa) ? (T.fgm - T.tpm) / (T.fga - T.tpa) : .5 };
+  const raw = x => { const g = x.gp || 1;
+    return { fg: (x.fgm + 10 * lg.fg) / (x.fga + 10), ppg: x.pts / g, tp: (x.tpm + 8 * lg.tp) / (x.tpa + 8), tpa: x.tpa / g, two: (x.fgm - x.tpm + 10 * lg.two) / (x.fga - x.tpa + 10), twom: (x.fgm - x.tpm) / g,
+      apg: x.ast / g, ato: x.ast / Math.max(x.to, 1), def: (x.stl + x.blk) / g, rpg: x.reb / g, ball: (x.fga + x.ast) / g / Math.max(x.to / g, .5) }; };
+  const R = Object.fromEntries(Object.entries(P).map(([k, x]) => [k, raw(x)])), ref = Object.entries(P).filter(([, x]) => x.gp >= 3).map(([k]) => R[k]);
+  const pct = (f, v) => { const arr = (ref.length >= 5 ? ref : Object.values(R)).map(r => r[f]); if(!arr.length) return .5; let lo = 0, eq = 0; arr.forEach(a => { if(a < v) lo++; else if(a === v) eq++; }); return (lo + eq / 2) / arr.length; };
+  return _pcLgCache[key] = { P, R, pct };
+}
+function _pcSkills(name, scope, games) {
+  const L = _pcLeague(scope), k = _normNick(name), x = L.P[k], r = L.R[k]; if(!x || !r) return null;
+  const c = { shoot: .6 * L.pct('fg', r.fg) + .4 * L.pct('ppg', r.ppg), three: .7 * L.pct('tp', r.tp) + .3 * L.pct('tpa', r.tpa), inside: .7 * L.pct('two', r.two) + .3 * L.pct('twom', r.twom),
+    play: .7 * L.pct('apg', r.apg) + .3 * L.pct('ato', r.ato), def: L.pct('def', r.def), reb: L.pct('rpg', r.rpg), ball: L.pct('ball', r.ball) };
+  const grade = p => _PC_GR.find(([t]) => p >= t)[1];
+  const attrs = Object.fromEntries(Object.entries(c).map(([kk, p]) => [kk, { p, g: grade(p) }]));
+  // 🏅 odznaki: 1 brąz · 2 srebro · 3 złoto · 4 Hall of Fame
+  const g = x.gp || 1, lvl = (v, th) => th.filter(t => v >= t).length, tp3 = x.tpa ? x.tpm / x.tpa : 0;
+  const B = [['sniper', '🔥', 'Snajper', 'Sniper', x.tpa / g >= 3 ? lvl(tp3, [.35, .38, .42, .46]) : 0], ['scorer', '🏀', 'Punktowa maszyna', 'Bucket getter', lvl(x.pts / g, [15, 20, 25, 30])],
+    ['thief', '🧤', 'Złodziej', 'Pickpocket', lvl(x.stl / g, [1.5, 2.2, 3, 4])], ['rim', '🚫', 'Obrońca obręczy', 'Rim protector', lvl(x.blk / g, [1, 1.6, 2.3, 3])],
+    ['dime', '🪄', 'Kreator', 'Dimer', lvl(x.ast / g, [5, 7, 9, 11])], ['glass', '🧲', 'Czyściciel tablic', 'Glass cleaner', lvl(x.reb / g, [7, 9, 11, 13])],
+    ['dd', '💯', 'Double-double', 'Double-double', x.gp >= 3 ? lvl(x.dd / g, [.25, .4, .6, .8]) : 0], ['winner', '🏆', 'Zwycięzca', 'Winner', x.gp >= 5 ? lvl(x.w / g, [.55, .65, .75, .85]) : 0],
+    ['iron', '🦾', 'Żelazny', 'Iron man', lvl(x.gp, [10, 20, 35, 50])]].filter(b => b[4] > 0).map(([key, icon, pl, en, l]) => ({ key, icon, pl, en, l })).sort((a, b) => b.l - a.l);
+  // 🧬 archetyp
+  const A = kk => attrs[kk].p, hi = kk => A(kk) >= .8, ok = kk => A(kk) >= .6;
+  const arch = hi('three') && ok('def') ? ['Strzelec 3&D', '3&D wing'] : hi('play') && (ok('shoot') || ok('three')) ? ['Rozgrywający-strzelec', 'Shot-creating playmaker'] : hi('play') ? ['Kreator gry', 'Playmaker']
+    : hi('inside') && hi('reb') ? ['Siłacz spod kosza', 'Paint beast'] : hi('def') && ok('reb') ? ['Kotwica obrony', 'Defensive anchor'] : hi('shoot') && ok('three') ? ['Snajper', 'Sharpshooter']
+    : Object.values(attrs).filter(a => a.p >= .7).length >= 5 ? ['Wszechstronny', 'All-around'] : hi('reb') ? ['Zbierający', 'Rebounder'] : hi('def') ? ['Obrońca', 'Lockdown defender']
+    : hi('inside') ? ['Wykańczający', 'Finisher'] : hi('shoot') ? ['Strzelec', 'Scorer'] : ['Zadaniowiec', 'Role player'];
+  // 🔥 forma: 3 ostatnie mecze vs średnia
+  const gsOf = q => (+q.p.pts || 0) + 0.4 * (+q.p.fgm || 0) - 0.7 * (+q.p.fga || 0) + 0.7 * (+q.p.reb || 0) + 0.7 * (+q.p.ast || 0) + (+q.p.stl || 0) + 0.7 * (+q.p.blk || 0) - (+q.p.to || 0);
+  const srt = [...games].sort((a, b) => String(a.m.date || '').localeCompare(String(b.m.date || ''))), avg = srt.reduce((s, q) => s + gsOf(q), 0) / Math.max(1, srt.length), last = srt.slice(-3), la = last.reduce((s, q) => s + gsOf(q), 0) / Math.max(1, last.length);
+  const form = srt.length < 4 ? null : la >= avg * 1.15 + .5 ? { icon: '🔥', pl: 'W formie', en: 'Hot' } : la <= avg * .85 - .5 ? { icon: '❄️', pl: 'Bez formy', en: 'Cold' } : { icon: '➡️', pl: 'Stabilnie', en: 'Steady' };
+  return { attrs, badges: B, arch: { pl: arch[0], en: arch[1] }, form, few: x.gp < 3 };
 }
 async function _pcImage(d, lang, withAvatar) {
   const W = 1080, H = 1350, F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'"; // emoji na końcu — cyfry zawsze ze zwykłej czcionki
@@ -13479,19 +13531,33 @@ async function _pcImage(d, lang, withAvatar) {
   g.save(); g.fillStyle = c1; g.beginPath(); g.roundRect(W / 2 - 160, 380, 320, 56, 28); g.fill(); g.fillStyle = '#0b0e14'; g.font = `900 34px ${F}`; g.fillText('⭐ ' + (lang === 'en' ? tEn : tPl), W / 2, 420); g.restore();
   // nick
   const fit = (s, max, size) => { g.font = `900 ${size}px ${F}`; while(g.measureText(s).width > max && size > 40) { size -= 4; g.font = `900 ${size}px ${F}`; } return size; };
-  g.save(); g.shadowColor = c1; g.shadowBlur = 30; g.fillStyle = '#fff'; g.font = `900 ${fit(d.name.toUpperCase(), W - 160, 150)}px ${F}`; g.fillText(d.name.toUpperCase(), W / 2, 590); g.restore();
-  g.fillStyle = 'rgba(255,255,255,.8)'; g.font = `800 44px ${F}`; g.fillText(`${d.team.toUpperCase()} · ${d.gp} ${T(d.gp === 1 ? 'MECZ' : d.gp % 10 >= 2 && d.gp % 10 <= 4 && (d.gp % 100 < 12 || d.gp % 100 > 14) ? 'MECZE' : 'MECZÓW', d.gp === 1 ? 'GAME' : 'GAMES')} · ${d.w}-${d.gp - d.w}`, W / 2, 655);
+  g.save(); g.shadowColor = c1; g.shadowBlur = 30; g.fillStyle = '#fff'; g.font = `900 ${fit(d.name.toUpperCase(), W - 160, 140)}px ${F}`; g.fillText(d.name.toUpperCase(), W / 2, 565); g.restore();
+  g.fillStyle = 'rgba(255,255,255,.8)'; g.font = `800 40px ${F}`; g.fillText(`${d.team.toUpperCase()} · ${d.gp} ${T(d.gp === 1 ? 'MECZ' : d.gp % 10 >= 2 && d.gp % 10 <= 4 && (d.gp % 100 < 12 || d.gp % 100 > 14) ? 'MECZE' : 'MECZÓW', d.gp === 1 ? 'GAME' : 'GAMES')} · ${d.w}-${d.gp - d.w}`, W / 2, 620);
+  const sk = d.sk;
+  if(sk) { g.fillStyle = c1; g.font = `800 36px ${F}`; g.fillText(`🧬 ${(lang === 'en' ? sk.arch.en : sk.arch.pl).toUpperCase()}${sk.form ? `   ${sk.form.icon} ${(lang === 'en' ? sk.form.en : sk.form.pl).toUpperCase()}` : ''}`, W / 2, 672); }
   // statystyki 4×2 (średnio na mecz + skuteczność)
   const st = [[num(d.ppg), 'PTS'], [num(d.rpg), T('ZB', 'REB')], [num(d.apg), T('AS', 'AST')], [num(d.spg), T('PRZ', 'STL')],
     [num(d.bpg), T('BL', 'BLK')], [num(d.tpg || 0), T('STR', 'TOV')], [d.fg == null ? '—' : Math.round(d.fg * 100) + '%', 'FG%'], [d.tp == null ? '—' : Math.round(d.tp * 100) + '%', '3P%']];
-  st.forEach(([v, l], i) => { const x = 180 + (i % 4) * 240, y = 790 + Math.floor(i / 4) * 185;
-    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect(x - 108, y - 100, 216, 155, 22); g.fill();
-    g.fillStyle = '#fff'; g.font = `900 ${v.length > 4 ? 66 : 80}px ${F}`; g.fillText(v, x, y); g.fillStyle = c1; g.font = `800 32px ${F}`; g.fillText(l, x, y + 40); });
-  // wyróżnienia
-  const chips = [`🔥 ${T('REKORD', 'HIGH')} ${d.high} PTS`, d.td ? `🔺 ${d.td} TRIPLE-DOUBLE` : null, d.dd ? `💪 ${d.dd} DOUBLE-DOUBLE` : null].filter(Boolean);
-  g.font = `800 36px ${F}`; const cw = chips.map(t => g.measureText(t).width + 50), tot = cw.reduce((a, b) => a + b, 0) + (chips.length - 1) * 18; let cx = W / 2 - tot / 2;
-  chips.forEach((t, i) => { g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect(cx, 1105, cw[i], 62, 31); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(t, cx + 25, 1148); g.textAlign = 'center'; cx += cw[i] + 18; });
-  g.fillStyle = 'rgba(255,255,255,.65)'; g.font = `700 32px ${F}`; g.fillText(`${T('Najlepszy mecz', 'Best game')}: ${d.best.line} vs ${d.best.vs}`, W / 2, 1222);
+  st.forEach(([v, l], i) => { const x = 180 + (i % 4) * 240, y = 790 + Math.floor(i / 4) * 150;
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect(x - 108, y - 78, 216, 128, 20); g.fill();
+    g.fillStyle = '#fff'; g.font = `900 ${v.length > 4 ? 56 : 66}px ${F}`; g.fillText(v, x, y); g.fillStyle = c1; g.font = `800 28px ${F}`; g.fillText(l, x, y + 36); });
+  // 📊 oceny umiejętności A+…F (względem ligi)
+  if(sk) {
+    const n = _PC_SK.length, tw = (W - 120 - (n - 1) * 10) / n;
+    _PC_SK.forEach(([kk, ic, pl, en], i) => { const x = 60 + i * (tw + 10), a = sk.attrs[kk];
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.roundRect(x, 1015, tw, 118, 16); g.fill(); g.strokeStyle = _PC_GCOL(a.g) + '88'; g.lineWidth = 2; g.stroke();
+      const lb = `${ic} ${lang === 'en' ? en : pl}`; let ls = 22; g.font = `800 ${ls}px ${F}`; while(g.measureText(lb).width > tw - 12 && ls > 12) { ls--; g.font = `800 ${ls}px ${F}`; }
+      g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(lb, x + tw / 2, 1047);
+      g.fillStyle = _PC_GCOL(a.g); g.font = `900 58px ${F}`; g.fillText(a.g, x + tw / 2, 1110); });
+  }
+  // 🏅 odznaki (3 najmocniejsze)
+  const LV = ['', '🥉', '🥈', '🥇', '💎'];
+  const chips = sk && sk.badges.length ? sk.badges.slice(0, 3).map(b => `${LV[b.l]} ${b.icon} ${(lang === 'en' ? b.en : b.pl).toUpperCase()}`) : [`🔥 ${T('REKORD', 'HIGH')} ${d.high} PTS`, d.td ? `🔺 ${d.td} TRIPLE-DOUBLE` : null, d.dd ? `💪 ${d.dd} DOUBLE-DOUBLE` : null].filter(Boolean);
+  g.font = `800 30px ${F}`; let cw = chips.map(t => g.measureText(t).width + 44), tot = cw.reduce((a, b) => a + b, 0) + (chips.length - 1) * 14;
+  if(tot > W - 100) { g.font = `800 24px ${F}`; cw = chips.map(t => g.measureText(t).width + 36); tot = cw.reduce((a, b) => a + b, 0) + (chips.length - 1) * 12; }
+  let cx = W / 2 - tot / 2;
+  chips.forEach((t, i) => { g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect(cx, 1160, cw[i], 56, 28); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(t, cx + cw[i] / 2 - (cw[i] - (tot > W - 100 ? 36 : 44)) / 2, 1198); g.textAlign = 'center'; cx += cw[i] + 14; });
+  g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `700 26px ${F}`; g.fillText(`${T('Najlepszy mecz', 'Best game')}: ${d.best.line} vs ${d.best.vs}`, W / 2, 1243);
   const scopeTxt = d.scope.includes('|') ? d.scope.split('|')[lang === 'en' ? 1 : 0] : d.scope;
   const foot = `${scopeTxt.toUpperCase()} · 2K PRO-AM EKSTRAKLASA · ${SITE_HOST.toUpperCase()}`;
   let fs = 30; g.font = `800 ${fs}px ${F}`; while(g.measureText(foot).width > W - 150 && fs > 18) { fs--; g.font = `800 ${fs}px ${F}`; }
@@ -13531,6 +13597,7 @@ async function pcRender(name) {
   document.getElementById('pc-out').innerHTML = `<img src="${url}" style="width:100%;max-width:420px;border-radius:14px">
     <div style="display:flex;gap:.4rem;justify-content:center;margin-top:.6rem;flex-wrap:wrap">
       <a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-${_normNick(d.name)}-${lang}.png">⬇ Pobierz</a>
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="openCardCompare(this.dataset.n,'')" data-n="${_h(d.name)}">⚖️ ${_g('Porównaj', 'Compare')}</button>
       ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="pcToDiscord()">📣 Wyślij na Discord</button>` : ''}
     </div>
     <div style="font-size:.68rem;color:var(--muted);margin-top:.4rem">Poziom karty zależy od oceny formy: 🥉 brąz · 🥈 srebro · 🥇 złoto · 💎 diament · 🌌 galaktyka. Na Discordzie: <code>/karta ${_h(d.name)}</code></div>`;
@@ -14009,7 +14076,8 @@ function renderGmAuction() {
         <div style="background:#10131a;border:2px solid ${cur ? '#f5c518' : 'rgba(255,255,255,.1)'};border-radius:16px;padding:1rem;text-align:center">
           ${cur && pl ? `<div style="font-size:.8rem;color:#8a93a8">${_g('NA AUKCJI', 'ON THE BLOCK')}</div>
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem">${_h(pl.name)}</div>
-            <div style="font-size:.85rem;color:#8a93a8">${_h(pl.pos || '—')} · ${_h(pl.team)} · ${_g('ocena', 'rating')} ${pl.ovr}</div>
+            <div style="font-size:.85rem;color:#8a93a8">${[pl.pos, pl.team, _g('ocena', 'rating') + ' ' + pl.ovr].filter(Boolean).map(_h).join(' · ')}</div>
+            ${_gmaLotSkills(pl.name)}
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:3.4rem;color:#f5c518;line-height:1.1;margin-top:.4rem">${cur.bid}</div>
             <div style="font-size:.9rem">${_g('prowadzi', 'leading')}: <b>${_h(lead?.teamName || '—')}</b></div>`
             : `<div style="font-size:.9rem;color:#8a93a8;padding:.6rem 0">${s.status === 'done' ? _g('Wszystkie składy są pełne 🎉', 'All rosters are full 🎉') : nom ? _g('Zgłasza teraz', 'Nominating now') + `: <b style="color:#e8eaf0">${_h(nom.teamName)}</b>` : ''}</div>`}
@@ -14024,7 +14092,8 @@ function renderGmAuction() {
           <div style="font-weight:800;margin-bottom:.4rem">🎯 ${_g('Twoja kolej — zgłoś zawodnika', 'Your turn — nominate a player')}</div>
           <div style="display:flex;gap:.4rem;margin-bottom:.4rem"><input id="gma-q" placeholder="${_g('Szukaj…', 'Search…')}" value="${_h(q)}" oninput="renderGmAuction()" style="flex:1;padding:.4rem;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:#0b0e14;color:#fff">
             <input id="gma-start" type="number" min="1" max="${myMax}" value="1" title="${_g('Cena wywoławcza', 'Starting bid')}" style="width:70px;padding:.4rem;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:#0b0e14;color:#fff"></div>
-          <div style="max-height:260px;overflow-y:auto">${s.pool.filter(p => p.id !== me.self && (!q || p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))).slice(0, 40).map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.06)"><span><b>${_h(p.name)}</b>${p.isNew ? ' 🆕' : ''} <span style="font-size:.74rem;color:#8a93a8">${_h(p.pos || '')} · ${_h(p.team)} · ${p.ovr}</span></span><button class="btn btn-primary" style="font-size:.7rem;padding:.15rem .5rem" onclick="gmaNominate('${_h(p.id)}')">${_g('Zgłoś', 'Nominate')}</button></div>`).join('')}</div>
+          <div style="margin-bottom:.35rem">${_pcSkSortSel('gma-sk', "window._gmSkSort=this.value;renderGmAuction()")}</div>
+          <div style="max-height:260px;overflow-y:auto">${_pcSkSort(s.pool.filter(p => p.id !== me.self && (!q || p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))), window._gmSkSort).slice(0, 40).map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.06)"><span><b>${_h(p.name)}</b>${p.isNew ? ' 🆕' : ''} <span style="font-size:.74rem;color:#8a93a8">${[p.pos, p.team, p.ovr].filter(Boolean).map(_h).join(' · ')}</span> <span style="font-size:.72rem">${_pcMini(p.name)}</span></span><button class="btn btn-primary" style="font-size:.7rem;padding:.15rem .5rem" onclick="gmaNominate('${_h(p.id)}')">${_g('Zgłoś', 'Nominate')}</button></div>`).join('')}</div>
         </div>` : ''}
         <div style="margin-top:.8rem;font-size:.76rem;color:#8a93a8;max-height:180px;overflow-y:auto">${s.history.slice(0, 15).map(h => `<div>✅ <b style="color:#e8eaf0">${_h(h.player)}</b> → ${_h(h.gm)} · ${h.price}</div>`).join('')}</div>
       </div>
@@ -14040,6 +14109,14 @@ function renderGmAuction() {
   </div>`;
   _gmaCountdown();
   const qi = document.getElementById('gma-q'); if(qi && q) { qi.focus(); qi.setSelectionRange(q.length, q.length); }
+}
+// karta licytowanego zawodnika: archetyp, forma, 7 ocen i odznaki
+function _gmaLotSkills(name) {
+  const r = _pcSkFor(name); if(!r) return '';
+  const sk = r.d.sk, LV = ['', '🥉', '🥈', '🥇', '💎'];
+  return `<div style="font-size:.85rem;margin-top:.3rem">🧬 <b>${_h(currentLang === 'en' ? sk.arch.en : sk.arch.pl)}</b>${sk.form ? ` · ${sk.form.icon} ${_h(currentLang === 'en' ? sk.form.en : sk.form.pl)}` : ''}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.25rem;margin:.45rem 0 .2rem">${_PC_SK.map(([k, ic, pl, en]) => `<div style="background:rgba(255,255,255,.05);border:1px solid ${_PC_GCOL(sk.attrs[k].g)}55;border-radius:8px;padding:.2rem 0"><div style="font-size:.6rem;color:#8a93a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ic} ${currentLang === 'en' ? en : pl}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;color:${_PC_GCOL(sk.attrs[k].g)}">${sk.attrs[k].g}</div></div>`).join('')}</div>
+    ${sk.badges.length ? `<div style="font-size:.72rem;color:#c8cdd8">${sk.badges.slice(0, 4).map(b => `${LV[b.l]} ${b.icon} ${_h(currentLang === 'en' ? b.en : b.pl)}`).join(' · ')}</div>` : ''}`;
 }
 async function gmaNominate(playerId) {
   const bid = Math.max(1, +document.getElementById('gma-start')?.value || 1);
@@ -14267,8 +14344,9 @@ function _gmMarketHtml(st) {
     const fa = _gmPoolFull().filter(p => !taken.has(p.id) && !(c.noSelf && me && _normNick(me.player || '') === p.id)).map(p => ({ ...p, sfp: fp[p.id] || 0 })).sort((a, b) => b.sfp - a.sfp);
     const full = me && (st.rosters[me.id] || []).length >= c.roster;
     body = `${me ? `<div style="font-size:.8rem;margin-bottom:.5rem">💵 ${_g('Miejsce pod salary cap', 'Cap space')}: <b>${_gmCap(st) - _gmPay(st, me.id)}</b> <span style="color:var(--muted)">(${_gmPay(st, me.id)} / ${_gmCap(st)})</span>${_gmMyBids?.length ? ` · ${_g('Twoje oferty', 'Your bids')}: ${_gmMyBids.filter(b => b.status === 'open').map(b => `<b>${_h(b.player)}</b> ${b.amount}${b.drop ? ` (−${_h(b.drop)})` : ''} <a href="#" onclick="gmMk('bid',{cancel:'${b.id}'});return false" style="color:var(--loss)">✕</a>`).join(' · ') || '—'}` : ''}</div>` : ''}
-      <div style="max-height:360px;overflow-y:auto">${fa.slice(0, 60).map(p => `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.8rem">
-        <span><b>${_h(p.name)}</b>${p.isNew ? ' 🆕' : ''} <span style="font-size:.72rem;color:var(--muted)">${_h(p.pos || '')} · ${_h(p.team)}</span></span><span style="color:var(--muted)">${f1(p.sfp)} ${_g('pkt', 'pts')}</span>
+      <div style="margin-bottom:.35rem">${_pcSkSortSel('gmfa-sk', "window._gmSkSort=this.value;renderGmView()")}</div>
+      <div style="max-height:360px;overflow-y:auto">${_pcSkSort(fa, window._gmSkSort).slice(0, 60).map(p => `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.8rem">
+        <span><b>${_h(p.name)}</b>${p.isNew ? ' 🆕' : ''} <span style="font-size:.72rem;color:var(--muted)">${_h(p.pos || '')} · ${_h(p.team)}</span> <span style="font-size:.72rem">${_pcMini(p.name)}</span></span><span style="color:var(--muted)">${f1(p.sfp)} ${_g('pkt', 'pts')}</span>
         ${me ? `<span style="display:flex;gap:.25rem;align-items:center"><input id="fab-${p.id}" type="number" min="1" value="1" title="${_g('Pensja', 'Salary')}" style="width:56px;padding:.15rem .3rem;font-size:.76rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">${full ? `<select id="fad-${p.id}" style="font-size:.72rem;max-width:110px;padding:.15rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)"><option value="">${_g('zwolnij…', 'drop…')}</option>${(st.rosters[me.id] || []).map(r => `<option value="${_h(r.name)}">${_h(r.name)}</option>`).join('')}</select>` : ''}<button class="btn btn-primary" style="font-size:.7rem;padding:.15rem .5rem" onclick="gmMkBid('${p.id}')">${_g('Oferta', 'Bid')}</button></span>` : '<span></span>'}</div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">${_g('Brak wolnych agentów.', 'No free agents.')}</div>`}</div>
       <div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">${_g('Oferta = pensja zawodnika i musi zmieścić się pod salary cap (zwolnienie zawodnika uwalnia jego pensję). Oferty są ukryte; rozstrzygnięcie co poniedziałek ok. 10:00 — wygrywa najwyższa, przy remisie słabszy w tabeli. Zmiany obowiązują od poniedziałku.', 'A bid is the player\'s salary and must fit under the salary cap (dropping a player frees his salary). Bids are blind; they resolve every Monday around 10:00 — the highest wins, ties go to the lower-ranked team. Changes apply from Monday.')}${mk.lastRun ? ' · ' + _g('ostatnio', 'last run') + ': ' + new Date(mk.lastRun).toLocaleDateString(currentLang === 'en' ? 'en-GB' : 'pl-PL') : ''}</div>
       ${admin ? `<button class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem" onclick="gmMkProcess()">⚖️ ${_g('Rozstrzygnij oferty teraz', 'Resolve bids now')} (${mk.bidCount || 0})</button>` : ''}`;
@@ -14548,6 +14626,48 @@ async function xqAct(id, action) {
   if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const i = _xq.findIndex(x => x.id === id); _xq[i] = r.draft; _xqDraw();
   showToast(action === 'publish' ? _g('🐦 Opublikowano na X', '🐦 Posted to X') : action === 'reject' ? _g('🗑 Odrzucono', '🗑 Rejected') : _g('💾 Zapisano', '💾 Saved'), 'success');
+}
+
+// ═══ 📊 UMIEJĘTNOŚCI w profilu, ⚖️ porównanie kart, mini-oceny dla Ligi GM ═══
+function _pcSkFor(name) { for(const sc of ['season', 'edition', 'career']) { const d = _pcData(name, sc); if(d?.sk) return { d, sc }; } return null; }
+function _pcSkillsHtml(name) {
+  const r = _pcSkFor(name); if(!r) return '';
+  const { d } = r, sk = d.sk, L = _pcLeague(r.sc), x = L.P[_normNick(name)] || {}, g = x.gp || 1, f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
+  const val = { shoot: `FG ${x.fga ? Math.round(x.fgm / x.fga * 100) : 0}% · ${f1(x.pts / g)} ${_g('pkt', 'pts')}`, three: `${x.tpa ? Math.round(x.tpm / x.tpa * 100) : 0}% · ${f1(x.tpa / g)} ${_g('prób', 'att')}`,
+    inside: `${(x.fga - x.tpa) ? Math.round((x.fgm - x.tpm) / (x.fga - x.tpa) * 100) : 0}% ${_g('za 2', '2PT')}`, play: `${f1(x.ast / g)} ${_g('as.', 'ast')} · AST/TO ${f1(x.ast / Math.max(x.to, 1))}`,
+    def: `${f1(x.stl / g)} ${_g('prz.', 'stl')} · ${f1(x.blk / g)} ${_g('bl.', 'blk')}`, reb: `${f1(x.reb / g)} ${_g('zb.', 'reb')}`, ball: `${f1(x.to / g)} ${_g('str.', 'tov')}` };
+  const LV = ['', '🥉', '🥈', '🥇', '💎'], scL = { season: _g('bieżący sezon', 'current season'), edition: _g('edycja', 'edition'), career: _g('kariera', 'career') }[r.sc];
+  return `<div data-notr style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:.7rem .85rem;margin:.6rem 0 .9rem">
+    <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:baseline"><b>📊 ${_g('Umiejętności', 'Skills')} <span style="font-size:.72rem;color:var(--muted);font-weight:500">· ${_g('na tle ligi', 'vs the league')} · ${scL}${sk.few ? ' · ' + _g('mało meczów', 'few games') : ''}</span></b>
+      <span style="font-size:.82rem">🧬 <b>${_h(currentLang === 'en' ? sk.arch.en : sk.arch.pl)}</b>${sk.form ? ` · ${sk.form.icon} ${_h(currentLang === 'en' ? sk.form.en : sk.form.pl)}` : ''}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.4rem;margin-top:.5rem">${_PC_SK.map(([k, ic, pl, en]) => `<div style="background:var(--surface);border-radius:8px;padding:.35rem .5rem;display:flex;justify-content:space-between;align-items:center;gap:.4rem">
+      <div><div style="font-size:.72rem;color:var(--muted)">${ic} ${currentLang === 'en' ? en : pl}</div><div style="font-size:.68rem;color:var(--muted)">${val[k]}</div></div><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.5rem;color:${_PC_GCOL(sk.attrs[k].g)}">${sk.attrs[k].g}</b></div>`).join('')}</div>
+    ${sk.badges.length ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem">${sk.badges.map(b => `<span style="font-size:.74rem;background:var(--surface);border-radius:999px;padding:.15rem .55rem">${LV[b.l]} ${b.icon} ${_h(currentLang === 'en' ? b.en : b.pl)}</span>`).join('')}</div>` : ''}
+    <div style="font-size:.66rem;color:var(--muted);margin-top:.4rem">${_g('Ocena = miejsce na tle zawodników ligi (min. 3 mecze): A+ to ok. 5% najlepszych. Odznaki: 🥉 brąz · 🥈 srebro · 🥇 złoto · 💎 Hall of Fame.', 'Grade = rank among league players (min. 3 games): A+ is roughly the top 5%. Badges: 🥉 bronze · 🥈 silver · 🥇 gold · 💎 Hall of Fame.')}</div>
+  </div>`;
+}
+function _pcMini(name) { const r = _pcSkFor(name); if(!r) return ''; const a = r.d.sk.attrs; return _PC_SK.map(([k, ic]) => [k, ic]).sort((p, q) => a[q[0]].p - a[p[0]].p).slice(0, 3).map(([k, ic]) => `${ic}<b style="color:${_PC_GCOL(a[k].g)}">${a[k].g}</b>`).join(' '); }
+function _pcSkSortSel(id, onchange) { return `<select id="${id}" onchange="${onchange}" style="font-size:.72rem;padding:.15rem .3rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"><option value="">${_g('sortuj: ocena', 'sort: rating')}</option>${_PC_SK.map(([k, ic, pl, en]) => `<option value="${k}" ${window._gmSkSort === k ? 'selected' : ''}>${ic} ${currentLang === 'en' ? en : pl}</option>`).join('')}</select>`; }
+function _pcSkSort(list, key) { if(!key) return list; return [...list].sort((a, b) => (_pcSkFor(b.name)?.d.sk.attrs[key].p ?? -1) - (_pcSkFor(a.name)?.d.sk.attrs[key].p ?? -1)); }
+// ⚖️ porównanie dwóch kart
+function openCardCompare(a, b) {
+  const all = [...new Set(_withAllMatches(() => matches.flatMap(m => [m.team1, m.team2]).flatMap(t => (t.players || []).map(p => p.name))))].sort((x, y) => x.localeCompare(y));
+  const m = _fxModal('pccmp-modal', 680); m.classList.add('open');
+  const A = a ? _pcSkFor(a) : null, B = b ? _pcSkFor(b) : null, f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
+  const row = (label, va, vb, na, nb) => { const wa = na != null && nb != null && na > nb, wb = na != null && nb != null && nb > na;
+    return `<tr><td style="text-align:right;padding:.3rem .5rem;${wa ? 'color:var(--win);font-weight:800' : ''}">${va}</td><td style="text-align:center;color:var(--muted);font-size:.74rem;padding:.3rem">${label}</td><td style="text-align:left;padding:.3rem .5rem;${wb ? 'color:var(--win);font-weight:800' : ''}">${vb}</td></tr>`; };
+  const sel = (id, v) => `<input id="${id}" list="pccmp-list" value="${_h(v || '')}" placeholder="${_g('Wybierz gracza…', 'Pick a player…')}" onchange="openCardCompare(document.getElementById('pccmp-a').value, document.getElementById('pccmp-b').value)" style="${_MODAL_INP};font-size:.82rem">`;
+  m.querySelector('.modal').innerHTML = _fxHead('pccmp-modal', '⚖️ ' + _g('Porównanie kart', 'Card comparison')) + `<div data-notr>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">${sel('pccmp-a', a)}${sel('pccmp-b', b)}</div><datalist id="pccmp-list">${all.map(n => `<option value="${_h(n)}">`).join('')}</datalist>
+    ${A && B ? `<table style="width:100%;border-collapse:collapse;font-size:.86rem">
+      <tr><th style="text-align:right;padding:.3rem .5rem;white-space:normal;vertical-align:top">${_h(A.d.name)}<div style="font-size:.7rem;color:var(--muted);font-weight:500">${_h(A.d.team)} · 🧬 ${_h(currentLang === 'en' ? A.d.sk.arch.en : A.d.sk.arch.pl)}</div></th><th></th><th style="text-align:left;padding:.3rem .5rem;white-space:normal;vertical-align:top">${_h(B.d.name)}<div style="font-size:.7rem;color:var(--muted);font-weight:500">${_h(B.d.team)} · 🧬 ${_h(currentLang === 'en' ? B.d.sk.arch.en : B.d.sk.arch.pl)}</div></th></tr>
+      ${row(_g('Ocena', 'Rating'), A.d.rating, B.d.rating, A.d.rating, B.d.rating)}
+      ${_PC_SK.map(([k, ic, pl, en]) => row(`${ic} ${currentLang === 'en' ? en : pl}`, `<b style="color:${_PC_GCOL(A.d.sk.attrs[k].g)}">${A.d.sk.attrs[k].g}</b>`, `<b style="color:${_PC_GCOL(B.d.sk.attrs[k].g)}">${B.d.sk.attrs[k].g}</b>`, A.d.sk.attrs[k].p, B.d.sk.attrs[k].p)).join('')}
+      ${[['PTS', 'ppg'], [_g('ZB', 'REB'), 'rpg'], [_g('AS', 'AST'), 'apg'], [_g('PRZ', 'STL'), 'spg'], [_g('BL', 'BLK'), 'bpg']].map(([l, k]) => row(l, f1(A.d[k]), f1(B.d[k]), A.d[k], B.d[k])).join('')}
+      ${row('FG%', A.d.fg == null ? '—' : Math.round(A.d.fg * 100) + '%', B.d.fg == null ? '—' : Math.round(B.d.fg * 100) + '%', A.d.fg, B.d.fg)}
+      ${row(_g('Odznaki', 'Badges'), A.d.sk.badges.length, B.d.sk.badges.length, A.d.sk.badges.length, B.d.sk.badges.length)}
+    </table>` : `<div style="font-size:.84rem;color:var(--muted)">${_g('Wybierz dwóch graczy, żeby porównać ich karty.', 'Pick two players to compare their cards.')}</div>`}
+  </div>`;
 }
 
 function goToTeamRegistrations() {
