@@ -14115,7 +14115,7 @@ function _gmaLotSkills(name) {
   const r = _pcSkFor(name); if(!r) return '';
   const sk = r.d.sk, LV = ['', '🥉', '🥈', '🥇', '💎'];
   return `<div style="font-size:.85rem;margin-top:.3rem">🧬 <b>${_h(currentLang === 'en' ? sk.arch.en : sk.arch.pl)}</b>${sk.form ? ` · ${sk.form.icon} ${_h(currentLang === 'en' ? sk.form.en : sk.form.pl)}` : ''}</div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.25rem;margin:.45rem 0 .2rem">${_PC_SK.map(([k, ic, pl, en]) => `<div style="background:rgba(255,255,255,.05);border:1px solid ${_PC_GCOL(sk.attrs[k].g)}55;border-radius:8px;padding:.2rem 0"><div style="font-size:.6rem;color:#8a93a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ic} ${currentLang === 'en' ? en : pl}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;color:${_PC_GCOL(sk.attrs[k].g)}">${sk.attrs[k].g}</div></div>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.25rem;margin:.45rem 0 .2rem">${_PC_SK.map(([k, ic, pl, en]) => `<div style="background:rgba(255,255,255,.05);border:1px solid ${_PC_GCOL(sk.attrs[k].g)}55;border-radius:8px;padding:.2rem 0"><div style="font-size:.6rem;color:#8a93a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ic} ${currentLang === 'en' ? en : pl}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;color:${_PC_GCOL(sk.attrs[k].g)}">${sk.attrs[k].g}</div></div>`).join('')}</div>
     ${sk.badges.length ? `<div style="font-size:.72rem;color:#c8cdd8">${sk.badges.slice(0, 4).map(b => `${LV[b.l]} ${b.icon} ${_h(currentLang === 'en' ? b.en : b.pl)}`).join(' · ')}</div>` : ''}`;
 }
 async function gmaNominate(playerId) {
