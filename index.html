@@ -4552,6 +4552,7 @@ function renderScheduleDashboard() {
     // linki do transmisji: podane przez kapitanów (terminarz) albo stary link przy meczu
     let streams = s.generated && typeof _streamLinks === 'function' ? _streamLinks(s, true) : '';
     if(!streams && s.streamUrl) streams = `<a href="${_h(s.streamUrl)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:700;font-size:.7rem">📺 Transmisja</a>`;
+    if(streams && s.generated && !s.played && typeof _effStream === 'function' && (_effStream(s, 'team1') || _effStream(s, 'team2'))) streams += ` <button onclick="event.stopPropagation();openMultistream('${s.id}')" class="btn ${live || today ? 'btn-primary' : 'btn-ghost'}" title="${_g('Obie transmisje obok siebie', 'Both streams side by side')}" style="font-size:.64rem;padding:.1rem .4rem">🖥️ Multistream</button>`;
     const myTeam = discordUser ? teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id)?.teamName : null;
     const canAdd = s.generated && !streams && (_isLoggedInSync() || (myTeam && [s.team1, s.team2].includes(myTeam)));
     const extra = live || streams || canAdd ? `<div style="display:flex;gap:.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:.4rem;padding-top:.4rem;border-top:1px dashed rgba(127,127,127,.2)">
@@ -7007,7 +7008,7 @@ function _ssCard(ctx, s, groupName) {
         return `<div style="display:flex;gap:.45rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:.45rem">
           ${live ? '<span style="background:#dc2626;color:#fff;font-size:.62rem;font-weight:900;letter-spacing:1px;border-radius:4px;padding:.05rem .4rem">🔴 NA ŻYWO</span>' : ''}
           ${sl}
-          ${sl && (live || s.date === new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' })) ? `<button onclick="openMultistream('${s.id}')" class="btn btn-primary" style="font-size:.66rem;padding:.12rem .45rem">📺 Multistream</button>` : ''}
+          ${sl && !_ssResult(ctx, s)?.done ? `<button onclick="openMultistream('${s.id}')" class="btn ${live || s.date === new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }) ? 'btn-primary' : 'btn-ghost'}" title="${_g('Obie transmisje obok siebie', 'Both streams side by side')}" style="font-size:.66rem;padding:.12rem .45rem">🖥️ Multistream</button>` : ''}
           ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Transmisja' : 'Dodaj transmisję'}</button>` : ''}
           <button onclick="openClips('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🎬 Akcje${nClips ? ' (' + nClips + ')' : ''}</button>
           <button onclick="openRivalry(this.dataset.a, this.dataset.b)" data-a="${_h(s.team1)}" data-b="${_h(s.team2)}" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">⚔️ H2H</button>
