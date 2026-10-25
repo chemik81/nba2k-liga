@@ -833,8 +833,8 @@ body.dn-obs{background:transparent!important}body.dn-obs>*:not(.dn-ov):not(#dn-t
     <button onclick="showView('schedule')" data-i18n="nav_schedule">📅 Harmonogram</button>
     <button onclick="showView('teams')">👥 Drużyny</button>
     <button onclick="showView('kordle')">🧩 2Kordle</button>
-    <button onclick="showView('fans')">🏅 Kibice</button>
-    <button onclick="showView('cards')">🃏 Karty</button>
+    <button onclick="showView('fans')">🏅 Liga kibiców</button>
+    <button onclick="showView('cards')">🃏 Kolekcja kart</button>
     <button id="nav-gm" style="display:none" onclick="showView('gm')">🏆 Liga GM</button>
     <button onclick="showView('fantasy')">🏀 Fantasy</button>
     <button onclick="showView('aliases')" data-i18n="nav_aliases">⚙ Aliasy</button>
@@ -11120,7 +11120,7 @@ function openMoreSheet() {
   items.push({ ico: '🃏', text: currentLang === 'en' ? 'Card collection' : 'Kolekcja kart', act: `document.getElementById('more-sheet').classList.remove('open');showView('cards')` });
   items.push({ ico: '🏅', text: 'Liga kibiców', act: `document.getElementById('more-sheet').classList.remove('open');showView('fans')` });
   items.push({ ico: '🔁', text: 'Okno transferowe', act: `document.getElementById('more-sheet').classList.remove('open');openTrades()` });
-  items.push({ ico: '🧩', text: '2Kordle — zagadka dnia', act: `document.getElementById('more-sheet').classList.remove('open');showView('kordle')` });
+  items.push({ ico: '🧩', text: '2Kordle', act: `document.getElementById('more-sheet').classList.remove('open');showView('kordle')` });
   items.push({ ico: '🎧', text: 'Podcast', act: `document.getElementById('more-sheet').classList.remove('open');showView('podcast')` });
   items.push({ ico: '📺', text: 'Multistream', act: `document.getElementById('more-sheet').classList.remove('open');_ms.sel=null;openMultistream()` });
   if(discordUser) items.push({ ico: '🎁', text: 'Mój Wrapped', act: `document.getElementById('more-sheet').classList.remove('open');_wr.tab=null;openWrapped()` });
