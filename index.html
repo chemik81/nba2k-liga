@@ -11164,6 +11164,11 @@ function openMoreSheet() {
   items.push({ ico: '💬', text: 'Discord ligi', href: 'https://discord.gg/EQ87cFkuW' });
   items.push({ ico: document.documentElement.getAttribute('data-theme') === 'light' ? '🌙' : '☀️', text: 'Motyw', act: `toggleTheme();openMoreSheet()` });
   const langs = ['pl', 'en'];
+  // bez dubli: ta sama zakładka może trafić z górnego menu i z listy skrótów — zostaje pierwsza pozycja
+  { const seen = new Set(); for(let n = items.length - 1; n >= 0; n--) {} const out = [];
+    items.forEach(it => { const v = (String(it.act || '').match(/(?:bnGo|showView)\('([\w-]+)'\)/) || [])[1], key = v ? 'v:' + v : 't:' + String(it.text).toLowerCase();
+      if(seen.has(key) || seen.has('t:' + String(it.text).toLowerCase())) return; seen.add(key); seen.add('t:' + String(it.text).toLowerCase()); out.push(it); });
+    items.length = 0; items.push(...out); }
   sheet.querySelector('.ms-panel').innerHTML = `
     <div style="width:40px;height:4px;border-radius:2px;background:var(--border);margin:0 auto .8rem"></div>
     ${capReg ? `<div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin:0 0 .45rem .2rem">🧢 KAPITAN · ${_h(capReg.teamName).toUpperCase()}</div>` : ''}
