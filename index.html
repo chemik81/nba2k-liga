@@ -2619,6 +2619,7 @@ async function loadData() {
     window._dj = record.dj || null; try { djMount(); } catch(e) {}
     window._xEditors = record.xEditors || [];
     setTimeout(() => { try { _captainXNudge(); } catch(e) {} }, 1500);
+    setTimeout(() => { try { _dailyRefresh(); } catch(e) {} }, 1200);
     events = record.events || []
     window._lastEventSignups = record.eventSignups || {};
     try { _evsMerge(record.eventSignups); } catch(e) { console.warn('evsMerge', e); }
@@ -10124,6 +10125,15 @@ function _myTodo() {
   if(openVotes) todo.push({ urgent: false, html: `🎯 Wytypuj zwycięzców: ${openVotes} ${_plPL(openVotes, 'mecz czeka', 'mecze czekają', 'meczów czeka')} na Twój typ`, go: `showView('schedule')` });
   const po = typeof getActivePlayoff === 'function' ? getActivePlayoff() : null;
   if(po && _bracketReady(po) && !bracketData[String(po.id)]?.locked && !myBracket[String(po.id)]) todo.push({ urgent: true, html: '🏆 Wypełnij drabinkę w Typerze playoffów', go: 'openBracketPicker()' });
+  // ☀️ NA DZIŚ — codzienne zabawy
+  try { if(window._cardsCanOpen) todo.push({ daily: true, html: currentLang === 'en' ? '🎁 Open today\u2019s card pack' : '🎁 Otwórz dzisiejszą paczkę kart', go: "showView('cards')" }); } catch(e) {}
+  try { if(_kPool().length && !_kState().done) todo.push({ daily: true, html: currentLang === 'en' ? '🧩 Solve today\u2019s 2Kordle' : '🧩 Rozwiąż dzisiejsze 2Kordle', go: "showView('kordle')" }); } catch(e) {}
+  try {
+    const td = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }), tm = new Date(Date.now() + 864e5).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+    const soon = items.filter(s => s.date && (s.date === td || s.date === tm) && !_voteClosedClient(s) && !myVotes[String(s.id)] && !_ssResult(ctx, s)).length;
+    if(soon) todo.push({ daily: true, html: currentLang === 'en' ? `🎯 Pick today\u2019s / tomorrow\u2019s games (${soon})` : `🎯 Wytypuj dzisiejsze i jutrzejsze mecze (${soon})`, go: "showView('schedule')" });
+  } catch(e) {}
+  try { const cr = isCaptain ? teamRegistrations.find(r => r.status === 'approved' && r.captain?.id === discordUser.id) : null; if(cr && !cr.xHandle) todo.push({ urgent: false, html: currentLang === 'en' ? '🐦 Add your team\u2019s X profile' : '🐦 Podaj profil X drużyny', go: `openTeamXModal('${cr.id}')` }); } catch(e) {}
   if(!myProfile || !myProfile.team) todo.push({ urgent: false, html: '🔗 Połącz konto z drużyną (niżej)', go: `document.getElementById('me-profile-box')?.scrollIntoView({behavior:'smooth'})` });
   else if(!myProfile.days?.some(Boolean)) todo.push({ urgent: false, html: '👥 Ustaw swoją dostępność (niżej)', go: `document.getElementById('me-profile-box')?.scrollIntoView({behavior:'smooth'})` });
   return todo;
@@ -10131,7 +10141,7 @@ function _myTodo() {
 function updateMyPanelBadge() {
   const el = document.getElementById('mypanel-badge');
   if(!el) return;
-  const n = discordUser ? _myTodo().filter(t => t.urgent).length : 0;
+  const n = discordUser ? _myTodo().filter(t => t.urgent || t.daily).length : 0;
   el.textContent = n; el.style.display = n ? 'inline-block' : 'none';
   const bn = document.getElementById('bn-badge');
   if(bn) { bn.textContent = n; bn.style.display = n ? 'inline-block' : 'none'; }
@@ -10391,8 +10401,10 @@ function renderMyPanelView() {
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.8rem">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
+        ${todo.some(t => t.daily) ? `<div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin-bottom:.3rem">☀️ ${currentLang === 'en' ? 'TODAY' : 'NA DZIŚ'}</div>
+        ${todo.filter(t => t.daily).map(t => `<div onclick="${t.go || ''}" style="font-size:.82rem;padding:.35rem .3rem;border-bottom:1px dashed rgba(127,127,127,.2);cursor:pointer;display:flex;gap:.4rem;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0"></span><span style="flex:1">${t.html}</span><span style="color:var(--muted)">›</span></div>`).join('')}<div style="height:.6rem"></div>` : ''}
         <div style="font-size:.68rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">✅ DO ZROBIENIA</div>
-        ${todo.map(t => `<div onclick="${t.go || ''}" style="font-size:.82rem;padding:.35rem .3rem;border-bottom:1px dashed rgba(127,127,127,.2);cursor:pointer;display:flex;gap:.4rem;align-items:center">
+        ${todo.filter(t => !t.daily).map(t => `<div onclick="${t.go || ''}" style="font-size:.82rem;padding:.35rem .3rem;border-bottom:1px dashed rgba(127,127,127,.2);cursor:pointer;display:flex;gap:.4rem;align-items:center">
           ${t.urgent ? '<span style="width:7px;height:7px;border-radius:50%;background:#dc2626;flex-shrink:0"></span>' : '<span style="width:7px;flex-shrink:0"></span>'}<span style="flex:1">${t.html}</span><span style="color:var(--muted)">›</span></div>`).join('') || '<div style="font-size:.8rem;color:var(--win)">Wszystko zrobione 👌</div>'}
       </div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem .85rem">
@@ -13013,6 +13025,7 @@ function renderKordle() {
   });
 }
 function kordleGuess() {
+  setTimeout(() => { try { updateMyPanelBadge(); } catch(e) {} }, 300); // licznik „Na dziś” po rozwiązaniu zagadki
   const pool = _kPool(), target = _kTarget(pool), st = _kState();
   const v = (document.getElementById('k-in')?.value || '').trim();
   const g = pool.find(p => p.name.toLowerCase() === v.toLowerCase()) || pool.find(p => p.k === _normNick(v));
@@ -14919,6 +14932,11 @@ async function renderCardsView() {
       <div style="font-size:.68rem;color:var(--muted);margin-top:.3rem">${_g('Każda unikalna karta = +2 XP w Lidze kibiców.', 'Each unique card = +2 XP in the Fan league.')}</div></div>
   </div>`;
 }
+async function _dailyRefresh() {
+  if(!discordUser?.session) { window._cardsCanOpen = false; return; }
+  try { const r = await _api('/cards/me', 'GET', null, { session: true }); window._cardsCanOpen = !!(r.ok && r.canOpen); } catch(e) {}
+  try { updateMyPanelBadge(); if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView(); } catch(e) {}
+}
 async function cardsOpen() {
   const r = await _api('/cards/open', 'POST', {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
@@ -14926,6 +14944,7 @@ async function cardsOpen() {
   for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
     document.getElementById('cp-' + i).innerHTML = `<div style="animation:cpFlip .6s;text-align:center">${img ? `<img src="${img}" style="width:180px;border-radius:12px;box-shadow:0 0 24px ${_TIER_COL[c.tier]}">` : `<div style="height:225px;border:2px solid ${_TIER_COL[c.tier]};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800">${_h(c.name)}</div>`}
       <div style="font-size:.76rem;margin-top:.25rem">${_TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
+  window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {}
   setTimeout(() => renderCardsView(), 3500);
 }
 async function cardsRecycle() { const r = await _api('/cards/recycle', 'POST', {}, { session: true }); showToast(r.ok ? _g('♻️ Masz dodatkową paczkę!', '♻️ You got a bonus pack!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
