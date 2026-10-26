@@ -7008,6 +7008,7 @@ function _ssCard(ctx, s, groupName) {
         return `<div style="display:flex;gap:.45rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:.45rem">
           ${live ? '<span style="background:#dc2626;color:#fff;font-size:.62rem;font-weight:900;letter-spacing:1px;border-radius:4px;padding:.05rem .4rem">🔴 NA ŻYWO</span>' : ''}
           ${sl}
+          ${ctx.isAdmin && (s.matchIds || (s.matchId ? [s.matchId] : [])).length ? `<button onclick="if(confirm(_g('Ogłosić na kanale wyników ostatni mecz tego spotkania?','Post the latest game of this matchup to the results channel?'))) _announceResult('${(s.matchIds || [s.matchId]).slice(-1)[0]}','${s.id}',true).then(ok=>showToast(ok?'📣 OK':'❌', ok?'success':'error'))" class="btn btn-ghost" title="${_g('Wyślij ogłoszenie wyniku ponownie (np. gdy nie doszło)', 'Re-send the result announcement (e.g. if it didn\u2019t go out)')}" style="font-size:.66rem;padding:.12rem .45rem">📣 ${_g('Ogłoś wynik', 'Post result')}</button>` : ''}
           ${sl && !_ssResult(ctx, s)?.done ? `<button onclick="openMultistream('${s.id}')" class="btn ${live || s.date === new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }) ? 'btn-primary' : 'btn-ghost'}" title="${_g('Obie transmisje obok siebie', 'Both streams side by side')}" style="font-size:.66rem;padding:.12rem .45rem">🖥️ Multistream</button>` : ''}
           ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Transmisja' : 'Dodaj transmisję'}</button>` : ''}
           <button onclick="openClips('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🎬 Akcje${nClips ? ' (' + nClips + ')' : ''}</button>
@@ -8244,9 +8245,16 @@ async function sendReportResult(k) {
 }
 
 // 🏀 Ogłoszenie wyniku na kanale wyników: plakat meczu + stan serii + MVP + fragment recapu
-async function _announceResult(matchId, scheduleId) {
+async function _announceResult(matchId, scheduleId, force) {
+  // rezerwacja u Workera: brak dubli, a gdy przeglądarka nie zdąży (np. zamknięta karta) — po 10 min ogłosi Worker
+  const auth = _isLoggedInSync() ? { admin: true } : { session: true };
+  const claim = await _api('/result-announce', 'POST', { matchId, action: 'claim' }, auth).catch(() => null);
+  if(claim?.skip && !force) return true;
   window._trOff = true;
-  try { return await _announceResultInner(matchId, scheduleId); } finally { window._trOff = false; }
+  let ok = false;
+  try { ok = await _announceResultInner(matchId, scheduleId); } finally { window._trOff = false; }
+  _api('/result-announce', 'POST', { matchId, action: ok ? 'done' : 'release' }, auth).catch(() => {});
+  return ok;
 }
 async function _announceResultInner(matchId, scheduleId) {
   try {
