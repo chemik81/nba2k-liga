@@ -11971,19 +11971,28 @@ function _msPlatform(url) {
   return u.includes('twitch') ? 'Twitch' : u.includes('youtu') ? 'YouTube' : u.includes('kick.com') ? 'Kick' : u.includes('facebook') || u.includes('fb.') ? 'Facebook' : u.includes('tiktok') ? 'TikTok' : 'Link';
 }
 // dostępne transmisje: mecze na żywo → dzisiejsze → najbliższe (z linkami)
-function _msSources() {
-  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
-  const items = schedule.filter(s => s.generated && (s.seasonId || null) === (currentSeasonId || null) && !s.played);
+function _msSources(keepId) {
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }), in3 = new Date(Date.now() + 3 * 864e5).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+  const items = schedule.filter(s => s.generated && (s.seasonId || null) === (currentSeasonId || null) && !s.played && !_ssResult({ demo: false }, s)?.done
+    && (String(s.id) === String(keepId) || _isLive(s) || (s.date && s.date >= today && s.date <= in3)));
+  // ten sam kanał drużyny przy kilku meczach dziś → „na żywo” tylko jej najwcześniejszy nierozegrany mecz
+  const ord = x => (x.time || '99:99') + ':' + String(x.id).padStart(8, '0');
+  const firstToday = team => items.filter(x => x.date === today && (x.team1 === team || x.team2 === team)).sort((a, b) => ord(a).localeCompare(ord(b)))[0];
   const out = [];
   items.forEach(s => ['team1', 'team2'].forEach(sd => {
     const url = _effStream(s, sd); if(!url) return;
-    const lv = _chanLive(url), live = !!lv || _isLive(s), isToday = s.date === today;
+    const isToday = s.date === today, lv0 = _chanLive(url), lv = lv0 && (_isLive(s) || (isToday && String(firstToday(s[sd])?.id) === String(s.id))) ? lv0 : null;
+    const live = !!lv || _isLive(s);
     out.push({ id: `${s.id}:${sd}`, s, side: sd, team: s[sd], url, live, viewers: lv?.viewers ?? null, isToday, prio: lv ? 0 : live ? 0.5 : isToday ? 1 : 2 });
   }));
-  return out.sort((a, b) => a.prio - b.prio || String(a.s.date || '9').localeCompare(String(b.s.date || '9')) || String(a.s.time || '').localeCompare(String(b.s.time || '')));
+  out.sort((a, b) => a.prio - b.prio || String(a.s.date || '9').localeCompare(String(b.s.date || '9')) || String(a.s.time || '').localeCompare(String(b.s.time || '')));
+  // jeden kanał = jedna pozycja (najważniejsza), chyba że to wskazany mecz
+  const seen = new Set();
+  return out.filter(x => { const k = String(x.url).toLowerCase(); if(seen.has(k) && String(x.s.id) !== String(keepId)) return false; seen.add(k); return true; });
 }
 function openMultistream(scheduleId) {
-  const src = _msSources();
+  _ms.keep = scheduleId || null;
+  const src = _msSources(_ms.keep);
   if(scheduleId) _ms.sel = src.filter(x => String(x.s.id) === String(scheduleId)).map(x => x.id);
   if(!_ms.sel || !_ms.sel.length) {
     const live = src.filter(x => x.live);
@@ -11995,7 +12004,7 @@ function openMultistream(scheduleId) {
 }
 function renderMultistream() {
   const el = document.getElementById('multistream-view'); if(!el) return;
-  const src = _msSources();
+  const src = _msSources(_ms.keep);
   if(!_ms.sel) { const live = src.filter(x => x.live); _ms.sel = (live.length ? live : src.filter(x => x.isToday)).slice(0, 4).map(x => x.id); }
   const chosen = _ms.sel.map(id => src.find(x => x.id === id)).filter(Boolean);
   if(!_ms.audio || !_ms.sel.includes(_ms.audio)) _ms.audio = _ms.sel[0] || null;
@@ -13028,6 +13037,7 @@ function renderKordle() {
       ${over ? `<div style="text-align:center;margin-top:.8rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;color:${won ? 'var(--win)' : 'var(--loss)'}">${won ? `🎉 Brawo! ${st.guesses.length}/6` : '😵 Tym razem nie'}</div>
         <div style="font-size:.86rem;margin:.2rem 0 .6rem">Dzisiejszy zawodnik: <b>${_h(target.name)}</b> (${_h(target.team)}, ${target.pos}) — ${target.ppg} pkt · ${target.rpg} zb. · ${target.apg} as.</div>
+        <div style="font-size:.84rem;margin-bottom:.6rem">⏳ ${_cdHtml('Nowa zagadka za', 'Next puzzle in')}</div>
         <button class="btn btn-primary" style="font-size:.76rem" onclick="kordleShare()">📋 Udostępnij wynik</button>
         <div style="font-size:.74rem;color:var(--muted);margin-top:.5rem" data-notr>${currentLang === 'en' ? `Your streak: <b>${stats.streak}</b> · best streak: ${stats.best} · played: ${stats.played} · won: ${stats.won}` : `Twoja seria: <b>${stats.streak}</b> · rekord serii: ${stats.best} · rozegrane: ${stats.played} · wygrane: ${stats.won}`}</div></div>` : ''}
     </div>
@@ -14931,8 +14941,10 @@ async function renderCardsView() {
     <div class="card" style="padding:.9rem 1rem;margin-bottom:1rem;text-align:center">
       ${!discordUser ? `<div style="font-size:.86rem">${_g('Zaloguj się przez Discord, żeby otwierać paczki i zbierać karty.', 'Log in with Discord to open packs and collect cards.')}</div>` : `
       <div style="font-size:.86rem;margin-bottom:.5rem">${_g('Codziennie darmowa paczka z 3 kartami graczy ligi. Rzadkość: ★ zwykła · ★★ rzadka · ★★★ epicka · ★★★★ legendarna · ★★★★★ mityczna (najlepsi gracze ligi).', 'A free pack of 3 league player cards every day. Rarity: ★ common · ★★ rare · ★★★ epic · ★★★★ legendary · ★★★★★ mythic (the league\u2019s best).')}</div>
-      <button class="btn btn-primary" style="font-size:1rem;padding:.6rem 1.4rem" ${me?.canOpen ? '' : 'disabled'} onclick="cardsOpen()">🎁 ${me?.canOpen ? _g('Otwórz paczkę', 'Open a pack') + (me.bonus ? ` (+${me.bonus})` : '') : _g('Kolejna paczka jutro', 'Next pack tomorrow')}</button>
-      <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)}${dups >= 5 ? ` · <a href="#" onclick="cardsRecycle();return false" style="color:var(--accent)">♻️ ${_g('5 duplikatów → dodatkowa paczka', '5 duplicates → bonus pack')}</a>` : ''}</div>`}
+      <button class="btn btn-primary" style="font-size:1rem;padding:.6rem 1.4rem" ${me?.canOpen ? '' : 'disabled'} onclick="cardsOpen()">🎁 ${me?.canOpen ? _g('Otwórz paczkę', 'Open a pack') + (me.bonus ? ` (+${me.bonus})` : '') : _g('Dzisiejsza paczka otwarta', 'Today\u2019s pack opened')}</button>
+      ${me && !me.canOpen ? `<div style="font-size:.84rem;margin-top:.45rem">⏳ ${_cdHtml('Nowa paczka za', 'Next pack in')}</div>` : ''}
+      <div style="font-size:.78rem;margin-top:.45rem">♻️ ${_g('Bonus: <b>5 duplikatów = 1 dodatkowa paczka</b> (3 karty)', 'Bonus: <b>5 duplicates = 1 extra pack</b> (3 cards)')} · ${_g('masz', 'you have')} <b>${Math.min(dups, 5)}/5</b>${dups >= 5 ? ` — <a href="#" onclick="cardsRecycle();return false" style="color:var(--accent);font-weight:800">${_g('wymień teraz', 'trade them now')}</a>` : ''}</div>
+      <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)}</div>`}
       <div id="cards-pack" style="display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:.8rem"></div>
     </div>
     ${discordUser ? `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">📚 ${_g('MOJA KOLEKCJA — ZESTAWY DRUŻYN', 'MY COLLECTION — TEAM SETS')}</div>
@@ -14998,6 +15010,17 @@ async function openSuggestions() {
       <div style="font-size:.86rem;margin-top:.3rem;white-space:pre-wrap">${_h(s.text)}</div></div>`).join('') || `<div style="color:var(--muted)">${_g('Brak sugestii.', 'No suggestions yet.')}</div>`}</div>`; };
   const r = await _api('/suggest', 'GET', null, { admin: true }); draw(r.ok ? r.list : []);
 }
+
+// ⏳ odliczanie do północy (czas polski) — nowa zagadka 2Kordle i nowa paczka kart
+function _msToWarsawMidnight() {
+  const now = new Date(), pl = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+  const mid = new Date(pl); mid.setHours(24, 0, 0, 0); return mid - pl;
+}
+function _cdText() { const ms = _msToWarsawMidnight(), h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+  return currentLang === 'en' ? (h ? `${h} h ${m} min` : `${m} min`) : (h ? `${h} godz. ${m} min` : `${m} min`); }
+function _cdHtml(pl, en) { return `<span class="cd-midnight" data-pl="${pl}" data-en="${en}">${currentLang === 'en' ? en : pl} <b>${_cdText()}</b></span>`; }
+setInterval(() => { document.querySelectorAll('.cd-midnight').forEach(el => { const b = el.querySelector('b'); if(b) b.textContent = _cdText(); });
+  if(_msToWarsawMidnight() < 61000) setTimeout(() => { try { if(document.getElementById('view-kordle')?.classList.contains('active')) renderKordle(); if(document.getElementById('view-cards')?.classList.contains('active')) renderCardsView(); _dailyRefresh?.(); } catch(e) {} }, 62000); }, 30000);
 
 function goToTeamRegistrations() {
   showView('dashboard');
