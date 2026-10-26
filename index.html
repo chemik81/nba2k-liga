@@ -6854,7 +6854,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? btn(`openWebhookModal('schedule')`, '⚙ Kanał Discord' + (_whStatus && !_whStatus.schedule?.set ? ' <span style="color:var(--loss)">●</span>' : ''), false) + btn('openStreamsChannel()', '📺 Kanał transmisji' + (_whStatus && !_whStatus.streams?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('results')`, '🏀 Kanał wyników' + (_whStatus && !_whStatus.results?.set ? ' <span style="color:var(--muted)">○</span>' : ''), false) + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('openRoutesModal()', '📣 Kanały powiadomień', false) + btn('openRemindersStatus()', '🩺 Przypomnienia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? '' + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('openRoutesModal()', '📣 Kanały powiadomień', false) + btn('openRemindersStatus()', '🩺 Przypomnienia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -21494,7 +21494,7 @@ async function openRoutesModal() {
   m.classList.add('open');
   const r = await _api('/routes', 'GET', null, { admin: true });
   if(!r.ok) { box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + `<div style="color:var(--loss)">❌ ${_h(r.error)}</div>`; return; }
-  const groups = { teams: '🧢 DRUŻYNY', fa: '🆓 WOLNI AGENCI I TRANSFERY', schedule: '📅 TERMINARZ I SEZON', main: '🎪 EVENTY' };
+  const groups = { results: '🏀 WYNIKI', streams: '🔴 TRANSMISJE', teams: '🧢 DRUŻYNY', fa: '🆓 WOLNI AGENCI I TRANSFERY', schedule: '📅 TERMINARZ I SEZON', main: '🎪 EVENTY' };
   const rows = Object.entries(r.routes);
   box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + `
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem;line-height:1.5">Wpisz <b>ID kanału</b> (Discord: prawy klik na kanał → Kopiuj ID kanału), <b>off</b> żeby wyłączyć, albo zostaw puste — wtedy jak dotąd (webhook). Bot ligi sam zakłada w każdym kanale webhook z nazwą i logo ligi — potrzebuje tam uprawnień <b>Wyświetlanie kanału</b> i <b>Zarządzanie webhookami</b>. Bez tego wiadomość pójdzie jako bot.</div>
