@@ -3468,6 +3468,8 @@ function populateTeamFilter() {
     ss.innerHTML = ('<option value="">'+t('all_seasons')+'</option>')
       + eds.map(e => `<option value="ed:${e}"${'ed:' + e === def ? ' selected' : ''}>🎮 ${e} — ${currentLang === 'en' ? 'whole edition' : 'cała edycja'}</option>`).join('')
       + seasons.map(s=>`<option value="${s.id}"${s.id===def?' selected':''}>${s.name}</option>`).join('');
+    // filtr ustawia się po wczytaniu danych — jeśli statystyki są już na ekranie, przerysuj je z nowym filtrem
+    if(ss.value !== cs && document.getElementById('view-stats')?.classList.contains('active')) setTimeout(() => renderStats(), 0);
   }
 }
 
@@ -3485,7 +3487,8 @@ function sortByCol(col) {
   renderStats();
 }
 
-function renderStats() {
+function renderStats() { return _withAllMatches(_renderStatsInner); } // zawsze pełna lista meczów — zawężają ją filtry (edycja, sezon, kolejka…)
+function _renderStatsInner() {
   const seasonFilter = document.getElementById('filter-season-stats')?.value || '';
   const roundFilterId = document.getElementById('filter-round-stats')?.value || '';
   const teamFilter = document.getElementById('filter-team')?.value || '';
