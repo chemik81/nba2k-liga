@@ -21383,6 +21383,7 @@ async function sendMatchWebhook(match) {
 
 // ═══ 📣 KANAŁY POWIADOMIEŃ (rodzaj → ID kanału Discord; wysyła bot ligi) ═══
 async function openRoutesModal() {
+  setTimeout(() => { try { _evoStatus(); } catch(e) {} }, 500);
   setTimeout(() => { try { onbLoad(); } catch(e) {} }, 400);
   const m = _fxModal('routes-modal', 720), box = m.querySelector('.modal');
   box.innerHTML = _fxHead('routes-modal', '📣 Kanały powiadomień') + '<div style="color:var(--muted)">⏳ Wczytuję…</div>';
@@ -21415,8 +21416,8 @@ async function openRoutesModal() {
         <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/versus/test','POST',{},{admin:true,session:true}).then(r=>showToast(r.ok?('📨 '+r.match):'❌ '+r.error, r.ok?'success':'error'))">🧪 ${_g('Najbliższy mecz → do mnie (DM)', 'Next match → my DMs')}</button></div>
     </div>
     <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.7rem;font-size:.78rem">
-      <b>🎉 ${_g('Awanse kart', 'Card upgrades')}</b> — ${_g('codziennie rano bot sprawdza, czyja karta awansowała (np. srebro → złoto) albo kto zdobył nową odznakę, i ogłasza to z kartą (kanał „Awanse kart graczy”) + DM do gracza.', 'every morning the bot checks whose card got upgraded (e.g. silver → gold) or who earned a new badge, and announces it with the card (“Card upgrades” channel) + DM to the player.')}
-      <div style="margin-top:.4rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/card-evo/run','POST',{},{admin:true}).then(r=>showToast(r.ok?_g('🎉 Sprawdzam awanse…','🎉 Checking upgrades…'):'❌ '+r.error, r.ok?'success':'error'))">🎉 ${_g('Sprawdź awanse teraz', 'Check upgrades now')}</button></div>
+      <b>🎉 ${_g('Awanse kart', 'Card upgrades')}</b> — ${_g('codziennie ok. 9:00 bot sprawdza, czyja karta awansowała (np. srebro → złoto) albo kto zdobył nową odznakę, i ogłasza to z kartą + DM do gracza. Kanał: pozycja „Awanse kart graczy” na liście powyżej (domyślnie kanał osiągnięć). Śledzone są karty graczy z min. 3 meczami w sezonie; pierwsze sprawdzenie tylko zapisuje stan kart.', 'every morning (~9:00) the bot checks whose card got upgraded (e.g. silver → gold) or who earned a new badge, and announces it with the card + DM to the player. Channel: the “Card upgrades” entry in the list above (the achievements channel by default). Cards of players with 3+ games this season are tracked; the first check only saves the current state.')}
+      <div style="margin-top:.4rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/card-evo/run','POST',{},{admin:true}).then(r=>{showToast(r.ok?_g('🎉 Sprawdzam awanse…','🎉 Checking upgrades…'):'❌ '+r.error, r.ok?'success':'error'); setTimeout(_evoStatus, 8000);})">🎉 ${_g('Sprawdź awanse teraz', 'Check upgrades now')}</button><span id="evo-status" style="font-size:.72rem;color:var(--muted)"></span></div>
     </div>
     <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.7rem;font-size:.78rem">
       <b>👋 Powitanie nowych osób</b> — bot pyta nową osobę o <b>język</b> (🇵🇱/🇬🇧) i <b>ligę</b>: <b>Polska Ekstraklasa</b> → zgłoszenie na kanale adminów (rangę nadajecie ręcznie), <b>Chemik League</b> → ranga automatycznie. Potem „Chcę grać / Chcę kibicować”.
@@ -21426,6 +21427,13 @@ async function openRoutesModal() {
     </div>
     <div id="routes-status" style="font-size:.8rem;min-height:1.1em;margin:.6rem 0"></div>
     <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-primary" onclick="routesSave()">💾 Zapisz</button></div>`;
+}
+async function _evoStatus() {
+  const el = document.getElementById('evo-status'); if(!el) return;
+  const r = await _api('/card-evo/status', 'POST', {}, { admin: true });
+  if(!r.ok) { el.textContent = ''; return; }
+  el.textContent = r.at ? `${_g('Ostatnie sprawdzenie', 'Last check')}: ${new Date(r.at).toLocaleString(currentLang === 'en' ? 'en-GB' : 'pl-PL')} · ${_g('śledzonych kart', 'tracked cards')}: ${r.players}` : _g('Jeszcze nie sprawdzano — pierwsze sprawdzenie zapisze stan kart (bez ogłoszeń)', 'Not checked yet — the first check saves the card state (no announcements)');
+  if(!r.channel) el.textContent += ' · ⚠️ ' + _g('brak kanału', 'no channel set');
 }
 async function onbLoad() {
   const el = document.getElementById('onb-cfg'); if(!el) return;
