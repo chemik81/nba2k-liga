@@ -9590,7 +9590,7 @@ function renderQuickLinks() {
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
     ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
-    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openPodcastStudio()', '🎙 Podcast')}${pendingResults.length ? `<button onclick="openPendingResults()" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem;border-color:#f59e0b;color:#f59e0b;font-weight:800">📸 Czekające wyniki (${pendingResults.length})</button>` : b('openPendingResults()', '📸 Czekające wyniki')}${b('openTrades()', '🔁 Okno transferowe')}${b('openRules()', '📜 Regulamin terminów')}${b('openHealth()', '🩺 Stan systemu')}${b('openDjSettings()', '🎧 DJ')}${b('openXQueue()', '🐦 Kolejka X')}${b('openSuggestions()', '💡 Sugestie')}${b('openShortMaker()', '🎬 Short')}${b('openWeekGraphics()', '🖼 Podsumowanie kolejki')}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openPodcastStudio()', '🎙 Podcast')}${pendingResults.length ? `<button onclick="openPendingResults()" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem;border-color:#f59e0b;color:#f59e0b;font-weight:800">📸 Czekające wyniki (${pendingResults.length})</button>` : b('openPendingResults()', '📸 Czekające wyniki')}${b('openTrades()', '🔁 Okno transferowe')}${b('openRules()', '📜 Regulamin terminów')}${b('openHealth()', '🩺 Stan systemu')}${b('openDjSettings()', '🎧 DJ')}${b('openXQueue()', '🐦 Kolejka X')}${b('openSuggestions()', '💡 Sugestie')}${b('openLimitedAdmin()', '🌟 Karty limitowane')}${b('openShortMaker()', '🎬 Short')}${b('openWeekGraphics()', '🖼 Podsumowanie kolejki')}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
   </div>`;
 }
 
@@ -10139,6 +10139,7 @@ function _myTodo() {
   if(po && _bracketReady(po) && !bracketData[String(po.id)]?.locked && !myBracket[String(po.id)]) todo.push({ urgent: true, html: '🏆 Wypełnij drabinkę w Typerze playoffów', go: 'openBracketPicker()' });
   // ☀️ NA DZIŚ — codzienne zabawy
   try { if(window._cardsCanOpen) todo.push({ daily: true, html: currentLang === 'en' ? '🎁 Open today\u2019s card pack' : '🎁 Otwórz dzisiejszą paczkę kart', go: "showView('cards')" }); } catch(e) {}
+  try { if(_karnetClaimable()) todo.push({ daily: true, html: currentLang === 'en' ? '🎟️ Claim your Weekly pass reward' : '🎟️ Odbierz nagrodę z Karnetu tygodnia', go: "showView('mypanel')" }); } catch(e) {}
   try { if(_kPool().length && !_kState().done) todo.push({ daily: true, html: currentLang === 'en' ? '🧩 Solve today\u2019s 2Kordle' : '🧩 Rozwiąż dzisiejsze 2Kordle', go: "showView('kordle')" }); } catch(e) {}
   try {
     const td = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }), tm = new Date(Date.now() + 864e5).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
@@ -10357,6 +10358,7 @@ function renderTeamsView() {
 }
 
 function renderMyPanelView() {
+  setTimeout(() => { try { karnetMount(); } catch(e) {} }, 50);
   const target = document.getElementById('mypanel-view');
   if(!target) return;
   if(!discordUser) {
@@ -10433,6 +10435,7 @@ function renderMyPanelView() {
     ${_myCapReg() ? `<button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.8rem" onclick="openTrades()">🔁 Okno transferowe — wymiany graczy</button>` : ''}
     ${discordUser && (window._xEditors || []).includes(discordUser.id) ? `<button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.8rem" onclick="openXQueue()">🐦 ${currentLang === 'en' ? 'X queue — posts to review' : 'Kolejka X — wpisy do sprawdzenia'}</button>` : ''}
     <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.8rem" onclick="openSuggest()">💡 ${currentLang === 'en' ? 'Send a suggestion to the admins' : 'Zgłoś sugestię do adminów'}</button>
+    <div class="karnet-slot" style="margin-top:.8rem">${_karnet ? karnetHtml(_karnet) : ''}</div>
     <div id="mp-fans"></div>
     ${_challengesHtml()}
     ${_pushCardHtml()}
@@ -13951,11 +13954,12 @@ async function rulesExtend(vid, sid, days) {
 let _fansCache = null;
 async function _fansLoad() { if(_fansCache && Date.now() - _fansCache.at < 5 * 60e3) return _fansCache; const r = await _api('/fans', 'GET', null, {}); if(r.ok && Array.isArray(r.fans) && Array.isArray(r.levels)) _fansCache = { ...r, at: Date.now() }; return _fansCache; }
 async function renderFansView() {
+  setTimeout(() => { try { const v = document.getElementById('fans-view'); if(v && discordUser && !v.querySelector('.karnet-slot')) { v.insertAdjacentHTML('afterbegin', '<div class="karnet-slot"></div>'); karnetMount(); } } catch(e) {} }, 900);
   const el = document.getElementById('fans-view'); if(!el) return;
   el.innerHTML = '<div class="section-title">🏅 Liga kibiców</div><div style="color:var(--muted)">⏳</div>';
   const d = await _fansLoad(); if(!d) { el.innerHTML = '<div class="section-title">🏅 Liga kibiców</div><div style="color:var(--loss)">Nie udało się wczytać rankingu</div>'; return; }
   const me = discordUser ? d.fans.find(f => f.id === discordUser.id) : null, myPos = me ? d.fans.indexOf(me) + 1 : null;
-  const SRC = { typer: '🎯 Typer', fantasy: '🏆 Fantasy', typy: '🔮 Typy sezonu', drabinka: '🏆 Drabinka', '2kordle': '🧩 2Kordle', karty: '🃏 Kolekcja' };
+  const SRC = { typer: '🎯 Typer', fantasy: '🏆 Fantasy', typy: '🔮 Typy sezonu', drabinka: '🏆 Drabinka', '2kordle': '🧩 2Kordle', karty: '🃏 Kolekcja', karnet: '🎟️ Karnet' };
   el.innerHTML = `<div class="section-title">🏅 Liga kibiców</div>
     ${_fansMeHtml(me, myPos, d)}
     <div class="card" style="padding:.7rem .9rem;margin-bottom:1rem;font-size:.78rem;line-height:1.7">
@@ -14927,8 +14931,8 @@ function gmTradeAnalyze(to) {
 }
 
 // ═══ 🃏 KOLEKCJA KART — codzienna paczka, kolekcja według drużyn, prezenty, ranking ═══
-const _TIER_COL = { galaxy: '#a855f7', diamond: '#38bdf8', gold: '#f5c518', silver: '#cbd5e1', bronze: '#d08b4f' };
-const _TIER_LBL = { galaxy: ['★★★★★ Mityczna', '★★★★★ Mythic'], diamond: ['★★★★ Legendarna', '★★★★ Legendary'], gold: ['★★★ Epicka', '★★★ Epic'], silver: ['★★ Rzadka', '★★ Rare'], bronze: ['★ Zwykła', '★ Common'] };
+const _TIER_COL = { limited: '#f5c518', galaxy: '#a855f7', diamond: '#38bdf8', gold: '#f5c518', silver: '#cbd5e1', bronze: '#d08b4f' };
+const _TIER_LBL = { limited: ['🌟 Limitowana', '🌟 Limited'], galaxy: ['★★★★★ Mityczna', '★★★★★ Mythic'], diamond: ['★★★★ Legendarna', '★★★★ Legendary'], gold: ['★★★ Epicka', '★★★ Epic'], silver: ['★★ Rzadka', '★★ Rare'], bronze: ['★ Zwykła', '★ Common'] };
 let _cards = null;
 async function renderCardsView() {
   const el = document.getElementById('cards-view'); if(!el) return;
@@ -14947,12 +14951,13 @@ async function renderCardsView() {
       <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)}</div>`}
       <div id="cards-pack" style="display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:.8rem"></div>
     </div>
+    ${limitedSectionHtml(me)}
     ${discordUser ? `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">📚 ${_g('MOJA KOLEKCJA — ZESTAWY DRUŻYN', 'MY COLLECTION — TEAM SETS')}</div>
       ${Object.entries(byTeam).sort((a, b) => a[0].localeCompare(b[0])).map(([team, list]) => { const got = list.filter(c => own[c.k]).length, done = got === list.length;
         return `<div style="margin-bottom:.6rem"><div style="font-size:.8rem;margin-bottom:.25rem">${done ? '✅' : '🧩'} <b>${_h(team)}</b> <span style="color:var(--muted)">${got}/${list.length}</span></div>
           <div style="display:flex;flex-wrap:wrap;gap:.35rem">${list.map(c => { const o = own[c.k]; return `<div onclick="${o ? `openPlayerCardImg('${_h(c.name).replace(/'/g, "\\'")}')` : ''}" title="${_h(c.name)}" style="width:84px;height:110px;border-radius:10px;border:2px solid ${o ? _TIER_COL[c.tier] : 'var(--border)'};background:${o ? `linear-gradient(160deg, ${_TIER_COL[c.tier]}33, var(--surface2))` : 'var(--surface2)'};display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:.2rem;cursor:${o ? 'pointer' : 'default'};opacity:${o ? 1 : .35};position:relative">
             <div style="font-size:.7rem;color:${o ? _TIER_COL[c.tier] : 'inherit'}">${o ? _TIER_LBL[c.tier][0].split(' ')[0] : '❔'}</div><div style="font-size:.68rem;font-weight:800;word-break:break-word">${o ? _h(c.name) + (c.rookie ? ' 🆕' : '') : '???'}</div>${o && o.n > 1 ? `<span style="position:absolute;top:3px;right:5px;font-size:.62rem;background:var(--accent);color:#000;border-radius:999px;padding:0 .3rem">×${o.n}</span><span onclick="event.stopPropagation();const s=document.getElementById('cg-card');if(s){s.value=this.dataset.n;s.scrollIntoView({behavior:'smooth',block:'center'});}" data-n="${_h(c.name)}" title="${_g('Podaruj duplikat', 'Gift a duplicate')}" style="position:absolute;bottom:3px;right:5px;font-size:.85rem;cursor:pointer">🎁</span>` : ''}</div>`; }).join('')}</div></div>`; }).join('') || `<div style="font-size:.82rem;color:var(--muted)">${_g('Pula kart pojawi się po pierwszych meczach sezonu.', 'The card pool appears after the first games of the season.')}</div>`}
-      ${dups ? `<div style="font-size:.78rem;margin-top:.8rem;padding:.6rem .75rem;border:1px dashed var(--accent);border-radius:10px"><b>🎁 ${_g('Podaruj kartę', 'Gift a card')}</b> <span style="color:var(--muted)">— ${_g('podarować można duplikat (karta z ×2 i więcej); odbiorca musi mieć otwartą choć jedną paczkę', 'you can gift a duplicate (a card marked ×2 or more); the recipient must have opened at least one pack')}</span><div style="margin-top:.4rem">${_g('Karta', 'Card')}: <select id="cg-card" style="font-size:.76rem">${Object.entries(own).filter(([, c]) => c.n > 1).map(([k, c]) => `<option value="${_h(c.name)}">${_h(c.name)} ×${c.n}</option>`).join('')}</select> → <select id="cg-to" style="font-size:.76rem">${(board.board || []).filter(b => b.id !== discordUser.id).map(b => `<option value="${b.id}">${_h(b.name)}</option>`).join('')}</select> <button class="btn btn-primary" style="font-size:.72rem" onclick="cardsGift()">🎁 ${_g('Podaruj', 'Gift')}</button></div></div>` : (discordUser && uniq ? `<div style="font-size:.74rem;color:var(--muted);margin-top:.6rem">🎁 ${_g('Karty można podarować innym kolekcjonerom, gdy masz duplikat (×2) — pojawi się wtedy tu opcja „Podaruj kartę”.', 'You can gift cards to other collectors once you have a duplicate (×2) — a “Gift a card” option will appear here.')}</div>` : '')}
+      ${dups ? `<div style="font-size:.78rem;margin-top:.8rem;padding:.6rem .75rem;border:1px dashed var(--accent);border-radius:10px"><b>🎁 ${_g('Podaruj kartę', 'Gift a card')}</b> <span style="color:var(--muted)">— ${_g('podarować można duplikat (karta z ×2 i więcej); odbiorca musi mieć otwartą choć jedną paczkę', 'you can gift a duplicate (a card marked ×2 or more); the recipient must have opened at least one pack')}</span><div style="margin-top:.4rem">${_g('Karta', 'Card')}: <select id="cg-card" style="font-size:.76rem">${Object.entries(own).filter(([, c]) => c.n > 1).map(([k, c]) => `<option value="${_h(c.name)}" data-k="${_h(k)}">${c.lim ? '🌟 ' : ''}${_h(c.name)}${c.lim ? ' (' + _h(c.label || '') + ')' : ''} ×${c.n}</option>`).join('')}</select> → <select id="cg-to" style="font-size:.76rem">${(board.board || []).filter(b => b.id !== discordUser.id).map(b => `<option value="${b.id}">${_h(b.name)}</option>`).join('')}</select> <button class="btn btn-primary" style="font-size:.72rem" onclick="cardsGift()">🎁 ${_g('Podaruj', 'Gift')}</button></div></div>` : (discordUser && uniq ? `<div style="font-size:.74rem;color:var(--muted);margin-top:.6rem">🎁 ${_g('Karty można podarować innym kolekcjonerom, gdy masz duplikat (×2) — pojawi się wtedy tu opcja „Podaruj kartę”.', 'You can gift cards to other collectors once you have a duplicate (×2) — a “Gift a card” option will appear here.')}</div>` : '')}
     </div>` : ''}
     <div class="card" style="padding:.6rem 1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🏆 ${_g('NAJWIĘKSI KOLEKCJONERZY', 'TOP COLLECTORS')}</div>
       ${(board.board || []).slice(0, 15).map((b, i) => `<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.82rem"><span>${['🥇', '🥈', '🥉'][i] || (i + 1) + '.'} ${_avatarHtml(b.avatar, 20)} ${_h(b.name)}</span><b>${b.unique}/${board.poolSize}</b></div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">${_g('Jeszcze nikt nie otworzył paczki.', 'No packs opened yet.')}</div>`}
@@ -14961,6 +14966,7 @@ async function renderCardsView() {
 }
 async function _dailyRefresh() {
   if(!discordUser?.session) { window._cardsCanOpen = false; return; }
+  try { await karnetLoad(); } catch(e) {}
   try { const r = await _api('/cards/me', 'GET', null, { session: true }); window._cardsCanOpen = !!(r.ok && r.canOpen); } catch(e) {}
   try { updateMyPanelBadge(); if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView(); } catch(e) {}
 }
@@ -14970,13 +14976,14 @@ async function cardsOpen() {
   _dnSound();
   for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
     document.getElementById('cp-' + i).innerHTML = `<div style="animation:cpFlip .6s;text-align:center">${img ? `<img src="${img}" style="width:180px;border-radius:12px;box-shadow:0 0 24px ${_TIER_COL[c.tier]}">` : `<div style="height:225px;border:2px solid ${_TIER_COL[c.tier]};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800">${_h(c.name)}</div>`}
-      <div style="font-size:.76rem;margin-top:.25rem">${_TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
+      <div style="font-size:.76rem;margin-top:.25rem">${c.tier === 'limited' ? `<b style="color:#f5c518">🌟 ${_h(c.label || '')}</b>` : _TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
   window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {}
   setTimeout(() => renderCardsView(), 3500);
 }
 async function cardsRecycle() { const r = await _api('/cards/recycle', 'POST', {}, { session: true }); showToast(r.ok ? _g('♻️ Masz dodatkową paczkę!', '♻️ You got a bonus pack!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
 async function cardsGift() { const card = document.getElementById('cg-card').value, to = document.getElementById('cg-to').value; if(!confirm(_g(`Podarować kartę ${card}?`, `Gift the ${card} card?`))) return;
-  const r = await _api('/cards/gift', 'POST', { card, to }, { session: true }); showToast(r.ok ? _g('🎁 Wysłano!', '🎁 Sent!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
+  const key = Object.entries(_cards?.cards || {}).find(([k, c]) => c.name === card && c.n > 1 && k.startsWith('lim:') && document.getElementById('cg-card').selectedOptions[0]?.dataset.k === k)?.[0];
+  const r = await _api('/cards/gift', 'POST', { card, to, key: document.getElementById('cg-card').selectedOptions[0]?.dataset.k || key }, { session: true }); showToast(r.ok ? _g('🎁 Wysłano!', '🎁 Sent!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
 
 // ═══ 🔗 LINK DO EVENTU (#event/<id>) ═══
 function eventLink(id) { return location.origin + location.pathname + '#event/' + encodeURIComponent(id); }
@@ -15021,6 +15028,79 @@ function _cdText() { const ms = _msToWarsawMidnight(), h = Math.floor(ms / 36e5)
 function _cdHtml(pl, en) { return `<span class="cd-midnight" data-pl="${pl}" data-en="${en}">${currentLang === 'en' ? en : pl} <b>${_cdText()}</b></span>`; }
 setInterval(() => { document.querySelectorAll('.cd-midnight').forEach(el => { const b = el.querySelector('b'); if(b) b.textContent = _cdText(); });
   if(_msToWarsawMidnight() < 61000) setTimeout(() => { try { if(document.getElementById('view-kordle')?.classList.contains('active')) renderKordle(); if(document.getElementById('view-cards')?.classList.contains('active')) renderCardsView(); _dailyRefresh?.(); } catch(e) {} }, 62000); }, 30000);
+
+// ═══ 🎟️ KARNET TYGODNIA ═══
+let _karnet = null;
+async function karnetLoad() { if(!discordUser?.session) return null; const r = await _api('/karnet', 'GET', null, { session: true }); _karnet = r.ok && Array.isArray(r.quests) ? r : null; return _karnet; }
+function _karnetClaimable(k) { k = k || _karnet; return !!k && Array.isArray(k.quests) && (k.quests.some(q => q.done && !q.off && !q.claimed) || (k.all && !k.allClaimed)); }
+function karnetHtml(k) {
+  if(!k || !Array.isArray(k.quests)) return '';
+  const en = currentLang === 'en', ends = new Date(k.ends + 'T23:59:00').toLocaleDateString(en ? 'en-GB' : 'pl-PL', { weekday: 'long' });
+  const GO = { terminarz: "showView('schedule')", '2kordle': "showView('kordle')", kolekcja: "showView('cards')", dashboard: "showView('dashboard')", fantasy: "showView('fantasy')" };
+  return `<div data-notr class="card" style="padding:.75rem .9rem;margin-bottom:1rem;border:1px solid var(--accent)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap"><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.15rem;letter-spacing:1px">🎟️ ${en ? 'WEEKLY PASS' : 'KARNET TYGODNIA'}</b><span style="font-size:.72rem;color:var(--muted)">${en ? 'until' : 'do'} ${ends} · ${en ? 'new tasks every Monday' : 'nowe zadania co poniedziałek'}</span></div>
+    ${k.quests.filter(q => !q.off).map(q => { const pct = Math.min(100, Math.round(q.have / q.need * 100));
+      return `<div style="display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;padding:.4rem 0;border-bottom:1px dashed rgba(127,127,127,.2)">
+        <div><div style="font-size:.84rem;cursor:pointer" onclick="${GO[q.go] || ''}">${q.icon} ${en ? q.en : q.pl} <span style="color:var(--muted);font-size:.74rem">${Math.min(q.have, q.need)}/${q.need}</span></div>
+          <div style="height:6px;border-radius:3px;background:var(--surface2);margin-top:.25rem;overflow:hidden"><div style="height:100%;width:${pct}%;background:${q.done ? 'var(--win)' : 'var(--accent)'}"></div></div></div>
+        ${q.claimed ? `<span style="font-size:.74rem;color:var(--win)">✅ +${q.xp} XP</span>` : q.done ? `<button class="btn btn-primary" style="font-size:.7rem;padding:.2rem .55rem" onclick="karnetClaim('${q.id}')">${en ? 'Claim' : 'Odbierz'} +${q.xp} XP</button>` : `<span style="font-size:.72rem;color:var(--muted)">+${q.xp} XP</span>`}</div>`; }).join('')}
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.55rem;flex-wrap:wrap">
+      <span style="font-size:.8rem">🏆 ${en ? 'All tasks done' : 'Wszystkie zadania'}: <b>+${k.bonus.xp} XP</b> ${en ? 'and' : 'i'} <b>🎁 ${en ? 'an extra card pack' : 'dodatkowa paczka kart'}</b></span>
+      ${k.allClaimed ? `<span style="font-size:.76rem;color:var(--win)">✅ ${en ? 'Claimed' : 'Odebrane'}</span>` : `<button class="btn ${k.all ? 'btn-primary' : 'btn-ghost'}" style="font-size:.72rem" ${k.all ? '' : 'disabled'} onclick="karnetClaim('all')">🎁 ${en ? 'Claim reward' : 'Odbierz nagrodę'}</button>`}</div>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:.35rem">${en ? 'XP counts in the Fan league.' : 'XP liczą się w Lidze kibiców.'}</div></div>`;
+}
+async function karnetClaim(id) {
+  const r = await _api('/karnet/claim', 'POST', { quest: id }, { session: true });
+  if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
+  _karnet = r; showToast(id === 'all' ? _g('🎁 Dodatkowa paczka kart czeka w Kolekcji! +' + r.gained + ' XP', '🎁 An extra card pack is waiting in your Collection! +' + r.gained + ' XP') : `+${r.gained} XP 🎟️`, 'success');
+  if(id === 'all') window._cardsCanOpen = true;
+  document.querySelectorAll('.karnet-slot').forEach(el => el.innerHTML = karnetHtml(_karnet)); try { updateMyPanelBadge(); } catch(e) {}
+}
+async function karnetMount() { const k = await karnetLoad(); document.querySelectorAll('.karnet-slot').forEach(el => el.innerHTML = karnetHtml(k)); try { updateMyPanelBadge(); } catch(e) {} }
+
+// ═══ 🌟 KARTY LIMITOWANE (kolekcja + admin) ═══
+function _limTile(c, own) {
+  const o = own?.['lim:' + c.id], left = c.active ? Math.max(0, Math.ceil((Date.parse(c.until) - Date.now()) / 864e5)) : 0;
+  return `<div title="${_h(c.label)}" onclick="${o ? `openPlayerCardImg('${_h(c.name).replace(/'/g, "\\'")}')` : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
+    background:${o ? 'linear-gradient(135deg,#3a2a00,#1a1405 40%,#4a3a10 60%,#1a1405)' : 'var(--surface2)'};border:2px solid ${o ? '#f5c518' : 'var(--border)'};box-shadow:${o ? '0 0 18px rgba(245,197,24,.45)' : 'none'};opacity:${o ? 1 : .55}">
+    <div style="font-size:.6rem;font-weight:900;letter-spacing:1px;color:#f5c518">🌟 ${currentLang === 'en' ? 'LIMITED' : 'LIMITOWANA'}</div>
+    <div style="font-size:1.6rem;margin:.3rem 0">${o ? '🏅' : '❔'}</div>
+    <div style="font-weight:900;font-size:.85rem;word-break:break-word">${_h(c.name)}</div><div style="font-size:.66rem;color:var(--muted)">${_h(c.team || '')}</div>
+    <div style="font-size:.64rem;font-weight:800;color:#f5c518;margin-top:.3rem">${_h(c.label)}</div>${c.line ? `<div style="font-size:.62rem;color:var(--muted)">${_h(c.line)}</div>` : ''}
+    <div style="font-size:.62rem;margin-top:.3rem;color:var(--muted)">${currentLang === 'en' ? `owned by ${c.owners}` : `ma ją ${c.owners} ${_plPL(c.owners, 'osoba', 'osoby', 'osób')}`}${c.active ? ` · ⏳ ${left} ${currentLang === 'en' ? 'd left' : (left === 1 ? 'dzień' : 'dni')}` : ''}</div>
+    ${o && o.n > 1 ? `<span style="position:absolute;top:4px;right:6px;font-size:.62rem;background:#f5c518;color:#000;border-radius:999px;padding:0 .3rem">×${o.n}</span>` : ''}</div>`;
+}
+function limitedSectionHtml(me) {
+  const L = me?.limited || []; if(!L.length) return '';
+  const act = L.filter(c => c.active), past = L.filter(c => !c.active && me.cards?.['lim:' + c.id]);
+  return `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem;border:1px solid rgba(245,197,24,.5)"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:#f5c518;margin-bottom:.4rem">🌟 ${_g('KARTY LIMITOWANE', 'LIMITED CARDS')}</div>
+    <div style="font-size:.76rem;color:var(--muted);margin-bottom:.5rem">${_g('Specjalne edycje (MVP tygodnia, Piątka tygodnia i inne) — do zdobycia w paczkach tylko przez kilka dni. Potem znikają na zawsze. Każda limitowana = +10 XP w Lidze kibiców.', 'Special editions (MVP of the week, Team of the Week and more) — only in packs for a few days, then gone for good. Each limited card = +10 XP in the Fan league.')}</div>
+    ${act.length ? `<div style="font-size:.74rem;font-weight:800;margin:.3rem 0">⏳ ${_g('Teraz w paczkach', 'In packs now')}</div><div style="display:flex;gap:.5rem;flex-wrap:wrap">${act.map(c => _limTile(c, me.cards)).join('')}</div>` : ''}
+    ${past.length ? `<div style="font-size:.74rem;font-weight:800;margin:.7rem 0 .3rem">📚 ${_g('Mój album', 'My album')}</div><div style="display:flex;gap:.5rem;flex-wrap:wrap">${past.map(c => _limTile(c, me.cards)).join('')}</div>` : ''}</div>`;
+}
+async function openLimitedAdmin() {
+  const m = _fxModal('lim-modal', 620); m.classList.add('open');
+  const names = [...new Set(_withAllMatches(() => matches.filter(x => (x.seasonId || null) === (currentSeasonId || null)).flatMap(x => [x.team1, x.team2]).flatMap(t => (t.players || []).map(p => p.name + '|' + t.name))))];
+  const st = await _api('/daily-invite', 'POST', {}, { admin: true });
+  const L = (await _api('/cards/me', 'GET', null, { session: true }).catch(() => ({}))).limited || [];
+  m.querySelector('.modal').innerHTML = _fxHead('lim-modal', '🌟 Karty limitowane') + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">Automatycznie: <b>Piątka tygodnia</b> (po grafikach tygodnia) i <b>MVP tygodnia</b> (po zamknięciu głosowania z kategorią „MVP”). Tu możesz wydać kartę ręcznie, np. za rekord ligi.</div>
+    <label style="${_MODAL_LBL}">Zawodnik</label><input id="lim-p" list="lim-pl" style="${_MODAL_INP};margin-bottom:.5rem"><datalist id="lim-pl">${names.map(x => `<option value="${_h(x.split('|')[0])}">${_h(x.split('|')[1])}</option>`).join('')}</datalist>
+    <label style="${_MODAL_LBL}">Napis na karcie</label><input id="lim-l" placeholder="np. REKORD LIGI · 41 PTS" maxlength="60" style="${_MODAL_INP};margin-bottom:.5rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem"><div><label style="${_MODAL_LBL}">Statystyki (opcjonalnie)</label><input id="lim-s" placeholder="41 PTS · 8 REB · 6 AST" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Dni w paczkach</label><input id="lim-d" type="number" min="1" max="30" value="3" style="${_MODAL_INP}"></div></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:.6rem"><button class="btn btn-primary" onclick="limitedCreate()">🌟 Wydaj kartę</button></div>
+    <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.6rem;font-size:.8rem">Szansa na kartę limitowaną w paczce: <input id="lim-c" type="number" min="0" max="100" value="${Math.round((st.limitedChance ?? .1) * 100)}" style="${_MODAL_INP};width:70px;display:inline-block"> % <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/cards/limited','POST',{chance:(+document.getElementById('lim-c').value||0)/100},{admin:true}).then(r=>showToast(r.ok?'💾 Zapisano':'❌','success'))">💾</button></div>
+    ${L.filter(c => c.active).length ? `<div style="margin-top:.7rem;font-size:.78rem"><b>Teraz w paczkach:</b>${L.filter(c => c.active).map(c => `<div style="display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${_h(c.name)} — ${_h(c.label)} · ma ją ${c.owners}</span><a href="#" onclick="_api('/cards/limited','POST',{end:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:var(--loss)">zakończ</a></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+async function limitedCreate() {
+  const v = id => document.getElementById(id).value.trim(), name = v('lim-p'), label = v('lim-l');
+  if(!name || !label) { showToast('Podaj zawodnika i napis', 'info'); return; }
+  const team = _withAllMatches(() => matches.flatMap(x => [x.team1, x.team2]).find(t => (t.players || []).some(p => _normNick(p.name) === _normNick(name)))?.name) || '';
+  const r = await _api('/cards/limited', 'POST', { name, team, label, line: v('lim-s'), days: +v('lim-d') || 3, kind: 'special' }, { admin: true });
+  showToast(r.ok && r.created?.length ? '🌟 Karta wydana — gracz dostał DM, zajawka poszła na Discord' : r.ok ? 'Taka karta już istnieje' : '❌ ' + r.error, r.ok ? 'success' : 'error');
+  if(r.ok) openLimitedAdmin();
+}
 
 function goToTeamRegistrations() {
   showView('dashboard');
@@ -21406,6 +21486,7 @@ async function sendMatchWebhook(match) {
 
 // ═══ 📣 KANAŁY POWIADOMIEŃ (rodzaj → ID kanału Discord; wysyła bot ligi) ═══
 async function openRoutesModal() {
+  setTimeout(async () => { try { const r = await _api('/daily-invite', 'POST', {}, { admin: true }); if(r.ok) { const h = document.getElementById('di-hour'), on = document.getElementById('di-on'); if(h) h.value = r.hour ?? 10; if(on) on.checked = !r.off; } } catch(e) {} }, 450);
   setTimeout(() => { try { _evoStatus(); } catch(e) {} }, 500);
   setTimeout(() => { try { onbLoad(); } catch(e) {} }, 400);
   const m = _fxModal('routes-modal', 720), box = m.querySelector('.modal');
@@ -21437,6 +21518,12 @@ async function openRoutesModal() {
       <b>⚔️ ${_g('Zapowiedzi VERSUS', 'VERSUS previews')}</b> — ${_g('ok. doba przed każdym meczem z datą i godziną bot publikuje grafikę PL + EN: radar umiejętności obu drużyn, kluczowe pojedynki, forma (kanał „Zapowiedź meczu VERSUS”).', 'about a day before every scheduled match the bot posts a PL + EN graphic: both teams\u2019 skill radar, key matchups and form (“VERSUS” channel).')}
       <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:.3rem;font-size:.76rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:0"><input type="checkbox" id="vs-auto" checked onchange="_api('/versus/settings','POST',{versusAuto:this.checked},{admin:true}).then(r=>showToast(r.ok?(r.versusAuto?'⚔️ ON':'⚔️ OFF'):'❌','success'))" style="width:auto;margin:0;accent-color:var(--accent)"> ${_g('automatycznie', 'automatic')}</label>
         <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/versus/test','POST',{},{admin:true,session:true}).then(r=>showToast(r.ok?('📨 '+r.match):'❌ '+r.error, r.ok?'success':'error'))">🧪 ${_g('Najbliższy mecz → do mnie (DM)', 'Next match → my DMs')}</button></div>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.7rem;font-size:.78rem">
+      <b>☀️ Codzienne zaproszenie</b> — codziennie o wybranej godzinie bot publikuje „Dziś w lidze” (zagadka i paczka odnawiają się o północy; wpis tylko o nich przypomina): nowa zagadka 2Kordle, paczka kart (i karty limitowane), dzisiejsze mecze do wytypowania, Karnet tygodnia, a w poniedziałki „Walka o playoff” — wszystko z linkami na stronę. Kanał: „Codzienne zaproszenie na stronę” na liście powyżej. Zajawki o rzadkich i limitowanych kartach: „Kolekcja kart: rzadkie i limitowane karty”.
+      <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:.3rem;font-size:.76rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:0"><input type="checkbox" id="di-on" checked onchange="_api('/daily-invite','POST',{off:!this.checked},{admin:true}).then(r=>showToast(r.ok?(r.off?'☀️ OFF':'☀️ ON'):'❌','success'))" style="width:auto;margin:0;accent-color:var(--accent)"> automatycznie</label>
+        <label style="display:flex;align-items:center;gap:.3rem;font-size:.76rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:0">godzina <select id="di-hour" onchange="_api('/daily-invite','POST',{hour:+this.value},{admin:true}).then(r=>showToast(r.ok?'☀️ '+String(r.hour).padStart(2,'0')+':00':'❌','success'))" style="width:auto;padding:.1rem .3rem;font-size:.74rem;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px">${[...Array(24).keys()].map(h => `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
+        <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/daily-invite','POST',{send:true},{admin:true}).then(r=>showToast(r.ok?'☀️ Wysłano':'❌ '+(r.error||''), r.ok?'success':'error'))">☀️ Wyślij teraz</button></div>
     </div>
     <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.7rem;font-size:.78rem">
       <b>🎉 ${_g('Awanse kart', 'Card upgrades')}</b> — ${_g('codziennie ok. 9:00 bot sprawdza, czyja karta awansowała (np. srebro → złoto) albo kto zdobył nową odznakę, i ogłasza to z kartą + DM do gracza. Kanał: pozycja „Awanse kart graczy” na liście powyżej (domyślnie kanał osiągnięć). Śledzone są karty graczy z min. 3 meczami w sezonie; pierwsze sprawdzenie tylko zapisuje stan kart.', 'every morning (~9:00) the bot checks whose card got upgraded (e.g. silver → gold) or who earned a new badge, and announces it with the card + DM to the player. Channel: the “Card upgrades” entry in the list above (the achievements channel by default). Cards of players with 3+ games this season are tracked; the first check only saves the current state.')}
