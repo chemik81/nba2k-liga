@@ -9986,6 +9986,15 @@ setInterval(() => { try { renderLiveBanner(); } catch(e) {} }, 60000);
 
 // ═══ 🎬 AKCJE MECZU ══════════════════════════════════════════════
 function _clipsFor(k) { return clipsList.filter(c => String(c.scheduleId) === String(k)); }
+const _isDcClip = url => /^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/channels\/|^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//i.test(String(url));
+// 🎬 film z Discorda: świeży adres od Workera (adresy plików Discorda wygasają) → odtwarzacz na stronie
+async function playDcClip(id) {
+  const box = document.getElementById('clip-' + id); if(!box) return;
+  box.innerHTML = '<div style="font-size:.78rem;color:var(--muted)">⏳</div>';
+  const r = await _api('/clip-media?id=' + encodeURIComponent(id), 'GET', null, {});
+  if(!r.ok || !r.url) { box.innerHTML = `<div style="font-size:.78rem;color:var(--loss)">❌ ${_h(_tr(r.error || ''))}</div>`; return; }
+  box.innerHTML = `<video src="${_h(r.url)}" controls autoplay playsinline style="width:100%;max-height:70vh;border-radius:8px;background:#000"></video>`;
+}
 function _clipEmbed(url) {
   const yt = url.match(/(?:youtu\.be\/|v=|shorts\/)([\w-]{11})/);
   if(yt) return `https://www.youtube.com/embed/${yt[1]}`;
@@ -10003,7 +10012,7 @@ function openClips(k) {
   m.querySelector('.modal').innerHTML = _fxHead('clips-modal', `🎬 Akcje — ${_h(s ? s.team1 + ' vs ' + s.team2 : 'mecz')}`) + `
     <div style="display:flex;flex-direction:column;gap:.7rem;max-height:55vh;overflow-y:auto;margin-bottom:1rem">
       ${list.map(c => {
-        const emb = _clipEmbed(c.url);
+        const emb = _clipEmbed(c.url), dc = _isDcClip(c.url);
         return `<div style="border:1px solid var(--border);border-radius:10px;padding:.6rem .75rem">
           <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
             <b style="flex:1">${_h(c.title || 'Akcja')}</b>
@@ -10012,15 +10021,16 @@ function openClips(k) {
             ${isAdmin || c.by?.id === discordUser?.id ? `<button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .4rem" onclick="deleteClip('${c.id}','${k}')">🗑</button>` : ''}
           </div>
           <div id="clip-${c.id}" style="margin-top:.45rem">
-            ${emb ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="document.getElementById('clip-${c.id}').innerHTML='<iframe src=&quot;${emb}&quot; style=&quot;width:100%;aspect-ratio:16/9;border:0;border-radius:8px&quot; allowfullscreen></iframe>'">▶ Odtwórz</button>` : ''}
+            ${dc ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="playDcClip('${c.id}')">▶ ${_g('Odtwórz', 'Play')}</button>` : emb ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="document.getElementById('clip-${c.id}').innerHTML='<iframe src=&quot;${emb}&quot; style=&quot;width:100%;aspect-ratio:16/9;border:0;border-radius:8px&quot; allowfullscreen></iframe>'">▶ ${_g('Odtwórz', 'Play')}</button>` : ''}
             <a href="${_h(c.url)}" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--accent);margin-left:.4rem">otwórz ↗</a>
           </div>
         </div>`;
       }).join('') || '<div style="color:var(--muted);text-align:center;padding:1rem">Jeszcze nikt nie dodał akcji z tego meczu</div>'}
     </div>
     <div style="border-top:1px solid var(--border);padding-top:.8rem">
-      <label style="${_MODAL_LBL}">Dodaj akcję (YouTube, Twitch, Medal, Streamable, X, TikTok)</label>
-      <input id="clip-url" placeholder="https://…" style="${_MODAL_INP};margin-bottom:.45rem">
+      <label style="${_MODAL_LBL}">${_g('Dodaj akcję (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)', 'Add a highlight (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)')}</label>
+      <div style="font-size:.72rem;color:var(--muted);margin:-.15rem 0 .35rem">💬 ${_g('Film na Discordzie? Prawy klik na wiadomość z filmem → <b>Kopiuj link do wiadomości</b> i wklej tutaj.', 'Video on Discord? Right-click the message with the video → <b>Copy Message Link</b> and paste it here.')}</div>
+      <input id="clip-url" placeholder="https://discord.com/channels/… / https://youtu.be/…" style="${_MODAL_INP};margin-bottom:.45rem">
       <input id="clip-title" maxlength="80" placeholder="Opis, np. Wsad nad dwoma obrońcami" style="${_MODAL_INP};margin-bottom:.6rem">
       <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="addClip('${k}')">➕ Dodaj</button></div>
     </div>`;
