@@ -2752,8 +2752,9 @@ function applyAliasesToMatch(match) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
+  try { if(window._navReady && !window._navFromPop) { const cur = (document.querySelector('.view.active')?.id || '').replace(/^view-/, ''); if(cur && cur !== id) history.pushState({ v: id }, '', location.pathname + location.search); } } catch(e) {}
   // link z adresu (np. #multistream, #kolekcja) obsłużony — przy przejściu na inny widok czyścimy adres, żeby odświeżenie nie wracało do linku
-  try { const h = location.hash.replace('#', ''); if(h && !h.startsWith('bin=') && !h.startsWith('{') && window._routeHandled && h !== id) history.replaceState(null, '', location.pathname + location.search); } catch(e) {}
+  try { const h = location.hash.replace('#', ''); if(h && !h.startsWith('bin=') && !h.startsWith('{') && window._routeHandled && h !== id) history.replaceState(history.state, '', location.pathname + location.search); } catch(e) {}
   try { _gmNavSync(); } catch(e) {}
   if(id === 'gm' && typeof _gmVisible === 'function' && !_gmVisible()) id = 'dashboard';
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
@@ -6997,8 +6998,10 @@ function _ssCard(ctx, s, groupName) {
   const mineSide = ctx.myTeam && [s.team1, s.team2].map(x => String(x).toLowerCase()).includes(ctx.myTeam.toLowerCase());
   const teamCol = (side, align) => `
     <div style="flex:1;min-width:0;text-align:${align};display:flex;flex-direction:column;align-items:${align === 'right' ? 'flex-end' : 'flex-start'};gap:.3rem">
+      <div ${ctx.demo ? '' : `onclick="openTeamModal(this.dataset.t)" data-t="${_h(s[side])}" title="${_g('Karta drużyny', 'Team card')}"`} style="display:flex;flex-direction:column;align-items:inherit;gap:.3rem;${ctx.demo ? '' : 'cursor:pointer'}">
       ${teamLogo(s[side], 38, '.85rem')}
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.05rem;${res && res.winnerSide === side ? 'color:var(--accent)' : ''};line-height:1.15;word-break:break-word">${_ssTeamName(ctx, s[side])}</div>
+      </div>
       ${_ssVoteBtn(ctx, s, side)}
     </div>`;
 
@@ -13829,9 +13832,11 @@ async function tradePropose() {
 async function tradeAct(kind, id, yes) {
   const msg = { respond: yes ? 'Przyjąć tę wymianę? Potem zatwierdzi ją admin.' : 'Odrzucić tę propozycję?', cancel: 'Anulować propozycję?', decide: yes ? 'Zatwierdzić wymianę? Gracze od razu zmienią drużyny, a transfery zostaną ogłoszone.' : 'Odrzucić wymianę?' }[kind];
   if(!confirm(msg)) return;
+  showToast(kind === 'decide' ? (yes ? '⏳ Zatwierdzam wymianę…' : '⏳ Odrzucam…') : '⏳ Zapisuję…', 'info');
+  document.querySelectorAll(`[onclick*="tradeAct("][onclick*="${id}"]`).forEach(b => { b.disabled = true; });
   const r = await _api('/trades/' + kind, 'POST', { id, accept: yes, approve: yes }, kind === 'decide' ? { admin: true } : { session: true });
-  if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
-  if(kind === 'decide' && yes) { showToast('✅ Wymiana zatwierdzona i ogłoszona', 'success'); await loadData(); } else showToast('Zapisano', 'success');
+  if(!r.ok) { showToast('❌ ' + r.error, 'error'); document.querySelectorAll(`[onclick*="tradeAct("][onclick*="${id}"]`).forEach(b => { b.disabled = false; }); return; }
+  if(kind === 'decide' && yes) { showToast('✅ Wymiana zatwierdzona — składy zmienione, ogłoszenie transferów idzie na Discord', 'success'); await loadData(); } else showToast('Zapisano', 'success');
   await _tradesLoad(); renderTrades();
 }
 async function tradeWindow(open) {
@@ -13898,10 +13903,10 @@ async function galaPodcast(test) {
 async function renderJobsBox() {
   const el = document.getElementById('jobs-box'); if(!el) return;
   const r = await _api('/jobs', 'GET', null, { admin: true }); if(!r.ok) { el.innerHTML = ''; return; }
-  const L = { podcast: '🎙️ Podcast', grafiki: '🖼 Grafiki tygodnia', x: '🐦 Wpis na X', zaproszenie: '☀️ Zaproszenie' };
+  const L = { podcast: '🎙️ Podcast', grafiki: '🖼 Grafiki tygodnia', x: '🐦 Wpis na X', zaproszenie: '☀️ Zaproszenie', transfer: '🔁 Ogłoszenie transferu' };
   // najnowszy stan każdego automatu w każdej kolejce
   const seen = new Set(), rows = (r.jobs || []).filter(j => { const k = j.job + ':' + (j.week ?? ''); if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 14);
-  const fix = j => j.ok === false ? (j.job === 'podcast' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openPodcastStudio()">🎙️ Nagraj ręcznie</button>` : `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openWeekGraphics()">🖼 Wyślij ręcznie</button>`) : '';
+  const fix = j => j.ok === false && j.job === 'transfer' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openRoutesModal()">📣 Kanały</button>` : j.ok === false ? (j.job === 'podcast' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openPodcastStudio()">🎙️ Nagraj ręcznie</button>` : `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openWeekGraphics()">🖼 Wyślij ręcznie</button>`) : '';
   const bad = rows.filter(j => j.ok === false).length;
   el.innerHTML = `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">📋 AUTOMATY ${bad ? `<span style="color:var(--loss)">· ${bad} do ręcznego wywołania</span>` : ''}</div>
     ${rows.length ? rows.map(j => `<div style="display:grid;grid-template-columns:24px 1fr auto;gap:.4rem;align-items:center;font-size:.76rem;padding:.3rem 0;border-bottom:1px solid var(--border)">
@@ -25471,6 +25476,29 @@ async function _dsLaunch() {
     window[fn] = function(...args) { return _withSeasonMatches(() => orig.apply(this, args)); };
     window[fn]._seasonScoped = true;
   });
+
+// ═══ ◀ PRZYCISK „WSTECZ” (telefon / aplikacja): zamyka okna, potem wraca do poprzedniej zakładki ═══
+(function () {
+  const isOverlay = el => el && el.nodeType === 1 && (el.classList.contains('modal-overlay') || el.id === 'more-sheet' || el.id === 'gma-overlay');
+  const stack = []; let popClosing = false; window._navIgnore = 0; window._navFromPop = false;
+  const curView = () => (document.querySelector('.view.active')?.id || 'view-dashboard').replace(/^view-/, '');
+  new MutationObserver(muts => muts.forEach(m => {
+    const el = m.target; if(!isOverlay(el)) return;
+    const open = el.classList.contains('open') || (el.id === 'gma-overlay' && el.style.display !== 'none' && el.isConnected && getComputedStyle(el).display !== 'none');
+    const i = stack.indexOf(el);
+    if(open && i < 0) { stack.push(el); if(window._navReady) history.pushState({ v: curView(), modal: el.id || 'modal' }, '', location.pathname + location.search + location.hash); }
+    else if(!open && i >= 0) { stack.splice(i, 1); if(!popClosing && history.state?.modal) { window._navIgnore++; history.back(); } } // zamknięte przyciskiem ✕ — zdejmij wpis z historii
+  })).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+  window.addEventListener('popstate', e => {
+    if(window._navIgnore > 0) { window._navIgnore--; return; }
+    const top = stack[stack.length - 1];
+    if(top) { popClosing = true; try { if(top.id === 'gma-overlay' && typeof closeGmAuction === 'function') closeGmAuction(); else top.classList.remove('open'); } finally { popClosing = false; } stack.pop(); return; }
+    const v = e.state?.v || 'dashboard';
+    window._navFromPop = true; try { showView(v); } finally { window._navFromPop = false; }
+  });
+  setTimeout(() => { window._navReady = true; try { history.replaceState({ v: curView() }, '', location.pathname + location.search + location.hash); } catch(e) {} }, 3200);
+})();
+
 </script>
 
 
