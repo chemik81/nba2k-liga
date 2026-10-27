@@ -724,6 +724,37 @@
 @keyframes cpFlip{from{transform:rotateY(90deg)}to{transform:rotateY(0)}}
 body.dn-obs{background:transparent!important}body.dn-obs>*:not(.dn-ov):not(#dn-ticker){display:none!important}
 #dn-ticker{display:none}body.dn-obs #dn-ticker{display:flex;gap:1.5rem;position:fixed;left:0;right:0;bottom:0;padding:.6rem 1rem;background:rgba(5,7,13,.85);color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;font-weight:800;overflow:hidden;white-space:nowrap}
+
+/* 🧭 boczne menu (komputer) */
+#side-nav{display:none}
+@media (min-width:1024px){
+  body.side-on{padding-left:240px}
+  body.side-on.side-col{padding-left:68px}
+  body.side-on #side-nav{display:flex;flex-direction:column;gap:1px;position:fixed;top:0;left:0;bottom:0;width:240px;box-sizing:border-box;padding:14px 10px 12px;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;z-index:850;scrollbar-width:thin}
+  body.side-on.side-col #side-nav{width:68px}
+  body.side-on header nav, body.side-on header .logo, body.side-on header > a[href*="discord.gg"],
+  body.side-on #logout-btn, body.side-on #baza-btn, body.side-on #psn-map-btn, body.side-on #playoff-btn, body.side-on #team-reg-admin-btn, body.side-on #season-btn{display:none!important}
+  .sn-brand{display:flex;align-items:center;gap:.6rem;padding:.1rem .3rem .5rem}
+  .sn-brand img{width:46px;height:46px;object-fit:contain;flex-shrink:0}
+  .sn-name{display:flex;flex-direction:column;font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;letter-spacing:.5px;line-height:1.05}
+  .sn-sec{font-size:.66rem;font-weight:800;letter-spacing:1.4px;color:var(--muted);padding:.85rem .7rem .3rem;text-transform:uppercase}
+  .sn-item{display:flex;align-items:center;gap:.7rem;width:100%;min-height:40px;padding:0 .7rem;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:.9rem;font-weight:500;border-radius:9px;cursor:pointer;text-align:left;position:relative;letter-spacing:0;text-transform:none}
+  .sn-item:hover{background:var(--surface2)}
+  .sn-item.on{background:rgba(245,197,24,.13);color:var(--accent);font-weight:700}
+  .sn-ico{width:22px;text-align:center;flex-shrink:0;font-size:1.05rem}
+  .sn-lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sn-b{min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:10px;background:var(--accent);color:#111;font-size:.7rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+  .sn-b.live{background:#dc2626;color:#fff;border-radius:6px;letter-spacing:.5px}
+  .sn-b.red{background:#ef4444;color:#fff}
+  .sn-b.warn{background:#f59e0b;color:#111}
+  .sn-toggle{color:var(--muted);margin-top:.3rem}
+  body.side-col .sn-lbl, body.side-col .sn-name{display:none}
+  body.side-col .sn-sec{padding:0;height:1px;background:var(--border);margin:.55rem .4rem}
+  body.side-col .sn-sec span{display:none}
+  body.side-col .sn-item{justify-content:center;padding:0}
+  body.side-col .sn-brand{justify-content:center;padding:.1rem 0 .5rem}
+  body.side-col .sn-b{position:absolute;top:2px;right:2px;min-width:16px;height:16px;font-size:.58rem;padding:0 4px}
+}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -2621,6 +2652,7 @@ async function loadData() {
     window._dj = record.dj || null; try { djMount(); } catch(e) {}
     window._xEditors = record.xEditors || [];
     window._rivalryNames = record.rivalryNames || {};
+    setTimeout(() => { try { renderSideNav(); } catch(e) { console.warn('side nav', e); } }, 50);
     setTimeout(() => { try { _captainXNudge(); } catch(e) {} }, 1500);
     setTimeout(() => { try { _dailyRefresh(); } catch(e) {} }, 1200);
     events = record.events || []
@@ -2752,6 +2784,7 @@ function applyAliasesToMatch(match) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
+  try { _sideSync(id); } catch(e) {}
   try { if(window._navReady && !window._navFromPop) { const cur = (document.querySelector('.view.active')?.id || '').replace(/^view-/, ''); if(cur && cur !== id) history.pushState({ v: id }, '', location.pathname + location.search); } } catch(e) {}
   // link z adresu (np. #multistream, #kolekcja) obsłużony — przy przejściu na inny widok czyścimy adres, żeby odświeżenie nie wracało do linku
   try { const h = location.hash.replace('#', ''); if(h && !h.startsWith('bin=') && !h.startsWith('{') && window._routeHandled && h !== id) history.replaceState(history.state, '', location.pathname + location.search); } catch(e) {}
@@ -6859,7 +6892,7 @@ function renderSeasonSchedule() {
         ${seasonSel}
         ${ctx.demo
           ? btn('openFixtureGenerator()', '⚙ Generuj (demo)', false) + btn('endDemo()', '✕ Zakończ demo', false)
-          : isRealAdmin ? '' + btn(`openWebhookModal('achievements')`, '🎖 Osiągnięcia', false) + btn('openRoutesModal()', '📣 Kanały powiadomień', false) + btn('openRemindersStatus()', '🩺 Przypomnienia', false) + btn('startDemo()', '🧪 Demo', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
+          : isRealAdmin ? btn("openAdminHub('sezon')", '🛠 Narzędzia admina', false) + btn('openFixtureGenerator()', '⚙ Generuj terminarz', true)
           : publicDemo ? btn('startDemo()', '❓ Jak to działa? (demo)', true) : ''}
       </div>
     </div>`;
@@ -9601,7 +9634,7 @@ function renderQuickLinks() {
     ${b('_recordsEdition=undefined;openLeagueRecordsModal()', '🏛 Rekordy')}
     ${b('openChampionsHistory()', '📜 Historia mistrzów')}
     ${discordUser ? b('openMyPanel()', '👤 Mój panel') : ''}
-    ${_isLoggedInSync() ? `<span style="flex:1"></span>${b("_uo.users=null;openUsersOverview('teams')", '👥 Użytkownicy i składy')}${(() => { const n = _qualityList().length; return n ? b('openQualityReview()', `🛡 Do sprawdzenia (${n})`) : ''; })()}${b('openPodcastStudio()', '🎙 Podcast')}${pendingResults.length ? `<button onclick="openPendingResults()" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem;border-color:#f59e0b;color:#f59e0b;font-weight:800">📸 Czekające wyniki (${pendingResults.length})</button>` : b('openPendingResults()', '📸 Czekające wyniki')}${b('openTrades()', '🔁 Okno transferowe')}${b('openRules()', '📜 Regulamin terminów')}${b('openHealth()', '🩺 Stan systemu')}${b('openDjSettings()', '🎧 DJ')}${b('openXQueue()', '🐦 Kolejka X')}${b('openSuggestions()', '💡 Sugestie')}${b('openLimitedAdmin()', '🌟 Karty limitowane')}${b('openShortMaker()', '🎬 Short')}${b('openWeekGraphics()', '🖼 Podsumowanie kolejki')}${b('openTeamNameFixer()', '🔄 Nazwy drużyn')}${b('openBotCommands()', '🤖 Komendy bota')}${b('openRolesSettings()', '🎭 Role Discord')}${b('openBackups()', '💾 Kopie')}${b('openAudit()', '📝 Dziennik zmian')}${b('openPenalties()', '⚖️ Kary')}` : ''}
+    ${_isLoggedInSync() ? `<span style="flex:1"></span>${(() => { const n = _adminGroups().reduce((x, g) => x + g.badge, 0); return `<button onclick="openAdminHub()" class="btn btn-ghost" style="font-size:.76rem;padding:.35rem .75rem;${n ? 'border-color:#f59e0b;color:#f59e0b;font-weight:800' : ''}">🛠 Panel admina${n ? ' (' + n + ')' : ''}</button>`; })()}` : ''}
   </div>`;
 }
 
@@ -9973,6 +10006,7 @@ async function saveStreamLinks(k, sides) {
 }
 
 function renderLiveBanner() {
+  setTimeout(() => { try { if(document.body.classList.contains('side-on')) renderSideNav(); } catch(e) {} }, 0);
   const el = document.getElementById('live-wrap');
   if(!el) return;
   const tdy = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }), ord = x => (x.time || '99:99') + ':' + String(x.id).padStart(8, '0');
@@ -10184,6 +10218,7 @@ function _myTodo() {
   return todo;
 }
 function updateMyPanelBadge() {
+  setTimeout(() => { try { if(document.body.classList.contains('side-on')) renderSideNav(); } catch(e) {} }, 0);
   const el = document.getElementById('mypanel-badge');
   if(!el) return;
   const n = discordUser ? _myTodo().filter(t => t.urgent || t.daily).length : 0;
@@ -11226,6 +11261,7 @@ function openMoreSheet() {
     );
   }
   if(_gmVisible()) items.push({ ico: '🏆', text: currentLang === 'en' ? 'GM League' : 'Liga GM', act: `document.getElementById('more-sheet').classList.remove('open');showView('gm')` });
+  if(_isLoggedInSync()) items.push({ ico: '🛠', text: currentLang === 'en' ? 'Admin panel' : 'Panel admina', act: `document.getElementById('more-sheet').classList.remove('open');openAdminHub()` });
   items.push({ ico: '💡', text: currentLang === 'en' ? 'Send a suggestion' : 'Zgłoś sugestię', act: `document.getElementById('more-sheet').classList.remove('open');openSuggest()` });
   items.push({ ico: '🃏', text: currentLang === 'en' ? 'Card collection' : 'Kolekcja kart', act: `document.getElementById('more-sheet').classList.remove('open');showView('cards')` });
   items.push({ ico: '🏅', text: 'Liga kibiców', act: `document.getElementById('more-sheet').classList.remove('open');showView('fans')` });
@@ -15246,6 +15282,72 @@ function renderClassics() {
         <div>${teamLogo(p.b, 34, '.7rem')}<div style="font-size:.74rem;font-weight:800;margin-top:.15rem">${_h(p.b)}</div></div></div>
       <div style="font-size:.68rem;color:var(--muted);text-align:center;margin-top:.3rem">${p.n} ${_g(_plPL(p.n, 'mecz', 'mecze', 'meczów'), 'games')} · ${p.close} ${_g(_plPL(p.close, 'zacięty', 'zacięte', 'zaciętych') + ' (≤5 pkt)', 'close (≤5 pts)')}</div></div>`).join('')}</div>`;
 }
+
+// ═══ 🧭 BOCZNE MENU (komputer ≥1024 px) + 🛠 PANEL ADMINA (narzędzia w grupach) ═══
+function _adminGroups() {
+  const pend = (pendingResults || []).length; let q = 0; try { q = _qualityList().length; } catch(e) {}
+  const gm = typeof _gmVisible === 'function' && _gmVisible();
+  return [
+    { id: 'mecze', icon: '🏀', title: _g('Mecze i wyniki', 'Games & results'), items: [
+      ['➕', _g('Dodaj mecz', 'Add game'), "showView('add-match')"], ['📸', _g('Czekające wyniki', 'Pending results'), 'openPendingResults()', pend], ['🛡', _g('Do sprawdzenia', 'To review'), 'openQualityReview()', q],
+      ['📜', _g('Regulamin terminów', 'Deadline rules'), 'openRules()'], ['⚖️', _g('Kary', 'Penalties'), 'openPenalties()'], ['⏰', _g('Przypomnienia', 'Reminders'), 'openRemindersStatus()'], ['⚙', _g('Aliasy nicków', 'Nickname aliases'), "showView('aliases')"]] },
+    { id: 'sezon', icon: '📅', title: _g('Sezon i terminarz', 'Season & schedule'), items: [
+      ['⚙', _g('Generuj terminarz', 'Generate schedule'), 'openFixtureGenerator()'], ['🗂', _g('Sezony', 'Seasons'), 'openSeasonModal()'], ['🏆', 'Playoff', 'openPlayoffModal()'], ['🔄', _g('Nazwy drużyn', 'Team names'), 'openTeamNameFixer()'],
+      ['🧪', _g('Demo terminarza', 'Schedule demo'), 'startDemo()'], ...(gm ? [['🏆', 'Liga GM', "showView('gm')"]] : [])] },
+    { id: 'druzyny', icon: '👥', title: _g('Drużyny i gracze', 'Teams & players'), items: [
+      ['👥', _g('Użytkownicy i składy', 'Users & rosters'), "_uo.users=null;openUsersOverview('teams')"], ['🧢', _g('Zgłoszenia drużyn', 'Team registrations'), "goToTeamRegistrations();setRegTab('teams')"],
+      ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
+    { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
+      ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎧', 'DJ', 'openDjSettings()']] },
+    { id: 'discord', icon: '🤖', title: 'Discord', items: [
+      ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
+      ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"]] },
+    { id: 'system', icon: '🛡', title: _g('System', 'System'), items: [
+      ['🩺', _g('Stan systemu', 'System health'), 'openHealth()'], ['📝', _g('Dziennik zmian', 'Change log'), 'openAudit()'], ['💾', _g('Kopie', 'Backups'), 'openBackups()'], ['⚙', _g('Baza danych', 'Database'), 'openSetupModal()'], ['💡', _g('Sugestie', 'Suggestions'), 'openSuggestions()'], ['🔓', _g('Wyloguj admina', 'Admin log out'), 'logout()']] }
+  ].map(g => ({ ...g, badge: g.items.reduce((n, it) => n + (+it[3] || 0), 0) }));
+}
+function openAdminHub(focus) {
+  const m = _fxModal('admin-hub', 900); m.classList.add('open');
+  const G = _adminGroups();
+  m.querySelector('.modal').innerHTML = _fxHead('admin-hub', '🛠 ' + _g('Panel admina', 'Admin panel')) + `<div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.7rem">${G.map(g => `
+    <section id="ah-${g.id}" style="background:var(--surface2);border:1px solid ${g.id === focus ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:.7rem .75rem">
+      <div style="font-size:.72rem;font-weight:800;letter-spacing:1.2px;color:${g.id === focus ? 'var(--accent)' : 'var(--muted)'};margin-bottom:.4rem;text-transform:uppercase">${g.icon} ${_h(g.title)}</div>
+      ${g.items.map(([ic, label, act, n]) => `<button onclick="_fxClose('admin-hub');${_h(act)}" style="display:flex;align-items:center;gap:.6rem;width:100%;min-height:40px;padding:0 .6rem;border:none;border-radius:8px;background:transparent;color:var(--text);font-family:inherit;font-size:.86rem;text-align:left;cursor:pointer" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
+        <span style="width:20px;text-align:center">${ic}</span><span style="flex:1">${_h(label)}</span>${n ? `<span style="min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#f59e0b;color:#111;font-size:.7rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center">${n}</span>` : ''}</button>`).join('')}
+    </section>`).join('')}</div>`;
+  if(focus) setTimeout(() => document.getElementById('ah-' + focus)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
+}
+function renderSideNav() {
+  let el = document.getElementById('side-nav');
+  if(!el) { el = document.createElement('aside'); el.id = 'side-nav'; el.setAttribute('aria-label', 'Menu'); document.body.prepend(el); }
+  document.body.classList.add('side-on');
+  document.body.classList.toggle('side-col', localStorage.getItem('nba2k_side_col') === '1');
+  const cur = (document.querySelector('.view.active')?.id || 'view-dashboard').replace(/^view-/, '');
+  const faN = (freeAgents || []).filter(f => f.status === 'active').length;
+  const lw = document.getElementById('live-wrap')?.innerText || '', live = /NA ŻYWO|LIVE/i.test(lw);
+  const myN = parseInt(document.getElementById('mypanel-badge')?.textContent || '0', 10) || 0;
+  const logo = document.querySelector('header .logo img')?.src || '';
+  const it = (view, ic, label, act, badge, kind) => `<button class="sn-item${view && view === cur ? ' on' : ''}" ${view ? `data-v="${view}"` : ''} onclick="${act || `showView('${view}')`}" title="${_h(label)}"><span class="sn-ico">${ic}</span><span class="sn-lbl">${_h(label)}</span>${badge ? `<span class="sn-b ${kind || ''}">${badge}</span>` : ''}</button>`;
+  const sec = t => `<div class="sn-sec"><span>${t}</span></div>`;
+  const admin = _isLoggedInSync();
+  el.innerHTML = `<div class="sn-brand">${logo ? `<img src="${logo}" alt="">` : ''}<div class="sn-name"><b>2K PRO-AM</b><b style="color:var(--accent)">EKSTRAKLASA</b></div></div>
+    ${sec(_g('Liga', 'League'))}
+    ${it('dashboard', '🏠', 'Dashboard')}${it('schedule', '📅', _g('Terminarz', 'Schedule'))}${it('matches', '🏀', _g('Mecze', 'Games'))}${it('stats', '📊', _g('Statystyki', 'Stats'))}${it('teams', '👥', _g('Drużyny', 'Teams'))}${it('events', '🏆', _g('Drafty', 'Drafts'))}
+    ${sec(_g('Rynek', 'Market'))}
+    ${it('', '🧢', _g('Zapisy do ligi', 'League sign-ups'), "goToTeamRegistrations();setRegTab('teams')")}${it('', '🆓', _g('Wolni agenci', 'Free agents'), "goToTeamRegistrations();setRegTab('fa')", faN || '')}${it('', '🔁', _g('Transfery', 'Transfers'), "goToTeamRegistrations();setRegTab('tr')")}
+    ${sec(_g('Kibice', 'Fans'))}
+    ${it('fans', '🏅', _g('Liga kibiców', 'Fan league'))}${it('fantasy', '⭐', 'Fantasy')}${it('kordle', '🧩', '2Kordle')}${it('cards', '🃏', _g('Kolekcja kart', 'Card collection'))}${typeof _gmVisible === 'function' && _gmVisible() ? it('gm', '🏆', 'Liga GM') : ''}
+    ${sec('Media')}
+    ${it('multistream', '📺', 'Multistream', 'openMultistream()', live ? 'LIVE' : '', 'live')}${it('podcast', '🎙', 'Podcast')}${it('', '📜', _g('Kronika ligi', 'League chronicle'), 'openChronicle()')}${it('', '🏛', _g('Rekordy', 'Records'), '_recordsEdition=undefined;openLeagueRecordsModal()')}${discordUser ? it('', '🎁', _g('Mój Wrapped', 'My Wrapped'), '_wr.tab=null;openWrapped()') : ''}
+    ${admin ? sec('Admin') + _adminGroups().map(g => it('', g.icon, g.title, `openAdminHub('${g.id}')`, g.badge || '', 'warn')).join('') : ''}
+    <div style="flex:1;min-height:14px"></div>
+    ${sec(_g('Ty', 'You'))}
+    ${it('mypanel', '👤', _g('Mój panel', 'My panel'), '', myN || '', 'red')}
+    ${discordUser ? it('', '💡', _g('Zgłoś sugestię', 'Send a suggestion'), 'openSuggest()') : ''}
+    <button class="sn-item sn-toggle" onclick="localStorage.setItem('nba2k_side_col', document.body.classList.contains('side-col') ? '0' : '1'); renderSideNav()" title="${_g('Zwiń / rozwiń menu', 'Collapse / expand menu')}"><span class="sn-ico">${document.body.classList.contains('side-col') ? '»' : '«'}</span><span class="sn-lbl">${_g('Zwiń menu', 'Collapse menu')}</span></button>`;
+}
+function _sideSync(v) { document.querySelectorAll('#side-nav .sn-item[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v)); }
 
 function goToTeamRegistrations() {
   showView('dashboard');
