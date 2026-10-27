@@ -8615,7 +8615,8 @@ async function createAwards() {
   if(document.getElementById('aw-announce')?.checked) {
     await _scheduleDiscordSendR('awardsVote', { embeds: [{
       title: `🗳 Głosowanie: ${d.title || 'Nagrody Week ' + d.week}`,
-      description: chosen.map(c => `**${c.emoji} ${c.title}**\n` + c.candidates.map(x => `• ${x.label}`).join('\n')).join('\n\n') + '\n\nGłosujcie na stronie (Dashboard)! 👇',
+      description: chosen.map(c => `**${c.emoji} ${c.title}**\n` + c.candidates.map(x => `• ${x.label}`).join('\n')).join('\n\n') + '\n\nGłosujcie na stronie (Dashboard)! 👇'
+        + (res.award.endsAt ? (() => { const u = Math.floor(Date.parse(res.award.endsAt) / 1000); return `\n\n⏳ **Głosowanie trwa do <t:${u}:f>** (koniec <t:${u}:R>) — zwycięzców ogłosimy tutaj automatycznie.`; })() : ''),
       url: location.origin + location.pathname, color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
     }] });
   }
@@ -8634,8 +8635,9 @@ function renderAwardsDashboard() {
     return `<div style="background:linear-gradient(135deg,rgba(245,197,24,.10),rgba(245,197,24,.02));border:1px solid rgba(245,197,24,.4);border-radius:12px;padding:.9rem 1rem;margin-bottom:.75rem">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
         <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🗳 ${_h(a.title)}</div>
-          ${a.type === 'season' ? '<div style="font-size:.7rem;color:var(--muted)">Głos kapitana drużyny liczy się podwójnie</div>' : ''}</div>
-        ${isAdmin ? `<div style="display:flex;gap:.3rem"><button onclick="closeAwards('${a.id}')" class="btn btn-primary" style="font-size:.72rem;padding:.25rem .6rem">🔒 Zakończ i ogłoś</button>
+          ${a.type === 'season' ? '<div style="font-size:.7rem;color:var(--muted)">Głos kapitana drużyny liczy się podwójnie</div>' : ''}
+          ${a.endsAt ? `<div class="aw-cd" data-until="${_h(a.endsAt)}" style="font-size:.78rem;font-weight:700;color:var(--accent);margin-top:.15rem">${_awCdText(a.endsAt)}</div>` : ''}</div>
+        ${isAdmin ? `<div style="display:flex;gap:.3rem"><button onclick="closeAwards('${a.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .6rem" title="Głosowanie i tak zamknie się samo po 3 dniach">🔒 Zakończ teraz</button>
           <button onclick="removeAwards('${a.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .5rem">🗑</button></div>` : ''}
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.6rem">
@@ -8703,6 +8705,16 @@ async function closeAwards(id) {
   if(a.type === 'season') { try { await _scheduleDiscordSendR('awardsWinners', { content: `🎖 **${a.title}** — plansza zwycięzców` }, await _galaImage(a)); } catch(e) { console.warn('gala board', e); } }
   showToast('🏅 Głosowanie zamknięte — zwycięzcy idą na Discord (kanał „Zwycięzcy nagród tygodnia”)', 'success');
 }
+// ⏳ licznik do końca głosowania (zamyka się samo po 3 dniach)
+function _awCdText(until) {
+  const ms = Date.parse(until) - Date.now(), en = currentLang === 'en';
+  if(ms <= 0) return en ? '⏳ Voting is closing — winners coming soon' : '⏳ Głosowanie się zamyka — zwycięzcy za chwilę';
+  const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+  const left = d ? (en ? `${d} d ${h} h` : `${d} ${d === 1 ? 'dzień' : 'dni'} ${h} godz.`) : h ? (en ? `${h} h ${m} min` : `${h} godz. ${m} min`) : `${m} min`;
+  const when = new Date(until).toLocaleString(en ? 'en-GB' : 'pl-PL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  return en ? `⏳ Voting ends in ${left} (${when})` : `⏳ Koniec głosowania za ${left} (${when})`;
+}
+setInterval(() => document.querySelectorAll('.aw-cd').forEach(el => { el.textContent = _awCdText(el.dataset.until); }), 30000);
 async function announceAwards(id) {
   const r = await _api('/awards', 'PATCH', { id, announce: true }, { admin: true });
   showToast(r.ok ? '🏅 Zwycięzcy ogłoszeni na Discordzie' : '❌ ' + (r.error || 'Nie udało się'), r.ok ? 'success' : 'error');
