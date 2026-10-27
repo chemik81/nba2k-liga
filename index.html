@@ -15096,7 +15096,7 @@ async function cardsOpen() {
   const r = await _api('/cards/open', 'POST', {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
-  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
+  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
     document.getElementById('cp-' + i).innerHTML = `<div style="animation:cpFlip .6s;text-align:center">${img ? `<img src="${img}" style="width:180px;border-radius:12px;box-shadow:0 0 24px ${_TIER_COL[c.tier]}">` : `<div style="height:225px;border:2px solid ${_TIER_COL[c.tier]};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800">${_h(c.name)}</div>`}
       <div style="font-size:.76rem;margin-top:.25rem">${c.tier === 'limited' ? `<b style="color:#f5c518">🌟 ${_h(c.label || '')}</b>` : _TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
   window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {} setTimeout(() => streakLoad().catch(() => {}), 1500);
@@ -15181,9 +15181,33 @@ async function karnetClaim(id) {
 async function karnetMount() { const k = await karnetLoad(); document.querySelectorAll('.karnet-slot').forEach(el => el.innerHTML = karnetHtml(k)); try { updateMyPanelBadge(); } catch(e) {} }
 
 // ═══ 🌟 KARTY LIMITOWANE (kolekcja + admin) ═══
+// 🌟 karta limitowana: zwykła karta gracza w złotej ramce z banerem okazji (ten sam wygląd co u bota)
+async function _pcLimitedImage(name, label) {
+  const d = _pcData(name, 'season') || _pcData(name, 'edition') || _pcData(name, 'career'); if(!d) return null;
+  const src = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true), img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+  const W = img.width, H = img.height, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'), F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'";
+  g.drawImage(img, 0, 0, W, H);
+  const gold = g.createLinearGradient(0, 0, W, H); gold.addColorStop(0, '#fff3b0'); gold.addColorStop(.3, '#f5c518'); gold.addColorStop(.55, '#a87a08'); gold.addColorStop(.8, '#f5c518'); gold.addColorStop(1, '#fff0a0');
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  g.lineWidth = 26; g.strokeStyle = gold; rr(13, 13, W - 26, H - 26, 54); g.stroke();
+  const sh = g.createLinearGradient(0, 0, W, H); sh.addColorStop(.35, 'rgba(255,255,255,0)'); sh.addColorStop(.5, 'rgba(255,240,180,.16)'); sh.addColorStop(.65, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
+  const txt = '🌟 ' + String(label || 'EDYCJA LIMITOWANA').toUpperCase(); g.font = `900 36px ${F}`;
+  { const sg = g.createLinearGradient(0, H - 150, 0, H); sg.addColorStop(0, 'rgba(10,8,3,0)'); sg.addColorStop(.35, 'rgba(10,8,3,.94)'); sg.addColorStop(1, 'rgba(10,8,3,.98)'); g.fillStyle = sg; g.save(); rr(26, H - 150, W - 52, 124, 40); g.clip(); g.fillRect(0, H - 150, W, 150); g.restore(); } // pas pod banerem (zamiast stopki)
+  const tw = Math.min(W - 120, g.measureText(txt).width + 80), bx = (W - tw) / 2, by = H - 112;
+  rr(bx, by, tw, 70, 35); g.fillStyle = '#120d02'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#f5c518'; g.stroke();
+  g.fillStyle = '#ffd84d'; g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 36; while(g.measureText(txt).width > tw - 44 && fs > 18) { fs--; g.font = `900 ${fs}px ${F}`; } g.fillText(txt, W / 2, by + 37);
+  return c.toDataURL('image/png');
+}
+async function openLimitedCard(name, label) {
+  const m = _fxModal('limcard-modal', 460); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + '<div style="color:var(--muted)">⏳</div>';
+  let url = null; try { url = await _pcLimitedImage(name, label); } catch(e) {}
+  m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + (url ? `<img src="${url}" alt="${_h(name)}" style="width:100%;border-radius:18px;display:block;box-shadow:0 0 30px rgba(245,197,24,.4)">
+    <div style="display:flex;justify-content:flex-end;margin-top:.6rem"><a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-limitowana-${_normNick(name)}.png">⬇ ${_g('Pobierz', 'Download')}</a></div>` : `<div style="color:var(--muted)">${_g('Karta będzie dostępna po pierwszym meczu gracza w sezonie.', 'The card will be available after the player\u2019s first game this season.')}</div>`);
+}
 function _limTile(c, own) {
   const o = own?.['lim:' + c.id], left = c.active ? Math.max(0, Math.ceil((Date.parse(c.until) - Date.now()) / 864e5)) : 0;
-  return `<div title="${_h(c.label)}" onclick="${o ? `openPlayerCardImg('${_h(c.name).replace(/'/g, "\\'")}')` : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
+  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
     background:${o ? 'linear-gradient(135deg,#3a2a00,#1a1405 40%,#4a3a10 60%,#1a1405)' : 'var(--surface2)'};border:2px solid ${o ? '#f5c518' : 'var(--border)'};box-shadow:${o ? '0 0 18px rgba(245,197,24,.45)' : 'none'};opacity:${o ? 1 : .55}">
     <div style="font-size:.6rem;font-weight:900;letter-spacing:1px;color:#f5c518">🌟 ${currentLang === 'en' ? 'LIMITED' : 'LIMITOWANA'}</div>
     <div style="font-size:1.6rem;margin:.3rem 0">${o ? '🏅' : '❔'}</div>
