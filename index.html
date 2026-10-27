@@ -2652,6 +2652,8 @@ async function loadData() {
     window._dj = record.dj || null; try { djMount(); } catch(e) {}
     window._xEditors = record.xEditors || [];
     window._rivalryNames = record.rivalryNames || {};
+    window._discordInviteUrl = record.discordInvite || null;
+    if(window._discordInviteUrl) document.querySelectorAll('a[href*="discord.gg/"]').forEach(a => { a.href = window._discordInviteUrl; });
     setTimeout(() => { try { renderSideNav(); } catch(e) { console.warn('side nav', e); } }, 50);
     setTimeout(() => { try { _captainXNudge(); } catch(e) {} }, 1500);
     setTimeout(() => { try { _dailyRefresh(); } catch(e) {} }, 1200);
@@ -6448,7 +6450,7 @@ function openFreeAgentModal() {
 
     <label id="fa-rules-wrap" style="display:flex;align-items:flex-start;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .8rem;margin-bottom:1.25rem;cursor:pointer;font-size:.85rem;line-height:1.4">
       <input type="checkbox" id="fa-rules" onchange="document.getElementById('fa-rules-wrap').style.borderColor='var(--border)'" style="accent-color:var(--accent);width:16px;height:16px;margin-top:.1rem;flex-shrink:0;cursor:pointer">
-      <span>${_g('Przeczytałem i akceptuję regulamin, który znajduje się na', 'I have read and accept the rules, which can be found on the')} <a href="https://discord.gg/EQ87cFkuW" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">${_g('Discordzie 2K Pro Am Ekstraklasa', '2K Pro Am Ekstraklasa Discord')}</a> <span style="color:var(--loss)">*</span></span>
+      <span>${_g('Przeczytałem i akceptuję regulamin, który znajduje się na', 'I have read and accept the rules, which can be found on the')} <a href="${_discordInvite()}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">${_g('Discordzie 2K Pro Am Ekstraklasa', '2K Pro Am Ekstraklasa Discord')}</a> <span style="color:var(--loss)">*</span></span>
     </label>
 
     <div style="display:flex;gap:.5rem;justify-content:flex-end">
@@ -11277,7 +11279,7 @@ function openMoreSheet() {
   items.push({ ico: '📜', text: 'Kronika ligi', act: `document.getElementById('more-sheet').classList.remove('open');openChronicle()` });
   items.push({ ico: '🏛', text: 'Rekordy', act: `document.getElementById('more-sheet').classList.remove('open');_recordsEdition=undefined;openLeagueRecordsModal()` });
   if(!_isStandalone()) items.push({ ico: '📲', text: 'Zainstaluj aplikację', act: `document.getElementById('more-sheet').classList.remove('open');installApp()` });
-  items.push({ ico: '💬', text: 'Discord ligi', href: 'https://discord.gg/EQ87cFkuW' });
+  items.push({ ico: '💬', text: 'Discord ligi', href: _discordInvite() });
   items.push({ ico: document.documentElement.getAttribute('data-theme') === 'light' ? '🌙' : '☀️', text: 'Motyw', act: `toggleTheme();openMoreSheet()` });
   const langs = ['pl', 'en'];
   // bez dubli: ta sama zakładka może trafić z górnego menu i z listy skrótów — zostaje pierwsza pozycja
@@ -15312,6 +15314,24 @@ function renderClassics() {
 }
 
 // ═══ 🧭 BOCZNE MENU (komputer ≥1024 px) + 🛠 PANEL ADMINA (narzędzia w grupach) ═══
+function _discordInvite() { return window._discordInviteUrl || 'https://discord.gg/EQ87cFkuW'; }
+async function openDiscordInvite() {
+  const m = _fxModal('dinv-modal', 520); m.classList.add('open');
+  const cur = window._discordInviteUrl;
+  m.querySelector('.modal').innerHTML = _fxHead('dinv-modal', '🔗 Zaproszenie na Discord') + `<div data-notr style="font-size:.82rem">
+    <div style="margin-bottom:.7rem">Ten link jest używany w całej stronie (przycisk Discord, formularz wolnego agenta, menu Więcej). Obecny: ${cur ? `<a href="${_h(cur)}" target="_blank" rel="noopener" style="color:var(--accent)">${_h(cur)}</a>` : '<b style="color:var(--loss)">nieustawiony — działa stary link, który wygasł</b>'}</div>
+    <button class="btn btn-primary" onclick="dinvSave({create:true, channel:document.getElementById('dinv-ch').value.trim()})">🤖 Utwórz stałe zaproszenie botem</button>
+    <div style="display:flex;gap:.4rem;align-items:center;margin:.45rem 0 .9rem"><input id="dinv-ch" placeholder="ID kanału (opcjonalnie — domyślnie kanał zasad/powitalny)" style="${_MODAL_INP};font-size:.76rem"></div>
+    <label style="${_MODAL_LBL}">…albo wklej własny link</label>
+    <div style="display:flex;gap:.4rem"><input id="dinv-link" placeholder="https://discord.gg/…" style="${_MODAL_INP}"><button class="btn btn-ghost" onclick="dinvSave({link:document.getElementById('dinv-link').value})">💾</button></div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.5rem">Zaproszenie utworzone przez bota nie wygasa i nie ma limitu użyć. Zwykłe linki z Discorda wygasają domyślnie po 7 dniach — wtedy kod może trafić do innego serwera.</div></div>`;
+}
+async function dinvSave(body) {
+  const r = await _api('/discord-invite', 'POST', body, { admin: true });
+  if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
+  window._discordInviteUrl = r.link; document.querySelectorAll('a[href*="discord.gg/"]').forEach(a => { a.href = r.link; });
+  showToast('🔗 Zapisano: ' + r.link, 'success'); openDiscordInvite();
+}
 function _adminGroups() {
   const pend = (pendingResults || []).length; let q = 0; try { q = _qualityList().length; } catch(e) {}
   const gm = typeof _gmVisible === 'function' && _gmVisible();
@@ -15330,7 +15350,7 @@ function _adminGroups() {
       ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
-      ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"]] },
+      ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
     { id: 'system', icon: '🛡', title: _g('System', 'System'), items: [
       ['🩺', _g('Stan systemu', 'System health'), 'openHealth()'], ['📝', _g('Dziennik zmian', 'Change log'), 'openAudit()'], ['💾', _g('Kopie', 'Backups'), 'openBackups()'], ['⚙', _g('Baza danych', 'Database'), 'openSetupModal()'], ['💡', _g('Sugestie', 'Suggestions'), 'openSuggestions()'], ['🔓', _g('Wyloguj admina', 'Admin log out'), 'logout()']] }
   ].map(g => ({ ...g, badge: g.items.reduce((n, it) => n + (+it[3] || 0), 0) }));
