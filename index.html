@@ -13808,9 +13808,9 @@ async function pcRender(name) {
   let url;
   try { url = await _pcImage(d, lang, wantAv); } catch(e) { url = await _pcImage(d, lang, false); } // obrazek bez zgody CORS → karta bez avatara
   window._pcLast = { url, name: d.name, lang };
-  const holoP = { GALAKTYKA: 1, DIAMENT: .8, 'ZŁOTO': .55, SREBRO: .35, 'BRĄZ': .25 }[d.tier?.[0]] ?? .4;
-  setTimeout(() => _holoBind(document.getElementById('pc-out')), 0);
-  document.getElementById('pc-out').innerHTML = `<div style="max-width:420px;margin:0 auto">${_holoHtml(url, d.name, holoP)}</div>
+  const holoP = { GALAKTYKA: 1, DIAMENT: .75 }[d.tier?.[0]] || 0; // holo tylko dla rzadkich kart: galaktyka i diament (oraz limitowane)
+  if(holoP) setTimeout(() => _holoBind(document.getElementById('pc-out')), 0);
+  document.getElementById('pc-out').innerHTML = `<div style="max-width:420px;margin:0 auto">${holoP ? _holoHtml(url, d.name, holoP) : `<img src="${url}" alt="${_h(d.name)}" style="width:100%;border-radius:14px;display:block">`}</div>
     <div style="display:flex;gap:.4rem;justify-content:center;margin-top:.6rem;flex-wrap:wrap">
       <a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-${_normNick(d.name)}-${lang}.png">⬇ Pobierz</a>
       <button class="btn btn-ghost" style="font-size:.74rem" onclick="openCardCompare(this.dataset.n,'')" data-n="${_h(d.name)}">⚖️ ${_g('Porównaj', 'Compare')}</button>
