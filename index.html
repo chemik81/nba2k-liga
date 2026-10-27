@@ -755,6 +755,16 @@ body.dn-obs{background:transparent!important}body.dn-obs>*:not(.dn-ov):not(#dn-t
   body.side-col .sn-brand{justify-content:center;padding:.1rem 0 .5rem}
   body.side-col .sn-b{position:absolute;top:2px;right:2px;min-width:16px;height:16px;font-size:.58rem;padding:0 4px}
 }
+
+/* ✨ karty holo */
+.holo{perspective:900px;touch-action:pan-y}
+.holo-in{position:relative;border-radius:18px;overflow:hidden;transform:rotateX(var(--rx)) rotateY(var(--ry));transition:transform .12s ease-out;box-shadow:0 18px 40px rgba(0,0,0,.45);will-change:transform}
+.holo-in img{display:block;width:100%;border-radius:18px}
+.holo-shine{position:absolute;inset:0;pointer-events:none;mix-blend-mode:color-dodge;opacity:calc(var(--o) * .55);transition:opacity .2s;
+  background:linear-gradient(115deg,transparent 20%,rgba(255,0,140,.55) 32%,rgba(255,220,0,.55) 40%,rgba(0,255,180,.55) 48%,rgba(0,140,255,.55) 56%,rgba(170,0,255,.5) 64%,transparent 76%);
+  background-size:250% 250%;background-position:var(--mx) var(--my)}
+.holo-glare{position:absolute;inset:0;pointer-events:none;opacity:var(--o);transition:opacity .2s;mix-blend-mode:overlay;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.55),rgba(255,255,255,0) 45%)}
+@media (prefers-reduced-motion: reduce){.holo-in{transform:none!important}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -13614,14 +13624,22 @@ const SITE_HOST = (location.host || 'chemikleagues.com').replace(/^www\./, '');
 const __mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
 const __encode = async c => c.toDataURL('image/png');
 // <<PCARD — karta gracza (wspólny kod strony i bota)
+// zakres „tydzień”: 'week:<sezon>:<numer kolejki>' — mecze z okna tej kolejki
+function _pcWeek(scope) {
+  if(typeof scope !== 'string' || !scope.startsWith('week:')) return null;
+  const [, s2, w] = scope.split(':'), sid2 = s2 || null, sch = (typeof schedule !== 'undefined' ? schedule : []).find(x => (x.seasonId || null) === sid2 && +x.week === +w && x.weekStart);
+  if(!sch) return null; const e = new Date(sch.weekStart + 'T12:00:00Z'); e.setUTCDate(e.getUTCDate() + 7);
+  return { sid: sid2, w: +w, from: sch.weekStart, to: e.toISOString().slice(0, 10) };
+}
 function _pcData(name, scope = 'season') {
   const key = _normNick(name), sid = currentSeasonId || null;
   const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
   const all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
   const mine = (pool) => pool.map(m => { for(const [t, o] of [[m.team1, m.team2], [m.team2, m.team1]]) { const p = (t.players || []).find(x => _normNick(x.name) === key); if(p) return { p, t, o, m, won: +t.score > +o.score }; } return null; }).filter(Boolean);
-  const pool = scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
+  const wk = _pcWeek(scope);
+  const pool = wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
   const games = mine(pool);
-  const scopeLbl = scope === 'career' ? 'KARIERA|CAREER' : scope === 'edition' ? edOf(sid) || 'EDYCJA|EDITION' : _seasonName(sid) || 'SEZON|SEASON';
+  const scopeLbl = wk ? `WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}|WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}` : scope === 'career' ? 'KARIERA|CAREER' : scope === 'edition' ? edOf(sid) || 'EDYCJA|EDITION' : _seasonName(sid) || 'SEZON|SEASON';
   if(!games.length) return null;
   const sum = f => games.reduce((n, g) => n + (+g.p[f] || 0), 0), gp = games.length;
   const teams = {}; games.forEach(g => { teams[g.t.name] = (teams[g.t.name] || 0) + 1; });
@@ -13650,7 +13668,8 @@ let _pcLgCache = {};
 function _pcLeague(scope) {
   const sid = currentSeasonId || null, all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
   const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
-  const pool = scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
+  const wk = _pcWeek(scope);
+  const pool = wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
   const key = scope + ':' + sid + ':' + all.length; if(_pcLgCache[key]) return _pcLgCache[key];
   const P = {};
   pool.forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => (t.players || []).forEach(p => {
@@ -13789,7 +13808,9 @@ async function pcRender(name) {
   let url;
   try { url = await _pcImage(d, lang, wantAv); } catch(e) { url = await _pcImage(d, lang, false); } // obrazek bez zgody CORS → karta bez avatara
   window._pcLast = { url, name: d.name, lang };
-  document.getElementById('pc-out').innerHTML = `<img src="${url}" style="width:100%;max-width:420px;border-radius:14px">
+  const holoP = { GALAKTYKA: 1, DIAMENT: .8, 'ZŁOTO': .55, SREBRO: .35, 'BRĄZ': .25 }[d.tier?.[0]] ?? .4;
+  setTimeout(() => _holoBind(document.getElementById('pc-out')), 0);
+  document.getElementById('pc-out').innerHTML = `<div style="max-width:420px;margin:0 auto">${_holoHtml(url, d.name, holoP)}</div>
     <div style="display:flex;gap:.4rem;justify-content:center;margin-top:.6rem;flex-wrap:wrap">
       <a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-${_normNick(d.name)}-${lang}.png">⬇ Pobierz</a>
       <button class="btn btn-ghost" style="font-size:.74rem" onclick="openCardCompare(this.dataset.n,'')" data-n="${_h(d.name)}">⚖️ ${_g('Porównaj', 'Compare')}</button>
@@ -15096,7 +15117,7 @@ async function cardsOpen() {
   const r = await _api('/cards/open', 'POST', {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
-  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
+  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
     document.getElementById('cp-' + i).innerHTML = `<div style="animation:cpFlip .6s;text-align:center">${img ? `<img src="${img}" style="width:180px;border-radius:12px;box-shadow:0 0 24px ${_TIER_COL[c.tier]}">` : `<div style="height:225px;border:2px solid ${_TIER_COL[c.tier]};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800">${_h(c.name)}</div>`}
       <div style="font-size:.76rem;margin-top:.25rem">${c.tier === 'limited' ? `<b style="color:#f5c518">🌟 ${_h(c.label || '')}</b>` : _TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
   window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {} setTimeout(() => streakLoad().catch(() => {}), 1500);
@@ -15182,8 +15203,8 @@ async function karnetMount() { const k = await karnetLoad(); document.querySelec
 
 // ═══ 🌟 KARTY LIMITOWANE (kolekcja + admin) ═══
 // 🌟 karta limitowana: zwykła karta gracza w złotej ramce z banerem okazji (ten sam wygląd co u bota)
-async function _pcLimitedImage(name, label) {
-  const d = _pcData(name, 'season') || _pcData(name, 'edition') || _pcData(name, 'career'); if(!d) return null;
+async function _pcLimitedImage(name, label, scope) {
+  const d = (scope && _pcData(name, scope)) || _pcData(name, 'season') || _pcData(name, 'edition') || _pcData(name, 'career'); if(!d) return null;
   const src = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true), img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
   const W = img.width, H = img.height, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'), F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'";
   g.drawImage(img, 0, 0, W, H);
@@ -15198,16 +15219,34 @@ async function _pcLimitedImage(name, label) {
   g.fillStyle = '#ffd84d'; g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 36; while(g.measureText(txt).width > tw - 44 && fs > 18) { fs--; g.font = `900 ${fs}px ${F}`; } g.fillText(txt, W / 2, by + 37);
   return c.toDataURL('image/png');
 }
-async function openLimitedCard(name, label) {
+async function openLimitedCard(name, label, scope) {
   const m = _fxModal('limcard-modal', 460); m.classList.add('open');
   m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + '<div style="color:var(--muted)">⏳</div>';
-  let url = null; try { url = await _pcLimitedImage(name, label); } catch(e) {}
-  m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + (url ? `<img src="${url}" alt="${_h(name)}" style="width:100%;border-radius:18px;display:block;box-shadow:0 0 30px rgba(245,197,24,.4)">
-    <div style="display:flex;justify-content:flex-end;margin-top:.6rem"><a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-limitowana-${_normNick(name)}.png">⬇ ${_g('Pobierz', 'Download')}</a></div>` : `<div style="color:var(--muted)">${_g('Karta będzie dostępna po pierwszym meczu gracza w sezonie.', 'The card will be available after the player\u2019s first game this season.')}</div>`);
+  let url = null; try { url = await _pcLimitedImage(name, label, scope); } catch(e) {}
+  setTimeout(() => _holoBind(m), 0);
+  m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + (url ? `${_holoHtml(url, name, 1)}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.6rem;gap:.5rem"><span style="font-size:.7rem;color:var(--muted)">✨ ${_g('Porusz kursorem albo przechyl telefon', 'Move the cursor or tilt your phone')}</span><a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-limitowana-${_normNick(name)}.png">⬇ ${_g('Pobierz', 'Download')}</a></div>` : `<div style="color:var(--muted)">${_g('Karta będzie dostępna po pierwszym meczu gracza w sezonie.', 'The card will be available after the player\u2019s first game this season.')}</div>`);
 }
+// ✨ HOLO — karta przechyla się za kursorem / telefonem, po powierzchni przesuwa się tęczowy połysk (jak karty holo w FIFA)
+function _holoHtml(src, alt, power) {
+  return `<div class="holo" data-p="${power}" style="--mx:50%;--my:50%;--rx:0deg;--ry:0deg;--o:0"><div class="holo-in"><img src="${src}" alt="${_h(alt || '')}"><div class="holo-shine"></div><div class="holo-glare"></div></div></div>`;
+}
+function _holoBind(root) {
+  (root || document).querySelectorAll('.holo:not([data-b])').forEach(el => {
+    el.dataset.b = '1'; const p = +el.dataset.p || .5;
+    const set = (x, y) => { el.style.setProperty('--mx', (x * 100) + '%'); el.style.setProperty('--my', (y * 100) + '%'); el.style.setProperty('--rx', ((.5 - y) * 22 * p) + 'deg'); el.style.setProperty('--ry', ((x - .5) * 26 * p) + 'deg'); el.style.setProperty('--o', .35 + .65 * p); };
+    el.addEventListener('pointermove', e => { const r = el.getBoundingClientRect(); set((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); });
+    el.addEventListener('pointerleave', () => { el.style.setProperty('--rx', '0deg'); el.style.setProperty('--ry', '0deg'); el.style.setProperty('--o', 0); });
+    if(window.DeviceOrientationEvent && matchMedia('(pointer: coarse)').matches) { // telefon: przechylenie urządzenia
+      const h = e => { if(!el.isConnected) { window.removeEventListener('deviceorientation', h); return; } if(e.gamma == null) return; set(Math.max(0, Math.min(1, .5 + e.gamma / 50)), Math.max(0, Math.min(1, .5 + (e.beta - 45) / 50))); };
+      window.addEventListener('deviceorientation', h);
+    }
+  });
+}
+
 function _limTile(c, own) {
   const o = own?.['lim:' + c.id], left = c.active ? Math.max(0, Math.ceil((Date.parse(c.until) - Date.now()) / 864e5)) : 0;
-  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
+  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l, this.dataset.s)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" data-s="${c.week ? _h('week:' + (c.seasonId || '') + ':' + c.week) : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
     background:${o ? 'linear-gradient(135deg,#3a2a00,#1a1405 40%,#4a3a10 60%,#1a1405)' : 'var(--surface2)'};border:2px solid ${o ? '#f5c518' : 'var(--border)'};box-shadow:${o ? '0 0 18px rgba(245,197,24,.45)' : 'none'};opacity:${o ? 1 : .55}">
     <div style="font-size:.6rem;font-weight:900;letter-spacing:1px;color:#f5c518">🌟 ${currentLang === 'en' ? 'LIMITED' : 'LIMITOWANA'}</div>
     <div style="font-size:1.6rem;margin:.3rem 0">${o ? '🏅' : '❔'}</div>
