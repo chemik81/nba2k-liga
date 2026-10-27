@@ -8664,6 +8664,7 @@ function renderAwardsDashboard() {
   const winners = lastClosed && lastClosed.winners ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .8rem;margin-bottom:.75rem;font-size:.8rem">
       <b>🏅 ${_h(lastClosed.title)}:</b>
       ${lastClosed.categories.map(c => lastClosed.winners[c.key] ? `<span>${c.emoji || ''} ${_h(c.title)}: <b style="color:var(--accent)">${_h(lastClosed.winners[c.key].label)}</b></span>` : '').join('<span style="color:var(--muted)">·</span>')}
+      ${_isLoggedInSync() ? `<span style="flex:1"></span><button onclick="announceAwards('${lastClosed.id}')" class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem" title="Wyślij ogłoszenie zwycięzców ponownie">📣 Ogłoś zwycięzców</button>` : ''}
     </div>` : '';
   el.innerHTML = open.map(card).join('') + (open.length ? '' : winners);
 }
@@ -8690,6 +8691,7 @@ async function removeAwards(id) {
 
 async function closeAwards(id) {
   if(!confirm('Zakończyć głosowanie i ogłosić zwycięzców na Discordzie?')) return;
+  showToast('⏳ Zamykam głosowanie…', 'info');
   const res = await _api('/awards', 'PATCH', { id, status: 'closed' }, { admin: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   const a = res.award;
@@ -8697,23 +8699,13 @@ async function closeAwards(id) {
   const i = awardsList.findIndex(x => x.id === id);
   if(i >= 0) awardsList[i] = a;
   renderAwardsDashboard();
-  const lines = await Promise.all(a.categories.filter(c => a.winners?.[c.key]).map(async c => {
-    const w = a.winners[c.key];
-    const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'award', data: { label: c.title, holder: w.label, week: a.week, value: w.team, names: [w.label, w.team] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
-    return { name: `${c.emoji || '🏅'} ${c.title}`, value: _trunc(`**${w.label}**${w.team ? ' (' + w.team + ')' : ''} · ${w.votes} ${_plVotes(w.votes)}${fl?.line ? '\n*' + fl.line + '*' : ''}`, 1020) };
-  }));
-  const ok = await _scheduleDiscordSendR('awardsWinners', { embeds: [{
-    title: `🏅 ${a.title} — zwycięzcy`, fields: [...(lines.length ? lines : [{ name: 'Brak głosów', value: 'Nikt nie zagłosował 😢' }]),
-      ...(a.type === 'season' && _galaCandidates().team5.length ? [{ name: '🏀 Drużyna sezonu', value: _galaCandidates().team5.map(x => `• **${x.name}** (${x.team})`).join('\n') }] : [])],
-    color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
-  }] });
+  // ogłoszenie zwycięzców (i zwycięski klip) wysyła Worker w tle; tu tylko plansza Gali (obrazek) przy nagrodach sezonu
   if(a.type === 'season') { try { await _scheduleDiscordSendR('awardsWinners', { content: `🎖 **${a.title}** — plansza zwycięzców` }, await _galaImage(a)); } catch(e) { console.warn('gala board', e); } }
-  // 🎬 zwycięski klip — osobna wiadomość z linkiem, żeby Discord pokazał film
-  for(const c of a.categories.filter(c => c.key === 'clip' && a.winners?.[c.key])) {
-    const w = a.winners[c.key], clip = clipsList.find(x => 'c' + x.id === String(w.id) || x.title === w.label);
-    if(clip?.url) await _scheduleDiscordSendR('awardsWinners', { content: `${c.emoji || '🎬'} **${c.title}: ${clip.title || w.label}**${(clip.teams || []).length ? ` · ${clip.teams.map(t => _emo(t) + t).join(' vs ')}` : ''}${clip.player ? ` · ${clip.player}` : ''}\n${clip.url}` });
-  }
-  showToast(ok ? '🏅 Zwycięzcy ogłoszeni' : '⚠ Głosowanie zamknięte, ale Discord nie przyjął wiadomości', ok ? 'success' : 'info');
+  showToast('🏅 Głosowanie zamknięte — zwycięzcy idą na Discord (kanał „Zwycięzcy nagród tygodnia”)', 'success');
+}
+async function announceAwards(id) {
+  const r = await _api('/awards', 'PATCH', { id, announce: true }, { admin: true });
+  showToast(r.ok ? '🏅 Zwycięzcy ogłoszeni na Discordzie' : '❌ ' + (r.error || 'Nie udało się'), r.ok ? 'success' : 'error');
 }
 
 // ═══ 📊 POWER RANKING ════════════════════════════════════════════
@@ -13939,10 +13931,10 @@ async function galaPodcast(test) {
 async function renderJobsBox() {
   const el = document.getElementById('jobs-box'); if(!el) return;
   const r = await _api('/jobs', 'GET', null, { admin: true }); if(!r.ok) { el.innerHTML = ''; return; }
-  const L = { podcast: '🎙️ Podcast', grafiki: '🖼 Grafiki tygodnia', x: '🐦 Wpis na X', zaproszenie: '☀️ Zaproszenie', transfer: '🔁 Ogłoszenie transferu' };
+  const L = { podcast: '🎙️ Podcast', grafiki: '🖼 Grafiki tygodnia', x: '🐦 Wpis na X', zaproszenie: '☀️ Zaproszenie', transfer: '🔁 Ogłoszenie transferu', nagrody: '🏅 Zwycięzcy nagród' };
   // najnowszy stan każdego automatu w każdej kolejce
   const seen = new Set(), rows = (r.jobs || []).filter(j => { const k = j.job + ':' + (j.week ?? ''); if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 14);
-  const fix = j => j.ok === false && j.job === 'transfer' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openRoutesModal()">📣 Kanały</button>` : j.ok === false ? (j.job === 'podcast' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openPodcastStudio()">🎙️ Nagraj ręcznie</button>` : `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openWeekGraphics()">🖼 Wyślij ręcznie</button>`) : '';
+  const fix = j => j.ok === false && (j.job === 'transfer' || j.job === 'nagrody') ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openRoutesModal()">📣 Kanały</button>` : j.ok === false ? (j.job === 'podcast' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openPodcastStudio()">🎙️ Nagraj ręcznie</button>` : `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openWeekGraphics()">🖼 Wyślij ręcznie</button>`) : '';
   const bad = rows.filter(j => j.ok === false).length;
   el.innerHTML = `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">📋 AUTOMATY ${bad ? `<span style="color:var(--loss)">· ${bad} do ręcznego wywołania</span>` : ''}</div>
     ${rows.length ? rows.map(j => `<div style="display:grid;grid-template-columns:24px 1fr auto;gap:.4rem;align-items:center;font-size:.76rem;padding:.3rem 0;border-bottom:1px solid var(--border)">
