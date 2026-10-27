@@ -6395,7 +6395,7 @@ function openFreeAgentModal() {
   }
   const box = m.querySelector('.modal');
   const close = `<button class="modal-close" onclick="document.getElementById('fa-modal').classList.remove('open')">&#x2715;</button>`;
-  const title = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px;margin-bottom:1.1rem">🆓 Zgłoszenie — wolny agent</div>`;
+  const title = `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:1px;margin-bottom:1.1rem">🆓 ${_g('Zgłoszenie — wolny agent', 'Listing — free agent')}</div>`;
 
   if(!discordUser || !discordUser.session) {
     box.innerHTML = close + title + `
@@ -6421,39 +6421,39 @@ function openFreeAgentModal() {
       <div style="font-size:.88rem;font-weight:600">${_h(discordUser.name)}</div>
     </div>
 
-    <div style="margin-bottom:.9rem"><label style="${lbl}">Pozycja preferowana <span style="color:var(--loss)">*</span></label>
+    <div style="margin-bottom:.9rem"><label style="${lbl}">${_g('Pozycja preferowana', 'Preferred position')} <span style="color:var(--loss)">*</span></label>
       <div id="fa-pos1" style="display:flex;gap:.35rem;flex-wrap:wrap">${_faPosButtons(1)}</div></div>
-    <div style="margin-bottom:.9rem"><label style="${lbl}">Druga pozycja</label>
+    <div style="margin-bottom:.9rem"><label style="${lbl}">${_g('Druga pozycja', 'Second position')}</label>
       <div id="fa-pos2" style="display:flex;gap:.35rem;flex-wrap:wrap">${_faPosButtons(2)}</div></div>
 
     <div style="display:grid;grid-template-columns:1fr 110px;gap:.6rem;margin-bottom:.9rem">
       <div><label style="${lbl}">Gamertag <span style="color:var(--loss)">*</span></label>
         <input type="text" id="fa-gamertag" maxlength="32" value="${_h(mine?.gamertag || '')}" style="${inp}"></div>
-      <div><label style="${lbl}">Platforma</label>
+      <div><label style="${lbl}">${_g('Platforma', 'Platform')}</label>
         <select id="fa-platform" style="${inp}"><option value="psn">PSN</option><option value="xbox">Xbox</option></select></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.9rem">
-      <div><label style="${lbl}">Poziom <span style="color:var(--loss)">*</span></label>
+      <div><label style="${lbl}">${_g('Poziom', 'Level')} <span style="color:var(--loss)">*</span></label>
         <select id="fa-experience" style="${inp}"><option value="">— wybierz —</option>${Object.entries(_expLabels).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
-      <div><label style="${lbl}">Sezon</label>
+      <div><label style="${lbl}">${_g('Sezon', 'Season')}</label>
         <select id="fa-season" style="${inp}">${seasonOpts}</select></div>
     </div>
 
     <div style="margin-bottom:1rem">
-      <label style="${lbl}">Opis <span id="fa-desc-count" style="letter-spacing:0;font-weight:400"></span></label>
+      <label style="${lbl}">${_g('Opis', 'Description')} <span id="fa-desc-count" style="letter-spacing:0;font-weight:400"></span></label>
       <textarea id="fa-desc" maxlength="500" rows="4" placeholder="Doświadczenie, build, dostępność w tygodniu, czego szukasz w drużynie…" style="${inp};resize:vertical;line-height:1.4"
         oninput="document.getElementById('fa-desc-count').textContent=this.value.length+'/500'">${_h(mine?.description || '')}</textarea>
     </div>
 
     <label id="fa-rules-wrap" style="display:flex;align-items:flex-start;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .8rem;margin-bottom:1.25rem;cursor:pointer;font-size:.85rem;line-height:1.4">
       <input type="checkbox" id="fa-rules" onchange="document.getElementById('fa-rules-wrap').style.borderColor='var(--border)'" style="accent-color:var(--accent);width:16px;height:16px;margin-top:.1rem;flex-shrink:0;cursor:pointer">
-      <span>Przeczytałem i akceptuję regulamin, który znajduje się na <a href="https://discord.gg/EQ87cFkuW" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">discordzie 2K Pro Am Ekstraklasa</a> <span style="color:var(--loss)">*</span></span>
+      <span>${_g('Przeczytałem i akceptuję regulamin, który znajduje się na', 'I have read and accept the rules, which can be found on the')} <a href="https://discord.gg/EQ87cFkuW" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">${_g('Discordzie 2K Pro Am Ekstraklasa', '2K Pro Am Ekstraklasa Discord')}</a> <span style="color:var(--loss)">*</span></span>
     </label>
 
     <div style="display:flex;gap:.5rem;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="document.getElementById('fa-modal').classList.remove('open')">Anuluj</button>
-      <button class="btn btn-primary" id="fa-submit-btn" onclick="submitFreeAgent()">${mine ? '💾 Zapisz zmiany' : '📢 Opublikuj'}</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('fa-modal').classList.remove('open')">${_g('Anuluj', 'Cancel')}</button>
+      <button class="btn btn-primary" id="fa-submit-btn" onclick="submitFreeAgent()">${mine ? '💾 ' + _g('Zapisz zmiany', 'Save changes') : '📢 ' + _g('Opublikuj', 'Publish')}</button>
     </div>`;
 
   document.getElementById('fa-platform').value = mine?.platform || 'psn';
@@ -6464,14 +6464,14 @@ function openFreeAgentModal() {
 }
 
 async function submitFreeAgent() {
-  if(!_faPos1) { showToast('❌ Wybierz pozycję preferowaną', 'error'); return; }
+  if(!_faPos1) { showToast('❌ ' + _g('Wybierz pozycję preferowaną', 'Pick your preferred position'), 'error'); return; }
   const gamertag = document.getElementById('fa-gamertag').value.trim();
-  if(!gamertag) { showToast('❌ Podaj gamertag', 'error'); return; }
+  if(!gamertag) { showToast('❌ ' + _g('Podaj gamertag', 'Enter your gamertag'), 'error'); return; }
   const experience = document.getElementById('fa-experience').value;
-  if(!experience) { showToast('❌ Wybierz poziom', 'error'); return; }
+  if(!experience) { showToast('❌ ' + _g('Wybierz poziom', 'Pick your level'), 'error'); return; }
   if(!document.getElementById('fa-rules').checked) {
     document.getElementById('fa-rules-wrap').style.borderColor = 'var(--loss)';
-    showToast('❌ Zaakceptuj regulamin', 'error');
+    showToast('❌ ' + _g('Zaakceptuj regulamin', 'Accept the rules'), 'error');
     return;
   }
   if(!_ensureSession()) return;
@@ -6501,7 +6501,7 @@ async function submitFreeAgent() {
   document.getElementById('fa-modal').classList.remove('open');
   _regTab = 'fa';
   renderTeamRegistrations();
-  showToast(i >= 0 ? '✅ Zgłoszenie zaktualizowane' : '✅ Opublikowano' + (res.posted ? ' · post na Discordzie' : ''), 'success');
+  showToast(i >= 0 ? '✅ ' + _g('Zgłoszenie zaktualizowane', 'Listing updated') : '✅ ' + _g('Opublikowano', 'Published') + (res.posted ? _g(' · post na Discordzie', ' · posted on Discord') : ''), 'success');
 }
 
 async function withdrawFreeAgent(id) {
@@ -14727,23 +14727,46 @@ function djMount() {
     btn = document.createElement('button'); btn.id = 'dj-fab'; btn.title = '🎧 ' + (dj.name || 'DJ');
     btn.style.cssText = 'position:fixed;left:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:880;width:48px;height:48px;border-radius:50%;border:2px solid var(--accent);background:var(--surface);color:var(--text);font-size:1.35rem;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4)';
     btn.textContent = '🎧'; btn.onclick = djToggle; document.body.appendChild(btn);
+    if(_djAuto() && !window._djAutoArmed) {
+      window._djAutoArmed = true;
+      const go = e => { ['pointerdown', 'keydown'].forEach(t => document.removeEventListener(t, go, true));
+        if(e?.target?.closest?.('#dj-fab, #dj-panel') || document.getElementById('dj-panel')) return; // klik w 🎧 obsłuży się sam
+        djToggle(); setTimeout(() => { const pn = document.getElementById('dj-panel'); if(pn && pn.dataset.min !== '1') djToggle(); }, 400); };
+      ['pointerdown', 'keydown'].forEach(t => document.addEventListener(t, go, true));
+    }
   }
 }
+function _djAuto() { try { return localStorage.getItem('nba2k_dj_auto') === '1'; } catch(e) { return false; } }
 function djToggle() {
   const dj = window._dj; let pn = document.getElementById('dj-panel');
   if(pn) { const hide = pn.dataset.min !== '1'; pn.dataset.min = hide ? '1' : '0'; pn.style.transform = hide ? 'translateY(calc(100% + 120px))' : 'none'; document.getElementById('dj-fab').style.borderColor = hide && pn.querySelector('iframe') ? 'var(--win)' : 'var(--accent)'; return; }
   const sources = [...(dj.latest?.link ? [{ url: dj.latest.link, label: '🆕 ' + dj.latest.title }] : []), ...(dj.sets || []).filter(u => u !== dj.latest?.link).map(u => ({ url: u, label: '🎵 ' + _djLabel(u) })), ...(dj.profile ? [{ url: dj.profile, label: '📀 ' + _g('Wszystkie sety', 'All sets') }] : [])];
+  let last = null; try { last = localStorage.getItem('nba2k_dj_src'); } catch(e) {}
+  const start = sources.find(x => x.url === last)?.url || sources[0]?.url;
   pn = document.createElement('div'); pn.id = 'dj-panel'; pn.dataset.min = '0'; pn.setAttribute('data-notr', '');
   pn.style.cssText = 'position:fixed;left:14px;bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:881;width:min(360px,calc(100vw - 28px));background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.5);padding:.6rem;transition:transform .25s';
   pn.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:.4rem;margin-bottom:.4rem"><b style="font-size:.85rem">🎧 ${_h(dj.name || 'DJ')}</b>
       <span style="display:flex;gap:.3rem"><button class="btn btn-ghost" style="font-size:.68rem;padding:.1rem .45rem" onclick="djToggle()" title="${_g('Zwiń — muzyka gra dalej', 'Minimise — music keeps playing')}">▾</button><button class="btn btn-ghost" style="font-size:.68rem;padding:.1rem .45rem" onclick="djClose()" title="${_g('Wyłącz', 'Turn off')}">✕</button></span></div>
-    <select id="dj-src" onchange="djPlay(this.value)" style="width:100%;font-size:.78rem;padding:.3rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);margin-bottom:.4rem">${sources.map(s => `<option value="${_h(s.url)}">${_h(s.label)}</option>`).join('')}</select>
-    <div id="dj-frame" style="border-radius:10px;overflow:hidden;min-height:120px;display:flex;align-items:center;justify-content:center;background:var(--surface2)"><button class="btn btn-primary" onclick="djPlay(document.getElementById('dj-src').value)">▶ ${_g('Odtwórz', 'Play')}</button></div>
+    <select id="dj-src" onchange="djPlay(this.value)" style="width:100%;font-size:.78rem;padding:.3rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);margin-bottom:.4rem">${sources.map(s => `<option value="${_h(s.url)}" ${s.url === start ? 'selected' : ''}>${_h(s.label)}</option>`).join('')}</select>
+    <div id="dj-frame" style="border-radius:10px;overflow:hidden;min-height:120px;background:var(--surface2)"></div>
+    <label style="display:flex;align-items:center;gap:.4rem;font-size:.74rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:.45rem 0 0;cursor:pointer"><input type="checkbox" ${_djAuto() ? 'checked' : ''} onchange="try{localStorage.setItem('nba2k_dj_auto', this.checked ? '1' : '0')}catch(e){}; showToast(this.checked ? _g('▶ Muzyka włączy się sama przy następnej wizycie (po pierwszym kliknięciu na stronie)', '▶ Music will start on your next visit (after your first click on the page)') : _g('Autostart wyłączony', 'Autoplay off'), 'success')" style="width:auto;margin:0;accent-color:var(--accent)"> ${_g('▶ Włączaj muzykę automatycznie na stronie', '▶ Play music automatically on the site')}</label>
     ${dj.profile ? `<a href="${_h(dj.profile)}" target="_blank" rel="noopener" style="display:block;font-size:.7rem;color:var(--muted);margin-top:.35rem;text-align:right">SoundCloud ↗</a>` : ''}`;
   document.body.appendChild(pn);
+  if(start) djPlay(start); // od razu gra — bez dodatkowego „Odtwórz”
 }
-function djPlay(url) { if(!url) return; document.getElementById('dj-frame').innerHTML = `<iframe width="100%" height="${/soundcloud\.com\/[^/]+\/?$/.test(url) ? 300 : 120}" scrolling="no" frameborder="no" allow="autoplay" src="${_djSrc(url)}"></iframe>`; }
-function djClose() { document.getElementById('dj-panel')?.remove(); const b = document.getElementById('dj-fab'); if(b) b.style.borderColor = 'var(--accent)'; }
+function _scApi() { return window.SC?.Widget ? Promise.resolve() : (window._scApiP = window._scApiP || new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://w.soundcloud.com/player/api.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); })); }
+function djPlay(url) {
+  if(!url) return; try { localStorage.setItem('nba2k_dj_src', url); } catch(e) {}
+  const fr = document.getElementById('dj-frame'); if(!fr) return;
+  fr.innerHTML = `<iframe id="dj-iframe" width="100%" height="${/soundcloud\.com\/[^/]+\/?$/.test(url) ? 300 : 120}" scrolling="no" frameborder="no" allow="autoplay" src="${_djSrc(url)}"></iframe>`;
+  const fab = document.getElementById('dj-fab');
+  _scApi().then(() => { const w = SC.Widget(document.getElementById('dj-iframe'));
+    w.bind(SC.Widget.Events.READY, () => w.play()); // start także przy liście setów (od pierwszego)
+    w.bind(SC.Widget.Events.PLAY, () => { if(fab) { fab.style.borderColor = 'var(--win)'; fab.textContent = '🎶'; } });
+    w.bind(SC.Widget.Events.PAUSE, () => { if(fab) { fab.style.borderColor = 'var(--accent)'; fab.textContent = '🎧'; } });
+  }).catch(() => {});
+}
+function djClose() { document.getElementById('dj-panel')?.remove(); const b = document.getElementById('dj-fab'); if(b) { b.style.borderColor = 'var(--accent)'; b.textContent = '🎧'; } }
 async function openDjSettings() {
   const r = await _api('/dj-settings', 'POST', {}, { admin: true }); if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
   const d = r.dj || {}, m = _fxModal('dj-modal', 600);
