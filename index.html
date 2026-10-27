@@ -2752,6 +2752,8 @@ function applyAliasesToMatch(match) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function showView(id) {
+  // link z adresu (np. #multistream, #kolekcja) obsłużony — przy przejściu na inny widok czyścimy adres, żeby odświeżenie nie wracało do linku
+  try { const h = location.hash.replace('#', ''); if(h && !h.startsWith('bin=') && !h.startsWith('{') && window._routeHandled && h !== id) history.replaceState(null, '', location.pathname + location.search); } catch(e) {}
   try { _gmNavSync(); } catch(e) {}
   if(id === 'gm' && typeof _gmVisible === 'function' && !_gmVisible()) id = 'dashboard';
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
@@ -7837,6 +7839,7 @@ function endDemo() { _demo = null; _ssDraft = {}; _ssWeek = null; renderSeasonSc
 
 // ═══ Linki bezpośrednie: #terminarz, #terminarz-week-3, #zapisy, #wolni-agenci ═══
 function openDeepLink() {
+  setTimeout(() => { window._routeHandled = true; }, 3000); // potem przejścia na inne widoki czyszczą adres z linku
   const _q = new URLSearchParams(location.search).get('v') || '';
   const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q).toLowerCase();
   if(!h) return;
@@ -8523,7 +8526,8 @@ async function sendWeekSummary() {
 function _awardCandidates(sid, week) {
   const wd = _weekData(sid, week);
   const fmtLine = p => `${+p.pts || 0} PTS · ${+p.reb || 0} REB · ${+p.ast || 0} AST${p.gp > 1 ? ` (${p.gp} mecze)` : ''}`;
-  const eff = p => p.pts + p.reb * 1.2 + p.ast * 1.5 + p.stl * 2 + p.blk * 2 - p.to * 1.5;
+  // ta sama miara co Piątka tygodnia i MVP meczu: średnia ocena występu na mecz (game score)
+  const eff = p => ((+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.7 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + 0.7 * (+p.blk || 0) - (+p.to || 0)) / Math.max(1, p.gp || 1);
   const cats = [];
   const mvp = [...wd.players].sort((a, b) => eff(b) - eff(a)).slice(0, 3);
   if(mvp.length >= 2) cats.push({ key: 'mvp', emoji: '⭐', title: 'MVP tygodnia', candidates: mvp.map(p => ({ id: p.name + '|' + p.team, label: p.name, team: p.team, sub: `${p.team} · ${fmtLine(p)}` })) });
@@ -12842,7 +12846,7 @@ function _shortFacts(week) {
   fx.forEach(s => {
     const ms = (s.matchIds || []).map(id => byId.get(String(id))).filter(Boolean);
     let a = 0, b = 0; ms.forEach(m => { const sw = m.team1.name === s.team2; const x = sw ? +m.team2.score : +m.team1.score, y = sw ? +m.team1.score : +m.team2.score; x > y ? a++ : b++; games.push(m); });
-    results.push({ t1: s.team1, t2: s.team2, score: ms.length ? `${a}:${b}` : '—' });
+    results.push({ t1: s.team1, t2: s.team2, score: ms.length ? `${a}:${b}${ms.some(m => m.walkover) ? ' (w/o)' : ''}` : '—' });
   });
   const P = {};
   games.forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => (t.players || []).forEach(p => {
@@ -12852,12 +12856,12 @@ function _shortFacts(week) {
   const ps = Object.values(P);
   const gs = a => a.pts + a.reb * 1.2 + a.ast * 1.5 - a.to - (a.fga - a.fgm) * 0.4;
   const hero = [...ps].sort((x, y) => gs(y) - gs(x))[0];
-  const brick = ps.filter(a => a.fga >= 12).sort((x, y) => x.fgm / x.fga - y.fgm / y.fga)[0];
+  const brick = ps.filter(a => a.gp && a.fga / a.gp >= 8).sort((x, y) => x.fgm / x.fga - y.fgm / y.fga || (y.fga - y.fgm) - (x.fga - x.fgm))[0]; // najgorszy % z gry w kolejce (min. średnio 8 rzutów na mecz)
   const ws = fx.map(f => f.weekStart).filter(Boolean).sort()[0], end = ws ? _ssAddDays(ws, 7) : '9999';
   const tb = {};
-  all.filter(m => (m.seasonId || null) === sid && !m.walkover && String(m.date) < end).forEach(m => {
+  all.filter(m => (m.seasonId || null) === sid && String(m.date) < end).forEach(m => { // walkower liczy się do bilansu, bez punktów
     const a = tb[m.team1.name] = tb[m.team1.name] || { w: 0, l: 0, d: 0 }, b = tb[m.team2.name] = tb[m.team2.name] || { w: 0, l: 0, d: 0 };
-    const x = +m.team1.score, y = +m.team2.score; a.d += x - y; b.d += y - x; x > y ? (a.w++, b.l++) : (b.w++, a.l++);
+    const x = +m.team1.score, y = +m.team2.score; if(!m.walkover) { a.d += x - y; b.d += y - x; } x > y ? (a.w++, b.l++) : (b.w++, a.l++);
   });
   const table = Object.entries(tb).sort((x, y) => y[1].w - x[1].w || y[1].d - x[1].d).slice(0, 5).map(([t, x]) => ({ t, rec: `${x.w}-${x.l}` }));
   return { week, season: _seasonName(sid) || '', results, hero, brick, table, games: games.length };
@@ -13220,12 +13224,12 @@ function _wgData(week) {
     let w1 = 0, w2 = 0; const scores = [], perf = [];
     ms.forEach(m => {
       const sw = m.team1.name === s.team2; const a = sw ? m.team2 : m.team1, b = sw ? m.team1 : m.team2;
-      +a.score > +b.score ? w1++ : w2++; scores.push(`${a.score}:${b.score}`); weekGames.push(m);
+      +a.score > +b.score ? w1++ : w2++; scores.push(m.walkover ? 'w/o' : `${a.score}:${b.score}`); if (!m.walkover) weekGames.push(m); // walkower: do wyniku serii, nie do statystyk tygodnia
       [[a, b], [b, a]].forEach(([t, o]) => (t.players || []).forEach(p => { perf.push({ p, team: t.name }); weekPerf.push({ p, team: t.name, opp: o.name, won: +t.score > +o.score, gs: gsOf(p) }); }));
     });
-    const tot = ms.reduce((n, m) => n + (+m.team1.score) + (+m.team2.score), 0);
+    const msPlayed = ms.filter(m => !m.walkover), tot = msPlayed.reduce((n, m) => n + (+m.team1.score) + (+m.team2.score), 0);
     const players = agg(perf);
-    return { t1: s.team1, t2: s.team2, w1, w2, games: ms.length, scores, avgTeam: ms.length ? tot / ms.length / 2 : null, mvp: players[0] || null, top: players.slice(1, 4), walkover: !!s.walkover };
+    return { t1: s.team1, t2: s.team2, w1, w2, games: ms.length, scores, avgTeam: msPlayed.length ? tot / msPlayed.length / 2 : null, mvp: players[0] || null, top: players.slice(1, 4), walkover: !!s.walkover };
   });
   // ciekawostki z całego tygodnia
   const wk = agg(weekPerf.map(x => ({ p: x.p, team: x.team })));
@@ -13233,7 +13237,7 @@ function _wgData(week) {
   const tens = p => ['pts', 'reb', 'ast', 'stl', 'blk'].filter(k => (+p[k] || 0) >= 10).length;
   const td = weekPerf.filter(x => tens(x.p) >= 3), dd = weekPerf.filter(x => tens(x.p) === 2);
   const sniper = wk.filter(a => a.fga >= 10).sort((a, b) => b.fgm / b.fga - a.fgm / a.fga)[0];
-  const brick = wk.filter(a => a.fga >= 12).sort((a, b) => a.fgm / a.fga - b.fgm / b.fga)[0];
+  const brick = (() => { const by = {}; weekGames.forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => { const k = String(p.name).toLowerCase(), a = by[k] = by[k] || { name: p.name, team: t.name, fgm: 0, fga: 0, gp: 0 }; a.fgm += +p.fgm || 0; a.fga += +p.fga || 0; a.gp++; }))); return Object.values(by).filter(a => a.fga / a.gp >= 8).sort((a, b) => a.fgm / a.fga - b.fgm / b.fga || (b.fga - b.fgm) - (a.fga - a.fgm))[0]; })(); // cegła tygodnia = najgorszy % z gry w całej kolejce (min. średnio 8 rzutów na mecz — 1 i 2 mecze liczą się tak samo)
   const margins = weekGames.map(m => ({ m, d: Math.abs(m.team1.score - m.team2.score) }));
   const blow = [...margins].sort((a, b) => b.d - a.d)[0], close = [...margins].sort((a, b) => a.d - b.d)[0];
   const totPts = weekGames.reduce((n, m) => n + (+m.team1.score) + (+m.team2.score), 0);
@@ -13438,8 +13442,8 @@ function _wgTweet(d, noTags) {
   const res = d.series.filter(s => s.games).map(s => `${tag(s.t1)} ${s.w1}:${s.w2} ${tag(s.t2)}`).join(' · ');
   const b = d.facts.best;
   const avgLine = _wgT(`\n📊 Średnio ${_wgNum(d.facts.avgGame)} pkt w meczu`, `\n📊 ${_wgNum(d.facts.avgGame)} pts per game on average`);
-  let t = _wgT(`🏀 Week ${d.week} — podsumowanie #2KEkstraklasa\n\n${res}\n\n🔥 Występ tygodnia: ${b ? `${b.p.name} (${b.p.pts} pkt, ${b.p.reb} zb., ${b.p.ast} as.)` : '—'}${avgLine}\n\n#NBA2K27 #ProAm`,
-    `🏀 Week ${d.week} results #2KEkstraklasa\n\n${res}\n\n🔥 Performance of the week: ${b ? `${b.p.name} (${b.p.pts} pts, ${b.p.reb} reb, ${b.p.ast} ast)` : '—'}${avgLine}\n\n#NBA2K27 #ProAm`);
+  let t = _wgT(`🏀 Week ${d.week} — podsumowanie #2KEkstraklasa\n\n${res}\n\n🔥 Występ tygodnia: ${b ? `${b.p.name} (${+b.p.pts || 0} pkt, ${+b.p.reb || 0} zb., ${+b.p.ast || 0} as.)` : '—'}${avgLine}\n\n#NBA2K27 #ProAm`,
+    `🏀 Week ${d.week} results #2KEkstraklasa\n\n${res}\n\n🔥 Performance of the week: ${b ? `${b.p.name} (${+b.p.pts || 0} pts, ${+b.p.reb || 0} reb, ${+b.p.ast || 0} ast)` : '—'}${avgLine}\n\n#NBA2K27 #ProAm`);
   if(t.length > 280) t = t.replace(avgLine, '');
   if(t.length > 280 && !noTags) return _wgTweet(d, true); // za długo z @profilami → wersja z nazwami
   return t.slice(0, 280);
@@ -13890,6 +13894,21 @@ async function galaPodcast(test) {
 }
 
 // ═══ 🩺 STAN SYSTEMU ═══
+// 📋 AUTOMATY: co poszło, a co trzeba wywołać ręcznie
+async function renderJobsBox() {
+  const el = document.getElementById('jobs-box'); if(!el) return;
+  const r = await _api('/jobs', 'GET', null, { admin: true }); if(!r.ok) { el.innerHTML = ''; return; }
+  const L = { podcast: '🎙️ Podcast', grafiki: '🖼 Grafiki tygodnia', x: '🐦 Wpis na X', zaproszenie: '☀️ Zaproszenie' };
+  // najnowszy stan każdego automatu w każdej kolejce
+  const seen = new Set(), rows = (r.jobs || []).filter(j => { const k = j.job + ':' + (j.week ?? ''); if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 14);
+  const fix = j => j.ok === false ? (j.job === 'podcast' ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openPodcastStudio()">🎙️ Nagraj ręcznie</button>` : `<button class="btn btn-ghost" style="font-size:.66rem;padding:.1rem .45rem" onclick="_fxClose('health-modal');openWeekGraphics()">🖼 Wyślij ręcznie</button>`) : '';
+  const bad = rows.filter(j => j.ok === false).length;
+  el.innerHTML = `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">📋 AUTOMATY ${bad ? `<span style="color:var(--loss)">· ${bad} do ręcznego wywołania</span>` : ''}</div>
+    ${rows.length ? rows.map(j => `<div style="display:grid;grid-template-columns:24px 1fr auto;gap:.4rem;align-items:center;font-size:.76rem;padding:.3rem 0;border-bottom:1px solid var(--border)">
+      <span>${j.ok === true ? '✅' : j.ok === false ? '❌' : '⏳'}</span>
+      <span><b>${L[j.job] || _h(j.job)}</b>${j.week ? ` · Week ${j.week}` : ''} <span style="color:var(--muted)">· ${new Date(j.at).toLocaleString('pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>${j.error || j.note ? `<br><span style="color:${j.ok === false ? 'var(--loss)' : 'var(--muted)'}">${_h(j.error || j.note)}</span>` : ''}</span>
+      ${fix(j)}</div>`).join('') : '<div style="font-size:.76rem;color:var(--muted)">Brak wpisów — pojawią się po najbliższym podsumowaniu kolejki.</div>'}`;
+}
 async function openHealth() {
   const m = _fxModal('health-modal', 620), box = m.querySelector('.modal'); m.classList.add('open');
   box.innerHTML = _fxHead('health-modal', '🩺 Stan systemu') + '<div style="color:var(--muted)">⏳ Sprawdzam…</div>';
@@ -13910,8 +13929,10 @@ async function openHealth() {
     <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.8rem 0 .3rem">🔐 SEKRETY WORKERA</div>
     <div style="display:flex;flex-wrap:wrap;gap:.3rem">${Object.entries(r.secrets).map(([k, v]) => `<span style="font-size:.68rem;padding:.12rem .45rem;border-radius:999px;background:${v ? 'rgba(34,197,94,.15)' : 'rgba(220,38,38,.12)'};color:${v ? 'var(--win)' : 'var(--loss)'}">${v ? '✓' : '✗'} ${k}</span>`).join('')}</div>
     ${(r.bot.errors || []).length ? `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.8rem 0 .3rem">⚠️ OSTATNIE BŁĘDY BOTA</div>${r.bot.errors.slice(0, 8).map(e => `<div style="font-size:.74rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><b>${_h(e.area)}</b> <span style="color:var(--muted)">· ${ago(e.at)}</span><br>${_h(e.msg)}</div>`).join('')}` : '<div style="font-size:.76rem;color:var(--win);margin-top:.7rem">✅ Brak błędów bota od ostatniego startu</div>'}
+    <div id="jobs-box" style="margin-top:.9rem"></div>
     <div style="display:flex;gap:.4rem;margin-top:.8rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="openHealth()">🔄 Odśwież</button><button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/health/test','POST',{},{admin:true}).then(r=>showToast(r.ok?'📨 Wysłano test alertu ('+r.admins+')':'❌ '+r.error, r.ok?'success':'error'))">📨 Test alertu DM</button></div>
     <div style="font-size:.68rem;color:var(--muted);margin-top:.5rem">Alerty DM przychodzą same: gdy bot przestanie odpowiadać (i gdy wróci), gdy nie uda się podcast, grafiki lub zapowiedź, oraz gdy regulamin wykryje mecz po terminie.</div>`;
+  setTimeout(() => { try { renderJobsBox(); } catch(e) {} }, 0);
 }
 
 // ═══ 🧹 KONFLIKTY: wolny agent wciąż w składzie drużyny ═══
