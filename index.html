@@ -15086,12 +15086,16 @@ async function renderCardsView() {
       ${!discordUser ? `<div style="font-size:.86rem">${_g('Zaloguj się przez Discord, żeby otwierać paczki i zbierać karty.', 'Log in with Discord to open packs and collect cards.')}</div>` : `
       <div style="font-size:.86rem;margin-bottom:.5rem">${_g('Codziennie darmowa paczka z 3 kartami graczy ligi. Rzadkość: ★ zwykła · ★★ rzadka · ★★★ epicka · ★★★★ legendarna · ★★★★★ mityczna (najlepsi gracze ligi).', 'A free pack of 3 league player cards every day. Rarity: ★ common · ★★ rare · ★★★ epic · ★★★★ legendary · ★★★★★ mythic (the league\u2019s best).')}</div>
       <button class="btn btn-primary" style="font-size:1rem;padding:.6rem 1.4rem" ${me?.canOpen ? '' : 'disabled'} onclick="cardsOpen()">🎁 ${me?.canOpen ? _g('Otwórz paczkę', 'Open a pack') + (me.bonus ? ` (+${me.bonus})` : '') : _g('Dzisiejsza paczka otwarta', 'Today\u2019s pack opened')}</button>
+      ${me?.premium ? `<button class="btn" style="font-size:.95rem;padding:.55rem 1.2rem;margin-left:.4rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none" onclick="cardsOpen(true)">💎 ${_g('Paczka premium', 'Premium pack')} (${me.premium})</button>` : ''}
       ${me && !me.canOpen ? `<div style="font-size:.84rem;margin-top:.45rem">⏳ ${_cdHtml('Nowa paczka za', 'Next pack in')}</div>` : ''}
       <div style="font-size:.78rem;margin-top:.45rem">♻️ ${_g('Bonus: <b>5 duplikatów = 1 dodatkowa paczka</b> (3 karty)', 'Bonus: <b>5 duplicates = 1 extra pack</b> (3 cards)')} · ${_g('masz', 'you have')} <b>${Math.min(dups, 5)}/5</b>${dups >= 5 ? ` — <a href="#" onclick="cardsRecycle();return false" style="color:var(--accent);font-weight:800">${_g('wymień teraz', 'trade them now')}</a>` : ''}</div>
       <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)}</div>`}
       <div id="cards-pack" style="display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:.8rem"></div>
     </div>
     ${discordUser ? `<div class="streak-slot" style="margin-bottom:.8rem">${streakChip()}</div>` : ''}
+    <div id="ut-slot"></div>
+    ${discordUser ? challengesHtml(me) : ''}
+    ${discordUser && me ? `<div style="text-align:right;margin:-.4rem 0 .8rem"><button class="btn btn-ghost" style="font-size:.74rem" onclick="showcasePick()">🏆 ${_g('Ustaw gablotę na profilu', 'Set your profile showcase')}</button></div>` : ''}
     ${limitedSectionHtml(me)}
     ${discordUser ? `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">📚 ${_g('MOJA KOLEKCJA — ZESTAWY DRUŻYN', 'MY COLLECTION — TEAM SETS')}</div>
       ${Object.entries(byTeam).sort((a, b) => a[0].localeCompare(b[0])).map(([team, list]) => { const got = list.filter(c => own[c.k]).length, done = got === list.length;
@@ -15105,6 +15109,7 @@ async function renderCardsView() {
       <div style="max-height:420px;overflow-y:auto">${(board.board || []).map((b, i) => `<div onclick="openFanProfile('${b.id}')" title="${_g('Profil kibica', 'Fan profile')}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.82rem"><span style="display:flex;align-items:center;gap:.45rem;min-width:0"><span style="width:26px;text-align:center;flex-shrink:0">${['🥇', '🥈', '🥉'][i] || (i + 1) + '.'}</span>${_avatarHtml(b.avatar, 22)}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(b.name)}</span></span><span style="display:flex;gap:.6rem;align-items:baseline"><span style="font-size:.7rem;color:var(--muted)">${b.packs ? b.packs + ' ' + _g(_plPL(b.packs, 'paczka', 'paczki', 'paczek'), b.packs === 1 ? 'pack' : 'packs') : ''}</span><b>${b.unique}/${board.poolSize}</b></span></div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">${_g('Jeszcze nikt nie otworzył paczki.', 'No packs opened yet.')}</div>`}</div>
       <div style="font-size:.68rem;color:var(--muted);margin-top:.3rem">${_g('Każda unikalna karta = +2 XP w Lidze kibiców.', 'Each unique card = +2 XP in the Fan league.')}</div></div>
   </div>`;
+  utHtml().then(h => { const el = document.getElementById('ut-slot'); if(el) el.innerHTML = h; }).catch(() => {});
 }
 async function _dailyRefresh() {
   if(!discordUser?.session) { window._cardsCanOpen = false; return; }
@@ -15113,8 +15118,8 @@ async function _dailyRefresh() {
   try { const r = await _api('/cards/me', 'GET', null, { session: true }); window._cardsCanOpen = !!(r.ok && r.canOpen); } catch(e) {}
   try { updateMyPanelBadge(); if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView(); } catch(e) {}
 }
-async function cardsOpen() {
-  const r = await _api('/cards/open', 'POST', {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
+async function cardsOpen(premium) {
+  const r = await _api('/cards/open', 'POST', premium ? { premium: true } : {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
   for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
@@ -15181,7 +15186,7 @@ function karnetHtml(k) {
   const en = currentLang === 'en', ends = new Date(k.ends + 'T23:59:00').toLocaleDateString(en ? 'en-GB' : 'pl-PL', { weekday: 'long' });
   const GO = { terminarz: "showView('schedule')", '2kordle': "showView('kordle')", kolekcja: "showView('cards')", dashboard: "showView('dashboard')", fantasy: "showView('fantasy')" };
   return `<div data-notr class="card" style="padding:.75rem .9rem;margin-bottom:1rem;border:1px solid var(--accent)">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap"><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.15rem;letter-spacing:1px">🎟️ ${en ? 'WEEKLY PASS' : 'KARNET TYGODNIA'}</b><span style="font-size:.72rem;color:var(--muted)">${en ? 'until' : 'do'} ${ends} · ${en ? 'new tasks every Monday' : 'nowe zadania co poniedziałek'}</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap"><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.15rem;letter-spacing:1px">🎟️ ${en ? 'WEEKLY PASS' : 'KARNET TYGODNIA'}</b><span style="font-size:.72rem;color:var(--muted)">${en ? 'ends' : 'koniec'}: ${ends} · ${en ? 'new tasks every Monday' : 'nowe zadania co poniedziałek'}</span></div>
     ${k.quests.filter(q => !q.off).map(q => { const pct = Math.min(100, Math.round(q.have / q.need * 100));
       return `<div style="display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;padding:.4rem 0;border-bottom:1px dashed rgba(127,127,127,.2)">
         <div><div style="font-size:.84rem;cursor:pointer" onclick="${GO[q.go] || ''}">${q.icon} ${en ? q.en : q.pl} <span style="color:var(--muted);font-size:.74rem">${Math.min(q.have, q.need)}/${q.need}</span></div>
@@ -15242,6 +15247,90 @@ function _holoBind(root) {
       window.addEventListener('deviceorientation', h);
     }
   });
+}
+
+// ═══ 🃏 WYBÓR KART (wspólne okno: wyzwania, Moja piątka, gablota) ═══
+function openCardPicker({ title, hint, max, exact, filter, preselect, onDone }) {
+  const own = Object.entries(_cards?.cards || {}).filter(([, c]) => c.n > 0 && (!filter || filter(c)));
+  const sel = new Set((preselect || []).filter(k => own.some(([kk]) => kk === k)));
+  const m = _fxModal('cpick-modal', 760); m.classList.add('open');
+  const draw = () => {
+    m.querySelector('.modal').innerHTML = _fxHead('cpick-modal', title) + `<div data-notr>
+      ${hint ? `<div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">${hint}</div>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:.45rem;max-height:52vh;overflow-y:auto;padding:.1rem">${own.sort((a, b) => (TIER_ORDER[b[1].tier] ?? 0) - (TIER_ORDER[a[1].tier] ?? 0) || a[1].name.localeCompare(b[1].name)).map(([k, c]) => `
+        <button onclick="_cpToggle('${k.replace(/'/g, '')}')" style="text-align:center;padding:.5rem .35rem;border-radius:10px;cursor:pointer;font-family:inherit;color:var(--text);background:${sel.has(k) ? 'rgba(245,197,24,.16)' : 'var(--surface2)'};border:2px solid ${sel.has(k) ? 'var(--accent)' : (_TIER_COL[c.tier] || 'var(--border)')}">
+          <div style="font-size:.66rem;color:${_TIER_COL[c.tier] || 'var(--muted)'}">${(_TIER_LBL[c.tier] || ['', ''])[currentLang === 'en' ? 1 : 0]}</div>
+          <div style="font-weight:800;font-size:.82rem;word-break:break-word">${_h(c.name)}</div><div style="font-size:.66rem;color:var(--muted)">${_h(c.team || '')}${c.n > 1 ? ' · ×' + c.n : ''}</div>
+          ${c.label ? `<div style="font-size:.6rem;color:#f5c518">${_h(c.label)}</div>` : ''}</button>`).join('') || `<div style="color:var(--muted);font-size:.82rem">${_g('Brak pasujących kart.', 'No matching cards.')}</div>`}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;gap:.5rem"><span style="font-size:.8rem">${_g('Wybrano', 'Selected')}: <b>${sel.size}</b> / ${max}</span>
+        <button class="btn btn-primary" ${exact && sel.size !== max ? 'disabled' : ''} onclick="_cpDone()">✓ ${_g('Zatwierdź', 'Confirm')}</button></div></div>`;
+  };
+  window._cpToggle = k => { if(sel.has(k)) sel.delete(k); else if(sel.size < max) sel.add(k); else showToast(_g(`Maksymalnie ${max}`, `Max ${max}`), 'info'); draw(); };
+  window._cpDone = () => { _fxClose('cpick-modal'); onDone([...sel]); };
+  draw();
+}
+const TIER_ORDER = { bronze: 0, silver: 1, gold: 2, diamond: 3, galaxy: 4, limited: 5 };
+
+// ═══ 🧩 WYZWANIA ═══
+function challengesHtml(me) {
+  const L = me?.challenges || []; if(!L.length) return '';
+  const rw = r => r.kind === 'premium' ? `💎 ${_g('paczka premium', 'premium pack')}` : `🎁 ${r.n} ${_g(_plPL(r.n, 'paczka', 'paczki', 'paczek'), r.n === 1 ? 'pack' : 'packs')}`;
+  return `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🧩 ${_g('WYZWANIA TYGODNIA', 'WEEKLY CHALLENGES')}</div>
+    <div style="font-size:.74rem;color:var(--muted);margin-bottom:.5rem">${_g('Oddaj karty spełniające warunek i odbierz nagrodę. Najlepiej oddawaj duplikaty. Nowe wyzwania co poniedziałek.', 'Hand in cards that meet the condition and get a reward — duplicates are best. New challenges every Monday.')}</div>
+    ${L.map(c => `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--border)">
+      <span style="font-size:1.3rem;width:30px;text-align:center">${c.icon}</span>
+      <div style="flex:1"><div style="font-weight:700;font-size:.86rem">${_h(currentLang === 'en' ? c.en : c.pl)}</div><div style="font-size:.74rem;color:var(--muted)">${_g('Nagroda', 'Reward')}: ${rw(c.reward)}</div></div>
+      ${c.done ? `<span style="color:var(--win);font-size:.78rem;font-weight:700">✅ ${_g('Ukończone', 'Done')}</span>` : `<button class="btn btn-primary" style="font-size:.72rem" onclick="challengePick('${c.id}')">${_g('Wybierz karty', 'Pick cards')}</button>`}</div>`).join('')}</div>`;
+}
+function challengePick(id) {
+  const c = _cards?.challenges?.find(x => x.id === id); if(!c) return;
+  const r = c.rule || {}, filt = r.minTier ? x => (TIER_ORDER[x.tier] ?? 0) >= TIER_ORDER[r.minTier] : r.team ? x => String(x.team).toLowerCase() === String(r.team).toLowerCase() : null;
+  openCardPicker({ title: c.icon + ' ' + _h(currentLang === 'en' ? c.en : c.pl), max: c.need, exact: true, filter: filt,
+    hint: _g('Wybrane karty zostaną oddane (z duplikatów zabierany jest jeden egzemplarz).', 'The selected cards will be handed in (one copy is taken from duplicates).'),
+    onDone: async keys => { if(!confirm(_g('Oddać wybrane karty i odebrać nagrodę?', 'Hand in the selected cards and claim the reward?'))) return;
+      const res = await _api('/cards/challenge', 'POST', { id, cards: keys }, { session: true });
+      if(!res.ok) { showToast('❌ ' + _tr(res.error), 'error'); return; }
+      showToast(res.reward.kind === 'premium' ? _g('💎 Masz paczkę premium!', '💎 You got a premium pack!') : _g(`🎁 +${res.reward.n} paczki!`, `🎁 +${res.reward.n} packs!`), 'success'); renderCardsView(); } });
+}
+
+// ═══ 🏀 MOJA PIĄTKA ═══
+let _ut = null;
+async function utHtml() {
+  const r = await _api('/ut', 'GET', null, discordUser?.session ? { session: true } : {}); if(!r.ok) return ''; _ut = r;
+  const mine = r.mine, ends = new Date(r.ends + 'T23:59:00').toLocaleDateString(currentLang === 'en' ? 'en-GB' : 'pl-PL', { weekday: 'long' });
+  const f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
+  return `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🏀 ${_g('MOJA PIĄTKA', 'MY FIVE')}</div><span style="font-size:.72rem;color:var(--muted)">${_g('koniec', 'ends')}: ${ends}</span></div>
+    <div style="font-size:.74rem;color:var(--muted);margin:.3rem 0 .6rem">${_g('Ułóż piątkę z kart, które masz. Punkty liczą się z prawdziwych meczów rozegranych po ustawieniu składu (punkty, zbiórki ×1,2, asysty ×1,5, przechwyty i bloki ×3, straty −1, wygrana +2). Karta limitowana: +20%. Podium tygodnia dostaje paczki w poniedziałek.', 'Build a five from cards you own. Points come from real games played after you set the lineup (points, rebounds ×1.2, assists ×1.5, steals & blocks ×3, turnovers −1, win +2). Limited card: +20%. The weekly podium gets packs on Monday.')}</div>
+    ${discordUser ? `<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.4rem">${[0, 1, 2, 3, 4].map(i => { const s = mine?.slots?.[i];
+      return s ? `<div style="background:var(--surface2);border:2px solid ${_TIER_COL[s.tier] || 'var(--border)'};border-radius:10px;padding:.45rem .3rem;text-align:center"><div style="font-weight:800;font-size:.78rem;word-break:break-word">${_h(s.name)}${s.limited ? ' 🌟' : ''}</div><div style="font-size:.64rem;color:var(--muted)">${_h(s.team || '')}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;color:var(--accent)">${f1(s.pts)}</div><div style="font-size:.6rem;color:var(--muted)">${s.gp} ${_g(_plPL(s.gp, 'mecz', 'mecze', 'meczów'), s.gp === 1 ? 'game' : 'games')}</div></div>`
+        : `<div style="background:var(--surface2);border:2px dashed var(--border);border-radius:10px;min-height:86px;display:flex;align-items:center;justify-content:center;color:var(--muted)">?</div>`; }).join('')}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.55rem;gap:.5rem;flex-wrap:wrap"><span style="font-size:.86rem">${_g('Razem', 'Total')}: <b style="color:var(--accent)">${f1(mine?.total || 0)}</b> ${_g('pkt', 'pts')}${mine ? ` · #${r.board.findIndex(x => x.id === mine.id) + 1}` : ''}</span>
+      <button class="btn btn-primary" style="font-size:.74rem" onclick="utPick()">🏀 ${mine ? _g('Zmień piątkę', 'Change lineup') : _g('Ustaw piątkę', 'Set lineup')}</button></div>
+    ${mine ? `<div style="font-size:.68rem;color:var(--muted);margin-top:.25rem">${_g('Zmieniony gracz zaczyna zbierać punkty od nowa — od meczów po zmianie.', 'A swapped-in player starts scoring from games after the change.')}</div>` : ''}` : `<div style="font-size:.82rem">${_g('Zaloguj się przez Discord, żeby zagrać.', 'Log in with Discord to play.')}</div>`}
+    ${r.board.length ? `<div style="margin-top:.7rem;font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">${_g('RANKING TYGODNIA', 'WEEKLY RANKING')}</div>${r.board.slice(0, 10).map((x, i) => `<div onclick="openFanProfile('${x.id}')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.82rem"><span style="display:flex;align-items:center;gap:.45rem"><span style="width:24px;text-align:center">${['🥇', '🥈', '🥉'][i] || (i + 1) + '.'}</span>${_avatarHtml(x.avatar, 20)} ${_h(x.name)}</span><b>${f1(x.total)}</b></div>`).join('')}` : ''}
+  </div>`;
+}
+function utPick() {
+  openCardPicker({ title: '🏀 ' + _g('Moja piątka', 'My five'), max: 5, exact: true, preselect: (_ut?.mine?.slots || []).map(s => s.key),
+    hint: _g('Wybierz 5 kart różnych graczy. Karta limitowana 🌟 daje +20% punktów.', 'Pick 5 cards of different players. A limited card 🌟 gives +20% points.'),
+    onDone: async keys => { const r = await _api('/ut/lineup', 'POST', { cards: keys }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; } showToast(_g('🏀 Piątka ustawiona!', '🏀 Lineup set!'), 'success'); renderCardsView(); } });
+}
+
+// ═══ 🏆 GABLOTA ═══
+function showcasePick() {
+  openCardPicker({ title: '🏆 ' + _g('Gablota na profilu', 'Profile showcase'), max: 3, preselect: _cards?.showcase || [],
+    hint: _g('Wybierz do 3 kart, które wszyscy zobaczą na Twoim profilu kibica.', 'Pick up to 3 cards everyone will see on your fan profile.'),
+    onDone: async keys => { const r = await _api('/cards/showcase', 'POST', { cards: keys }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; } _cards.showcase = r.showcase; showToast(_g('🏆 Gablota zapisana', '🏆 Showcase saved'), 'success'); } });
+}
+async function showcaseRender(el, list) {
+  if(!el || !list?.length) return;
+  for(const c of list) {
+    let url = null; try { url = c.tier === 'limited' ? await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null) : await (async () => { const d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })(); } catch(e) {}
+    const slot = document.createElement('div'); slot.style.cssText = 'flex:1 1 160px;max-width:200px';
+    slot.innerHTML = url ? (['limited', 'galaxy', 'diamond'].includes(c.tier) ? _holoHtml(url, c.name, c.tier === 'diamond' ? .75 : 1) : `<img src="${url}" alt="${_h(c.name)}" style="width:100%;border-radius:12px;display:block">`) : `<div style="padding:1rem;border:1px dashed var(--border);border-radius:12px;text-align:center;font-size:.8rem">${_h(c.name)}</div>`;
+    el.appendChild(slot);
+  }
+  _holoBind(el);
 }
 
 function _limTile(c, own) {
@@ -15321,6 +15410,7 @@ async function openFanProfile(id) {
         <div style="font-size:.82rem;margin-top:.2rem">🏅 <b>${_h(p.level?.name || '')}</b> · ${p.xp} XP${p.rank ? ` · #${p.rank} ${_g('w Lidze kibiców', 'in the Fan league')}` : ''}</div>
         <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">🔥 ${p.streak} ${_g('dni z rzędu', 'days in a row')} (${_g('rekord', 'best')} ${p.bestStreak}) · 🃏 ${p.cards} ${_g('kart', 'cards')}${team ? ` · 📣 ${_h(team)}` : ''}</div></div>
       <button class="btn btn-ghost" style="font-size:.72rem" onclick="navigator.clipboard?.writeText(location.origin+location.pathname+'#kibic/${p.id}').then(()=>showToast('🔗 ${_g('Skopiowano link do profilu', 'Profile link copied')}','success'))">🔗 Link</button></div>
+    ${(p.showcase || []).length ? `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">🏆 ${_g('GABLOTA', 'SHOWCASE')}</div><div id="fp-showcase" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem"></div>` : ''}
     ${(p.seasonBadges || []).length ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem">${p.seasonBadges.map(b => `<span style="background:linear-gradient(135deg,#3a2a00,#1a1405);border:1px solid #f5c518;border-radius:999px;padding:.25rem .7rem;font-size:.78rem">${['', '🥇', '🥈', '🥉'][b.place]} ${_g('Kibic sezonu', 'Fan of the season')} · ${_h(b.season)}</span>`).join('')}</div>` : ''}
     <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">🏅 ${_g('OSIĄGNIĘCIA', 'ACHIEVEMENTS')}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:.4rem;margin-bottom:.8rem">${p.achievements.map(a => `<div style="background:var(--surface2);border-radius:10px;padding:.45rem .6rem;opacity:${a.lvl ? 1 : .55};border:1px solid ${a.lvl === 3 ? '#f5c518' : 'transparent'}">
@@ -15329,6 +15419,7 @@ async function openFanProfile(id) {
     ${(p.limited || []).length ? `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:#f5c518;margin-bottom:.3rem">🌟 ${_g('KARTY LIMITOWANE', 'LIMITED CARDS')}</div><div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.7rem">${p.limited.map(c => `<span style="border:1px solid #f5c518;border-radius:8px;padding:.2rem .5rem;font-size:.74rem">${_h(c.name)} · <span style="color:#f5c518">${_h(c.label)}</span></span>`).join('')}</div>` : ''}
     ${Object.keys(p.src || {}).length ? `<div style="font-size:.72rem;color:var(--muted)">XP ${_g('w tym sezonie', 'this season')}: ${Object.entries(p.src).map(([k, v]) => `${SRC[k] || k} ${v}`).join(' · ')}</div>` : ''}
   </div>`;
+  showcaseRender(document.getElementById('fp-showcase'), p.showcase);
 }
 async function closeFanSeason() {
   if(!confirm('Zamknąć sezon kibiców? Najlepsza trójka Ligi kibiców dostanie stałą odznakę „Kibic sezonu” na profilu i DM z gratulacjami. Punkty w nowym sezonie liczą się od daty startu nowego sezonu ligi.')) return;
