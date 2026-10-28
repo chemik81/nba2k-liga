@@ -8436,8 +8436,11 @@ async function ssDecideResult(id, accept) {
   if(!confirm(`${accept ? 'Potwierdzić' : 'Odrzucić'} wynik: ${md.team1.name} ${md.team1.score}:${md.team2.score} ${md.team2.name}?`)) return;
   const isAdmin = _isLoggedInSync();
   if(!isAdmin && !_ensureSession()) return;
-  const res = await _api('/captain-result/decide', 'POST', { id, accept }, isAdmin ? { admin: true } : { session: true });
-  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  if(window._ssDeciding) return; window._ssDeciding = true; // bez podwójnego kliknięcia
+  showToast(accept ? '⏳ Zapisuję wynik…' : '⏳ Odrzucam zgłoszenie…', 'info');
+  document.querySelectorAll(`[onclick*="ssDecideResult('${id}'"]`).forEach(b => { b.disabled = true; b.style.opacity = '.5'; });
+  let res; try { res = await _api('/captain-result/decide', 'POST', { id, accept }, isAdmin ? { admin: true } : { session: true }); } finally { window._ssDeciding = false; }
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); document.querySelectorAll(`[onclick*="ssDecideResult('${id}'"]`).forEach(b => { b.disabled = false; b.style.opacity = ''; }); return; }
   pendingResults = pendingResults.filter(x => x.id !== id);
   if(accept) {
     showToast('✅ Wynik zapisany', 'success');
