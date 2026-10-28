@@ -765,6 +765,15 @@ body.dn-obs{background:transparent!important}body.dn-obs>*:not(.dn-ov):not(#dn-t
   background-size:250% 250%;background-position:var(--mx) var(--my)}
 .holo-glare{position:absolute;inset:0;pointer-events:none;opacity:var(--o);transition:opacity .2s;mix-blend-mode:overlay;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.55),rgba(255,255,255,0) 45%)}
 @media (prefers-reduced-motion: reduce){.holo-in{transform:none!important}}
+
+/* 🏛 pasek rekordów */
+.ticker{display:flex;align-items:center;gap:.8rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.55rem .8rem;margin-bottom:1.5rem;cursor:pointer;overflow:hidden}
+.ticker-lbl{font-size:.68rem;font-weight:800;letter-spacing:1.5px;color:var(--accent);white-space:nowrap;flex-shrink:0}
+.ticker-mask{overflow:hidden;flex:1;-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.ticker-track{display:inline-flex;font-size:.84rem;animation:tickerMove 45s linear infinite}
+.ticker:hover .ticker-track{animation-play-state:paused}
+@keyframes tickerMove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion: reduce){.ticker-track{animation:none;flex-wrap:wrap}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -2667,7 +2676,8 @@ async function loadData() {
     window._dj = record.dj || null; try { djMount(); } catch(e) {}
     window._xEditors = record.xEditors || [];
     window._rivalryNames = record.rivalryNames || {};
-    try { _moveJoinSection(); } catch(e) {}
+    try { _moveJoinSection(); _dashLayout(); } catch(e) { console.warn('dash layout', e); }
+    setTimeout(() => { try { renderDashNews(); renderRecordsTicker(); } catch(e) { console.warn('dash news', e); } }, 300);
     window._discordInviteUrl = record.discordInvite || null;
     if(window._discordInviteUrl) document.querySelectorAll('a[href*="discord.gg/"]').forEach(a => { a.href = window._discordInviteUrl; });
     setTimeout(() => { try { renderSideNav(); } catch(e) { console.warn('side nav', e); } }, 50);
@@ -2812,7 +2822,7 @@ function showView(id) {
   if(id==='events') { setTimeout(renderEvents, 50); }
   if(id==='totw') setTimeout(renderTotw, 30);
   if(id==='fplus') setTimeout(renderFantasyPlus, 30);
-  if(id==='awards') setTimeout(() => { try { renderAwardsDashboard(); } catch(e) {} }, 30);
+  if(id==='awards') setTimeout(() => { try { renderAwardsDashboard(); renderAwardsView(); } catch(e) {} }, 30);
   if(id==='join') setTimeout(() => { try { _moveJoinSection(); renderTeamRegistrations(); } catch(e) {} }, 30);
   if(id==='add-match') { setTimeout(initWalkoverTeams, 50); setTimeout(()=>setScreenshotModel(aiModel||'gemini-2.5-flash'), 50); setTimeout(initDiscordQueue, 100); }
   if(PROTECTED_VIEWS.includes(id)) {
@@ -8692,7 +8702,9 @@ function renderAwardsDashboard() {
       ${_isLoggedInSync() ? `<span style="flex:1"></span><button onclick="announceAwards('${lastClosed.id}')" class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem" title="Wyślij ogłoszenie zwycięzców ponownie">📣 Ogłoś zwycięzców</button>` : ''}
     </div>` : '';
   el.innerHTML = open.map(card).join('') + (open.length ? '' : winners);
-  try { const v = document.getElementById('awards-view-wrap'); if(v) v.innerHTML = el.innerHTML || `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Teraz nie ma otwartego głosowania. Nowe rusza po każdej kolejce.', 'No voting open right now — a new one starts after every round.')}</div>`; } catch(e) {}
+  try { el.style.display = (awardsList || []).some(a => a.status === 'open' && (!sid || !a.seasonId || a.seasonId === sid)) ? '' : 'none'; } catch(e) {} // na Dashboardzie tylko trwające głosowanie (zwycięzcy są w Ogłoszeniach)
+  try { if(document.querySelector('.view.active')?.id === 'view-awards') renderAwardsView(); } catch(e) {}
+  try { renderDashNews(); } catch(e) {}
 }
 
 async function voteAward(id, cat, idx) {
@@ -15785,7 +15797,11 @@ function _sideSync(v) { const key = v === 'join' ? 'join:' + (typeof _regTab !==
 
 // ═══ 🏀 PIĄTKA TYGODNIA — 5 najlepszych występów kolejki (średnia ocena występu na mecz; ta sama miara co grafiki i MVP) ═══
 let _totwWeek = null;
-function _totwWeeks() { const sid = currentSeasonId || null; return [...new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && x.week && (x.matchIds || []).length).map(x => +x.week))].sort((a, b) => b - a); }
+function _totwWeeks() { // tylko zakończone kolejki: każde spotkanie rozegrane albo walkower
+  const sid = currentSeasonId || null, by = {};
+  (schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && x.week).forEach(x => (by[+x.week] = by[+x.week] || []).push(x));
+  return Object.entries(by).filter(([, L]) => L.every(x => x.played || x.walkover || _ssResult({ demo: false }, x)?.done) && L.some(x => (x.matchIds || []).length)).map(([w]) => +w).sort((a, b) => b - a);
+}
 function _totwData(w) {
   const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || []).map(String)));
   const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + .7 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + .7 * (+p.blk || 0) - (+p.to || 0);
@@ -15812,26 +15828,54 @@ async function renderTotw() {
 // ═══ ⭐ FANTASY+ — zapowiedź (podgląd, opis, wpisowe) + ankieta ═══
 async function renderFantasyPlus() {
   const el = document.getElementById('fplus-wrap'); if(!el) return;
-  const mock = (title, body) => `<div class="card" style="padding:.8rem .9rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin-bottom:.5rem">${title}</div>${body}</div>`;
-  const pill = (t, c) => `<span style="display:inline-block;font-size:.66rem;font-weight:800;padding:.1rem .45rem;border-radius:6px;background:${c};color:#111">${t}</span>`;
+  const T = (pl, en) => _g(pl, en), pill = (t, c) => `<span style="display:inline-block;font-size:.66rem;font-weight:800;padding:.1rem .45rem;border-radius:6px;background:${c};color:#111">${t}</span>`;
+  const screen = (title, body) => `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)"><div style="display:flex;align-items:center;gap:.35rem;padding:.4rem .6rem;background:var(--surface2);border-bottom:1px solid var(--border)"><span style="width:9px;height:9px;border-radius:50%;background:#ef4444"></span><span style="width:9px;height:9px;border-radius:50%;background:#f59e0b"></span><span style="width:9px;height:9px;border-radius:50%;background:#22c55e"></span><span style="font-size:.7rem;font-weight:700;color:var(--muted);margin-left:.4rem">${title}</span></div><div style="padding:.75rem">${body}</div></div>`;
+  const h = t => `<div class="section-title" style="font-size:1.25rem;margin:1.3rem 0 .6rem">${t}</div>`;
+  const steps = [['📝', T('Zapisy i wpisowe', 'Sign-up & entry fee'), T('Zgłaszasz się jako GM. Liczba miejsc jest ograniczona, a wpisowe zasila pulę nagród.', 'Sign up as a GM. Spots are limited and entry fees go to the prize pool.')],
+    ['🔨', T('Aukcja draftowa na żywo', 'Live draft auction'), T('Każdy GM ma ten sam budżet. Zawodnicy ligi po kolei trafiają na licytację: kto da więcej, ten bierze. Czas na podbicie to kilka sekund, a każde podbicie go odnawia. Budżet = limit wynagrodzeń.', 'Every GM gets the same budget. League players go up for auction one by one — highest bid wins. A few seconds to raise, every raise resets the clock. Your budget is your salary cap.')],
+    ['📅', T('Sezon: pojedynki co tydzień', 'Season: weekly matchups'), T('Co kolejkę mierzysz się z innym GM-em. Twoi zawodnicy zdobywają punkty za swoje prawdziwe mecze w lidze — wygrywa GM z większą sumą punktów.', 'Each round you face another GM. Your players score points from their real league games — the higher total wins.')],
+    ['🔁', T('Rynek: wolni agenci i wymiany', 'Market: free agents & trades'), T('Wolnych agentów kupujesz w licytacji w ciemno (FAAB) — każdy GM oferuje kwotę, najwyższa oferta wygrywa. Z innymi GM-ami wymieniasz się zawodnikami; analizator pokazuje, czy wymiana się opłaca, a pozostali mogą ją zawetować.', 'Free agents are bought in blind bidding (FAAB) — highest offer wins. Trade players with other GMs; the analyzer shows if a deal pays off and other GMs can veto it.')],
+    ['🏆', T('Playoffy i mistrz', 'Playoffs & champion'), T('Najlepsi GM-owie sezonu zasadniczego grają playoffy o tytuł i główną nagrodę.', 'The best regular-season GMs play the playoffs for the title and the top prize.')],
+    ['🧬', T('Dynastia', 'Dynasty'), T('Po sezonie zatrzymujesz kilku zawodników (keeperów) na kolejny — budujesz drużynę na lata.', 'After the season you keep a few players (keepers) for the next one — build a team for years.')]];
+  const SC = [[T('Punkt', 'Point'), '+1'], [T('Zbiórka', 'Rebound'), '+1,2'], [T('Asysta', 'Assist'), '+1,5'], [T('Przechwyt', 'Steal'), '+3'], [T('Blok', 'Block'), '+3'], [T('Strata', 'Turnover'), '−1'], [T('Wygrana drużyny', 'Team win'), '+2'], ['Double-double', '+3'], ['Triple-double', '+5'], [T('Ocena meczu A+ … F', 'Game grade A+ … F'), '+3 … −2']];
   el.innerHTML = `<div data-notr>
-    <div class="card" style="padding:1.1rem 1.2rem;margin-bottom:1rem;background:linear-gradient(135deg,rgba(124,58,237,.18),rgba(245,197,24,.08))">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.7rem;letter-spacing:1px">⭐ FANTASY+ · ${_g('LIGA MENEDŻERÓW', 'MANAGER LEAGUE')}</div>
-      <div style="font-size:.9rem;margin-top:.4rem;max-width:760px;line-height:1.5">${_g('Zostań GM-em własnej drużyny. Licytujesz zawodników ligi w <b>aukcji na żywo</b>, budujesz skład pod <b>limit wynagrodzeń</b>, handlujesz z innymi menedżerami i walczysz w <b>playoffach</b> o mistrzostwo. Twoi gracze zdobywają punkty za prawdziwe mecze ligi.', 'Become the GM of your own team. Bid on league players in a <b>live auction</b>, build a roster under the <b>salary cap</b>, trade with other managers and fight for the title in the <b>playoffs</b>. Your players score points from real league games.')}</div>
-      <div style="margin-top:.6rem;font-size:.84rem">💰 ${_g('<b>Wpisowe</b> — udział będzie płatny, a wpisowe zasili pulę nagród. Kwotę i nagrody ogłosimy przed startem.', '<b>Entry fee</b> — participation will be paid and fees go to the prize pool. Amount and prizes will be announced before launch.')}</div></div>
-    <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.45rem">👀 ${_g('PODGLĄD', 'PREVIEW')}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.7rem;margin-bottom:1rem">
-      ${mock('🔨 ' + _g('AUKCJA DRAFTOWA NA ŻYWO', 'LIVE DRAFT AUCTION'), `<div style="background:var(--surface2);border-radius:10px;padding:.6rem;text-align:center"><div style="font-size:.7rem;color:var(--muted)">${_g('Na licytacji', 'Up for bid')}</div><div style="font-weight:900;font-size:1.15rem">MaTT M2544</div><div style="font-size:.72rem;color:var(--muted)">ROW Rybnik · PG · ${pill('A-', '#86efac')} ${pill('B+', '#86efac')}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.5rem"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;color:var(--accent)">$42</span><span style="font-size:.8rem">⏱ 0:08</span></div><div style="font-size:.7rem;color:var(--muted)">${_g('prowadzi', 'leading')}: Sanki GM</div></div>`)}
-      ${mock('💵 ' + _g('LIMIT WYNAGRODZEŃ', 'SALARY CAP'), `<div style="font-size:.8rem;margin-bottom:.35rem">${_g('Twój skład', 'Your roster')}: <b>$186</b> / $200</div><div style="height:10px;background:var(--surface2);border-radius:5px;overflow:hidden"><div style="width:93%;height:100%;background:linear-gradient(90deg,#22c55e,#f59e0b)"></div></div>
-        <div style="font-size:.74rem;color:var(--muted);margin-top:.5rem">${['PG MaTT M2544 · $42', 'SG Rvnm · $31', 'SF llmorganll · $28', 'PF San · $19', 'C Wil · $24'].map(x => `<div>${x}</div>`).join('')}</div>`)}
-      ${mock('🔁 ' + _g('WYMIANY Z ANALIZATOREM', 'TRADES WITH ANALYZER'), `<div style="display:flex;justify-content:space-between;font-size:.8rem"><span>${_g('Oddajesz', 'You give')}: <b>Rvnm</b></span><span>${_g('Dostajesz', 'You get')}: <b>Kozak</b></span></div>
-        <div style="font-size:.74rem;margin-top:.4rem">${_g('Prognoza punktów / tydzień', 'Projected pts / week')}: <b style="color:#86efac">+6,4</b></div><div style="font-size:.74rem">${_g('Ocena wymiany', 'Trade verdict')}: <b style="color:#f59e0b">⚖️ ${_g('uczciwa', 'fair')}</b></div><div style="font-size:.7rem;color:var(--muted);margin-top:.3rem">${_g('Inni menedżerowie mogą zawetować wymianę.', 'Other managers can veto a trade.')}</div>`)}
-      ${mock('🏆 ' + _g('SEZON, PLAYOFFY, DYNASTIA', 'SEASON, PLAYOFFS, DYNASTY'), `<div style="font-size:.78rem;line-height:1.6">📅 ${_g('Mecze GM-ów co tydzień', 'Weekly GM matchups')}<br>🆓 ${_g('Wolni agenci z licytacją w ciemno (FAAB)', 'Free agents with blind bidding (FAAB)')}<br>🏆 ${_g('Playoffy o tytuł', 'Playoffs for the title')}<br>🧬 ${_g('Dynastia: zatrzymujesz graczy na kolejny sezon', 'Dynasty: keep players for next season')}</div>`)}
+    <div class="card" style="padding:1.2rem 1.3rem;background:linear-gradient(135deg,rgba(124,58,237,.2),rgba(245,197,24,.08))">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.9rem;letter-spacing:1px">⭐ FANTASY+ · ${T('LIGA MENEDŻERÓW', 'MANAGER LEAGUE')}</div>
+      <div style="font-size:.95rem;margin-top:.45rem;max-width:820px;line-height:1.6">${T('Zwykłe fantasy to wybór piątki z budżetu. <b>Fantasy+</b> idzie dalej: jesteś <b>generalnym menedżerem</b> własnej drużyny przez cały sezon. Walczysz o zawodników ligi z innymi GM-ami na <b>aukcji na żywo</b>, pilnujesz <b>limitu wynagrodzeń</b>, negocjujesz <b>wymiany</b>, polujesz na wolnych agentów i co tydzień grasz <b>pojedynek</b> z innym GM-em. Każdy rzut, zbiórka i asysta Twoich zawodników w prawdziwych meczach ligi to punkty dla Ciebie.', 'Regular fantasy is picking a five within a budget. <b>Fantasy+</b> goes further: you are the <b>general manager</b> of your own team for the whole season. Fight other GMs for league players in a <b>live auction</b>, manage the <b>salary cap</b>, negotiate <b>trades</b>, hunt free agents and play a <b>weekly matchup</b> against another GM. Every shot, rebound and assist your players make in real league games is points for you.')}</div>
+      <div style="margin-top:.7rem;font-size:.86rem">💰 ${T('<b>Wpisowe:</b> udział będzie płatny, a całe wpisowe trafi do puli nagród dla najlepszych GM-ów. Kwotę i podział nagród ogłosimy przed startem — zagłosuj w ankiecie na dole, czy wchodzisz.', '<b>Entry fee:</b> participation will be paid and all fees go to the prize pool for the best GMs. Amount and prize split will be announced before launch — vote in the poll below.')}</div></div>
+    ${h('🗺️ ' + T('Jak wygląda sezon', 'How a season works'))}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.6rem">${steps.map(([e, t, d], i) => `<div class="card" style="padding:.75rem .85rem"><div style="font-size:.7rem;font-weight:800;color:var(--accent)">${T('KROK', 'STEP')} ${i + 1}</div><div style="font-weight:800;font-size:.95rem;margin:.15rem 0 .3rem">${e} ${t}</div><div style="font-size:.8rem;color:var(--muted);line-height:1.5">${d}</div></div>`).join('')}</div>
+    ${h('🧮 ' + T('Punktacja zawodników', 'Player scoring'))}
+    <div class="card" style="padding:.6rem .9rem"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.1rem .9rem">${SC.map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.84rem"><span>${k}</span><b style="color:${v.startsWith('−') ? 'var(--loss)' : 'var(--accent)'}">${v}</b></div>`).join('')}</div>
+      <div style="font-size:.74rem;color:var(--muted);margin-top:.45rem">${T('Przykład: 25 pkt, 8 zb., 6 as., 2 przechwyty, wygrana i ocena A- = 25 + 9,6 + 9 + 6 + 2 + 2 = <b>53,6 pkt</b>.', 'Example: 25 pts, 8 reb, 6 ast, 2 stl, a win and an A- grade = 25 + 9.6 + 9 + 6 + 2 + 2 = <b>53.6 pts</b>.')}</div></div>
+    ${h('🖥️ ' + T('Tak to wygląda', 'What it looks like'))}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.8rem">
+      ${screen('🔨 ' + T('Pokój aukcji', 'Auction room'), `<div style="display:grid;grid-template-columns:1fr 120px;gap:.7rem">
+        <div><div style="font-size:.7rem;color:var(--muted)">${T('Na licytacji · zawodnik 14/40', 'Up for bid · player 14/40')}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem">MaTT M2544</div><div style="font-size:.72rem;color:var(--muted)">ROW Rybnik · PG · ${T('Strzelec 3&D', '3&D shooter')}</div>
+          <div style="display:flex;gap:.25rem;margin:.4rem 0">${[['RZUT', 'A-'], ['ZA 3', 'A'], ['ROZ', 'B+'], ['OBR', 'B'], ['ZB', 'B-']].map(([k, g]) => `<div style="flex:1;text-align:center;background:var(--surface2);border-radius:6px;padding:.2rem 0"><div style="font-size:.52rem;color:var(--muted)">${k}</div><b style="color:#86efac;font-size:.82rem">${g}</b></div>`).join('')}</div>
+          <div style="display:flex;gap:.3rem"><button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem">+$1</button><button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem">+$5</button><button class="btn btn-primary" style="font-size:.7rem;padding:.2rem .5rem">${T('Podbij', 'Raise')} → $43</button></div></div>
+        <div style="text-align:center"><div style="width:84px;height:84px;margin:0 auto;border-radius:50%;border:6px solid #f59e0b;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem">0:08</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.7rem;color:var(--accent);margin-top:.3rem">$42</div><div style="font-size:.66rem;color:var(--muted)">${T('prowadzi', 'leading')}: Sanki GM</div></div></div>
+        <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.55rem;font-size:.66rem">${[['Lechu', 118], ['Sanki GM', 96], ['AsuRa', 133], ['Kozak', 71]].map(([n, b]) => `<span style="background:var(--surface2);border-radius:6px;padding:.15rem .4rem">${n} · <b>$${b}</b></span>`).join('')}</div>`)}
+      ${screen('💵 ' + T('Mój skład i limit', 'My roster & cap'), `<div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:.3rem"><span>${T('Wynagrodzenia', 'Salaries')}</span><b>$186 / $200</b></div><div style="height:9px;background:var(--surface2);border-radius:5px;overflow:hidden;margin-bottom:.5rem"><div style="width:93%;height:100%;background:linear-gradient(90deg,#22c55e,#f59e0b)"></div></div>
+        ${[['PG', 'MaTT M2544', 42, '38,4'], ['SG', 'Rvnm', 31, '29,1'], ['SF', 'llmorganll', 28, '31,7'], ['PF', 'San', 19, '18,2'], ['C', 'Wil', 24, '22,9'], ['🪑', 'Kozak', 12, '9,5']].map(([p, n, $, fp]) => `<div style="display:grid;grid-template-columns:28px 1fr 46px 46px;gap:.3rem;font-size:.78rem;padding:.22rem 0;border-bottom:1px solid var(--border)"><b style="color:var(--muted)">${p}</b><span>${n}</span><span style="color:var(--muted);text-align:right">$${$}</span><b style="text-align:right">${fp}</b></div>`).join('')}
+        <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">${T('Ostatnia kolumna: średnia punktów na tydzień', 'Last column: average points per week')}</div>`)}
+      ${screen('⚔️ ' + T('Pojedynek tygodnia', 'Weekly matchup'), `<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.5rem;align-items:center;text-align:center;margin-bottom:.5rem"><div><div style="font-size:.74rem;color:var(--muted)">Lechu</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:var(--win)">152,4</div></div><b style="color:var(--muted)">vs</b><div><div style="font-size:.74rem;color:var(--muted)">AsuRa</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem">138,9</div></div></div>
+        ${[['MaTT M2544', '41,2', 'Rvnm', '35,0'], ['llmorganll', '33,5', 'San', '27,8'], ['Wil', '28,1', 'Kozak', '30,6'], ['San', '24,6', 'cichy_x', '22,4'], ['Kozak', '25,0', 'qLechu', '23,1']].map(([a, x, b, y]) => `<div style="display:grid;grid-template-columns:1fr 44px 10px 44px 1fr;gap:.25rem;font-size:.76rem;padding:.2rem 0;border-bottom:1px solid var(--border)"><span>${a}</span><b style="text-align:right">${x}</b><span></span><b>${y}</b><span style="text-align:right">${b}</span></div>`).join('')}
+        <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">${T('Na żywo — punkty rosną z każdym wgranym meczem kolejki', 'Live — points grow with every game uploaded this round')}</div>`)}
+      ${screen('🔁 ' + T('Wymiana z analizatorem', 'Trade with analyzer'), `<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.78rem"><div style="background:var(--surface2);border-radius:8px;padding:.45rem"><div style="font-size:.66rem;color:var(--muted)">${T('Oddajesz', 'You give')}</div><b>Rvnm</b> · $31</div><div style="background:var(--surface2);border-radius:8px;padding:.45rem"><div style="font-size:.66rem;color:var(--muted)">${T('Dostajesz', 'You get')}</div><b>Kozak</b> · $12 + <b>San</b> · $19</div></div>
+        <div style="margin-top:.5rem;font-size:.76rem">${[[T('Rzut', 'Shooting'), 72, 64], [T('Rozgrywanie', 'Playmaking'), 58, 66], [T('Zbiórki', 'Rebounding'), 44, 61]].map(([k, a, b]) => `<div style="display:grid;grid-template-columns:86px 1fr;gap:.4rem;align-items:center;margin:.2rem 0"><span style="color:var(--muted)">${k}</span><div style="position:relative;height:8px;background:var(--surface2);border-radius:4px"><div style="position:absolute;inset:0;width:${a}%;background:rgba(148,163,184,.5);border-radius:4px"></div><div style="position:absolute;top:2px;height:4px;width:${b}%;background:#f5c518;border-radius:2px"></div></div></div>`).join('')}</div>
+        <div style="font-size:.78rem;margin-top:.4rem">${T('Prognoza / tydzień', 'Projection / week')}: <b style="color:var(--win)">+6,4 pkt</b> · ${T('limit', 'cap')}: <b>$186 → $186</b> · ⚖️ <b style="color:#f59e0b">${T('uczciwa', 'fair')}</b></div>
+        <div style="font-size:.66rem;color:var(--muted);margin-top:.25rem">${T('Szare — przed wymianą, żółte — po. Inni GM-owie mają czas na weto.', 'Grey — before, yellow — after. Other GMs get time to veto.')}</div>`)}
+      ${screen('📊 ' + T('Tabela GM-ów', 'GM standings'), `${[['Lechu', '6-1', '1 024,6'], ['AsuRa', '5-2', '987,1'], ['Sanki GM', '4-3', '941,0'], ['Kozak', '3-4', '902,3'], ['cichy_x', '2-5', '866,8'], ['qLechu', '1-6', '801,2']].map(([n, r, p], i) => `<div style="display:grid;grid-template-columns:22px 1fr 44px 64px;gap:.3rem;font-size:.78rem;padding:.25rem 0;border-bottom:1px solid ${i === 3 ? '#f5c518' : 'var(--border)'}"><b style="color:var(--muted)">${i + 1}</b><span>${n}</span><span>${r}</span><b style="text-align:right">${p}</b></div>`).join('')}<div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">${T('Żółta linia — awans do playoffów', 'Yellow line — playoff spots')}</div>`)}
     </div>
-    <div class="card" style="padding:.9rem 1rem" id="fplus-poll">⏳</div></div>`;
+    ${h('❓ ' + T('Najczęstsze pytania', 'FAQ'))}
+    <div class="card" style="padding:.7rem .9rem;font-size:.82rem;line-height:1.55">${[[T('Czy muszę być na aukcji na żywo?', 'Do I have to attend the auction live?'), T('Tak — aukcja to najważniejszy wieczór sezonu. Termin ustalimy z wyprzedzeniem tak, żeby jak najwięcej GM-ów mogło być na żywo.', 'Yes — the auction is the big night of the season. We\u2019ll set the date in advance so as many GMs as possible can be there live.')],
+      [T('Czy mogę mieć zawodników z mojej drużyny?', 'Can I own players from my own team?'), T('O tym decyduje admin w ustawieniach ligi (np. zakaz brania siebie).', 'The admin decides in league settings (e.g. no picking yourself).')],
+      [T('Co, jeśli mój zawodnik nie gra w danym tygodniu?', 'What if my player doesn\u2019t play that week?'), T('Zdobywa 0 pkt — dlatego warto mieć ławkę i reagować na rynku.', 'He scores 0 — that\u2019s why a bench and market moves matter.')]].map(([q, a]) => `<div style="padding:.35rem 0;border-bottom:1px solid var(--border)"><b>${q}</b><br><span style="color:var(--muted)">${a}</span></div>`).join('')}</div>
+    <div class="card" style="padding:.9rem 1rem;margin-top:1rem" id="fplus-poll">⏳</div></div>`;
   const r = await _api('/poll?id=fantasyplus', 'GET', null, discordUser?.session ? { session: true } : {}); _fplusPoll(r);
 }
+
 function _fplusPoll(r) {
   const box = document.getElementById('fplus-poll'); if(!box) return;
   const opts = [['yes', '✅ ' + _g('Tak, gram!', 'Yes, I\u2019m in!')], ['maybe', '🤔 ' + _g('Może — zależy od wpisowego', 'Maybe — depends on the fee')], ['no', '❌ ' + _g('Nie, dziękuję', 'No, thanks')]];
@@ -15850,6 +15894,78 @@ async function fplusVote(v) {
 function _evCurrent() { const L = (events || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))); return L.find(e => !['finished', 'closed', 'archived'].includes(e.status)) || L[0] || null; }
 function openCurrentDraft(tab) { const ev = _evCurrent(); if(!ev) { showView('events'); showToast(_g('Brak draftów', 'No drafts yet'), 'info'); return; } showView('events'); setTimeout(() => openEventDetail(ev.id, tab), 150); }
 function goJoin(tab) { setRegTab(tab); showView('join'); }
+
+// ═══ 🗳️ GŁOSOWANIE TYGODNIA — bieżące głosowanie + archiwum (zwycięzcy, karty MVP i obrońcy, link do meczu) ═══
+let _awArchId = null;
+async function renderAwardsView() {
+  const host = document.getElementById('awards-view-wrap'); if(!host) return;
+  const sid = currentSeasonId || null, open = (awardsList || []).filter(a => a.status === 'open' && (!sid || !a.seasonId || a.seasonId === sid));
+  const closed = (awardsList || []).filter(a => a.status === 'closed' && a.winners && (!sid || !a.seasonId || a.seasonId === sid)).sort((a, b) => (+b.week || 0) - (+a.week || 0) || String(b.closedAt).localeCompare(String(a.closedAt)));
+  const dashHtml = document.getElementById('awards-dashboard-wrap')?.innerHTML || '';
+  const a = closed.find(x => x.id === _awArchId) || closed[0];
+  host.innerHTML = `${open.length && dashHtml ? `<div style="margin-bottom:1.2rem">${dashHtml}</div>` : `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;color:var(--muted);font-size:.86rem">${_g('Teraz nie ma otwartego głosowania. Nowe rusza po każdej kolejce.', 'No voting open right now — a new one starts after every round.')}</div>`}
+    ${closed.length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem"><div class="section-title" style="font-size:1.25rem;margin:0">🏅 ${_g('Zwycięzcy', 'Winners')}</div>
+      <select onchange="_awArchId=this.value;renderAwardsView()" style="font-size:.82rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${closed.map(x => `<option value="${x.id}" ${x.id === a.id ? 'selected' : ''}>${_h(x.title)}</option>`).join('')}</select></div>
+      <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.7rem">${a.categories.filter(c => a.winners[c.key]).map(c => { const w = a.winners[c.key], card = ['mvp', 'def'].includes(c.key);
+        const link = c.key === 'game' && /^m/.test(String(w.id)) ? `<button class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem" onclick="openMatch('${String(w.id).slice(1)}')">🏀 ${_g('Zobacz mecz', 'View game')}</button>`
+          : c.key === 'clip' ? (() => { const cl = (clipsList || []).find(x => 'c' + x.id === String(w.id)); return cl?.url ? `<a class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem;text-decoration:none" href="${_h(cl.url)}" target="_blank" rel="noopener">🎬 ${_g('Zobacz akcję', 'Watch')}</a>` : ''; })() : '';
+        return `<div class="card" style="padding:.7rem .8rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent)">${c.emoji || '🏅'} ${_h(c.title).toUpperCase()}</div>
+          <div style="font-weight:800;font-size:1rem;margin-top:.2rem">${_h(w.label)}</div><div style="font-size:.74rem;color:var(--muted)">${w.team ? _h(w.team) + ' · ' : ''}${w.votes} ${_g(_plPL(w.votes, 'głos', 'głosy', 'głosów'), w.votes === 1 ? 'vote' : 'votes')}</div>
+          ${card ? `<div id="awc-${c.key}" style="margin-top:.5rem;aspect-ratio:4/5;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted)">⏳</div>` : ''}${link}</div>`; }).join('')}</div>` : ''}`;
+  if(!a) return;
+  const scope = a.week ? `week:${a.seasonId || sid || ''}:${a.week}` : null;
+  for(const k of ['mvp', 'def']) { const w = a.winners[k], box = document.getElementById('awc-' + k); if(!w || !box) continue;
+    try { const url = k === 'mvp' ? await _pcLimitedImage(w.label, `MVP · ${String(a.title || '').toUpperCase()}`, scope, 'gold', 0, null) : await (async () => { const d = (scope && _pcData(w.label, scope)) || _pcData(w.label, 'season'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })();
+      box.innerHTML = url ? (k === 'mvp' ? _holoHtml(url, w.label, 1) : `<img src="${url}" alt="${_h(w.label)}" style="width:100%;border-radius:12px;display:block">`) : _h(w.label); if(k === 'mvp') _holoBind(box); } catch(e) { box.textContent = w.label; } }
+}
+
+// ═══ 📣 DASHBOARD: OGŁOSZENIA (nagrody, MVP z kartą, Piątka tygodnia, linki, zapisy, drafty) ═══
+async function renderDashNews() {
+  let el = document.getElementById('dash-news'); if(!el) return;
+  const sid = currentSeasonId || null, aw = (awardsList || []).filter(a => a.status === 'closed' && a.winners && (!sid || !a.seasonId || a.seasonId === sid)).sort((a, b) => (+b.week || 0) - (+a.week || 0))[0];
+  const tw = _totwWeeks()[0], top = tw ? _totwData(tw) : [], evOpen = (events || []).filter(e => ['open', 'signup', 'registration'].includes(e.status) || e.signupsOpen);
+  const box = (inner, extra = '') => `<div class="card" style="padding:.75rem .9rem;${extra}">${inner}</div>`, hd = t => `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">${t}</div>`;
+  el.innerHTML = `<div class="section-title" style="font-size:1.3rem">📣 ${_g('Ogłoszenia', 'News')}</div>
+    <div data-notr style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem;margin-bottom:1.5rem">
+      ${aw ? box(`${hd('🏅 ' + _h(aw.title).toUpperCase())}<div style="display:flex;gap:.7rem;align-items:flex-start">
+          <div id="dn-mvp" style="width:120px;flex-shrink:0;aspect-ratio:4/5;border-radius:10px;background:var(--surface2)"></div>
+          <div style="font-size:.82rem;line-height:1.55">${aw.categories.filter(c => aw.winners[c.key]).map(c => `<div>${c.emoji || '🏅'} <span style="color:var(--muted)">${_h(c.title)}:</span> <b>${_h(aw.winners[c.key].label)}</b></div>`).join('')}
+            <button class="btn btn-ghost" style="font-size:.7rem;margin-top:.4rem" onclick="showView('awards')">${_g('Wszystkie nagrody →', 'All awards →')}</button></div></div>`) : ''}
+      ${top.length ? box(`${hd('🏆 ' + _g('PIĄTKA TYGODNIA', 'TEAM OF THE WEEK') + ' · WEEK ' + tw)}${top.map((p, i) => `<div style="display:flex;justify-content:space-between;gap:.5rem;font-size:.82rem;padding:.18rem 0"><span>${['🥇', '🥈', '🥉', '4.', '5.'][i]} <b>${_h(p.name)}</b> <span style="color:var(--muted)">${_h(p.team)}</span></span><span style="color:var(--muted)">${Math.round(p.pts / p.gp)} PTS</span></div>`).join('')}
+          <button class="btn btn-ghost" style="font-size:.7rem;margin-top:.4rem" onclick="showView('totw')">${_g('Zobacz karty →', 'See the cards →')}</button>`) : ''}
+      ${box(`${hd('🤝 ' + _g('DOŁĄCZ', 'JOIN US'))}
+          ${!registrationsClosed ? `<button class="btn btn-primary" style="font-size:.78rem;width:100%;margin-bottom:.45rem" onclick="goJoin('teams')">🧢 ${_g('Zapisy do ligi otwarte — zgłoś drużynę', 'League sign-ups open — register your team')}</button>` : `<div style="font-size:.84rem;margin-bottom:.5rem">🧢 ${_g('Zapisy do ligi EU — <b>wkrótce</b>', 'EU league sign-ups — <b>coming soon</b>')}</div>`}
+          ${evOpen.map(e => `<button class="btn btn-ghost" style="font-size:.74rem;width:100%;margin-bottom:.35rem" onclick="openEventDetail('${_h(e.id)}')">📝 ${_g('Zapisy na draft', 'Draft sign-ups')}: ${_h(e.name || e.title || '')}</button>`).join('')}
+          <div style="display:flex;gap:.4rem;margin-top:.2rem"><a class="btn btn-ghost" style="flex:1;font-size:.74rem;text-decoration:none;text-align:center" href="${_discordInvite()}" target="_blank" rel="noopener">💬 Discord</a><a class="btn btn-ghost" style="flex:1;font-size:.74rem;text-decoration:none;text-align:center" href="${document.getElementById('x-link')?.href || 'https://x.com/ChemikLeague2K'}" target="_blank" rel="noopener">𝕏 X</a></div>`)}
+    </div>`;
+  if(aw?.winners?.mvp) { const w = aw.winners.mvp, scope = aw.week ? `week:${aw.seasonId || sid || ''}:${aw.week}` : null;
+    try { const url = await _pcLimitedImage(w.label, `MVP · ${String(aw.title || '').toUpperCase()}`, scope, 'gold', 0, null), b = document.getElementById('dn-mvp'); if(url && b) b.innerHTML = `<img src="${url}" alt="${_h(w.label)}" style="width:100%;border-radius:10px;display:block;cursor:pointer" onclick="showView('awards')">`; } catch(e) {} }
+}
+// 🏛 pasek rekordów ligi (przewijany)
+function renderRecordsTicker() {
+  const el = document.getElementById('dash-ticker'); if(!el) return;
+  const all = _withAllMatches(() => matches.filter(m => !m.walkover)), best = {};
+  const put = (k, v, html) => { if(v > (best[k]?.v ?? -1)) best[k] = { v, html }; };
+  all.forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => {
+    put('team', +t.score || 0, `🔥 ${_g('Najwięcej punktów drużyny', 'Most team points')}: <b>${_h(t.name)}</b> ${t.score} vs ${_h(o.name)}`);
+    put('margin', (+t.score || 0) - (+o.score || 0), `💥 ${_g('Najwyższa wygrana', 'Biggest win')}: <b>${_h(t.name)}</b> ${t.score}:${o.score} ${_h(o.name)}`);
+    (t.players || []).forEach(p => [['pts', '🏀', _g('punktów', 'points')], ['reb', '💪', _g('zbiórek', 'rebounds')], ['ast', '🎯', _g('asyst', 'assists')], ['stl', '🦊', _g('przechwytów', 'steals')], ['blk', '🧱', _g('bloków', 'blocks')]].forEach(([k, e, l]) => put(k, +p[k] || 0, `${e} <b>${_h(p.name)}</b> — ${+p[k] || 0} ${l} vs ${_h(o.name)}`)));
+  }));
+  const items = Object.values(best).filter(x => x.v > 0).map(x => `<span style="padding:0 1.6rem;white-space:nowrap">${x.html}</span>`).join('');
+  el.innerHTML = items ? `<div class="ticker" onclick="_recordsEdition=undefined;openLeagueRecordsModal()" title="${_g('Wszystkie rekordy', 'All records')}"><span class="ticker-lbl">🏛 ${_g('REKORDY LIGI', 'LEAGUE RECORDS')}</span><div class="ticker-mask"><div class="ticker-track">${items}${items}</div></div></div>` : '';
+}
+// układ Dashboardu: kolejność bloków
+function _dashLayout() {
+  const v = document.getElementById('view-dashboard'); if(!v || v.dataset.layout) return; v.dataset.layout = '1';
+  const top = id => { const e = document.getElementById(id); if(!e) return null; let x = e; while(x && x.parentElement !== v) x = x.parentElement; return x; };
+  const mk = id => { let e = document.getElementById(id); if(!e) { e = document.createElement('div'); e.id = id; v.appendChild(e); } return e; };
+  const std = top('standings-body'), sum = top('leaders-grid'), totwOld = top('team-of-week-wrap');
+  const order = [top('live-wrap'), top('schedule-dashboard'), std?.previousElementSibling, std, top('penalties-note'), mk('dash-news'), top('awards-dashboard-wrap'), top('events-dashboard-wrap'), top('playoff-dashboard-wrap'), top('bracket-wrap'),
+    mk('dash-ticker'), top('power-ranking-wrap'), top('elo-wrap'), sum?.previousElementSibling, sum, top('dashboard-extras'), top('classics-wrap'), top('mvp-race-wrap'), top('scenario-wrap'), top('ach-wrap'), top('quicklinks-wrap')].filter(Boolean);
+  order.forEach(e => v.appendChild(e)); // pozostałe bloki zostają na końcu
+  [top('league-hero'), totwOld, totwOld?.previousElementSibling?.id ? null : totwOld?.previousElementSibling, top('records-banner-wrap')].filter(Boolean).forEach(e => { e.style.display = 'none'; }); // stary baner, stara „najlepsza piątka”, pasek nowych rekordów → zastąpione
+  ['records-banner-wrap', 'milestone-banner', 'round-comparison-wrap', 'event-ratings-wrap'].map(top).filter(Boolean).forEach(e => v.appendChild(e));
+}
 
 function goToTeamRegistrations() { showView('join'); renderTeamRegistrations(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 function _moveJoinSection() { const el = document.getElementById('team-registrations-wrap'), host = document.getElementById('join-wrap'); if(el && host && el.parentElement !== host) host.appendChild(el); }
