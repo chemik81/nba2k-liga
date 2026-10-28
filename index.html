@@ -15256,6 +15256,27 @@ const _LIM_THEMES = {
   xmas: { stops: ['#e8fff1', '#16a34a', '#b91c1c', '#16a34a', '#fef2f2'], banner: '#0b1a10', text: '#fca5a5', tint: ['rgba(22,163,74,.16)', 'rgba(185,28,28,.2)'], deco: [['🎄', '❄️', '🎁'], ['⭐', '❄️', '🎅'], ['🎁', '🔔', '❄️'], ['❄️', '⛄', '🎄']] },
   fire: { stops: ['#fff1a8', '#f97316', '#b91c1c', '#f97316', '#fde68a'], banner: '#170603', text: '#fdba74', tint: ['rgba(249,115,22,.16)', 'rgba(185,28,28,.22)'], deco: [['🔥', '🔥', '💥'], ['🔥', '⚡', '🔥']] }
 };
+// 🎃 HALLOWEEN — pajęczyny, pająk, nietoperze, dynie, duszek, ociekające krople; układ zależny od wariantu
+function _limHalloween(g, W, H, v, F) {
+  let s = (v + 7) * 7919; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const emo = (e, x, y, size, rot = 0, a = 1) => { g.save(); g.translate(x, y); g.rotate(rot); g.globalAlpha = a; g.font = `${Math.round(size)}px ${F}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(e, 0, 0); g.restore(); };
+  const vg = g.createRadialGradient(W / 2, H / 2, H * .22, W / 2, H / 2, H * .78); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(46,0,60,.6)'); g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  const glow = g.createLinearGradient(0, H - 330, 0, H); glow.addColorStop(0, 'rgba(255,122,0,0)'); glow.addColorStop(1, 'rgba(255,122,0,.28)'); g.fillStyle = glow; g.fillRect(0, H - 330, W, 330);
+  const web = (cx, cy, dx, dy, r) => { g.save(); g.strokeStyle = 'rgba(235,235,245,.5)'; g.lineWidth = 2.2; const n = 6;
+    for(let i = 0; i <= n; i++) { const a = (i / n) * Math.PI / 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + dx * Math.cos(a) * r, cy + dy * Math.sin(a) * r); g.stroke(); }
+    for(let k = 1; k <= 5; k++) { const rr = r * k / 5; g.beginPath(); for(let i = 0; i <= n; i++) { const a = (i / n) * Math.PI / 2, x = cx + dx * Math.cos(a) * rr, y = cy + dy * Math.sin(a) * rr;
+      if(i === 0) g.moveTo(x, y); else { const pa = ((i - .5) / n) * Math.PI / 2; g.quadraticCurveTo(cx + dx * Math.cos(pa) * rr * .84, cy + dy * Math.sin(pa) * rr * .84, x, y); } } g.stroke(); }
+    g.restore(); };
+  web(26, 26, 1, 1, 175 + (v % 3) * 15); web(W - 26, 26, -1, 1, 175 + ((v + 1) % 3) * 15); if(v % 2) web(26, H - 26, 1, -1, 140); else web(W - 26, H - 26, -1, -1, 140);
+  const sx = v % 2 ? 170 : W - 170, sy = 240 + rnd() * 140; g.strokeStyle = 'rgba(235,235,245,.6)'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx, 30); g.lineTo(sx, sy - 24); g.stroke(); emo('🕷️', sx, sy, 58);
+  for(let i = 0; i < 4 + v % 3; i++) emo('🦇', 190 + rnd() * (W - 380), 60 + rnd() * 130, 48 + rnd() * 34, (rnd() - .5) * .7, .95);
+  emo('🎃', 92, H - 200, 96, -.15); emo('🎃', W - 92, H - 200, 80, .18);
+  emo(['👻', '💀', '🍬', '🕯️', '🧙'][v % 5], v % 2 ? W - 66 : 66, H * .5 + (rnd() - .5) * 120, 64, (rnd() - .5) * .4, .88);
+  if(v % 3 === 1) emo('🌕', W / 2 + (rnd() - .5) * 260, 64, 54, 0, .9);
+  g.fillStyle = '#ff7a00'; // ociekające krople na górnej ramce
+  for(let i = 0; i < 10; i++) { const x = 70 + i * (W - 140) / 9 + (rnd() - .5) * 30, len = 18 + rnd() * 58, w = 12 + rnd() * 10;
+    g.beginPath(); g.moveTo(x - w / 2, 20); g.lineTo(x + w / 2, 20); g.lineTo(x + w / 2, 20 + len); g.arc(x, 20 + len, w / 2, 0, Math.PI); g.closePath(); g.fill(); }
+}
 function _limPaint(g, W, H, label, theme, variant, F) {
   const T = _LIM_THEMES[theme] || _LIM_THEMES.gold, v = +variant || 0;
   const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
@@ -15263,7 +15284,8 @@ function _limPaint(g, W, H, label, theme, variant, F) {
   const fr = g.createLinearGradient(0, 0, W, H); T.stops.forEach((c, i) => fr.addColorStop(i / (T.stops.length - 1), c));
   g.lineWidth = 26; g.strokeStyle = fr; rr(13, 13, W - 26, H - 26, 54); g.stroke();
   const sh = g.createLinearGradient(0, 0, W, H); sh.addColorStop(.35, 'rgba(255,255,255,0)'); sh.addColorStop(.5, 'rgba(255,240,180,.16)'); sh.addColorStop(.65, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
-  if(T.deco.length) { // dekoracje w narożnikach — inny zestaw i układ dla każdego wariantu
+  if(theme === 'halloween') _limHalloween(g, W, H, v, F);
+  else if(T.deco.length) { // dekoracje w narożnikach — inny zestaw i układ dla każdego wariantu
     const set = T.deco[v % T.deco.length], spots = [[70, 300], [W - 70, 300], [70, H - 300], [W - 70, H - 300], [W / 2, 60]].slice(v % 2, (v % 2) + 4);
     g.textAlign = 'center'; g.textBaseline = 'middle';
     spots.forEach(([x, y], i) => { g.save(); g.translate(x, y); g.rotate(((i + v) % 3 - 1) * .25); g.font = `${64 + ((i + v) % 3) * 14}px ${F}`; g.globalAlpha = .9; g.fillText(set[i % set.length], 0, 0); g.restore(); });
@@ -15452,7 +15474,10 @@ async function openLimitedAdmin() {
       <div style="border-top:1px solid var(--border);margin-top:.9rem;padding-top:.7rem">
         <b style="font-size:.84rem">🎉 Kreator okazji — karty z cegieł tygodnia</b>
         <div style="font-size:.74rem;color:var(--muted);margin:.2rem 0 .45rem">Każda karta dostaje inny wariant dekoracji. Najlepiej z wyższą szansą — okazja szybko mija.</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;align-items:end"><div><label style="${_MODAL_LBL}">Motyw</label>${sel('ev-t', _LIM_THEME_LBL, 'halloween')}</div><div><label style="${_MODAL_LBL}">Ostatnie kolejki</label><input id="ev-n" type="number" min="1" max="10" value="4" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Do</label><input id="ev-u" type="datetime-local" value="${until}" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Szansa %</label><input id="ev-c" type="number" value="30" min="1" max="90" style="${_MODAL_INP}"></div></div>
+        <div style="display:grid;grid-template-columns:1.3fr .7fr 1.3fr .7fr;gap:.4rem;align-items:end"><div><label style="${_MODAL_LBL}">Motyw</label>${sel('ev-t', _LIM_THEME_LBL, 'halloween')}</div><div><label style="${_MODAL_LBL}">Ile kart</label><input id="ev-n" type="number" min="1" max="12" value="4" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Do</label><input id="ev-u" type="datetime-local" value="${until}" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Szansa %</label><input id="ev-c" type="number" value="30" min="1" max="90" style="${_MODAL_INP}"></div></div>
+        <label style="${_MODAL_LBL};margin-top:.45rem">Z których kolejek</label>
+        <div id="ev-weeks" style="display:flex;flex-wrap:wrap;gap:.35rem">${(() => { const W = _eventWeeks(); return W.length ? W.map((w, i) => `<label style="display:flex;align-items:center;gap:.3rem;font-size:.78rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.25rem .55rem;cursor:pointer"><input type="checkbox" value="${w}" ${i >= W.length - 2 ? 'checked' : ''} style="width:auto;margin:0;accent-color:var(--accent)"> Week ${w}</label>`).join('') : '<span style="font-size:.76rem;color:var(--muted)">Brak rozegranych kolejek w tym sezonie.</span>'; })()}</div>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Kolejność: 1. miejsca z cegieł każdej zaznaczonej kolejki, potem 2. miejsca itd. (np. 4 karty z Week 1 i 2 → #1 i #2 z obu).</div>
         <label style="${_MODAL_LBL};margin-top:.4rem">Napis</label><input id="ev-l" value="CEGŁA · HALLOWEEN" style="${_MODAL_INP}">
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-ghost" onclick="eventPreview()">👁 Podgląd kart</button><button class="btn btn-primary" onclick="eventCreate()">🎉 Wydaj wszystkie</button></div>
       </div>
@@ -15480,21 +15505,33 @@ async function limitedCreate() {
   showToast(r.ok && r.created?.length ? '🌟 Karta wydana — ogłoszenie z kartą idzie na Discord' : r.ok ? 'Taka karta jest już aktywna' : '❌ ' + r.error, r.ok ? 'success' : 'error');
   if(r.ok) openLimitedAdmin();
 }
-function _eventBricks(nWeeks) { // cegły tygodnia z ostatnich kolejek (ta sama zasada co na grafikach)
-  const sid = currentSeasonId || null, weeks = [...new Set((schedule || []).filter(s => s.generated && (s.seasonId || null) === sid && s.week).map(s => +s.week))].sort((a, b) => b - a), out = [];
-  for(const w of weeks) { if(out.length >= nWeeks) break; try { const d = _wgData(w); const b = d?.facts?.brick; if(b && !out.some(x => _normNick(x.name) === _normNick(b.name))) out.push({ name: b.name, team: b.team, week: w }); } catch(e) {} }
+function _weekBrickRank(w) {
+  const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || (x.matchId ? [x.matchId] : [])).map(String)));
+  const by = {}; _withAllMatches(() => matches.filter(m => !m.walkover && ids.has(String(m.id)))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
+    const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, fgm: 0, fga: 0, gp: 0 }; a.fgm += +p.fgm || 0; a.fga += +p.fga || 0; a.gp++; })));
+  return Object.values(by).filter(a => a.gp && a.fga / a.gp >= 8).sort((a, b) => a.fgm / a.fga - b.fgm / b.fga || (b.fga - b.fgm) - (a.fga - a.fgm)).map(a => ({ ...a, week: +w }));
+}
+function _eventWeeks() { const sid = currentSeasonId || null; return [...new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && x.week && (x.matchIds || []).length).map(x => +x.week))].sort((a, b) => a - b); }
+// karty z zaznaczonych kolejek: najpierw 1. miejsca każdej kolejki, potem 2. miejsca itd.
+function _eventBricks(count, weeks) {
+  const ranks = weeks.map(w => _weekBrickRank(w)), out = [], seen = new Set();
+  for(let r = 0; out.length < count && ranks.some(l => l.length > r); r++) for(const l of ranks) { if(out.length >= count) break; const b = l[r]; if(b && !seen.has(_normNick(b.name))) { seen.add(_normNick(b.name)); out.push({ ...b, place: r + 1 }); } }
   return out;
 }
-function _eventForm() { const v = id => document.getElementById(id)?.value?.trim() || ''; return { theme: v('ev-t') || 'halloween', n: Math.max(1, Math.min(10, +v('ev-n') || 4)), until: v('ev-u') ? new Date(v('ev-u')).toISOString() : null, chance: Math.min(90, +v('ev-c') || 30) / 100, label: v('ev-l') || 'CEGŁA' }; }
+function _eventForm() { const v = id => document.getElementById(id)?.value?.trim() || ''; return { weeks: [...document.querySelectorAll('#ev-weeks input:checked')].map(x => +x.value), theme: v('ev-t') || 'halloween', n: Math.max(1, Math.min(12, +v('ev-n') || 4)), until: v('ev-u') ? new Date(v('ev-u')).toISOString() : null, chance: Math.min(90, +v('ev-c') || 30) / 100, label: v('ev-l') || 'CEGŁA' }; }
 async function eventPreview() {
-  const f = _eventForm(), list = _eventBricks(f.n), box = document.getElementById('lim-prev');
-  if(!list.length) { box.innerHTML = 'Brak cegieł tygodnia w tym sezonie.'; return; }
+  const f = _eventForm(), box = document.getElementById('lim-prev');
+  if(!f.weeks.length) { box.innerHTML = 'Zaznacz co najmniej jedną kolejkę.'; return; }
+  const list = _eventBricks(f.n, f.weeks);
+  if(!list.length) { box.innerHTML = 'Brak cegieł w zaznaczonych kolejkach (min. średnio 8 rzutów na mecz).'; return; }
   box.innerHTML = '⏳';
   const urls = []; for(const [i, b] of list.entries()) urls.push(await _limRender({ name: b.name, label: f.label, theme: f.theme, variant: i, scope: `week:${currentSeasonId || ''}:${b.week}` }));
-  box.innerHTML = urls.map((u, i) => u ? `<div style="flex:1 1 140px;max-width:48%"><div style="font-size:.7rem;margin-bottom:.15rem">${_h(list[i].name)} · Week ${list[i].week}</div>${_holoHtml(u, list[i].name, 1)}</div>` : '').join(''); _holoBind(box);
+  box.innerHTML = urls.map((u, i) => u ? `<div style="flex:1 1 140px;max-width:48%"><div style="font-size:.7rem;margin-bottom:.15rem">${_h(list[i].name)} · Week ${list[i].week} · #${list[i].place} (${list[i].fgm}/${list[i].fga})</div>${_holoHtml(u, list[i].name, 1)}</div>` : '').join(''); _holoBind(box);
 }
 async function eventCreate() {
-  const f = _eventForm(), list = _eventBricks(f.n); if(!list.length) { showToast('Brak cegieł tygodnia', 'info'); return; }
+  const f = _eventForm(); if(!f.weeks.length) { showToast('Zaznacz co najmniej jedną kolejkę', 'info'); return; }
+  const list = _eventBricks(f.n, f.weeks); if(!list.length) { showToast('Brak cegieł w zaznaczonych kolejkach', 'info'); return; }
+  if(list.length < f.n) showToast(`W zaznaczonych kolejkach jest tylko ${list.length} cegieł`, 'info');
   if(!confirm(`Wydać ${list.length} kart(y) „${f.label}” (${list.map(b => b.name).join(', ')})? Każda dostanie ogłoszenie na Discordzie.`)) return;
   const r = await _api('/cards/limited', 'POST', { cards: list.map((b, i) => ({ name: b.name, team: b.team, label: f.label, kind: 'event', theme: f.theme, variant: i, until: f.until, chance: f.chance, week: b.week, seasonId: currentSeasonId || null })) }, { admin: true });
   showToast(r.ok ? `🎉 Wydano ${r.created?.length || 0} kart` : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) openLimitedAdmin();
