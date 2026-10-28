@@ -15163,7 +15163,7 @@ async function cardsOpen(premium) {
   const r = await _api('/cards/open', 'POST', premium ? { premium: true } : {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
-  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
+  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null, c.theme, c.variant, c.persona) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
     document.getElementById('cp-' + i).innerHTML = `<div style="animation:cpFlip .6s;text-align:center">${img ? `<img src="${img}" style="width:180px;border-radius:12px;box-shadow:0 0 24px ${_TIER_COL[c.tier]}">` : `<div style="height:225px;border:2px solid ${_TIER_COL[c.tier]};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800">${_h(c.name)}</div>`}
       <div style="font-size:.76rem;margin-top:.25rem">${c.tier === 'limited' ? `<b style="color:#f5c518">🌟 ${_h(c.label || '')}</b>` : _TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
   window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {} setTimeout(() => streakLoad().catch(() => {}), 1500);
@@ -15249,26 +15249,51 @@ async function karnetMount() { const k = await karnetLoad(); document.querySelec
 
 // ═══ 🌟 KARTY LIMITOWANE (kolekcja + admin) ═══
 // 🌟 karta limitowana: zwykła karta gracza w złotej ramce z banerem okazji (ten sam wygląd co u bota)
-async function _pcLimitedImage(name, label, scope) {
-  const d = (scope && _pcData(name, scope)) || _pcData(name, 'season') || _pcData(name, 'edition') || _pcData(name, 'career'); if(!d) return null;
-  const src = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true), img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
-  const W = img.width, H = img.height, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'), F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'";
-  g.drawImage(img, 0, 0, W, H);
-  const gold = g.createLinearGradient(0, 0, W, H); gold.addColorStop(0, '#fff3b0'); gold.addColorStop(.3, '#f5c518'); gold.addColorStop(.55, '#a87a08'); gold.addColorStop(.8, '#f5c518'); gold.addColorStop(1, '#fff0a0');
+// 🌟 KARTA LIMITOWANA — motywy (złoty, Halloween, Święta, Ogień) z dekoracjami zależnymi od wariantu; wspólny kod strony i bota
+const _LIM_THEMES = {
+  gold: { stops: ['#fff3b0', '#f5c518', '#a87a08', '#f5c518', '#fff0a0'], banner: '#120d02', text: '#ffd84d', tint: null, deco: [] },
+  halloween: { stops: ['#ffb347', '#ff7a00', '#5b1a8a', '#ff7a00', '#ffb347'], banner: '#14060f', text: '#ff9a2e', tint: ['rgba(255,122,0,.18)', 'rgba(91,26,138,.28)'], deco: [['🎃', '🦇', '🕸️'], ['👻', '🦇', '🍬'], ['🕷️', '🕸️', '🎃'], ['🦇', '🌕', '👻'], ['🍬', '🎃', '🕷️']] },
+  xmas: { stops: ['#e8fff1', '#16a34a', '#b91c1c', '#16a34a', '#fef2f2'], banner: '#0b1a10', text: '#fca5a5', tint: ['rgba(22,163,74,.16)', 'rgba(185,28,28,.2)'], deco: [['🎄', '❄️', '🎁'], ['⭐', '❄️', '🎅'], ['🎁', '🔔', '❄️'], ['❄️', '⛄', '🎄']] },
+  fire: { stops: ['#fff1a8', '#f97316', '#b91c1c', '#f97316', '#fde68a'], banner: '#170603', text: '#fdba74', tint: ['rgba(249,115,22,.16)', 'rgba(185,28,28,.22)'], deco: [['🔥', '🔥', '💥'], ['🔥', '⚡', '🔥']] }
+};
+function _limPaint(g, W, H, label, theme, variant, F) {
+  const T = _LIM_THEMES[theme] || _LIM_THEMES.gold, v = +variant || 0;
   const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-  g.lineWidth = 26; g.strokeStyle = gold; rr(13, 13, W - 26, H - 26, 54); g.stroke();
+  if(T.tint) { const tg = g.createLinearGradient(0, 0, W, H); tg.addColorStop(0, T.tint[0]); tg.addColorStop(1, T.tint[1]); g.fillStyle = tg; g.fillRect(0, 0, W, H); }
+  const fr = g.createLinearGradient(0, 0, W, H); T.stops.forEach((c, i) => fr.addColorStop(i / (T.stops.length - 1), c));
+  g.lineWidth = 26; g.strokeStyle = fr; rr(13, 13, W - 26, H - 26, 54); g.stroke();
   const sh = g.createLinearGradient(0, 0, W, H); sh.addColorStop(.35, 'rgba(255,255,255,0)'); sh.addColorStop(.5, 'rgba(255,240,180,.16)'); sh.addColorStop(.65, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
-  const txt = '🌟 ' + String(label || 'EDYCJA LIMITOWANA').toUpperCase(); g.font = `900 36px ${F}`;
-  { const sg = g.createLinearGradient(0, H - 150, 0, H); sg.addColorStop(0, 'rgba(10,8,3,0)'); sg.addColorStop(.35, 'rgba(10,8,3,.94)'); sg.addColorStop(1, 'rgba(10,8,3,.98)'); g.fillStyle = sg; g.save(); rr(26, H - 150, W - 52, 124, 40); g.clip(); g.fillRect(0, H - 150, W, 150); g.restore(); } // pas pod banerem (zamiast stopki)
+  if(T.deco.length) { // dekoracje w narożnikach — inny zestaw i układ dla każdego wariantu
+    const set = T.deco[v % T.deco.length], spots = [[70, 300], [W - 70, 300], [70, H - 300], [W - 70, H - 300], [W / 2, 60]].slice(v % 2, (v % 2) + 4);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    spots.forEach(([x, y], i) => { g.save(); g.translate(x, y); g.rotate(((i + v) % 3 - 1) * .25); g.font = `${64 + ((i + v) % 3) * 14}px ${F}`; g.globalAlpha = .9; g.fillText(set[i % set.length], 0, 0); g.restore(); });
+  }
+  { const sg = g.createLinearGradient(0, H - 150, 0, H); sg.addColorStop(0, 'rgba(10,8,3,0)'); sg.addColorStop(.35, 'rgba(10,8,3,.94)'); sg.addColorStop(1, 'rgba(10,8,3,.98)'); g.fillStyle = sg; g.save(); rr(26, H - 150, W - 52, 124, 40); g.clip(); g.fillRect(0, H - 150, W, 150); g.restore(); }
+  const icon = { halloween: '🎃', xmas: '🎄', fire: '🔥' }[theme] || '🌟', txt = icon + ' ' + String(label || 'EDYCJA LIMITOWANA').toUpperCase(); g.font = `900 36px ${F}`;
   const tw = Math.min(W - 120, g.measureText(txt).width + 80), bx = (W - tw) / 2, by = H - 112;
-  rr(bx, by, tw, 70, 35); g.fillStyle = '#120d02'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#f5c518'; g.stroke();
-  g.fillStyle = '#ffd84d'; g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 36; while(g.measureText(txt).width > tw - 44 && fs > 18) { fs--; g.font = `900 ${fs}px ${F}`; } g.fillText(txt, W / 2, by + 37);
-  return c.toDataURL('image/png');
+  rr(bx, by, tw, 70, 35); g.fillStyle = T.banner; g.fill(); g.lineWidth = 4; g.strokeStyle = T.stops[1]; g.stroke();
+  g.fillStyle = T.text; g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 36; while(g.measureText(txt).width > tw - 44 && fs > 18) { fs--; g.font = `900 ${fs}px ${F}`; } g.fillText(txt, W / 2, by + 37);
 }
-async function openLimitedCard(name, label, scope) {
+// karta osoby spoza ligi (bez statystyk): imię, podpis, opcjonalny obrazek
+function _limPersonaPaint(g, W, H, name, sub, img, theme, F) {
+  const T = _LIM_THEMES[theme] || _LIM_THEMES.gold, bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#1b1530'); bg.addColorStop(1, '#07060c'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  if(img) { g.save(); g.beginPath(); g.arc(W / 2, 420, 230, 0, Math.PI * 2); g.closePath(); g.clip(); const s = Math.max(460 / img.width, 460 / img.height); g.drawImage(img, W / 2 - img.width * s / 2, 420 - img.height * s / 2, img.width * s, img.height * s); g.restore();
+    g.lineWidth = 10; g.strokeStyle = T.stops[1]; g.beginPath(); g.arc(W / 2, 420, 232, 0, Math.PI * 2); g.stroke(); }
+  else { g.font = `900 260px ${F}`; g.fillStyle = T.stops[1]; g.fillText('★', W / 2, 520); }
+  g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 34px ${F}`; g.fillText('KARTA SPECJALNA', W / 2, 760);
+  let fs = 130; g.font = `900 ${fs}px ${F}`; while(g.measureText(String(name).toUpperCase()).width > W - 140 && fs > 50) { fs -= 4; g.font = `900 ${fs}px ${F}`; }
+  g.fillStyle = '#fff'; g.fillText(String(name).toUpperCase(), W / 2, 900);
+  if(sub) { g.font = `800 46px ${F}`; g.fillStyle = T.text; g.fillText(String(sub).toUpperCase(), W / 2, 980); }
+  g.font = `700 26px ${F}`; g.fillStyle = 'rgba(255,255,255,.5)'; g.fillText('2K PRO-AM EKSTRAKLASA · CHEMIKLEAGUES.COM', W / 2, 1180);
+}
+async function _pcLimitedImage(name, label, scope, theme, variant, persona) { return _limRender({ name, label, scope, theme: theme || 'gold', variant: variant || 0, persona: persona || null }); }
+async function openLimitedCard(name, label, scope, theme, variant, persona) {
+  if(typeof persona === 'string') { try { persona = persona ? JSON.parse(persona) : null; } catch(e) { persona = null; } }
   const m = _fxModal('limcard-modal', 460); m.classList.add('open');
   m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + '<div style="color:var(--muted)">⏳</div>';
-  let url = null; try { url = await _pcLimitedImage(name, label, scope); } catch(e) {}
+  let url = null; try { url = await _pcLimitedImage(name, label, scope, theme, +variant || 0, persona); } catch(e) {}
   setTimeout(() => _holoBind(m), 0);
   m.querySelector('.modal').innerHTML = _fxHead('limcard-modal', '🌟 ' + _h(label || '')) + (url ? `${_holoHtml(url, name, 1)}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.6rem;gap:.5rem"><span style="font-size:.7rem;color:var(--muted)">✨ ${_g('Porusz kursorem albo przechyl telefon', 'Move the cursor or tilt your phone')}</span><a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-limitowana-${_normNick(name)}.png">⬇ ${_g('Pobierz', 'Download')}</a></div>` : `<div style="color:var(--muted)">${_g('Karta będzie dostępna po pierwszym meczu gracza w sezonie.', 'The card will be available after the player\u2019s first game this season.')}</div>`);
@@ -15367,7 +15392,7 @@ function showcasePick() {
 async function showcaseRender(el, list) {
   if(!el || !list?.length) return;
   for(const c of list) {
-    let url = null; try { url = c.tier === 'limited' ? await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null) : await (async () => { const d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })(); } catch(e) {}
+    let url = null; try { url = c.tier === 'limited' ? await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null, c.theme, c.variant, c.persona) : await (async () => { const d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })(); } catch(e) {}
     const slot = document.createElement('div'); slot.style.cssText = 'flex:1 1 160px;max-width:200px';
     slot.innerHTML = url ? (['limited', 'galaxy', 'diamond'].includes(c.tier) ? _holoHtml(url, c.name, c.tier === 'diamond' ? .75 : 1) : `<img src="${url}" alt="${_h(c.name)}" style="width:100%;border-radius:12px;display:block">`) : `<div style="padding:1rem;border:1px dashed var(--border);border-radius:12px;text-align:center;font-size:.8rem">${_h(c.name)}</div>`;
     el.appendChild(slot);
@@ -15377,7 +15402,7 @@ async function showcaseRender(el, list) {
 
 function _limTile(c, own) {
   const o = own?.['lim:' + c.id], left = c.active ? Math.max(0, Math.ceil((Date.parse(c.until) - Date.now()) / 864e5)) : 0;
-  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l, this.dataset.s)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" data-s="${c.week ? _h('week:' + (c.seasonId || '') + ':' + c.week) : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
+  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l, this.dataset.s, this.dataset.t, this.dataset.v, this.dataset.p)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" data-s="${c.week ? _h('week:' + (c.seasonId || '') + ':' + c.week) : ''}" data-t="${_h(c.theme || 'gold')}" data-v="${+c.variant || 0}" data-p="${c.persona ? _h(JSON.stringify(c.persona)) : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
     background:${o ? 'linear-gradient(135deg,#3a2a00,#1a1405 40%,#4a3a10 60%,#1a1405)' : 'var(--surface2)'};border:2px solid ${o ? '#f5c518' : 'var(--border)'};box-shadow:${o ? '0 0 18px rgba(245,197,24,.45)' : 'none'};opacity:${o ? 1 : .55}">
     <div style="font-size:.6rem;font-weight:900;letter-spacing:1px;color:#f5c518">🌟 ${currentLang === 'en' ? 'LIMITED' : 'LIMITOWANA'}</div>
     <div style="font-size:1.6rem;margin:.3rem 0">${o ? '🏅' : '❔'}</div>
@@ -15394,28 +15419,102 @@ function limitedSectionHtml(me) {
     ${act.length ? `<div style="font-size:.74rem;font-weight:800;margin:.3rem 0">⏳ ${_g('Teraz w paczkach', 'In packs now')}</div><div style="display:flex;gap:.5rem;flex-wrap:wrap">${act.map(c => _limTile(c, me.cards)).join('')}</div>` : ''}
     ${past.length ? `<div style="font-size:.74rem;font-weight:800;margin:.7rem 0 .3rem">📚 ${_g('Mój album', 'My album')}</div><div style="display:flex;gap:.5rem;flex-wrap:wrap">${past.map(c => _limTile(c, me.cards)).join('')}</div>` : ''}</div>`;
 }
+// 🌟 KREATOR KART LIMITOWANYCH (admin): rodzaj, motyw, osoba spoza ligi, podgląd, data końca, szansa; okazje (np. Halloween z cegieł tygodnia)
+const _LIM_KINDS = [['special', '✨ Specjalna'], ['event', '🎉 Okazja'], ['mvp', '⭐ MVP'], ['record', '🏆 Rekord']];
+const _LIM_THEME_LBL = [['gold', '🌟 Złoty'], ['halloween', '🎃 Halloween'], ['xmas', '🎄 Święta'], ['fire', '🔥 Ogień']];
+async function _limRender(c) { // c: {name,label,theme,variant,persona:{sub,img},scope}
+  const F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'";
+  let baseUrl = null;
+  if(!c.persona) { const d = (c.scope && _pcData(c.name, c.scope)) || _pcData(c.name, 'season') || _pcData(c.name, 'edition') || _pcData(c.name, 'career'); if(d) baseUrl = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); }
+  const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const load = src => new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = src; });
+  if(baseUrl) g.drawImage(await load(baseUrl), 0, 0, W, H);
+  else { let img = null; if(c.persona?.img) { try { img = await load(c.persona.img); } catch(e) {} } _limPersonaPaint(g, W, H, c.name, c.persona?.sub || '', img, c.theme, F); }
+  _limPaint(g, W, H, c.label, c.theme, c.variant, F);
+  try { return cv.toDataURL('image/png'); } catch(e) { return null; } // obrazek z innej domeny bez CORS — bez podglądu
+}
+let _limDraft = null;
 async function openLimitedAdmin() {
-  const m = _fxModal('lim-modal', 620); m.classList.add('open');
-  const names = [...new Set(_withAllMatches(() => matches.filter(x => (x.seasonId || null) === (currentSeasonId || null)).flatMap(x => [x.team1, x.team2]).flatMap(t => (t.players || []).map(p => p.name + '|' + t.name))))];
-  const st = await _api('/daily-invite', 'POST', {}, { admin: true });
-  const L = (await _api('/cards/me', 'GET', null, { session: true }).catch(() => ({}))).limited || [];
-  m.querySelector('.modal').innerHTML = _fxHead('lim-modal', '🌟 Karty limitowane') + `<div data-notr>
-    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">Automatycznie: <b>Piątka tygodnia</b> (po grafikach tygodnia) i <b>MVP tygodnia</b> (po zamknięciu głosowania z kategorią „MVP”). Tu możesz wydać kartę ręcznie, np. za rekord ligi.</div>
-    <label style="${_MODAL_LBL}">Zawodnik</label><input id="lim-p" list="lim-pl" style="${_MODAL_INP};margin-bottom:.5rem"><datalist id="lim-pl">${names.map(x => `<option value="${_h(x.split('|')[0])}">${_h(x.split('|')[1])}</option>`).join('')}</datalist>
-    <label style="${_MODAL_LBL}">Napis na karcie</label><input id="lim-l" placeholder="np. REKORD LIGI · 41 PTS" maxlength="60" style="${_MODAL_INP};margin-bottom:.5rem">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem"><div><label style="${_MODAL_LBL}">Statystyki (opcjonalnie)</label><input id="lim-s" placeholder="41 PTS · 8 REB · 6 AST" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Dni w paczkach</label><input id="lim-d" type="number" min="1" max="30" value="3" style="${_MODAL_INP}"></div></div>
-    <div style="display:flex;justify-content:flex-end;margin-top:.6rem"><button class="btn btn-primary" onclick="limitedCreate()">🌟 Wydaj kartę</button></div>
-    <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.6rem;font-size:.8rem">Szansa na kartę limitowaną w paczce: <input id="lim-c" type="number" min="0" max="100" value="${Math.round((st.limitedChance ?? .1) * 100)}" style="${_MODAL_INP};width:70px;display:inline-block"> % <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/cards/limited','POST',{chance:(+document.getElementById('lim-c').value||0)/100},{admin:true}).then(r=>showToast(r.ok?'💾 Zapisano':'❌','success'))">💾</button></div>
-    ${L.filter(c => c.active).length ? `<div style="margin-top:.7rem;font-size:.78rem"><b>Teraz w paczkach:</b>${L.filter(c => c.active).map(c => `<div style="display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${_h(c.name)} — ${_h(c.label)} · ma ją ${c.owners}</span><a href="#" onclick="_api('/cards/limited','POST',{end:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:var(--loss)">zakończ</a></div>`).join('')}</div>` : ''}
+  const m = _fxModal('lim-modal', 860); m.classList.add('open');
+  const players = [...new Set(_withAllMatches(() => matches.flatMap(x => [x.team1, x.team2]).flatMap(t => (t.players || []).map(p => p.name + '|' + t.name))))];
+  const st = await _api('/daily-invite', 'POST', {}, { admin: true }), L = (await _api('/cards/limited', 'POST', { list: true }, { admin: true })).list || [];
+  const now = Date.now(), until = new Date(Date.now() + 7 * 864e5 - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16), sel = (id, opts, v) => `<select id="${id}" style="${_MODAL_INP}">${opts.map(([k, l]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  m.querySelector('.modal').innerHTML = _fxHead('lim-modal', '🌟 Karty limitowane') + `<div data-notr style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:1rem">
+    <div>
+      <div style="font-size:.76rem;color:var(--muted);margin-bottom:.6rem">Automatycznie: Piątka tygodnia i MVP tygodnia. Tu wydajesz kartę ręcznie — za rekord, okazję albo dla kogoś spoza ligi.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem"><div><label style="${_MODAL_LBL}">Rodzaj</label>${sel('lim-k', _LIM_KINDS, 'special')}</div><div><label style="${_MODAL_LBL}">Motyw</label>${sel('lim-t', _LIM_THEME_LBL, 'gold')}</div></div>
+      <label style="${_MODAL_LBL};margin-top:.5rem">Zawodnik / osoba</label><input id="lim-p" list="lim-pl" style="${_MODAL_INP}"><datalist id="lim-pl">${players.map(x => `<option value="${_h(x.split('|')[0])}">${_h(x.split('|')[1])}</option>`).join('')}</datalist>
+      <label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);margin:.45rem 0"><input type="checkbox" id="lim-per" style="width:auto;margin:0" onchange="document.getElementById('lim-perbox').style.display=this.checked?'grid':'none'"> Osoba spoza ligi (karta bez statystyk)</label>
+      <div id="lim-perbox" style="display:none;grid-template-columns:1fr 1fr;gap:.5rem"><div><label style="${_MODAL_LBL}">Podpis</label><input id="lim-sub" placeholder="np. Organizator ligi" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Obrazek (URL, opcj.)</label><input id="lim-img" placeholder="https://cdn.discordapp.com/…" style="${_MODAL_INP}"></div></div>
+      <label style="${_MODAL_LBL};margin-top:.5rem">Napis na karcie</label><input id="lim-l" placeholder="np. REKORD LIGI · 52 PTS" maxlength="60" style="${_MODAL_INP}">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.5rem"><div><label style="${_MODAL_LBL}">W paczkach do</label><input id="lim-u" type="datetime-local" value="${until}" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Szansa w paczce %</label><input id="lim-c" type="number" min="1" max="90" placeholder="${Math.round((st.limitedChance ?? .1) * 100)} (domyślna)" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Wariant dekoracji</label><input id="lim-v" type="number" min="0" max="9" value="0" style="${_MODAL_INP}"></div></div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.7rem"><button class="btn btn-ghost" onclick="limPreview()">👁 Podgląd</button><button class="btn btn-primary" onclick="limitedCreate()">🌟 Wydaj i ogłoś</button></div>
+      <div style="border-top:1px solid var(--border);margin-top:.9rem;padding-top:.7rem">
+        <b style="font-size:.84rem">🎉 Kreator okazji — karty z cegieł tygodnia</b>
+        <div style="font-size:.74rem;color:var(--muted);margin:.2rem 0 .45rem">Każda karta dostaje inny wariant dekoracji. Najlepiej z wyższą szansą — okazja szybko mija.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;align-items:end"><div><label style="${_MODAL_LBL}">Motyw</label>${sel('ev-t', _LIM_THEME_LBL, 'halloween')}</div><div><label style="${_MODAL_LBL}">Ostatnie kolejki</label><input id="ev-n" type="number" min="1" max="10" value="4" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Do</label><input id="ev-u" type="datetime-local" value="${until}" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Szansa %</label><input id="ev-c" type="number" value="30" min="1" max="90" style="${_MODAL_INP}"></div></div>
+        <label style="${_MODAL_LBL};margin-top:.4rem">Napis</label><input id="ev-l" value="CEGŁA · HALLOWEEN" style="${_MODAL_INP}">
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-ghost" onclick="eventPreview()">👁 Podgląd kart</button><button class="btn btn-primary" onclick="eventCreate()">🎉 Wydaj wszystkie</button></div>
+      </div>
+      <div style="border-top:1px solid var(--border);margin-top:.9rem;padding-top:.6rem;font-size:.8rem">Domyślna szansa na kartę limitowaną w paczce: <input id="lim-gc" type="number" min="0" max="100" value="${Math.round((st.limitedChance ?? .1) * 100)}" style="${_MODAL_INP};width:70px;display:inline-block"> % <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/cards/limited','POST',{chance:(+document.getElementById('lim-gc').value||0)/100},{admin:true}).then(r=>showToast(r.ok?'💾 Zapisano':'❌','success'))">💾</button></div>
+      ${L.length ? `<div style="margin-top:.7rem;font-size:.78rem"><b>Karty (aktywne i z ostatnich dni):</b>${L.slice().reverse().map(c => { const act = Date.parse(c.until) > now; return `<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${act ? '🟢' : '⚪'} ${_h(c.name)} — ${_h(c.label)} <span style="color:var(--muted)">${c.theme && c.theme !== 'gold' ? '· ' + c.theme : ''}${c.chance != null ? ' · ' + Math.round(c.chance * 100) + '%' : ''}</span></span><span>${act ? `<a href="#" onclick="_api('/cards/limited','POST',{end:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:#f59e0b">zakończ</a> · ` : ''}<a href="#" onclick="if(confirm('Usunąć kartę? Zdobyte egzemplarze zostaną w kolekcjach.')) _api('/cards/limited','POST',{remove:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:var(--loss)">usuń</a></span></div>`; }).join('')}</div>` : ''}
+    </div>
+    <div><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">PODGLĄD</div><div id="lim-prev" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-start;color:var(--muted);font-size:.8rem">Kliknij „👁 Podgląd”.</div></div>
   </div>`;
 }
+function _limForm() {
+  const v = id => document.getElementById(id)?.value?.trim() || '', per = document.getElementById('lim-per')?.checked;
+  const name = v('lim-p'), team = per ? '' : (_withAllMatches(() => matches.flatMap(x => [x.team1, x.team2]).find(t => (t.players || []).some(p => _normNick(p.name) === _normNick(name)))?.name) || '');
+  return { name, team, label: v('lim-l'), kind: v('lim-k') || 'special', theme: v('lim-t') || 'gold', variant: +v('lim-v') || 0, line: '', until: v('lim-u') ? new Date(v('lim-u')).toISOString() : null, chance: v('lim-c') ? Math.min(90, +v('lim-c')) / 100 : null, persona: per ? { sub: v('lim-sub'), img: v('lim-img') || null } : null };
+}
+async function limPreview() {
+  const f = _limForm(); if(!f.name || !f.label) { showToast('Podaj osobę i napis', 'info'); return; }
+  const box = document.getElementById('lim-prev'); box.innerHTML = '⏳';
+  if(!f.persona && !_pcData(f.name, 'season') && !_pcData(f.name, 'career')) { box.innerHTML = 'Ta osoba nie ma statystyk — zaznacz „Osoba spoza ligi”.'; return; }
+  const url = await _limRender(f); box.innerHTML = url ? `<div style="width:100%">${_holoHtml(url, f.name, 1)}</div>` : 'Nie udało się narysować (obrazek z innej strony blokuje podgląd — na Discordzie i tak się pojawi).'; _holoBind(box);
+}
 async function limitedCreate() {
-  const v = id => document.getElementById(id).value.trim(), name = v('lim-p'), label = v('lim-l');
-  if(!name || !label) { showToast('Podaj zawodnika i napis', 'info'); return; }
-  const team = _withAllMatches(() => matches.flatMap(x => [x.team1, x.team2]).find(t => (t.players || []).some(p => _normNick(p.name) === _normNick(name)))?.name) || '';
-  const r = await _api('/cards/limited', 'POST', { name, team, label, line: v('lim-s'), days: +v('lim-d') || 3, kind: 'special' }, { admin: true });
-  showToast(r.ok && r.created?.length ? '🌟 Karta wydana — gracz dostał DM, zajawka poszła na Discord' : r.ok ? 'Taka karta już istnieje' : '❌ ' + r.error, r.ok ? 'success' : 'error');
+  const f = _limForm(); if(!f.name || !f.label) { showToast('Podaj osobę i napis', 'info'); return; }
+  if(!f.persona && !_pcData(f.name, 'season') && !_pcData(f.name, 'career')) { showToast('Ta osoba nie ma statystyk — zaznacz „Osoba spoza ligi”', 'info'); return; }
+  const r = await _api('/cards/limited', 'POST', f, { admin: true });
+  showToast(r.ok && r.created?.length ? '🌟 Karta wydana — ogłoszenie z kartą idzie na Discord' : r.ok ? 'Taka karta jest już aktywna' : '❌ ' + r.error, r.ok ? 'success' : 'error');
   if(r.ok) openLimitedAdmin();
+}
+function _eventBricks(nWeeks) { // cegły tygodnia z ostatnich kolejek (ta sama zasada co na grafikach)
+  const sid = currentSeasonId || null, weeks = [...new Set((schedule || []).filter(s => s.generated && (s.seasonId || null) === sid && s.week).map(s => +s.week))].sort((a, b) => b - a), out = [];
+  for(const w of weeks) { if(out.length >= nWeeks) break; try { const d = _wgData(w); const b = d?.facts?.brick; if(b && !out.some(x => _normNick(x.name) === _normNick(b.name))) out.push({ name: b.name, team: b.team, week: w }); } catch(e) {} }
+  return out;
+}
+function _eventForm() { const v = id => document.getElementById(id)?.value?.trim() || ''; return { theme: v('ev-t') || 'halloween', n: Math.max(1, Math.min(10, +v('ev-n') || 4)), until: v('ev-u') ? new Date(v('ev-u')).toISOString() : null, chance: Math.min(90, +v('ev-c') || 30) / 100, label: v('ev-l') || 'CEGŁA' }; }
+async function eventPreview() {
+  const f = _eventForm(), list = _eventBricks(f.n), box = document.getElementById('lim-prev');
+  if(!list.length) { box.innerHTML = 'Brak cegieł tygodnia w tym sezonie.'; return; }
+  box.innerHTML = '⏳';
+  const urls = []; for(const [i, b] of list.entries()) urls.push(await _limRender({ name: b.name, label: f.label, theme: f.theme, variant: i, scope: `week:${currentSeasonId || ''}:${b.week}` }));
+  box.innerHTML = urls.map((u, i) => u ? `<div style="flex:1 1 140px;max-width:48%"><div style="font-size:.7rem;margin-bottom:.15rem">${_h(list[i].name)} · Week ${list[i].week}</div>${_holoHtml(u, list[i].name, 1)}</div>` : '').join(''); _holoBind(box);
+}
+async function eventCreate() {
+  const f = _eventForm(), list = _eventBricks(f.n); if(!list.length) { showToast('Brak cegieł tygodnia', 'info'); return; }
+  if(!confirm(`Wydać ${list.length} kart(y) „${f.label}” (${list.map(b => b.name).join(', ')})? Każda dostanie ogłoszenie na Discordzie.`)) return;
+  const r = await _api('/cards/limited', 'POST', { cards: list.map((b, i) => ({ name: b.name, team: b.team, label: f.label, kind: 'event', theme: f.theme, variant: i, until: f.until, chance: f.chance, week: b.week, seasonId: currentSeasonId || null })) }, { admin: true });
+  showToast(r.ok ? `🎉 Wydano ${r.created?.length || 0} kart` : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) openLimitedAdmin();
+}
+// 🎁 paczki od admina
+function openGrantPacks() {
+  const m = _fxModal('grant-modal', 520); m.classList.add('open');
+  const known = new Map(); (playersList || []).forEach(p => p.id && known.set(p.id, p.name || p.gamertag)); (teamRegistrations || []).forEach(r => r.captain?.id && !known.has(r.captain.id) && known.set(r.captain.id, r.captain.name)); (freeAgents || []).forEach(f => f.discordId && !known.has(f.discordId) && known.set(f.discordId, f.name));
+  m.querySelector('.modal').innerHTML = _fxHead('grant-modal', '🎁 Daj paczki') + `<div data-notr>
+    <label style="${_MODAL_LBL}">Komu</label><input id="gr-to" list="gr-list" placeholder="Nick albo Discord ID" style="${_MODAL_INP}"><datalist id="gr-list">${[...known].map(([id, n]) => `<option value="${_h(n)} · ${id}">`).join('')}</datalist>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem"><div><label style="${_MODAL_LBL}">Rodzaj</label><select id="gr-k" style="${_MODAL_INP}"><option value="pack">🎁 Zwykła paczka</option><option value="premium">💎 Paczka premium</option></select></div><div><label style="${_MODAL_LBL}">Ile</label><input id="gr-n" type="number" min="1" max="10" value="1" style="${_MODAL_INP}"></div></div>
+    <label style="${_MODAL_LBL};margin-top:.5rem">Za co (pojawi się w ogłoszeniu)</label><input id="gr-r" placeholder="np. boost serwera Nitro 💜" maxlength="140" style="${_MODAL_INP}">
+    <div style="display:flex;justify-content:flex-end;margin-top:.7rem"><button class="btn btn-primary" onclick="grantPacks()">🎁 Daj i ogłoś</button></div></div>`;
+}
+async function grantPacks() {
+  const raw = document.getElementById('gr-to').value.trim(), id = (raw.match(/(\d{15,21})\s*$/) || [])[1];
+  if(!id) { showToast('Wybierz osobę z listy albo wpisz Discord ID', 'info'); return; }
+  const r = await _api('/cards/grant', 'POST', { to: id, name: raw.replace(/\s*·\s*\d+$/, ''), kind: document.getElementById('gr-k').value, n: +document.getElementById('gr-n').value || 1, reason: document.getElementById('gr-r').value.trim() }, { admin: true });
+  if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
+  _fxClose('grant-modal'); showToast(`🎁 ${r.user}: przyznano — DM i ogłoszenie poszły`, 'success');
 }
 
 // ═══ 🔥 SERIA DNI ═══
@@ -15543,7 +15642,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
