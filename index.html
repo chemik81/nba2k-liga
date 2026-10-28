@@ -15819,9 +15819,14 @@ async function renderTotw() {
     <div id="totw-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.7rem">${list.map((p, i) => `<div data-notr>
       <div id="totw-c${i}" style="aspect-ratio:4/5;border-radius:14px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted)">⏳</div>
       <div style="text-align:center;margin-top:.35rem;font-size:.8rem"><b>${['🥇', '🥈', '🥉'][i] || '#' + (i + 1)} ${_h(p.name)}</b><br><span style="color:var(--muted)">${_h(p.team)} · ${f1(p.pts / p.gp)} PTS · ${f1(p.reb / p.gp)} REB · ${f1(p.ast / p.gp)} AST</span></div></div>`).join('')}</div>`;
-  for(const [i, p] of list.entries()) { // karty z zakresu tej kolejki
-    const d = _pcData(p.name, `week:${currentSeasonId || ''}:${w}`), box = document.getElementById('totw-c' + i); if(!box) continue;
-    try { const url = d ? await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; box.innerHTML = url ? `<img src="${url}" alt="${_h(p.name)}" style="width:100%;border-radius:14px;display:block;cursor:pointer" onclick="openPlayerCardImg(this.alt)">` : _h(p.name); } catch(e) { box.textContent = p.name; }
+  for(const [i, p] of list.entries()) { // karty limitowane Piątki tygodnia (jak MVP): złota ramka, statystyki z tej kolejki, od razu holo; bez otwierania i pobierania
+    const box = document.getElementById('totw-c' + i); if(!box) continue;
+    try { const url = await _pcLimitedImage(p.name, `PIĄTKA TYGODNIA · WEEK ${w}`, `week:${currentSeasonId || ''}:${w}`, 'gold', 0, null);
+      box.style.background = 'none'; box.style.aspectRatio = 'auto';
+      box.innerHTML = url ? `<div oncontextmenu="return false" style="user-select:none;-webkit-touch-callout:none">${_holoHtml(url, p.name, 1)}</div>` : _h(p.name);
+      box.querySelectorAll('img').forEach(im => { im.draggable = false; im.style.pointerEvents = 'none'; });
+      _holoBind(box);
+    } catch(e) { box.textContent = p.name; }
   }
 }
 
