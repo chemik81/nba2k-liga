@@ -15542,14 +15542,16 @@ function openGrantPacks() {
   const known = new Map(); (playersList || []).forEach(p => p.id && known.set(p.id, p.name || p.gamertag)); (teamRegistrations || []).forEach(r => r.captain?.id && !known.has(r.captain.id) && known.set(r.captain.id, r.captain.name)); (freeAgents || []).forEach(f => f.discordId && !known.has(f.discordId) && known.set(f.discordId, f.name));
   m.querySelector('.modal').innerHTML = _fxHead('grant-modal', '🎁 Daj paczki') + `<div data-notr>
     <label style="${_MODAL_LBL}">Komu</label><input id="gr-to" list="gr-list" placeholder="Nick albo Discord ID" style="${_MODAL_INP}"><datalist id="gr-list">${[...known].map(([id, n]) => `<option value="${_h(n)} · ${id}">`).join('')}</datalist>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem"><div><label style="${_MODAL_LBL}">Rodzaj</label><select id="gr-k" style="${_MODAL_INP}"><option value="pack">🎁 Zwykła paczka</option><option value="premium">💎 Paczka premium</option></select></div><div><label style="${_MODAL_LBL}">Ile</label><input id="gr-n" type="number" min="1" max="10" value="1" style="${_MODAL_INP}"></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem"><div><label style="${_MODAL_LBL}">🎁 Zwykłe paczki</label><input id="gr-p" type="number" min="0" max="10" value="1" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">💎 Paczki premium</label><input id="gr-x" type="number" min="0" max="10" value="0" style="${_MODAL_INP}"></div></div>
     <label style="${_MODAL_LBL};margin-top:.5rem">Za co (pojawi się w ogłoszeniu)</label><input id="gr-r" placeholder="np. boost serwera Nitro 💜" maxlength="140" style="${_MODAL_INP}">
     <div style="display:flex;justify-content:flex-end;margin-top:.7rem"><button class="btn btn-primary" onclick="grantPacks()">🎁 Daj i ogłoś</button></div></div>`;
 }
 async function grantPacks() {
   const raw = document.getElementById('gr-to').value.trim(), id = (raw.match(/(\d{15,21})\s*$/) || [])[1];
   if(!id) { showToast('Wybierz osobę z listy albo wpisz Discord ID', 'info'); return; }
-  const r = await _api('/cards/grant', 'POST', { to: id, name: raw.replace(/\s*·\s*\d+$/, ''), kind: document.getElementById('gr-k').value, n: +document.getElementById('gr-n').value || 1, reason: document.getElementById('gr-r').value.trim() }, { admin: true });
+  const packs = Math.max(0, +document.getElementById('gr-p').value || 0), premium = Math.max(0, +document.getElementById('gr-x').value || 0);
+  if(!packs && !premium) { showToast('Podaj liczbę paczek', 'info'); return; }
+  const r = await _api('/cards/grant', 'POST', { to: id, name: raw.replace(/\s*·\s*\d+$/, ''), packs, premium, reason: document.getElementById('gr-r').value.trim() }, { admin: true });
   if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
   _fxClose('grant-modal'); showToast(`🎁 ${r.user}: przyznano — DM i ogłoszenie poszły`, 'success');
 }
