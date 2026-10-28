@@ -15119,7 +15119,7 @@ async function renderCardsView() {
   const el = document.getElementById('cards-view'); if(!el) return;
   el.innerHTML = `<div class="section-title">🃏 ${_g('Kolekcja kart', 'Card collection')}</div><div style="color:var(--muted)">⏳</div>`;
   const board = await _api('/cards/board', 'GET', null, {});
-  if(discordUser?.session) { const r = await _api('/cards/me', 'GET', null, { session: true }); _cards = r.ok ? r : null; }
+  if(discordUser?.session) { const r = await _api('/cards/me', 'GET', null, { session: true }); _cards = r.ok ? r : null; _setRewardToast(r.setRewards); }
   const me = _cards, pool = me?.pool || [], own = me?.cards || {}, uniq = Object.keys(own).length, dups = Object.values(own).reduce((s, c) => s + Math.max(0, c.n - 1), 0);
   const byTeam = {}; pool.forEach(c => (byTeam[c.team] = byTeam[c.team] || []).push(c));
   el.innerHTML = `<div class="section-title">🃏 ${_g('Kolekcja kart', 'Card collection')}</div><div data-notr>
@@ -15137,6 +15137,7 @@ async function renderCardsView() {
     <div id="ut-slot"></div>
     ${discordUser ? challengesHtml(me) : ''}
     ${discordUser && me ? `<div style="text-align:right;margin:-.4rem 0 .8rem"><button class="btn btn-ghost" style="font-size:.74rem" onclick="showcasePick()">🏆 ${_g('Ustaw gablotę na profilu', 'Set your profile showcase')}</button></div>` : ''}
+    ${limitedSetsHtml(me)}
     ${limitedSectionHtml(me)}
     ${discordUser ? `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">📚 ${_g('MOJA KOLEKCJA — ZESTAWY DRUŻYN', 'MY COLLECTION — TEAM SETS')}</div>
       ${Object.entries(byTeam).sort((a, b) => a[0].localeCompare(b[0])).map(([team, list]) => { const got = list.filter(c => own[c.k]).length, done = got === list.length;
@@ -15161,6 +15162,7 @@ async function _dailyRefresh() {
 }
 async function cardsOpen(premium) {
   const r = await _api('/cards/open', 'POST', premium ? { premium: true } : {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
+  setTimeout(() => _setRewardToast(r.setRewards), 3500);
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
   for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, _limScope(c), c.theme, c.variant, c.persona) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); else img = await _rookieCardImage(c.name, c.team); } catch(e) {}
@@ -15433,6 +15435,18 @@ function _limTile(c, own) {
     <div style="font-size:.62rem;margin-top:.3rem;color:var(--muted)">${currentLang === 'en' ? `owned by ${c.owners}` : `ma ją ${c.owners} ${_plPL(c.owners, 'osoba', 'osoby', 'osób')}`}${c.active ? ` · ⏳ ${left} ${currentLang === 'en' ? 'd left' : (left === 1 ? 'dzień' : 'dni')}` : ''}</div>
     ${o && o.n > 1 ? `<span style="position:absolute;top:4px;right:6px;font-size:.62rem;background:#f5c518;color:#000;border-radius:999px;padding:0 .3rem">×${o.n}</span>` : ''}</div>`;
 }
+function _setRewardToast(list) { (list || []).map(n => currentLang === 'en' ? String(n).replace('Karty limitowane', 'Limited cards') : n).forEach(n => showToast(_g(`🏆 Komplet zestawu „${n}” — dostajesz 💎 paczkę premium!`, `🏆 Set “${n}” complete — you get a 💎 premium pack!`), 'success')); }
+// 🏆 zestawy kart limitowanych: tydzień (Piątka + MVP) i okazje; komplet = 💎 paczka premium
+function limitedSetsHtml(me) {
+  const S = (me?.sets || []).slice().sort((a, b) => (a.done - b.done) || (b.active - a.active)); if(!S.length) return '';
+  return `<div style="margin-bottom:.8rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:#f5c518;margin-bottom:.35rem">🏆 ${_g('ZESTAWY — KOMPLET = 💎 PACZKA PREMIUM', 'SETS — COMPLETE = 💎 PREMIUM PACK')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.45rem">${S.map(x => { const pct = Math.round(x.owned / x.total * 100);
+      return `<div style="background:var(--surface2);border:1px solid ${x.done ? 'var(--win)' : 'var(--border)'};border-radius:10px;padding:.5rem .65rem">
+        <div style="display:flex;justify-content:space-between;gap:.4rem;font-size:.8rem"><b>${_h(x.key.startsWith('wk:') ? _g('Karty limitowane', 'Limited cards') + ' · Week ' + x.key.split(':')[2] : x.name)}</b><span>${x.owned}/${x.total}</span></div>
+        <div style="height:6px;background:var(--surface);border-radius:3px;margin:.35rem 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:${x.done ? 'var(--win)' : '#f5c518'}"></div></div>
+        <div style="font-size:.7rem;color:var(--muted)">${x.done ? '✅ ' + _g('Skompletowany — nagroda odebrana', 'Complete — reward claimed') : !x.final ? '⏳ ' + _g('Zestaw uzupełni karta MVP tygodnia', 'The MVP of the week card will complete this set') : x.active ? _g('Brakuje', 'Missing') + ': ' + x.cards.filter(c => !c.owned).map(c => _h(c.name)).join(', ') : _g('Już niedostępny w paczkach', 'No longer in packs')}</div></div>`; }).join('')}</div>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">${_g('Karty limitowane, które już masz, nie wypadają Ci ponownie z paczek.', 'Limited cards you already own won\u2019t drop for you again.')}</div></div>`;
+}
 function limitedSectionHtml(me) {
   const L = me?.limited || []; if(!L.length) return '';
   const act = L.filter(c => c.active), past = L.filter(c => !c.active && me.cards?.['lim:' + c.id]);
@@ -15552,7 +15566,8 @@ async function eventCreate() {
   const list = _eventBricks(f.n, f.weeks); if(!list.length) { showToast('Brak cegieł w zaznaczonych kolejkach', 'info'); return; }
   if(list.length < f.n) showToast(`W zaznaczonych kolejkach jest tylko ${list.length} cegieł`, 'info');
   if(!confirm(`Wydać ${list.length} kart(y) „${f.label}” (${list.map(b => b.name).join(', ')})? Każda dostanie ogłoszenie na Discordzie.`)) return;
-  const r = await _api('/cards/limited', 'POST', { cards: list.map((b, i) => ({ name: b.name, team: b.team, label: f.label, kind: 'event', theme: f.theme, variant: i, until: f.until, chance: f.chance, week: b.week, seasonId: currentSeasonId || null })) }, { admin: true });
+  const setKey = 'ev:' + Date.now().toString(36), setName = ({ halloween: '🎃 ', xmas: '🎄 ', fire: '🔥 ' }[f.theme] || '🌟 ') + f.label;
+  const r = await _api('/cards/limited', 'POST', { cards: list.map((b, i) => ({ name: b.name, team: b.team, label: f.label, kind: 'event', theme: f.theme, variant: i, until: f.until, chance: f.chance, week: b.week, seasonId: currentSeasonId || null, set: setKey, setName })) }, { admin: true });
   showToast(r.ok ? `🎉 Wydano ${r.created?.length || 0} kart` : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) openLimitedAdmin();
 }
 // 🎁 paczki od admina
