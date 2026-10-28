@@ -15163,7 +15163,7 @@ async function cardsOpen(premium) {
   const r = await _api('/cards/open', 'POST', premium ? { premium: true } : {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
-  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null, c.theme, c.variant, c.persona) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); } catch(e) {}
+  for(let i = 0; i < r.pack.length; i++) { await new Promise(res => setTimeout(res, 700)); const c = r.pack[i], d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); let img = ''; try { if(c.tier === 'limited') img = await _pcLimitedImage(c.name, c.label, _limScope(c), c.theme, c.variant, c.persona) || ''; else if(d) img = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); else img = await _rookieCardImage(c.name, c.team); } catch(e) {}
     document.getElementById('cp-' + i).innerHTML = `<div style="animation:cpFlip .6s;text-align:center">${img ? `<img src="${img}" style="width:180px;border-radius:12px;box-shadow:0 0 24px ${_TIER_COL[c.tier]}">` : `<div style="height:225px;border:2px solid ${_TIER_COL[c.tier]};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800">${_h(c.name)}</div>`}
       <div style="font-size:.76rem;margin-top:.25rem">${c.tier === 'limited' ? `<b style="color:#f5c518">🌟 ${_h(c.label || '')}</b>` : _TIER_LBL[c.tier][currentLang === 'en' ? 1 : 0]}${c.isNew ? ` · <b style="color:var(--win)">${_g('NOWA!', 'NEW!')}</b>` : ''}</div></div>`; }
   window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {} setTimeout(() => streakLoad().catch(() => {}), 1500);
@@ -15414,7 +15414,7 @@ function showcasePick() {
 async function showcaseRender(el, list) {
   if(!el || !list?.length) return;
   for(const c of list) {
-    let url = null; try { url = c.tier === 'limited' ? await _pcLimitedImage(c.name, c.label, c.week ? 'week:' + (c.seasonId || '') + ':' + c.week : null, c.theme, c.variant, c.persona) : await (async () => { const d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })(); } catch(e) {}
+    let url = null; try { url = c.tier === 'limited' ? await _pcLimitedImage(c.name, c.label, _limScope(c), c.theme, c.variant, c.persona) : await (async () => { const d = _pcData(c.name, 'season') || _pcData(c.name, 'career'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })(); } catch(e) {}
     const slot = document.createElement('div'); slot.style.cssText = 'flex:1 1 160px;max-width:200px';
     slot.innerHTML = url ? (['limited', 'galaxy', 'diamond'].includes(c.tier) ? _holoHtml(url, c.name, c.tier === 'diamond' ? .75 : 1) : `<img src="${url}" alt="${_h(c.name)}" style="width:100%;border-radius:12px;display:block">`) : `<div style="padding:1rem;border:1px dashed var(--border);border-radius:12px;text-align:center;font-size:.8rem">${_h(c.name)}</div>`;
     el.appendChild(slot);
@@ -15424,7 +15424,7 @@ async function showcaseRender(el, list) {
 
 function _limTile(c, own) {
   const o = own?.['lim:' + c.id], left = c.active ? Math.max(0, Math.ceil((Date.parse(c.until) - Date.now()) / 864e5)) : 0;
-  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l, this.dataset.s, this.dataset.t, this.dataset.v, this.dataset.p)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" data-s="${c.week ? _h('week:' + (c.seasonId || '') + ':' + c.week) : ''}" data-t="${_h(c.theme || 'gold')}" data-v="${+c.variant || 0}" data-p="${c.persona ? _h(JSON.stringify(c.persona)) : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
+  return `<div title="${_h(c.label)}" onclick="${o ? `openLimitedCard(this.dataset.n, this.dataset.l, this.dataset.s, this.dataset.t, this.dataset.v, this.dataset.p)` : ''}" data-n="${_h(c.name)}" data-l="${_h(c.label)}" data-s="${_h(_limScope(c) || '')}" data-t="${_h(c.theme || 'gold')}" data-v="${+c.variant || 0}" data-p="${c.persona ? _h(JSON.stringify(c.persona)) : ''}" style="width:150px;min-height:175px;border-radius:12px;padding:.5rem;text-align:center;position:relative;cursor:${o ? 'pointer' : 'default'};
     background:${o ? 'linear-gradient(135deg,#3a2a00,#1a1405 40%,#4a3a10 60%,#1a1405)' : 'var(--surface2)'};border:2px solid ${o ? '#f5c518' : 'var(--border)'};box-shadow:${o ? '0 0 18px rgba(245,197,24,.45)' : 'none'};opacity:${o ? 1 : .55}">
     <div style="font-size:.6rem;font-weight:900;letter-spacing:1px;color:#f5c518">🌟 ${currentLang === 'en' ? 'LIMITED' : 'LIMITOWANA'}</div>
     <div style="font-size:1.6rem;margin:.3rem 0">${o ? '🏅' : '❔'}</div>
@@ -15444,6 +15444,25 @@ function limitedSectionHtml(me) {
 // 🌟 KREATOR KART LIMITOWANYCH (admin): rodzaj, motyw, osoba spoza ligi, podgląd, data końca, szansa; okazje (np. Halloween z cegieł tygodnia)
 const _LIM_KINDS = [['special', '✨ Specjalna'], ['event', '🎉 Okazja'], ['mvp', '⭐ MVP'], ['record', '🏆 Rekord']];
 const _LIM_THEME_LBL = [['gold', '🌟 Złoty'], ['halloween', '🎃 Halloween'], ['xmas', '🎄 Święta'], ['fire', '🔥 Ogień']];
+// zakres statystyk karty limitowanej: zapisana kolejka, a dla starszych kart — numer tygodnia z napisu („… WEEK 2”)
+function _limScope(c) {
+  const w = c?.week || +(String(c?.label || '').match(/WEEK\s*(\d+)/i) || [])[1] || null;
+  return w && c?.kind !== 'special' ? 'week:' + (c.seasonId || currentSeasonId || '') + ':' + w : null;
+}
+// 🆕 karta debiutanta — gracz bez meczu w sezonie (bez statystyk)
+async function _rookieCardImage(name, team) {
+  const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d'), F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'";
+  const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#3a2414'); bg.addColorStop(1, '#120a05'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.lineWidth = 18; g.strokeStyle = '#d08b4f'; g.strokeRect(18, 18, W - 36, H - 36);
+  g.textAlign = 'center'; g.fillStyle = '#f3c9a3'; g.font = `900 120px ${F}`; g.fillText('🆕', W / 2, 360);
+  g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 40px ${F}`; g.fillText(currentLang === 'en' ? 'ROOKIE' : 'DEBIUTANT', W / 2, 520);
+  let fs = 130; g.font = `900 ${fs}px ${F}`; while(g.measureText(String(name).toUpperCase()).width > W - 140 && fs > 50) { fs -= 4; g.font = `900 ${fs}px ${F}`; }
+  g.fillStyle = '#fff'; g.fillText(String(name).toUpperCase(), W / 2, 700);
+  if(team) { g.font = `800 50px ${F}`; g.fillStyle = '#f3c9a3'; g.fillText(String(team).toUpperCase(), W / 2, 790); }
+  g.font = `700 36px ${F}`; g.fillStyle = 'rgba(255,255,255,.55)'; g.fillText(currentLang === 'en' ? 'First game still ahead' : 'Pierwszy mecz w sezonie przed nim', W / 2, 920);
+  g.font = `700 26px ${F}`; g.fillStyle = 'rgba(255,255,255,.4)'; g.fillText('2K PRO-AM EKSTRAKLASA · CHEMIKLEAGUES.COM', W / 2, H - 70);
+  return cv.toDataURL('image/png');
+}
 async function _limRender(c) { // c: {name,label,theme,variant,persona:{sub,img},scope}
   const F = "'Barlow Condensed', 'Arial Narrow', sans-serif, 'Noto Color Emoji'";
   let baseUrl = null;
