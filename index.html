@@ -11549,6 +11549,46 @@ function _fxCard(k, where, idx) {
   </div>`;
 }
 
+// 📊 TRACKER FANTASY — statystyki i boxscore zawodników z Twojego składu w wybranej kolejce
+function _fxTrackerHtml() {
+  if(!discordUser || !fantasyData?.weekBoards) return '';
+  const weeks = Object.keys(fantasyData.weekBoards).map(Number).filter(w => fantasyData.weekBoards[w]?.some(x => x.id === discordUser.id)).sort((a, b) => b - a);
+  if(!weeks.length) return '';
+  const w = weeks.includes(+_fx.trackWeek) ? +_fx.trackWeek : weeks[0];
+  const me = fantasyData.weekBoards[w].find(x => x.id === discordUser.id);
+  const sid = currentSeasonId || null, ws = (schedule || []).filter(s => s.generated && (s.seasonId || null) === sid && +s.week === w && s.weekStart).map(s => s.weekStart).sort()[0];
+  const we = ws ? _ssAddDays(ws, 7) : null;
+  const games = ws ? _withAllMatches(() => matches.filter(m => !m.walkover && (m.seasonId || null) === sid && String(m.date) >= ws && String(m.date) < we)) : [];
+  const f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
+  const rows = me.lineup.map(l => {
+    const name = _fxP(l.key)?.name || l.key;
+    const perf = games.flatMap(m => [[m.team1, m.team2], [m.team2, m.team1]].map(([t, o]) => { const p = (t.players || []).find(x => _mpSame(x.name, name)); return p ? { m, t, o, p, won: +t.score > +o.score } : null; }).filter(Boolean));
+    const S = k => perf.reduce((n, g) => n + (+g.p[k] || 0), 0);
+    return { l, name, perf, tot: { pts: S('pts'), reb: S('reb'), ast: S('ast'), stl: S('stl'), blk: S('blk'), to: S('to'), fgm: S('fgm'), fga: S('fga') } };
+  });
+  const th = 'padding:.35rem .4rem;font-size:.66rem;font-weight:800;letter-spacing:.5px;color:var(--muted);text-align:right', td = 'padding:.35rem .4rem;text-align:right';
+  return `<div class="card" style="padding:.7rem .9rem;margin-bottom:1rem" data-notr>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">📊 ${_g('TRACKER STATYSTYK', 'STATS TRACKER')}</div>
+      <select onchange="_fx.trackWeek=this.value;renderFantasy()" style="font-size:.76rem;padding:.2rem .4rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${weeks.map(x => `<option value="${x}" ${x === w ? 'selected' : ''}>Week ${x}</option>`).join('')}</select></div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.8rem;min-width:560px">
+      <thead><tr><th style="${th};text-align:left">${_g('ZAWODNIK', 'PLAYER')}</th><th style="${th}">${_g('M', 'G')}</th><th style="${th}">PTS</th><th style="${th}">REB</th><th style="${th}">AST</th><th style="${th}">STL</th><th style="${th}">BLK</th><th style="${th}">TO</th><th style="${th}">FG</th><th style="${th};color:var(--accent)">FANTASY</th></tr></thead>
+      <tbody>${rows.map((r, i) => `
+        <tr style="border-top:1px solid var(--border);cursor:${r.perf.length ? 'pointer' : 'default'}" onclick="const x=document.getElementById('fxtr-${i}'); if(x) x.style.display = x.style.display === 'none' ? '' : 'none'">
+          <td style="padding:.4rem;font-weight:700;text-align:left">${r.l.cap ? '<span title="Kapitan ×2" style="color:var(--accent)">Ⓒ</span> ' : ''}${r.l.sub ? '<span title="Wszedł z ławki">🔄</span> ' : ''}${_h(r.name)}${r.perf.length ? ' <span style="color:var(--muted);font-size:.7rem">▾</span>' : ''}</td>
+          <td style="${td}">${r.perf.length}</td><td style="${td}">${r.tot.pts}</td><td style="${td}">${r.tot.reb}</td><td style="${td}">${r.tot.ast}</td><td style="${td}">${r.tot.stl}</td><td style="${td}">${r.tot.blk}</td><td style="${td}">${r.tot.to}</td>
+          <td style="${td}">${r.tot.fga ? r.tot.fgm + '/' + r.tot.fga : '—'}</td><td style="${td};font-weight:900;color:var(--accent)">${f1(r.l.pts)}</td></tr>
+        ${r.perf.length ? `<tr id="fxtr-${i}" style="display:none"><td colspan="10" style="padding:0 .4rem .5rem 1.2rem">${r.perf.map(g => `<div style="display:flex;flex-wrap:wrap;gap:.25rem .8rem;font-size:.74rem;padding:.3rem 0;border-bottom:1px dashed var(--border)">
+            <span style="color:var(--muted)">${_ssFmt(g.m.date)}</span><span>vs <b>${_h(g.o.name)}</b> ${g.t.score}:${g.o.score} ${g.won ? '<span style="color:var(--win)">W</span>' : '<span style="color:var(--loss)">P</span>'}</span>
+            <span>${+g.p.pts || 0} PTS · ${+g.p.reb || 0} REB · ${+g.p.ast || 0} AST · ${+g.p.stl || 0} STL · ${+g.p.blk || 0} BLK · ${+g.p.to || 0} TO${g.p.fga ? ` · ${+g.p.fgm || 0}/${g.p.fga} FG` : ''}${g.p.grade ? ` · ${_g('ocena', 'grade')} ${_h(g.p.grade)}` : ''}</span>
+            <b style="color:var(--accent);margin-left:auto">${f1(_fxPoints({ pts: +g.p.pts || 0, reb: +g.p.reb || 0, ast: +g.p.ast || 0, stl: +g.p.stl || 0, blk: +g.p.blk || 0, to: +g.p.to || 0, grade: g.p.grade }, g.won))} ${_g('pkt', 'pts')}</b></div>`).join('')}</td></tr>` : ''}`).join('')}
+      </tbody>
+      <tfoot><tr style="border-top:2px solid var(--border)"><td style="padding:.45rem .4rem;font-weight:800;text-align:left" colspan="9">${_g('Razem', 'Total')} Week ${w}</td><td style="${td};font-weight:900;color:var(--accent)">${f1(me.pts)}</td></tr></tfoot>
+    </table></div>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:.35rem">${_g('Kliknij zawodnika, żeby zobaczyć boxscore każdego meczu. Ⓒ kapitan (punkty ×2) · 🔄 wszedł z ławki. Punkty fantasy w kolumnie po prawej uwzględniają kapitana.', 'Click a player to see the box score of each game. Ⓒ captain (points ×2) · 🔄 came off the bench. Fantasy points on the right include the captain bonus.')}</div>
+  </div>`;
+}
+
 function _fxSquadHtml() {
   if(!discordUser) return `<div class="card" style="padding:1.6rem;text-align:center"><div style="font-size:.88rem;color:var(--muted);margin-bottom:.8rem">Zaloguj się przez Discord, żeby zbudować swój skład.</div><button class="btn btn-primary" onclick="loginWithDiscord()">Zaloguj przez Discord</button></div>`;
   const R = fantasyData.rules, d = _fxDraft();
@@ -11576,6 +11616,7 @@ function _fxSquadHtml() {
     </div>
     ${myWeek ? `<div class="card" style="padding:.6rem .9rem;margin-bottom:1rem"><div style="font-size:.66rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">TWOJA PIĄTKA W WEEK ${cw}</div>
       <div style="display:flex;flex-wrap:wrap;gap:.4rem">${myWeek.lineup.map(l => `<span style="font-size:.76rem;border:1px solid ${l.cap ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:.12rem .55rem">${l.cap ? 'Ⓒ ' : ''}${l.sub ? '🔄 ' : ''}${_h(_fxP(l.key)?.name || l.key)} <b>${l.pts}</b></span>`).join('')}</div></div>` : ''}
+    ${_fxTrackerHtml()}
     ${_fxNeedsRedo() ? `<div style="background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.55);border-radius:10px;padding:.6rem .8rem;margin-bottom:.8rem;font-size:.82rem;line-height:1.5">
       ⚠️ <b>Zmiana zasad — ułóż skład na nowo.</b> Pierwsza piątka jest teraz po pozycjach (PG, SG, SF, PF, C), a pozycje zawodników liczą się z meczów w NBA 2K27.
       W Week 2 Twój skład punktuje jeszcze normalnie, ale <b>od Week ${fantasyData?.rules?.posFromWeek || 3} skład sprzed zmiany nie zdobywa punktów</b> — ułóż piątkę (możesz użyć „🔀 Ułóż na pozycjach”) i kliknij <b>💾 Zapisz skład</b> przed poniedziałkiem 00:00.</div>` : ''}
@@ -15072,7 +15113,7 @@ function gmTradeAnalyze(to) {
 
 // ═══ 🃏 KOLEKCJA KART — codzienna paczka, kolekcja według drużyn, prezenty, ranking ═══
 const _TIER_COL = { limited: '#f5c518', galaxy: '#a855f7', diamond: '#38bdf8', gold: '#f5c518', silver: '#cbd5e1', bronze: '#d08b4f' };
-const _TIER_LBL = { limited: ['🌟 Limitowana', '🌟 Limited'], galaxy: ['★★★★★ Mityczna', '★★★★★ Mythic'], diamond: ['★★★★ Legendarna', '★★★★ Legendary'], gold: ['★★★ Epicka', '★★★ Epic'], silver: ['★★ Rzadka', '★★ Rare'], bronze: ['★ Zwykła', '★ Common'] };
+const _TIER_LBL = { limited: ['🌟 Limitowana', '🌟 Limited'], galaxy: ['🌌 Galaktyka', '🌌 Galaxy'], diamond: ['💎 Diament', '💎 Diamond'], gold: ['🥇 Złoto', '🥇 Gold'], silver: ['🥈 Srebro', '🥈 Silver'], bronze: ['🥉 Brąz', '🥉 Bronze'] };
 let _cards = null;
 async function renderCardsView() {
   const el = document.getElementById('cards-view'); if(!el) return;
@@ -15084,7 +15125,7 @@ async function renderCardsView() {
   el.innerHTML = `<div class="section-title">🃏 ${_g('Kolekcja kart', 'Card collection')}</div><div data-notr>
     <div class="card" style="padding:.9rem 1rem;margin-bottom:1rem;text-align:center">
       ${!discordUser ? `<div style="font-size:.86rem">${_g('Zaloguj się przez Discord, żeby otwierać paczki i zbierać karty.', 'Log in with Discord to open packs and collect cards.')}</div>` : `
-      <div style="font-size:.86rem;margin-bottom:.5rem">${_g('Codziennie darmowa paczka z 3 kartami graczy ligi. Rzadkość: ★ zwykła · ★★ rzadka · ★★★ epicka · ★★★★ legendarna · ★★★★★ mityczna (najlepsi gracze ligi).', 'A free pack of 3 league player cards every day. Rarity: ★ common · ★★ rare · ★★★ epic · ★★★★ legendary · ★★★★★ mythic (the league\u2019s best).')}</div>
+      <div style="font-size:.86rem;margin-bottom:.5rem">${_g('Codziennie darmowa paczka z 3 kartami graczy ligi. Rzadkość = poziom karty gracza z bieżącego sezonu: 🥉 brąz · 🥈 srebro · 🥇 złoto · 💎 diament · 🌌 galaktyka — im lepiej ktoś gra, tym rzadsza jego karta.', 'A free pack of 3 league player cards every day. Rarity = the player\u2019s card tier this season: 🥉 bronze · 🥈 silver · 🥇 gold · 💎 diamond · 🌌 galaxy — the better someone plays, the rarer their card.')}</div>
       <button class="btn btn-primary" style="font-size:1rem;padding:.6rem 1.4rem" ${me?.canOpen ? '' : 'disabled'} onclick="cardsOpen()">🎁 ${me?.canOpen ? _g('Otwórz paczkę', 'Open a pack') + (me.bonus ? ` (+${me.bonus})` : '') : _g('Dzisiejsza paczka otwarta', 'Today\u2019s pack opened')}</button>
       ${me?.premium ? `<button class="btn" style="font-size:.95rem;padding:.55rem 1.2rem;margin-left:.4rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none" onclick="cardsOpen(true)">💎 ${_g('Paczka premium', 'Premium pack')} (${me.premium})</button>` : ''}
       ${me && !me.canOpen ? `<div style="font-size:.84rem;margin-top:.45rem">⏳ ${_cdHtml('Nowa paczka za', 'Next pack in')}</div>` : ''}
@@ -15251,7 +15292,8 @@ function _holoBind(root) {
 
 // ═══ 🃏 WYBÓR KART (wspólne okno: wyzwania, Moja piątka, gablota) ═══
 function openCardPicker({ title, hint, max, exact, filter, preselect, onDone }) {
-  const own = Object.entries(_cards?.cards || {}).filter(([, c]) => c.n > 0 && (!filter || filter(c)));
+  const tierNow = (k, c) => k.startsWith('lim:') ? 'limited' : ((_cards?.pool || []).find(p => p.k === k)?.tier || c.tier); // aktualny poziom karty gracza
+  const own = Object.entries(_cards?.cards || {}).map(([k, c]) => [k, { ...c, tier: tierNow(k, c) }]).filter(([, c]) => c.n > 0 && (!filter || filter(c)));
   const sel = new Set((preselect || []).filter(k => own.some(([kk]) => kk === k)));
   const m = _fxModal('cpick-modal', 760); m.classList.add('open');
   const draw = () => {
