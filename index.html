@@ -7074,7 +7074,7 @@ function _ssCard(ctx, s, groupName) {
   return `
     <div style="background:var(--surface);border:1px solid ${mineSide && !res ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:.85rem 1rem">
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:.72rem;margin-bottom:.6rem;gap:.5rem">
-        <span style="color:var(--muted)">${!ctx.demo && _isClassic(s.team1, s.team2) ? `<b style="color:#f97316;cursor:pointer" onclick="openRivalry(this.dataset.a, this.dataset.b)" data-a="${_h(s.team1)}" data-b="${_h(s.team2)}" title="${_g('Zobacz rywalizację', 'See the rivalry')}">🔥 ${_h(_rivName(s.team1, s.team2) || 'Klasyk')}</b> · ` : ''}${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}${s.round ? ' · Kolejka ' + s.round : ''}${bo > 1 ? ' · <b style="color:var(--text)">Bo' + bo + '</b>' : ''}</span>
+        <span style="color:var(--muted)">${s.makeup ? `<b style="color:#f59e0b">⏰ ${_g('Zaległy', 'Make-up')}${s.ruleUntil ? ' · ' + _g('do', 'by') + ' ' + _ssFmt(s.ruleUntil) : ''}</b> · ` : ''}${!ctx.demo && _isClassic(s.team1, s.team2) ? `<b style="color:#f97316;cursor:pointer" onclick="openRivalry(this.dataset.a, this.dataset.b)" data-a="${_h(s.team1)}" data-b="${_h(s.team2)}" title="${_g('Zobacz rywalizację', 'See the rivalry')}">🔥 ${_h(_rivName(s.team1, s.team2) || 'Klasyk')}</b> · ` : ''}${groupName(s.groupId) ? _h(groupName(s.groupId)) + ' · ' : ''}Week ${s.week}${s.round ? ' · Kolejka ' + s.round : ''}${bo > 1 ? ' · <b style="color:var(--text)">Bo' + bo + '</b>' : ''}</span>
         ${status}
       </div>
       <div style="display:flex;align-items:center;gap:.6rem">
@@ -12963,7 +12963,7 @@ async function podDeleteEp(id) {
 // ═══════════════════════════════════════════════════════════════
 function _shortFacts(week) {
   const sid = currentSeasonId || null;
-  const fx = schedule.filter(s => s.generated && (s.seasonId || null) === sid && +s.week === +week);
+  const fx = schedule.filter(s => s.generated && !s.makeup && (s.seasonId || null) === sid && +s.week === +week);
   const all = _withAllMatches(() => matches.slice());
   const byId = new Map(all.map(m => [String(m.id), m]));
   const games = [], results = [];
@@ -13334,7 +13334,7 @@ const _wgGames = n => _wgLang === 'en' ? (n === 1 ? 'GAME' : 'GAMES') : _plPL(n,
 const WG_ACCENTS = ['#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'];
 function _wgData(week) {
   const sid = currentSeasonId || null;
-  const fx = schedule.filter(s => s.generated && (s.seasonId || null) === sid && +s.week === +week);
+  const fx = schedule.filter(s => s.generated && !s.makeup && (s.seasonId || null) === sid && +s.week === +week);
   const all = _withAllMatches(() => matches.slice());
   const byId = new Map(all.map(m => [String(m.id), m]));
   const gsOf = p => (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) - 0.4 * ((+p.fta || 0) - (+p.ftm || 0)) + 0.7 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + 0.7 * (+p.blk || 0) - (+p.to || 0);
@@ -15567,7 +15567,7 @@ async function limitedCreate() {
   if(r.ok) openLimitedAdmin();
 }
 function _weekBrickRank(w) {
-  const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || (x.matchId ? [x.matchId] : [])).map(String)));
+  const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && !x.makeup && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || (x.matchId ? [x.matchId] : [])).map(String)));
   const by = {}; _withAllMatches(() => matches.filter(m => !m.walkover && ids.has(String(m.id)))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
     const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, fgm: 0, fga: 0, gp: 0 }; a.fgm += +p.fgm || 0; a.fga += +p.fga || 0; a.gp++; })));
   return Object.values(by).filter(a => a.gp && a.fga / a.gp >= 8).sort((a, b) => a.fgm / a.fga - b.fgm / b.fga || (b.fga - b.fgm) - (a.fga - a.fgm)).map(a => ({ ...a, week: +w }));
@@ -15736,7 +15736,7 @@ function _adminGroups() {
       ['➕', _g('Dodaj mecz', 'Add game'), "showView('add-match')"], ['📸', _g('Czekające wyniki', 'Pending results'), 'openPendingResults()', pend], ['🛡', _g('Do sprawdzenia', 'To review'), 'openQualityReview()', q],
       ['📜', _g('Regulamin terminów', 'Deadline rules'), 'openRules()'], ['⚖️', _g('Kary', 'Penalties'), 'openPenalties()'], ['⏰', _g('Przypomnienia', 'Reminders'), 'openRemindersStatus()'], ['⚙', _g('Aliasy nicków', 'Nickname aliases'), "showView('aliases')"]] },
     { id: 'sezon', icon: '📅', title: _g('Sezon i terminarz', 'Season & schedule'), items: [
-      ['⚙', _g('Generuj terminarz', 'Generate schedule'), 'openFixtureGenerator()'], ['🗂', _g('Sezony', 'Seasons'), 'openSeasonModal()'], ['🏆', 'Playoff', 'openPlayoffModal()'], ['🔄', _g('Nazwy drużyn', 'Team names'), 'openTeamNameFixer()'],
+      ['⚙', _g('Generuj terminarz', 'Generate schedule'), 'openFixtureGenerator()'], ['🗂', _g('Sezony', 'Seasons'), 'openSeasonModal()'], ['➕', _g('Dopisz drużynę do terminarza', 'Add a team to the schedule'), 'openAddTeamToSchedule()'], ['🏆', 'Playoff', 'openPlayoffModal()'], ['🔄', _g('Nazwy drużyn', 'Team names'), 'openTeamNameFixer()'],
       ['🧪', _g('Demo terminarza', 'Schedule demo'), 'startDemo()'], ...(gm ? [['🏆', 'Liga GM', "showView('gm')"]] : [])] },
     { id: 'druzyny', icon: '👥', title: _g('Drużyny i gracze', 'Teams & players'), items: [
       ['👥', _g('Użytkownicy i składy', 'Users & rosters'), "_uo.users=null;openUsersOverview('teams')"], ['🧢', _g('Zgłoszenia drużyn', 'Team registrations'), "goToTeamRegistrations();setRegTab('teams')"],
@@ -15802,11 +15802,11 @@ function _sideSync(v) { const key = v === 'join' ? 'join:' + (typeof _regTab !==
 let _totwWeek = null;
 function _totwWeeks() { // tylko zakończone kolejki: każde spotkanie rozegrane albo walkower
   const sid = currentSeasonId || null, by = {};
-  (schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && x.week).forEach(x => (by[+x.week] = by[+x.week] || []).push(x));
+  (schedule || []).filter(x => x.generated && !x.makeup && (x.seasonId || null) === sid && x.week).forEach(x => (by[+x.week] = by[+x.week] || []).push(x)); // zaległe mecze nie blokują kolejki
   return Object.entries(by).filter(([, L]) => L.every(x => x.played || x.walkover || _ssResult({ demo: false }, x)?.done) && L.some(x => (x.matchIds || []).length)).map(([w]) => +w).sort((a, b) => b - a);
 }
 function _totwData(w) {
-  const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || []).map(String)));
+  const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && !x.makeup && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || []).map(String)));
   const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + .7 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + .7 * (+p.blk || 0) - (+p.to || 0);
   const by = {}; _withAllMatches(() => matches.filter(m => !m.walkover && ids.has(String(m.id)))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
     const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, pos: p.pos || '' }; a.gp++; a.gs += gs(p); a.pts += +p.pts || 0; a.reb += +p.reb || 0; a.ast += +p.ast || 0; })));
@@ -15981,6 +15981,59 @@ function _dashLayout() {
   order.forEach(e => v.appendChild(e)); // pozostałe bloki zostają na końcu
   [top('league-hero'), totwOld, totwOld?.previousElementSibling?.id ? null : totwOld?.previousElementSibling, top('records-banner-wrap')].filter(Boolean).forEach(e => { e.style.display = 'none'; }); // stary baner, stara „najlepsza piątka”, pasek nowych rekordów → zastąpione
   ['records-banner-wrap', 'milestone-banner', 'round-comparison-wrap', 'event-ratings-wrap'].map(top).filter(Boolean).forEach(e => v.appendChild(e));
+}
+
+// ➕ DOPISANIE DRUŻYNY W TRAKCIE SEZONU — gra z drużyną pauzującą w każdej kolejce; kolejki już rozpoczęte = mecze zaległe z terminem
+function _addTeamPlan(team, groupId, deadline) {
+  const sid = currentSeasonId || null, items = schedule.filter(s => s.generated && (s.seasonId || null) === sid && !s.makeup || (s.generated && (s.seasonId || null) === sid && s.makeup));
+  const reg = items.filter(s => !s.makeup), gid = groupId ?? (reg[0]?.groupId ?? null);
+  const inGroup = reg.filter(s => (s.groupId ?? null) === gid), teams = [...new Set(inGroup.flatMap(s => [s.team1, s.team2]))].filter(t => t !== team);
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+  const weeks = [...new Set(inGroup.map(s => +s.week))].sort((a, b) => a - b), out = [];
+  for(const w of weeks) {
+    const wk = inGroup.filter(s => +s.week === w), playing = new Set(wk.flatMap(s => [s.team1, s.team2]));
+    if(playing.has(team) || items.some(s => +s.week === w && [s.team1, s.team2].includes(team))) continue; // już ma mecz w tej kolejce
+    const bye = teams.filter(t => !playing.has(t)), ws = wk[0].weekStart, makeup = ws <= today;
+    out.push({ week: w, weekStart: ws, bye, makeup, round: wk[0].round, bestOf: wk[0].bestOf, defaultTime: wk[0].defaultTime || '', groupId: gid, deadline: makeup ? deadline : null });
+  }
+  return out;
+}
+function openAddTeamToSchedule() {
+  const sid = currentSeasonId || null, inSched = new Set(schedule.filter(s => s.generated && (s.seasonId || null) === sid).flatMap(s => [s.team1, s.team2]));
+  const cand = (teamRegistrations || []).filter(r => r.status === 'approved' && (!r.seasonId || r.seasonId === sid)).map(r => r.teamName).filter(t => !inSched.has(t));
+  const groups = [...new Set(schedule.filter(s => s.generated && (s.seasonId || null) === sid).map(s => s.groupId ?? null))];
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }), cur = schedule.filter(s => s.generated && (s.seasonId || null) === sid && s.weekStart && s.weekStart <= today).map(s => s.weekStart).sort().pop();
+  const dl = cur ? _ssAddDays(cur, 13) : _ssAddDays(today, 7); // koniec następnej kolejki
+  const m = _fxModal('addteam-modal', 640); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('addteam-modal', '➕ Dopisz drużynę do terminarza') + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">Obecny terminarz zostaje bez zmian. Nowa drużyna gra w każdej kolejce z drużyną, która pauzuje. Kolejki już rozpoczęte dostają <b>zaległe mecze z terminem</b> — nie blokują podsumowań swoich kolejek i nie liczą się do Piątki tygodnia.</div>
+    <label style="${_MODAL_LBL}">Drużyna</label><input id="at-team" list="at-list" value="${_h(cand[0] || '')}" style="${_MODAL_INP}"><datalist id="at-list">${cand.map(t => `<option value="${_h(t)}">`).join('')}</datalist>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem">
+      ${groups.length > 1 ? `<div><label style="${_MODAL_LBL}">Grupa</label><select id="at-group" style="${_MODAL_INP}">${groups.map(g => `<option value="${_h(g ?? '')}">${_h(g ?? '—')}</option>`).join('')}</select></div>` : ''}
+      <div><label style="${_MODAL_LBL}">Termin zaległych meczów</label><input id="at-dl" type="date" value="${dl}" style="${_MODAL_INP}"></div></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.6rem"><button class="btn btn-ghost" onclick="addTeamPreview()">👁 Podgląd</button></div>
+    <div id="at-prev" style="margin-top:.5rem"></div></div>`;
+  if(cand[0]) addTeamPreview();
+}
+function _atForm() { const g = document.getElementById('at-group'); return { team: document.getElementById('at-team').value.trim(), groupId: g ? (g.value === '' ? null : (isNaN(+g.value) ? g.value : +g.value)) : undefined, dl: document.getElementById('at-dl').value }; }
+function addTeamPreview() {
+  const f = _atForm(), box = document.getElementById('at-prev'); if(!f.team) { box.innerHTML = ''; return; }
+  const plan = _addTeamPlan(f.team, f.groupId, f.dl);
+  if(!plan.length) { box.innerHTML = '<div style="color:var(--muted);font-size:.8rem">Brak kolejek do uzupełnienia (drużyna już ma mecze albo nikt nie pauzuje).</div>'; return; }
+  const bad = plan.filter(p => p.bye.length !== 1);
+  box.innerHTML = `<div style="font-size:.8rem">${plan.map(p => `<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--border)"><span><b>Week ${p.week}</b> · ${p.bye.length === 1 ? `${_h(p.bye[0])} vs <b>${_h(f.team)}</b>` : `<span style="color:var(--loss)">${p.bye.length ? 'pauzuje kilka drużyn: ' + p.bye.map(_h).join(', ') : 'nikt nie pauzuje'} — pominę</span>`}</span><span style="color:${p.makeup ? '#f59e0b' : 'var(--muted)'}">${p.makeup ? '⏰ zaległy · do ' + _ssFmt(f.dl) : 'w swojej kolejce'}</span></div>`).join('')}</div>
+    ${bad.length ? `<div style="font-size:.74rem;color:var(--loss);margin-top:.4rem">Kolejki z niejednoznaczną pauzą zostaną pominięte — dodasz je ręcznie.</div>` : ''}
+    <div style="display:flex;justify-content:flex-end;margin-top:.6rem"><button class="btn btn-primary" onclick="addTeamApply()">➕ Dodaj ${(n => n + ' ' + _plPL(n, 'mecz', 'mecze', 'meczów'))(plan.filter(p => p.bye.length === 1).length)} do terminarza</button></div>`;
+}
+async function addTeamApply() {
+  const f = _atForm(), plan = _addTeamPlan(f.team, f.groupId, f.dl).filter(p => p.bye.length === 1); if(!plan.length) return;
+  if(!confirm(`Dodać ${plan.length} meczów ${f.team} do terminarza? Obecne mecze zostaną bez zmian.`)) return;
+  let id = Math.max(Date.now(), ...schedule.map(s => +s.id || 0)) + 1;
+  plan.forEach((p, i) => schedule.push({ id: id + i, generated: true, seasonId: currentSeasonId || null, week: p.week, round: p.round, weekStart: p.weekStart, groupId: p.groupId, bestOf: p.bestOf,
+    team1: p.bye[0], team2: f.team, date: '', time: '', defaultTime: p.defaultTime, streamUrl: '', played: false, prediction: null, matchId: null, matchIds: [],
+    ...(p.makeup ? { makeup: true, ruleUntil: f.dl } : {}) }));
+  await saveData(); _fxClose('addteam-modal'); try { renderSchedule(); renderSeasonSchedule(); } catch(e) {}
+  showToast(`➕ Dodano ${plan.length} meczów ${f.team}${plan.some(p => p.makeup) ? ' (w tym zaległe do ' + _ssFmt(f.dl) + ')' : ''}`, 'success');
 }
 
 function goToTeamRegistrations() { showView('join'); renderTeamRegistrations(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
