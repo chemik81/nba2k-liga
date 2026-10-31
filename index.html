@@ -15599,6 +15599,24 @@ async function eventCreate() {
   showToast(r.ok ? `🎉 Wydano ${r.created?.length || 0} kart` : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) openLimitedAdmin();
 }
 // 🎁 paczki od admina
+// 🧩 historia wyzwań (admin): kto ukończył, co oddał, jaką nagrodę dostał
+async function openChallengeLog() {
+  const m = _fxModal('chlog-modal', 820); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('chlog-modal', '🧩 Wyzwania — historia') + '<div style="color:var(--muted)">⏳</div>';
+  const r = await _api('/cards/challenge-log', 'POST', {}, { admin: true });
+  if(!r.ok) { m.querySelector('.modal').innerHTML = _fxHead('chlog-modal', '🧩 Wyzwania — historia') + `<div style="color:var(--loss)">❌ ${_h(r.error || '')}</div>`; return; }
+  const rw = x => x?.kind === 'premium' ? `💎 ${x.n} premium` : `🎁 ${x?.n || 0} ${_plPL(x?.n || 0, 'paczka', 'paczki', 'paczek')}`;
+  const chName = id => (r.challenges.find(c => c.id === id) || {}).pl || id;
+  m.querySelector('.modal').innerHTML = _fxHead('chlog-modal', '🧩 Wyzwania — historia') + `<div data-notr style="font-size:.8rem">
+    <div style="font-weight:800;margin-bottom:.3rem">Wyzwania tygodnia (od ${_ssFmt(r.week)})</div>
+    ${r.challenges.map(c => `<div style="padding:.2rem 0">${c.icon} ${_h(c.pl)} → ${rw(c.reward)}</div>`).join('') || '<div style="color:var(--muted)">—</div>'}
+    <div style="font-weight:800;margin:.8rem 0 .3rem">Ukończyli w tym tygodniu (${r.done.length})</div>
+    ${r.done.map(d => `<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span><b>${_h(d.name)}</b> — ${d.ids.map(i => _h(chName(i))).join(', ')}</span><span style="color:var(--muted);white-space:nowrap">teraz: 🎁 ${d.bonus} · 💎 ${d.premium}</span></div>`).join('') || '<div style="color:var(--muted)">Nikt jeszcze.</div>'}
+    <div style="font-weight:800;margin:.8rem 0 .3rem">Dziennik (najnowsze)</div>
+    ${r.log.map(e => `<div style="padding:.3rem 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;gap:.5rem"><span><b>${_h(e.name)}</b> · ${_h(e.label)}</span><span style="color:var(--muted);white-space:nowrap">${new Date(e.at).toLocaleString('pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
+      <div style="color:var(--muted);font-size:.74rem">Oddał: ${(e.cards || []).map(_h).join(', ')} · nagroda: ${rw(e.reward)} · po przyznaniu: 🎁 ${e.after?.bonus ?? '?'} · 💎 ${e.after?.premium ?? '?'}</div></div>`).join('') || '<div style="color:var(--muted)">Dziennik zbiera wpisy od tej aktualizacji.</div>'}
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">Jeśli ktoś zgłasza brak nagrody: sprawdź, czy jest na liście i ile ma teraz paczek („teraz: 🎁 …”). Paczki z wyzwania dodają się do licznika dodatkowych paczek — otwiera się je przyciskiem „Otwórz paczkę (+N)”. Brakujące możesz dać przez <a href="#" onclick="_fxClose('chlog-modal');openGrantPacks();return false" style="color:var(--accent)">🎁 Daj paczki</a>.</div></div>`;
+}
 function openGrantPacks() {
   const m = _fxModal('grant-modal', 520); m.classList.add('open');
   const known = new Map(); (playersList || []).forEach(p => p.id && known.set(p.id, p.name || p.gamertag)); (teamRegistrations || []).forEach(r => r.captain?.id && !known.has(r.captain.id) && known.set(r.captain.id, r.captain.name)); (freeAgents || []).forEach(f => f.discordId && !known.has(f.discordId) && known.set(f.discordId, f.name));
@@ -15743,7 +15761,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
