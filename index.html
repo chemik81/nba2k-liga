@@ -16180,7 +16180,11 @@ async function openPayments() {
         ${r.payment?.status !== 'paid' ? `<button class="btn btn-primary" style="font-size:.7rem" onclick="payConfirm('${r.id}',true)">✅ Opłacone</button>` : `<button class="btn btn-ghost" style="font-size:.7rem" onclick="payConfirm('${r.id}',false)">↩ Cofnij</button>`}</span></div>`).join('') || '<div style="color:var(--muted)">Brak zgłoszeń.</div>'}
     <div id="pay-proof" style="margin-top:.7rem"></div></div>`;
 }
-async function payProof(regId) { const box = document.getElementById('pay-proof'); box.innerHTML = '⏳'; const r = await _api('/team-payment/img/' + regId, 'GET', null, { admin: true }); box.innerHTML = r.ok ? `<img src="${r.image}" style="max-width:100%;border-radius:10px;border:1px solid var(--border)">` : '❌ ' + _h(r.error || ''); }
+async function payProof(regId) { const box = document.getElementById('pay-proof'); if(!box) return; const t = teamRegistrations.find(x => x.id === regId);
+  box.innerHTML = '⏳'; const r = await _api('/team-payment/img/' + regId, 'GET', null, { admin: true });
+  box.innerHTML = r.ok ? `<div style="font-weight:800;font-size:.84rem;margin-bottom:.35rem">🧾 Przelew · ${_h(t?.teamName || '')}</div><a href="${r.image}" target="_blank" rel="noopener"><img src="${r.image}" style="max-width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--border);display:block"></a>
+    ${t?.payment?.status !== 'paid' ? `<div style="display:flex;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-primary" onclick="payConfirm('${regId}',true)">✅ Oznacz jako opłacone</button></div>` : ''}` : '❌ ' + _h(r.error || '');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 async function payConfirm(regId, paid) { const r = await _api('/team-payment/confirm', 'POST', { regId, paid }, { admin: true }); if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; } const i = teamRegistrations.findIndex(x => x.id === regId); if(i >= 0) teamRegistrations[i] = r.registration; showToast(paid ? '✅ Oznaczono jako opłacone (DM do kapitana)' : '↩ Cofnięto', 'success'); openPayments(); try { renderTeamRegistrations(); renderEuDash(); } catch(e) {} }
 // admin: ustawienia zapisów
 function openSignupSettings() {
@@ -16437,6 +16441,8 @@ function renderTeamRegistrations() {
       const btn = (st, label, color) => `<button onclick="teamRegSetStatus('${r.id}','${st}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:${color}">${label}</button>`;
       const payBtns = (isMyTeam(r) || isAdmin) && r.status !== 'rejected' && (EU_MODE || _signup().revolutUrl || r.payment) ? `<div style="display:flex;gap:.35rem;align-items:center;margin-top:.5rem;flex-wrap:wrap">${_levelBadge(r)}${_payBadge(r)}
         ${isMyTeam(r) && r.payment?.status !== 'paid' ? `<button class="btn btn-primary" style="font-size:.72rem;padding:.2rem .55rem" onclick="openTeamPayment('${r.id}')">💶 ${_g('Wpisowe', 'Entry fee')}</button>` : ''}
+        ${isAdmin && ['sent', 'paid'].includes(r.payment?.status) ? `<button class="btn btn-primary" style="font-size:.72rem;padding:.2rem .55rem" onclick="openPayments();setTimeout(()=>payProof('${r.id}'),150)">🧾 Zobacz przelew</button>` : ''}
+        ${isAdmin && r.payment?.status === 'sent' ? `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem" onclick="payConfirm('${r.id}',true)">✅ Opłacone</button>` : ''}
         ${isAdmin ? `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem" onclick="openPayments()">💳 Płatności</button>` : ''}</div>` : '';
       const adminBtns = payBtns + (isAdmin ? `
         <div style="display:flex;gap:.35rem;margin-top:.6rem;flex-wrap:wrap">
