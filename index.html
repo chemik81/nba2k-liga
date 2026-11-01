@@ -15384,6 +15384,8 @@ async function openLimitedCard(name, label, scope, theme, variant, persona) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.6rem;gap:.5rem"><span style="font-size:.7rem;color:var(--muted)">✨ ${_g('Porusz kursorem albo przechyl telefon', 'Move the cursor or tilt your phone')}</span><a class="btn btn-primary" style="font-size:.74rem;text-decoration:none" href="${url}" download="karta-limitowana-${_normNick(name)}.png">⬇ ${_g('Pobierz', 'Download')}</a></div>` : `<div style="color:var(--muted)">${_g('Karta będzie dostępna po pierwszym meczu gracza w sezonie.', 'The card will be available after the player\u2019s first game this season.')}</div>`);
 }
 if(EU_MODE) document.addEventListener('DOMContentLoaded', () => { document.body.classList.add('eu'); document.title = 'EU Chemik League — NBA 2K Pro-Am'; });
+// zabezpieczenie: układ Dashboardu, menu i bloki EU także wtedy, gdy liga jest pusta albo dane dodatkowe się nie wczytały
+window.addEventListener('load', () => [1500, 4000].forEach(t => setTimeout(() => { try { _moveJoinSection(); _dashLayout(); renderSideNav(); renderEuBillboard(); if(EU_MODE) renderEuDash(); else renderDashNews(); } catch(e) { console.warn('layout fallback', e); } }, t)));
 // ✨ HOLO — karta przechyla się za kursorem / telefonem, po powierzchni przesuwa się tęczowy połysk (jak karty holo w FIFA)
 function _holoHtml(src, alt, power) {
   return `<div class="holo" data-p="${power}" style="--mx:50%;--my:50%;--rx:0deg;--ry:0deg;--o:0"><div class="holo-in"><img src="${src}" alt="${_h(alt || '')}"><div class="holo-shine"></div><div class="holo-glare"></div></div></div>`;
