@@ -15418,7 +15418,30 @@ function _holoBind(root) {
 }
 
 // ═══ 🃏 WYBÓR KART (wspólne okno: wyzwania, Moja piątka, gablota) ═══
-function openCardPicker({ title, hint, max, exact, filter, preselect, onDone }) {
+// 🃏 MINI-KARTA — wspólny wygląd kart w wyborze talii i w Korcie (avatar z Discorda, logo drużyny, ocena, poziom)
+const _MC_BG = { galaxy: ['#2e1065', '#0e7490'], diamond: ['#0c4a6e', '#1e293b'], gold: ['#422006', '#1f1405'], silver: ['#334155', '#111827'], bronze: ['#3b2412', '#140b05'], limited: ['#3d2c00', '#120d02'] };
+function _mcAvatar(name, size) {
+  const d = _pcData(name, 'season') || _pcData(name, 'career'), url = d?.avatar;
+  if(url) return `<img src="${_h(url)}" alt="" loading="lazy" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.35);display:block;margin:0 auto">`;
+  const ini = String(name || '?').replace(/[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]/g, '').slice(0, 2).toUpperCase();
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.25);font-weight:900;font-size:${Math.round(size * .36)}px">${_h(ini)}</div>`;
+}
+function _miniCard({ name, team, tier, rating, lim, label, size = 'm', body = '', sel = false, count = 0 }) {
+  const t = lim ? 'limited' : (tier || 'bronze'), col = lim ? '#f5c518' : (_TIER_COL[t] || 'var(--border)'), bg = _MC_BG[t] || _MC_BG.bronze;
+  const S = { s: { av: 30, lg: 14, fs: '.6rem', rt: '1rem', pad: '.25rem' }, m: { av: 46, lg: 20, fs: '.74rem', rt: '1.35rem', pad: '.4rem' }, l: { av: 56, lg: 22, fs: '.8rem', rt: '1.5rem', pad: '.45rem' } }[size];
+  return `<div style="position:relative;border-radius:12px;padding:${S.pad};text-align:center;color:#fff;background:linear-gradient(160deg,${bg[0]},${bg[1]});border:2px solid ${sel ? 'var(--accent)' : col};box-shadow:${sel ? '0 0 0 2px var(--accent),' : ''}0 4px 14px rgba(0,0,0,.35);overflow:hidden">
+    ${t === 'galaxy' || lim ? `<div style="position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.12) 45%,transparent 60%);pointer-events:none"></div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;position:relative">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:${S.rt};line-height:1;color:${col}">${rating ?? ''}</div>
+      <div style="opacity:.95">${team ? teamLogo(team, S.lg, '.5rem') : ''}</div></div>
+    <div style="margin:${size === 's' ? '0' : '-.2rem'} 0 .2rem">${_mcAvatar(name, S.av)}</div>
+    <div style="font-weight:800;font-size:${S.fs};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lim ? '🌟 ' : ''}${_h(name)}</div>
+    ${size !== 's' ? `<div style="font-size:.58rem;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(team || '')}${count > 1 ? ' · ×' + count : ''}</div>` : ''}
+    ${label && size !== 's' ? `<div style="font-size:.55rem;color:#f5c518;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(label)}</div>` : ''}
+    ${body}</div>`;
+}
+
+function openCardPicker({ title, hint, max, exact, filter, preselect, onDone, extra, footer }) {
   const tierNow = (k, c) => k.startsWith('lim:') ? 'limited' : ((_cards?.pool || []).find(p => p.k === k)?.tier || c.tier); // aktualny poziom karty gracza
   const own = Object.entries(_cards?.cards || {}).map(([k, c]) => [k, { ...c, tier: tierNow(k, c) }]).filter(([, c]) => c.n > 0 && (!filter || filter(c)));
   const sel = new Set((preselect || []).filter(k => own.some(([kk]) => kk === k)));
@@ -15426,12 +15449,10 @@ function openCardPicker({ title, hint, max, exact, filter, preselect, onDone }) 
   const draw = () => {
     m.querySelector('.modal').innerHTML = _fxHead('cpick-modal', title) + `<div data-notr>
       ${hint ? `<div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">${hint}</div>` : ''}
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:.45rem;max-height:52vh;overflow-y:auto;padding:.1rem">${own.sort((a, b) => (TIER_ORDER[b[1].tier] ?? 0) - (TIER_ORDER[a[1].tier] ?? 0) || a[1].name.localeCompare(b[1].name)).map(([k, c]) => `
-        <button onclick="_cpToggle('${k.replace(/'/g, '')}')" style="text-align:center;padding:.5rem .35rem;border-radius:10px;cursor:pointer;font-family:inherit;color:var(--text);background:${sel.has(k) ? 'rgba(245,197,24,.16)' : 'var(--surface2)'};border:2px solid ${sel.has(k) ? 'var(--accent)' : (_TIER_COL[c.tier] || 'var(--border)')}">
-          <div style="font-size:.66rem;color:${_TIER_COL[c.tier] || 'var(--muted)'}">${(_TIER_LBL[c.tier] || ['', ''])[currentLang === 'en' ? 1 : 0]}</div>
-          <div style="font-weight:800;font-size:.82rem;word-break:break-word">${_h(c.name)}</div><div style="font-size:.66rem;color:var(--muted)">${_h(c.team || '')}${c.n > 1 ? ' · ×' + c.n : ''}</div>
-          ${c.label ? `<div style="font-size:.6rem;color:#f5c518">${_h(c.label)}</div>` : ''}</button>`).join('') || `<div style="color:var(--muted);font-size:.82rem">${_g('Brak pasujących kart.', 'No matching cards.')}</div>`}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;gap:.5rem"><span style="font-size:.8rem">${_g('Wybrano', 'Selected')}: <b>${sel.size}</b> / ${max}</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:.5rem;max-height:56vh;overflow-y:auto;padding:.25rem">${own.sort((a, b) => (TIER_ORDER[b[1].tier] ?? 0) - (TIER_ORDER[a[1].tier] ?? 0) || a[1].name.localeCompare(b[1].name)).map(([k, c]) => `
+        <button onclick="_cpToggle('${k.replace(/'/g, '')}')" style="padding:0;border:none;background:none;cursor:pointer;font-family:inherit;text-align:center">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.tier === 'limited', label: c.label, count: c.n, sel: sel.has(k),
+          rating: (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(c.name, 'season')?.rating, body: extra ? extra(k, c) : '' })}</button>`).join('') || `<div style="color:var(--muted);font-size:.82rem">${_g('Brak pasujących kart.', 'No matching cards.')}</div>`}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;gap:.5rem"><span style="font-size:.8rem">${_g('Wybrano', 'Selected')}: <b>${sel.size}</b> / ${max}${footer ? ' · ' + footer([...sel]) : ''}</span>
         <button class="btn btn-primary" ${exact && sel.size !== max ? 'disabled' : ''} onclick="_cpDone()">✓ ${_g('Zatwierdź', 'Confirm')}</button></div></div>`;
   };
   window._cpToggle = k => { if(sel.has(k)) sel.delete(k); else if(sel.size < max) sel.add(k); else showToast(_g(`Maksymalnie ${max}`, `Max ${max}`), 'info'); draw(); };
@@ -16434,8 +16455,15 @@ async function renderKort() {
       <b>Bonuses:</b> 🌌 galaxy +1, 🌟 limited card +1 and immune, 🔥 form +1 (❄️ −1), two teammates on court: +1 each.<br>
       <b>Badges:</b> 🎯 Sniper +1/+2 in Attack · 🏀 Bucket getter +1/+2 in Attack next to another attacker · 💪 Glass +1/+2 in Defense · 🪄 Dimer +1/+2 in Playmaking next to another playmaker · ✌️ Double-double +1 (gold/diamond) · 🏆 Winner +2/+4 in round 3 · 🦊 Thief in Playmaking: −1 to the opponent\\u2019s best playmaker · 🚫 Rim protector in Defense: −1 to the opponent\\u2019s best card · 🧱 Iron: immune, +2 in round 3.`)}</div></details></div>`;
 }
+function _kortPickInfo(k, c) {
+  const src = _kortSrc(c.name, { lim: k.startsWith('lim:'), label: c.label }); if(!src) return `<div style="font-size:.6rem;color:var(--muted)">${_g('brak statystyk', 'no stats')}</div>`;
+  const kc = kortCard(src, 0), best = Math.max(...KORT_ROWS.map(r => kc.pw[r]));
+  return `<div style="display:flex;justify-content:center;gap:.2rem;margin:.25rem 0 .1rem;font-size:.64rem">${KORT_ROWS.map(r => `<span style="background:rgba(0,0,0,.35);border-radius:4px;padding:.05rem .22rem;${kc.pw[r] === best ? 'color:#ffd84d;font-weight:800' : ''}">${_KR[r][0]}${kc.pw[r]}</span>`).join('')}</div>
+    ${kc.badges.length ? `<div style="font-size:.7rem;line-height:1" title="${kc.badges.map(b => b.key).join(', ')}">${kc.badges.map(b => (_KB[b.key] || '') + (b.b > 1 ? '⁺' : '')).join(' ')}</div>` : ''}`;
+}
 function kortDeckPick() {
-  openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
+  openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, extra: _kortPickInfo,
+    footer: keys => { const r = keys.map(k => (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(_cards?.cards?.[k]?.name, 'season')?.rating).filter(Boolean); return r.length ? _g('średnia', 'avg') + ' <b>' + Math.round(r.reduce((a, b) => a + b, 0) / r.length) + '</b>' : ''; }, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
     hint: _g('Wybierz 8 kart różnych graczy. Patrz na umiejętności (atak, rozegranie, obrona) i odznaki.', 'Pick 8 cards of different players. Mind their skills (attack, playmaking, defense) and badges.'),
     onDone: keys => { const names = new Set(); const ok = keys.filter(k => { const n = _normNick(_cards?.cards?.[k]?.name || ''); if(names.has(n)) return false; names.add(n); return true; }); localStorage.setItem('kort_deck', JSON.stringify(ok)); showToast(_g('🃏 Talia zapisana', '🃏 Deck saved'), 'success'); renderKort(); } });
 }
@@ -16445,14 +16473,14 @@ function kortStart() {
   _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
 }
 function _kortCardHtml(st, side, c, row, onBoard) {
-  const val = onBoard ? kortValue(st, side, row, c) : null, tc = { galaxy: '#a855f7', diamond: '#38bdf8', gold: '#f5c518', silver: '#cbd5e1', bronze: '#d08b4f' }[c.tier] || 'var(--border)';
-  const badges = c.badges.map(b => _KB[b.key] || '').join('');
-  if(onBoard) return `<div title="${_h(c.name)}" style="min-width:64px;background:var(--surface2);border:2px solid ${c.lim ? '#f5c518' : tc};border-radius:8px;padding:.25rem .35rem;text-align:center"><div style="font-size:.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${_h(c.name)}</div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;line-height:1;color:${c.mod < 0 ? 'var(--loss)' : 'var(--text)'}">${val}</div><div style="font-size:.6rem;line-height:1">${badges}</div></div>`;
+  const badges = c.badges.map(b => (_KB[b.key] || '') + (b.b > 1 ? '⁺' : '')).join(''), rt = _pcData(c.name, 'season')?.rating;
+  if(onBoard) { const val = kortValue(st, side, row, c);
+    return `<div title="${_h(c.name)}" style="width:70px">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 's', rating: rt,
+      body: `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;line-height:1;color:${c.mod < 0 ? '#fca5a5' : '#fff'}">${val}</div><div style="font-size:.55rem;line-height:1">${badges}</div>` })}</div>`; }
   const myTurn = st.turn === 0 && !st.over && !st.p[0].passed && !_kortBusy, tac = st.tactics[st.q - 1];
-  return `<div style="width:118px;flex-shrink:0;background:var(--surface);border:2px solid ${c.lim ? '#f5c518' : tc};border-radius:10px;padding:.4rem;text-align:center">
-    <div style="font-weight:800;font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.lim ? '🌟 ' : ''}${_h(c.name)}</div><div style="font-size:.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(c.team || '')}${c.form === 'hot' ? ' 🔥' : c.form === 'cold' ? ' ❄️' : ''}</div>
-    <div style="font-size:.7rem;margin:.15rem 0;min-height:.9rem">${badges}</div>
-    <div style="display:flex;flex-direction:column;gap:.2rem">${KORT_ROWS.map(r => `<button ${myTurn ? '' : 'disabled'} onclick="kortHumanPlay('${c.id}','${r}')" style="display:flex;justify-content:space-between;align-items:center;padding:.15rem .4rem;border-radius:6px;border:1px solid ${r === tac ? 'var(--accent)' : 'var(--border)'};background:${r === tac ? 'rgba(245,197,24,.14)' : 'var(--surface2)'};color:var(--text);font-family:inherit;font-size:.72rem;cursor:${myTurn ? 'pointer' : 'default'};opacity:${myTurn ? 1 : .55}"><span>${_KR[r][0]}</span><b>${c.pw[r]}${r === tac ? ' ×2' : ''}</b></button>`).join('')}</div></div>`;
+  return `<div style="width:126px;flex-shrink:0">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
+    body: `<div style="font-size:.66rem;margin:.1rem 0 .2rem;min-height:.85rem">${badges}${c.form === 'hot' ? ' 🔥' : c.form === 'cold' ? ' ❄️' : ''}</div>
+      <div style="display:flex;flex-direction:column;gap:.2rem">${KORT_ROWS.map(r => `<button ${myTurn ? '' : 'disabled'} onclick="kortHumanPlay('${c.id}','${r}')" style="display:flex;justify-content:space-between;align-items:center;padding:.15rem .4rem;border-radius:6px;border:1px solid ${r === tac ? '#ffd84d' : 'rgba(255,255,255,.18)'};background:${r === tac ? 'rgba(245,197,24,.22)' : 'rgba(0,0,0,.3)'};color:#fff;font-family:inherit;font-size:.72rem;cursor:${myTurn ? 'pointer' : 'default'};opacity:${myTurn ? 1 : .55}"><span>${_KR[r][0]}</span><b>${c.pw[r]}${r === tac ? ' ×2' : ''}</b></button>`).join('')}</div>` })}</div>`;
 }
 function _kortDraw() {
   const el = document.getElementById('kort-board'); if(!el || !_kort) return; const st = _kort.st, en = currentLang === 'en', tac = st.tactics[st.q - 1];
