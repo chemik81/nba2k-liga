@@ -792,6 +792,38 @@ body.dn-obs{background:transparent!important}body.dn-obs>*:not(.dn-ov):not(#dn-t
 .sn-eu small{display:block;font-size:.62rem;letter-spacing:1px;color:#ffcc00;font-weight:800}
 body.side-col .sn-lbl-wrap{display:none}
 body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
+
+/* 🏀 Kort — boisko */
+.kc-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:.7rem}
+.kc-board-top{display:grid;grid-template-columns:1fr auto 1fr;gap:.6rem;align-items:center;background:linear-gradient(180deg,#0b0d12,#151a24);border:1px solid #2a3142;border-radius:12px;padding:.5rem .7rem;box-shadow:inset 0 0 18px rgba(0,0,0,.6)}
+.kc-team{min-width:0}.kc-right{text-align:right}
+.kc-tname{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.95rem;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e5e7eb}
+.kc-dots{margin-top:.2rem}.kc-dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin:0 2px;border:2px solid #f5c518;opacity:.5}.kc-dot.on{background:#f5c518;opacity:1;box-shadow:0 0 8px #f5c518}
+.kc-led{display:flex;align-items:center;gap:.7rem;background:#000;border-radius:10px;padding:.3rem .7rem;border:1px solid #333}
+.kc-led-n{font-family:'Courier New',monospace;font-weight:900;font-size:2.1rem;line-height:1;text-shadow:0 0 10px currentColor;letter-spacing:2px}
+.kc-led-mid{text-align:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.85rem;color:#f5c518;letter-spacing:1px}
+.kc-led-tac{font-size:.66rem;color:#ffd84d;opacity:.85;font-weight:700;letter-spacing:0;white-space:nowrap}
+.kc-opp-info{font-size:.74rem;color:var(--muted);margin:.45rem .2rem .3rem}.kc-passed{color:#f5c518;font-weight:800}
+.kc-court{position:relative;border-radius:14px;padding:.55rem;border:4px solid rgba(255,255,255,.85);
+  background:linear-gradient(rgba(20,10,0,.28),rgba(20,10,0,.28)),repeating-linear-gradient(90deg,#b8743f 0 44px,#c3804a 44px 88px,#ad6c3a 88px 132px),#b8743f;box-shadow:inset 0 0 40px rgba(0,0,0,.45)}
+.kc-half{display:flex;flex-direction:column;gap:.35rem}
+.kc-mid{position:relative;height:30px;margin:.25rem 0}
+.kc-mid:before{content:"";position:absolute;left:-.55rem;right:-.55rem;top:50%;border-top:3px solid rgba(255,255,255,.85)}
+.kc-circle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;border:3px solid rgba(255,255,255,.85);background:#b8743f;display:flex;align-items:center;justify-content:center;font-size:1.5rem;z-index:1}
+.kc-lane{display:grid;grid-template-columns:96px 1fr 46px;gap:.45rem;align-items:center;border-radius:10px;padding:.3rem .35rem;border:2px solid rgba(255,255,255,.35);min-height:62px}
+.kc-lane.kc-tac{border-color:#ffd84d;box-shadow:0 0 0 2px rgba(255,216,77,.35),0 0 18px rgba(255,216,77,.35)}
+.kc-lbl{font-size:.72rem;font-weight:800;color:#fff;background:rgba(0,0,0,.45);border-radius:10px;padding:.2rem .45rem;text-align:center;line-height:1.25;overflow:hidden}
+.kc-lbl b{color:#ffd84d}
+.kc-cards{display:flex;gap:.3rem;flex-wrap:wrap;min-height:50px;align-items:center}
+.kc-sum{width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.6);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem}
+.kc-tac .kc-sum{border-color:#ffd84d;color:#ffd84d}
+.kc-log{font-size:.74rem;color:var(--muted);min-height:1.1rem;margin:.45rem .2rem}
+.kc-bench{background:linear-gradient(180deg,#2a1a0e,#1a1008);border:1px solid #4a3220;border-radius:12px;padding:.55rem}
+.kc-pop{animation:kcPop .45s ease-out}
+@keyframes kcPop{0%{transform:scale(.4) translateY(30px);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@media (max-width:600px){.kc-lane{grid-template-columns:74px 1fr 38px}.kc-lbl{font-size:.6rem;padding:.15rem .25rem}.kc-led-n{font-size:1.6rem}.kc-sum{width:36px;height:36px;font-size:1rem}
+  .kc-board-top{grid-template-columns:1fr 1fr;row-gap:.4rem}.kc-led{grid-column:1/-1;order:-1;justify-content:center}.kc-tname{font-size:.85rem}}
+@media (prefers-reduced-motion:reduce){.kc-pop{animation:none}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -16484,25 +16516,35 @@ function _kortCardHtml(st, side, c, row, onBoard) {
 }
 function _kortDraw() {
   const el = document.getElementById('kort-board'); if(!el || !_kort) return; const st = _kort.st, en = currentLang === 'en', tac = st.tactics[st.q - 1];
-  const half = side => `<div style="display:flex;flex-direction:column;gap:.3rem">${KORT_ROWS.map(r => `<div style="display:grid;grid-template-columns:100px 1fr 44px;gap:.4rem;align-items:center;background:${r === tac ? 'rgba(245,197,24,.07)' : 'transparent'};border-radius:8px;padding:.2rem .3rem">
-      <div style="font-size:.72rem;font-weight:700">${_KR[r][0]} ${en ? _KR[r][2] : _KR[r][1]}${r === tac ? ' <span style="color:var(--accent)">×2</span>' : ''}</div>
-      <div style="display:flex;gap:.3rem;flex-wrap:wrap;min-height:46px">${st.p[side].board[r].map(c => _kortCardHtml(st, side, c, r, true)).join('')}</div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.2rem;text-align:right">${kortRowSum(st, side, r)}</div></div>`).join('')}</div>`;
-  const dots = n => '●'.repeat(n) + '○'.repeat(Math.max(0, 2 - n)), last = st.log.slice(-3).map(l => l.quarter ? `🏁 ${en ? 'Round ' : 'Runda '}${l.quarter}: ${l.score[0]}:${l.score[1]}` : l.pass ? `${l.side ? '🤖' : '🧑'} ${en ? 'passes' : 'pasuje'}` : `${l.side ? '🤖' : '🧑'} ${_h(l.card)} → ${_KR[l.row][0]}${l.ev?.length ? ' · ' + l.ev.join(', ') : ''}`).join(' · ');
-  el.innerHTML = `<div class="card" style="padding:.8rem .9rem" data-notr>
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
-      <div><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.3rem">${en ? 'ROUND' : 'RUNDA'} ${st.q}/3</b> <span style="font-size:.8rem;color:var(--accent);margin-left:.4rem">${en ? _KT[tac][1] : _KT[tac][0]} — ${_KR[tac][0]} ×2</span></div>
-      <div style="font-size:.85rem">🧑 ${dots(st.p[0].wins)} · 🤖 ${dots(st.p[1].wins)}</div></div>
-    <div style="font-size:.74rem;color:var(--muted);margin-bottom:.2rem">🤖 ${_h(_kort.opp.icon + ' ' + _kort.opp.name)} · ${en ? 'cards' : 'karty'}: ${st.p[1].hand.length}${st.p[1].passed ? ' · <b style="color:var(--accent)">' + (en ? 'PASSED' : 'SPASOWAŁ') + '</b>' : ''}</div>
-    ${half(1)}
-    <div style="display:flex;justify-content:center;align-items:center;gap:1rem;margin:.5rem 0;padding:.4rem;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border)">
-      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${kortTotal(st, 0) >= kortTotal(st, 1) ? 'var(--win)' : 'var(--text)'}">${kortTotal(st, 0)}</span><span style="color:var(--muted)">:</span><span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;color:${kortTotal(st, 1) > kortTotal(st, 0) ? 'var(--loss)' : 'var(--text)'}">${kortTotal(st, 1)}</span></div>
-    ${half(0)}
-    <div style="font-size:.72rem;color:var(--muted);min-height:1rem;margin:.4rem 0">${last}</div>
-    ${st.over ? _kortEndHtml() : `<div style="display:flex;justify-content:space-between;align-items:center;margin:.3rem 0">
-      <span style="font-size:.8rem">${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — pick a card and a row' : 'Twoja tura — wybierz kartę i rząd') : st.p[0].passed ? (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…') : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
-      <button class="btn btn-ghost" ${st.turn === 0 && !st.p[0].passed && !_kortBusy ? '' : 'disabled'} onclick="kortHumanPass()">✋ ${en ? 'Pass' : 'Pasuj'}</button></div>
-      <div style="display:flex;gap:.45rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div>`}</div>`;
+  const tint = { atk: 'rgba(239,68,68,.20)', roz: 'rgba(59,130,246,.20)', obr: 'rgba(34,197,94,.20)' };
+  const lane = (side, r) => `<div class="kc-lane${r === tac ? ' kc-tac' : ''}" style="background:${tint[r]}">
+      <div class="kc-lbl">${_KR[r][0]} ${en ? _KR[r][2] : _KR[r][1]}${r === tac ? '<br><b>×2</b>' : ''}</div>
+      <div class="kc-cards">${st.p[side].board[r].map(c => `<div class="${c.id === _kort.lastId ? 'kc-pop' : ''}">${_kortCardHtml(st, side, c, r, true)}</div>`).join('')}</div>
+      <div class="kc-sum">${kortRowSum(st, side, r)}</div></div>`;
+  const dots = n => '<span class="kc-dot on"></span>'.repeat(n) + '<span class="kc-dot"></span>'.repeat(Math.max(0, 2 - n));
+  const last = st.log.slice(-3).map(l => l.quarter ? `🏁 ${en ? 'Round ' : 'Runda '}${l.quarter}: ${l.score[0]}:${l.score[1]}` : l.pass ? `${l.side ? '🤖' : '🧑'} ${en ? 'passes' : 'pasuje'}` : `${l.side ? '🤖' : '🧑'} ${_h(l.card)} → ${_KR[l.row][0]}${l.ev?.length ? ' · ' + l.ev.join(', ') : ''}`).join(' · ');
+  const t0 = kortTotal(st, 0), t1 = kortTotal(st, 1);
+  el.innerHTML = `<div data-notr class="kc-wrap">
+    <div class="kc-board-top">
+      <div class="kc-team"><div class="kc-tname">🧑 ${en ? 'YOU' : 'TY'}</div><div class="kc-dots">${dots(st.p[0].wins)}</div></div>
+      <div class="kc-led"><div class="kc-led-n" style="color:${t0 >= t1 ? '#4ade80' : '#ffd84d'}">${String(t0).padStart(2, '0')}</div>
+        <div class="kc-led-mid"><div>${en ? 'ROUND' : 'RUNDA'} ${st.q}/3</div><div class="kc-led-tac">${en ? _KT[tac][1] : _KT[tac][0]} · ${_KR[tac][0]}×2</div></div>
+        <div class="kc-led-n" style="color:${t1 > t0 ? '#f87171' : '#ffd84d'}">${String(t1).padStart(2, '0')}</div></div>
+      <div class="kc-team kc-right"><div class="kc-tname">🤖 ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}</div></div>
+    </div>
+    <div class="kc-opp-info">${_h(_kort.opp.icon)} ${en ? 'cards in hand' : 'kart w ręce'}: <b>${st.p[1].hand.length}</b>${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}</div>
+    <div class="kc-court">
+      <div class="kc-half">${['obr', 'roz', 'atk'].map(r => lane(1, r)).join('')}</div>
+      <div class="kc-mid"><div class="kc-circle">🏀</div></div>
+      <div class="kc-half">${['atk', 'roz', 'obr'].map(r => lane(0, r)).join('')}</div>
+    </div>
+    <div class="kc-log">${last || '&nbsp;'}</div>
+    ${st.over ? _kortEndHtml() : `<div class="kc-bench">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem">
+        <span style="font-size:.82rem">${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — pick a card and a row' : 'Twoja tura — wybierz kartę i rząd') : st.p[0].passed ? (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…') : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
+        <button class="btn btn-ghost" ${st.turn === 0 && !st.p[0].passed && !_kortBusy ? '' : 'disabled'} onclick="kortHumanPass()">✋ ${en ? 'Pass' : 'Pasuj'}</button></div>
+      <div style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
+  </div>`;
 }
 function _kortEndHtml() {
   const st = _kort.st, en = currentLang === 'en', r = st.result === 0 ? 'win' : st.result === 1 ? 'loss' : 'draw';
@@ -16512,12 +16554,12 @@ function _kortEndHtml() {
     <div style="font-size:.8rem;color:var(--muted)">${en ? 'Rounds' : 'Rundy'}: ${qs}</div>
     <button class="btn btn-primary" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button></div>`;
 }
-function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kortDraw(); _kortBot(); } }
+function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kortDraw(); _kortBot(); } }
 function kortHumanPass() { if(!_kort || _kortBusy) return; if(kortPass(_kort.st, 0)) { _kortDraw(); _kortBot(); } }
 function _kortBot() {
   const st = _kort?.st; if(!st || st.over || st.turn !== 1) { _kortDraw(); return; }
   _kortBusy = true; _kortDraw();
-  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) kortPass(st, 1); else kortPlay(st, 1, m.id, m.row); _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
+  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) kortPass(st, 1); else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
 }
 
 function goToTeamRegistrations() { showView('join'); renderTeamRegistrations(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
