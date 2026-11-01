@@ -13773,6 +13773,7 @@ const __mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.wid
 const __encode = async c => c.toDataURL('image/png');
 // <<PCARD — karta gracza (wspólny kod strony i bota)
 // zakres „tydzień”: 'week:<sezon>:<numer kolejki>' — mecze z okna tej kolejki
+function _pcMatch(scope) { return typeof scope === 'string' && scope.startsWith('match:') ? scope.slice(6) : null; }
 function _pcWeek(scope) {
   if(typeof scope !== 'string' || !scope.startsWith('week:')) return null;
   const [, s2, w] = scope.split(':'), sid2 = s2 || null, sch = (typeof schedule !== 'undefined' ? schedule : []).find(x => (x.seasonId || null) === sid2 && +x.week === +w && x.weekStart);
@@ -13784,10 +13785,10 @@ function _pcData(name, scope = 'season') {
   const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
   const all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
   const mine = (pool) => pool.map(m => { for(const [t, o] of [[m.team1, m.team2], [m.team2, m.team1]]) { const p = (t.players || []).find(x => _normNick(x.name) === key); if(p) return { p, t, o, m, won: +t.score > +o.score }; } return null; }).filter(Boolean);
-  const wk = _pcWeek(scope);
-  const pool = wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
+  const wk = _pcWeek(scope), mid = _pcMatch(scope), mm = mid ? all.find(m => String(m.id) === String(mid)) : null;
+  const pool = mm ? [mm] : wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
   const games = mine(pool);
-  const scopeLbl = wk ? `WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}|WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}` : scope === 'career' ? 'KARIERA|CAREER' : scope === 'edition' ? edOf(sid) || 'EDYCJA|EDITION' : _seasonName(sid) || 'SEZON|SEASON';
+  const scopeLbl = mm ? `${String(mm.date || '').split('-').reverse().join('.')} · vs ${mm.team1.players?.some(p => _normNick(p.name) === _normNick(name)) ? mm.team2.name : mm.team1.name}|${String(mm.date || '').split('-').reverse().join('.')} · vs ${mm.team1.players?.some(p => _normNick(p.name) === _normNick(name)) ? mm.team2.name : mm.team1.name}` : wk ? `WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}|WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}` : scope === 'career' ? 'KARIERA|CAREER' : scope === 'edition' ? edOf(sid) || 'EDYCJA|EDITION' : _seasonName(sid) || 'SEZON|SEASON';
   if(!games.length) return null;
   const sum = f => games.reduce((n, g) => n + (+g.p[f] || 0), 0), gp = games.length;
   const teams = {}; games.forEach(g => { teams[g.t.name] = (teams[g.t.name] || 0) + 1; });
@@ -13816,7 +13817,7 @@ let _pcLgCache = {};
 function _pcLeague(scope) {
   const sid = currentSeasonId || null, all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
   const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
-  const wk = _pcWeek(scope);
+  const wk = _pcWeek(scope), _mid = _pcMatch(scope); if(_mid) { const _m = all.find(m => String(m.id) === String(_mid)); if(_m) scope = 'season'; }
   const pool = wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
   const key = scope + ':' + sid + ':' + all.length; if(_pcLgCache[key]) return _pcLgCache[key];
   const P = {};
@@ -15363,7 +15364,8 @@ const _LIM_THEMES = {
   gold: { stops: ['#fff3b0', '#f5c518', '#a87a08', '#f5c518', '#fff0a0'], banner: '#120d02', text: '#ffd84d', tint: null, deco: [] },
   halloween: { stops: ['#ffb347', '#ff7a00', '#5b1a8a', '#ff7a00', '#ffb347'], banner: '#14060f', text: '#ff9a2e', tint: ['rgba(255,122,0,.18)', 'rgba(91,26,138,.28)'], deco: [['🎃', '🦇', '🕸️'], ['👻', '🦇', '🍬'], ['🕷️', '🕸️', '🎃'], ['🦇', '🌕', '👻'], ['🍬', '🎃', '🕷️']] },
   xmas: { stops: ['#e8fff1', '#16a34a', '#b91c1c', '#16a34a', '#fef2f2'], banner: '#0b1a10', text: '#fca5a5', tint: ['rgba(22,163,74,.16)', 'rgba(185,28,28,.2)'], deco: [['🎄', '❄️', '🎁'], ['⭐', '❄️', '🎅'], ['🎁', '🔔', '❄️'], ['❄️', '⛄', '🎄']] },
-  fire: { stops: ['#fff1a8', '#f97316', '#b91c1c', '#f97316', '#fde68a'], banner: '#170603', text: '#fdba74', tint: ['rgba(249,115,22,.16)', 'rgba(185,28,28,.22)'], deco: [['🔥', '🔥', '💥'], ['🔥', '⚡', '🔥']] }
+  fire: { stops: ['#fff1a8', '#f97316', '#b91c1c', '#f97316', '#fde68a'], banner: '#170603', text: '#fdba74', tint: ['rgba(249,115,22,.16)', 'rgba(185,28,28,.22)'], deco: [['🔥', '🔥', '💥'], ['🔥', '⚡', '🔥']] },
+  record: { stops: ['#fff8d0', '#f5c518', '#5c4300', '#f5c518', '#fff3b0'], banner: '#0a0800', text: '#ffd84d', tint: ['rgba(0,0,0,.04)', 'rgba(70,50,0,.10)'], deco: [] }
 };
 // 🎃 HALLOWEEN — pajęczyny, pająk, nietoperze, dynie, duszek, ociekające krople; układ zależny od wariantu
 function _limHalloween(g, W, H, v, F) {
@@ -15386,6 +15388,20 @@ function _limHalloween(g, W, H, v, F) {
   for(let i = 0; i < 10; i++) { const x = 70 + i * (W - 140) / 9 + (rnd() - .5) * 30, len = 18 + rnd() * 58, w = 12 + rnd() * 10;
     g.beginPath(); g.moveTo(x - w / 2, 20); g.lineTo(x + w / 2, 20); g.lineTo(x + w / 2, 20 + len); g.arc(x, 20 + len, w / 2, 0, Math.PI); g.closePath(); g.fill(); }
 }
+// 🏛 REKORD — czarno-złota karta: podwójna złota ramka, wstęga „REKORD LIGI”, korona i iskry
+function _limRecord(g, W, H, v, F, label) {
+  let s = (v + 3) * 6151; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const vg = g.createRadialGradient(W / 2, H * .45, H * .2, W / 2, H / 2, H * .8); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.28)'); g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(255,216,77,.75)'; g.lineWidth = 3; g.strokeRect(46, 46, W - 92, H - 92); // wewnętrzna złota linia
+  const isBreaker = /BREAK/i.test(label || ''), txt = isBreaker ? '🔥 RECORD BREAKER' : '🏛 REKORD LIGI';
+  g.font = `900 34px ${F}`; const tw = g.measureText(txt).width + 70, x = (W - tw) / 2, y = 30;
+  const rib = g.createLinearGradient(x, 0, x + tw, 0); rib.addColorStop(0, '#7a5a00'); rib.addColorStop(.5, '#ffd84d'); rib.addColorStop(1, '#7a5a00');
+  g.fillStyle = rib; g.beginPath(); g.moveTo(x - 24, y); g.lineTo(x + tw + 24, y); g.lineTo(x + tw, y + 30); g.lineTo(x + tw + 24, y + 60); g.lineTo(x - 24, y + 60); g.lineTo(x, y + 30); g.closePath(); g.fill();
+  g.fillStyle = '#1a1200'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, W / 2, y + 31);
+  g.font = `64px ${F}`; g.fillText('👑', W / 2, y + 110);
+  for(let i = 0; i < 14; i++) { const ang = rnd() * Math.PI * 2, r = .3 + rnd() * .25, sx = W / 2 + Math.cos(ang) * W * r, sy = H / 2 + Math.sin(ang) * H * r * .8; // złote iskry przy krawędziach
+    if(sx > 90 && sx < W - 90 && sy > 140 && sy < H - 200) continue; g.fillStyle = `rgba(255,${200 + Math.floor(rnd() * 55)},${80 + Math.floor(rnd() * 80)},${.6 + rnd() * .4})`; g.font = `${18 + Math.floor(rnd() * 22)}px ${F}`; g.fillText('✦', sx, sy); }
+}
 function _limPaint(g, W, H, label, theme, variant, F) {
   const T = _LIM_THEMES[theme] || _LIM_THEMES.gold, v = +variant || 0;
   const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
@@ -15394,13 +15410,14 @@ function _limPaint(g, W, H, label, theme, variant, F) {
   g.lineWidth = 26; g.strokeStyle = fr; rr(13, 13, W - 26, H - 26, 54); g.stroke();
   const sh = g.createLinearGradient(0, 0, W, H); sh.addColorStop(.35, 'rgba(255,255,255,0)'); sh.addColorStop(.5, 'rgba(255,240,180,.16)'); sh.addColorStop(.65, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
   if(theme === 'halloween') _limHalloween(g, W, H, v, F);
+  else if(theme === 'record') _limRecord(g, W, H, v, F, label);
   else if(T.deco.length) { // dekoracje w narożnikach — inny zestaw i układ dla każdego wariantu
     const set = T.deco[v % T.deco.length], spots = [[70, 300], [W - 70, 300], [70, H - 300], [W - 70, H - 300], [W / 2, 60]].slice(v % 2, (v % 2) + 4);
     g.textAlign = 'center'; g.textBaseline = 'middle';
     spots.forEach(([x, y], i) => { g.save(); g.translate(x, y); g.rotate(((i + v) % 3 - 1) * .25); g.font = `${64 + ((i + v) % 3) * 14}px ${F}`; g.globalAlpha = .9; g.fillText(set[i % set.length], 0, 0); g.restore(); });
   }
   { const sg = g.createLinearGradient(0, H - 150, 0, H); sg.addColorStop(0, 'rgba(10,8,3,0)'); sg.addColorStop(.35, 'rgba(10,8,3,.94)'); sg.addColorStop(1, 'rgba(10,8,3,.98)'); g.fillStyle = sg; g.save(); rr(26, H - 150, W - 52, 124, 40); g.clip(); g.fillRect(0, H - 150, W, 150); g.restore(); }
-  const icon = { halloween: '🎃', xmas: '🎄', fire: '🔥' }[theme] || '🌟', txt = icon + ' ' + String(label || 'EDYCJA LIMITOWANA').toUpperCase(); g.font = `900 36px ${F}`;
+  const icon = theme === 'record' && /BREAK/i.test(label || '') ? '🔥' : { halloween: '🎃', xmas: '🎄', fire: '🔥', record: '🏛' }[theme] || '🌟', txt = icon + ' ' + String(label || 'EDYCJA LIMITOWANA').toUpperCase(); g.font = `900 36px ${F}`;
   const tw = Math.min(W - 120, g.measureText(txt).width + 80), bx = (W - tw) / 2, by = H - 112;
   rr(bx, by, tw, 70, 35); g.fillStyle = T.banner; g.fill(); g.lineWidth = 4; g.strokeStyle = T.stops[1]; g.stroke();
   g.fillStyle = T.text; g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 36; while(g.measureText(txt).width > tw - 44 && fs > 18) { fs--; g.font = `900 ${fs}px ${F}`; } g.fillText(txt, W / 2, by + 37);
@@ -15588,9 +15605,10 @@ function limitedSectionHtml(me) {
 }
 // 🌟 KREATOR KART LIMITOWANYCH (admin): rodzaj, motyw, osoba spoza ligi, podgląd, data końca, szansa; okazje (np. Halloween z cegieł tygodnia)
 const _LIM_KINDS = [['special', '✨ Specjalna'], ['event', '🎉 Okazja'], ['mvp', '⭐ MVP'], ['record', '🏆 Rekord']];
-const _LIM_THEME_LBL = [['gold', '🌟 Złoty'], ['halloween', '🎃 Halloween'], ['xmas', '🎄 Święta'], ['fire', '🔥 Ogień']];
+const _LIM_THEME_LBL = [['gold', '🌟 Złoty'], ['record', '🏛 Rekord'], ['halloween', '🎃 Halloween'], ['xmas', '🎄 Święta'], ['fire', '🔥 Ogień']];
 // zakres statystyk karty limitowanej: zapisana kolejka, a dla starszych kart — numer tygodnia z napisu („… WEEK 2”)
 function _limScope(c) {
+  if(c?.matchId) return 'match:' + c.matchId; // karta z rekordowego meczu
   const w = c?.week || +(String(c?.label || '').match(/WEEK\s*(\d+)/i) || [])[1] || null;
   return w && c?.kind !== 'special' ? 'week:' + (c.seasonId || currentSeasonId || '') + ':' + w : null;
 }
@@ -15645,11 +15663,19 @@ async function openLimitedAdmin() {
         <label style="${_MODAL_LBL};margin-top:.4rem">Napis</label><input id="ev-l" value="CEGŁA · HALLOWEEN" style="${_MODAL_INP}">
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-ghost" onclick="eventPreview()">👁 Podgląd kart</button><button class="btn btn-primary" onclick="eventCreate()">🎉 Wydaj wszystkie</button></div>
       </div>
+      <div style="border-top:1px solid var(--border);margin-top:.9rem;padding-top:.7rem">
+        <b style="font-size:.84rem">🏛 Kolekcja rekordów ligi</b>
+        <div style="font-size:.74rem;color:var(--muted);margin:.2rem 0 .45rem">Karty rekordzistów ze statystykami z <b>meczu rekordowego</b>. Nowe rekordy (🔥 Record Breakers) Worker wydaje sam, zaraz po pobiciu.</div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.3fr .7fr;gap:.4rem;align-items:end"><div><label style="${_MODAL_LBL}">Zakres</label><select id="rc-s" onchange="recList()" style="${_MODAL_INP}"><option value="all">Cała historia ligi</option><option value="season">Bieżący sezon</option></select></div><div><label style="${_MODAL_LBL}">Do</label><input id="rc-u" type="datetime-local" value="${until}" style="${_MODAL_INP}"></div><div><label style="${_MODAL_LBL}">Szansa %</label><input id="rc-c" type="number" value="20" min="1" max="90" style="${_MODAL_INP}"></div></div>
+        <div id="rc-list" style="margin:.45rem 0"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-ghost" onclick="recPreview()">👁 Podgląd kart</button><button class="btn btn-primary" onclick="recCreate()">🏛 Wydaj kolekcję</button></div>
+      </div>
       <div style="border-top:1px solid var(--border);margin-top:.9rem;padding-top:.6rem;font-size:.8rem">Domyślna szansa na kartę limitowaną w paczce: <input id="lim-gc" type="number" min="0" max="100" value="${Math.round((st.limitedChance ?? .1) * 100)}" style="${_MODAL_INP};width:70px;display:inline-block"> % <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/cards/limited','POST',{chance:(+document.getElementById('lim-gc').value||0)/100},{admin:true}).then(r=>showToast(r.ok?'💾 Zapisano':'❌','success'))">💾</button></div>
       ${L.length ? `<div style="margin-top:.7rem;font-size:.78rem"><b>Karty (aktywne i z ostatnich dni):</b>${L.slice().reverse().map(c => { const act = Date.parse(c.until) > now; return `<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${act ? '🟢' : '⚪'} ${_h(c.name)} — ${_h(c.label)} <span style="color:var(--muted)">${c.theme && c.theme !== 'gold' ? '· ' + c.theme : ''}${c.chance != null ? ' · ' + Math.round(c.chance * 100) + '%' : ''}</span></span><span>${act ? `<a href="#" onclick="_api('/cards/limited','POST',{end:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:#f59e0b">zakończ</a> · ` : ''}<a href="#" onclick="if(confirm('Usunąć kartę? Zdobyte egzemplarze zostaną w kolekcjach.')) _api('/cards/limited','POST',{remove:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:var(--loss)">usuń</a></span></div>`; }).join('')}</div>` : ''}
     </div>
     <div><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">PODGLĄD</div><div id="lim-prev" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-start;color:var(--muted);font-size:.8rem">Kliknij „👁 Podgląd”.</div></div>
   </div>`;
+  setTimeout(recList, 0);
 }
 function _limForm() {
   const v = id => document.getElementById(id)?.value?.trim() || '', per = document.getElementById('lim-per')?.checked;
@@ -15674,6 +15700,31 @@ function _weekBrickRank(w) {
   const by = {}; _withAllMatches(() => matches.filter(m => !m.walkover && ids.has(String(m.id)))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
     const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, fgm: 0, fga: 0, gp: 0 }; a.fgm += +p.fgm || 0; a.fga += +p.fga || 0; a.gp++; })));
   return Object.values(by).filter(a => a.gp && a.fga / a.gp >= 8).sort((a, b) => a.fgm / a.fga - b.fgm / b.fga || (b.fga - b.fgm) - (a.fga - a.fgm)).map(a => ({ ...a, week: +w }));
+}
+// 🏛 rekordy indywidualne (najlepszy pojedynczy mecz): cała historia albo bieżący sezon
+const _REC_CATS = [['pts', 'PTS', 'punktów'], ['reb', 'REB', 'zbiórek'], ['ast', 'AST', 'asyst'], ['stl', 'STL', 'przechwytów'], ['blk', 'BLK', 'bloków'], ['tpm', '3PM', 'trójek']];
+function _leagueRecordList(scope) {
+  const sid = currentSeasonId || null, all = _withAllMatches(() => matches.filter(m => !m.walkover && (scope !== 'season' || (m.seasonId || null) === sid))).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  return _REC_CATS.map(([k, unit, pl]) => { let best = null;
+    all.forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => (t.players || []).forEach(p => { const v = +p[k] || 0; if(v > 0 && (!best || v > best.val)) best = { cat: k, unit, pl, val: v, name: p.name, team: t.name, opp: o.name, matchId: m.id, date: m.date }; })));
+    return best; }).filter(Boolean);
+}
+function _recForm() { const v = id => document.getElementById(id)?.value?.trim() || ''; return { scope: v('rc-s') || 'all', until: v('rc-u') ? new Date(v('rc-u')).toISOString() : null, chance: Math.min(90, +v('rc-c') || 20) / 100, picked: new Set([...document.querySelectorAll('#rc-list input:checked')].map(x => x.value)) }; }
+function recList() {
+  const f = _recForm(), L = _leagueRecordList(f.scope), box = document.getElementById('rc-list'); if(!box) return;
+  box.innerHTML = L.map(r => `<label style="display:flex;gap:.4rem;align-items:center;font-size:.78rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text);padding:.2rem 0"><input type="checkbox" value="${r.cat}" checked style="width:auto;margin:0;accent-color:var(--accent)"> <b>${r.val} ${r.unit}</b> — ${_h(r.name)} <span style="color:var(--muted)">(${_h(r.team)} vs ${_h(r.opp)}, ${_ssFmt(r.date)})</span></label>`).join('') || '<span style="color:var(--muted);font-size:.78rem">Brak meczów.</span>';
+}
+async function recPreview() {
+  const f = _recForm(), L = _leagueRecordList(f.scope).filter(r => f.picked.has(r.cat)), box = document.getElementById('lim-prev'); if(!L.length) { box.innerHTML = 'Zaznacz rekordy.'; return; }
+  box.innerHTML = '⏳'; const urls = []; for(const [i, r] of L.entries()) urls.push(await _limRender({ name: r.name, label: `REKORD LIGI · ${r.val} ${r.unit}`, theme: 'record', variant: i, scope: 'match:' + r.matchId }));
+  box.innerHTML = urls.map((u, i) => u ? `<div style="flex:1 1 140px;max-width:48%"><div style="font-size:.7rem;margin-bottom:.15rem">${_h(L[i].name)} · ${L[i].val} ${L[i].unit}</div>${_holoHtml(u, L[i].name, 1)}</div>` : '').join(''); _holoBind(box);
+}
+async function recCreate() {
+  const f = _recForm(), L = _leagueRecordList(f.scope).filter(r => f.picked.has(r.cat)); if(!L.length) { showToast('Zaznacz rekordy', 'info'); return; }
+  if(!confirm(`Wydać ${L.length} kart(y) „Rekord ligi” (${L.map(r => r.name + ' ' + r.val + ' ' + r.unit).join(', ')})?`)) return;
+  const setKey = 'rec:holders:' + Date.now().toString(36);
+  const r = await _api('/cards/limited', 'POST', { cards: L.map((x, i) => ({ name: x.name, team: x.team, label: `REKORD LIGI · ${x.val} ${x.unit}`, kind: 'record', theme: 'record', variant: i, until: f.until, chance: f.chance, matchId: x.matchId, set: setKey, setName: '🏛 Rekordziści ligi' })) }, { admin: true });
+  showToast(r.ok ? `🏛 Wydano ${r.created?.length || 0} kart rekordów` : '❌ ' + r.error, r.ok ? 'success' : 'error'); if(r.ok) openLimitedAdmin();
 }
 function _eventWeeks() { const sid = currentSeasonId || null; return [...new Set((schedule || []).filter(x => x.generated && (x.seasonId || null) === sid && x.week && (x.matchIds || []).length).map(x => +x.week))].sort((a, b) => a - b); }
 // karty z zaznaczonych kolejek: najpierw 1. miejsca każdej kolejki, potem 2. miejsca itd.
