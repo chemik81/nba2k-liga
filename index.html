@@ -2649,7 +2649,7 @@ async function loadData() {
     }
 
     // ── Fallback / Migration source: JSONBin ─────────────────────────────
-    if(!record && jbBin) {
+    if(!record && jbBin && !EU_MODE) { // liga EU nigdy nie bierze zapasowej bazy ligi PL
       const headers = { 'Content-Type': 'application/json' };
       if(jbKey) headers['X-Master-Key'] = jbKey;
       else headers['X-Access-Key'] = PUBLIC_JB_READ_KEY;
@@ -2669,7 +2669,7 @@ async function loadData() {
       }
     }
 
-    if(!record) { showGlobalLoader(false); return; }
+    if(!record) { showGlobalLoader(false); if(EU_MODE) showToast('⚠️ Cannot load EU league data — check the EU Worker (DATA_KV binding).', 'error'); return; }
 
     // ── Unpack data ───────────────────────────────────────────────────────
     const unpackPlayer = p => {
