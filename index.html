@@ -838,6 +838,30 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 .kc-banner.good{background:linear-gradient(135deg,#ffd84d,#f59e0b)}.kc-banner.bad{background:linear-gradient(135deg,#fca5a5,#ef4444);color:#fff}
 @keyframes kcBan{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}25%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-60%)}}
 @media (prefers-reduced-motion:reduce){.kc-com,.kc-banner{animation:none}}
+
+/* 🎨 Kort — rewersy, dobieranie, przeciąganie, ekran zwycięstwa, żywe karty */
+.kc-back{display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:repeating-linear-gradient(45deg,#7f1d1d 0 6px,#991b1b 6px 12px);border:2px solid #f5c518;box-shadow:0 2px 6px rgba(0,0,0,.4);vertical-align:middle;flex-shrink:0}
+.kc-back span{font-size:.7rem;filter:drop-shadow(0 1px 1px #000)}
+.kc-opp-info{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}.kc-opp-hand{display:flex}.kc-opp-hand .kc-back{margin-right:-10px}
+.kc-mid:before{border-top-color:var(--kc-line,rgba(255,255,255,.85))!important}
+.kc-circle{overflow:hidden}
+.kc-drawn{animation:kcDraw .6s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes kcDraw{0%{transform:translate(-60px,-40px) rotate(-12deg) scale(.6);opacity:0}100%{transform:none;opacity:1}}
+.kc-ghost{transform:rotate(-4deg) scale(1.05);filter:drop-shadow(0 12px 18px rgba(0,0,0,.55))}
+.kc-lane.kc-drop{outline:3px dashed #ffd84d;outline-offset:-3px;background-color:rgba(255,216,77,.18)!important}
+.kc-lane.kc-drop:after{content:attr(data-gain);position:absolute;right:58px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;color:#ffd84d;text-shadow:0 2px 8px #000}
+.kc-lane{position:relative}
+.kc-glow>div:last-child{animation:kcGlow 1.1s ease-out 2}
+@keyframes kcGlow{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px #ffd84d,0 0 22px #ffd84d}}
+.kc-badgepop{position:absolute;left:50%;top:-6px;transform:translateX(-50%);z-index:3;font-size:1.1rem;animation:kcBP 1.3s ease-out forwards;pointer-events:none}
+@keyframes kcBP{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}25%{opacity:1;transform:translate(-50%,-6px) scale(1.25)}100%{opacity:0;transform:translate(-50%,-30px)}}
+.kc-hit{animation:kcHit .5s ease-in-out 2}.kc-hit>div:last-child{box-shadow:0 0 0 3px #ef4444,0 0 16px #ef4444}
+@keyframes kcHit{0%,100%{transform:none}20%{transform:translateX(-4px) rotate(-2deg)}40%{transform:translateX(4px) rotate(2deg)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.kc-wrap{position:relative;overflow:hidden}
+.kc-confetti{position:fixed;inset:0;pointer-events:none;z-index:9998;overflow:hidden}
+.kc-confetti i{position:absolute;top:-12px;width:9px;height:14px;border-radius:2px;animation-name:kcConf;animation-timing-function:linear;animation-fill-mode:forwards}
+@keyframes kcConf{to{transform:translateY(1100px) rotate(720deg);opacity:.6}}
+@media (prefers-reduced-motion:reduce){.kc-drawn,.kc-glow>div:last-child,.kc-badgepop,.kc-hit{animation:none}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -16583,7 +16607,7 @@ function _kortOpponent(myDeck) { // temat dnia + talia o podobnej sile (dobór d
     const cand = L.filter(x => !mine.has(_normNick(x.name)) && !deck.some(d => d.name === x.name) && (hi ? x.rating < deck[i].rating : x.rating > deck[i].rating)).sort((a, b) => Math.abs(a.rating - want) - Math.abs(b.rating - want))[0];
     if(!cand) break; deck[i] = cand;
   }
-  return { ...th, deck: deck.slice(0, 8), avg: Math.round(davg()), day };
+  return { ...th, team: th.id === 'team' ? th.name : null, deck: deck.slice(0, 8), avg: Math.round(davg()), day };
 }
 let _kortInfo = null;
 async function renderKort() {
@@ -16794,6 +16818,54 @@ async function openKortBalance() {
     </div></div>`;
 }
 
+// ═══ 🎨 KORT — grafika: boisko w barwach rywala, rewersy i dobieranie, przeciąganie kart, ekran zwycięstwa, „żywe” karty ═══
+function _kortCourt() { // motyw boiska: drużyna (jej kolor i logo), boss (złoto-czarny), ranking (kolor dywizji rywala)
+  const o = _kort.opp || {};
+  if(_kort.mode === 'boss') return { tint: 'rgba(245,197,24,.16)', wood: ['#2a2216', '#33291a', '#241d12'], line: '#f5c518', center: '<span style="font-size:1.6rem">👑</span>' };
+  if(o.team) { const c = teamColor(o.team); return { tint: c + '38', wood: null, line: c, center: teamLogo(o.team, 46, '.8rem') }; }
+  if(_kort.mode === 'ranked' && o.div) { const c = (_KDIV[o.div] || _KDIV.bronze)[3]; return { tint: c + '2e', wood: null, line: c, center: '<span style="font-size:1.4rem">' + (_KDIV[o.div] || _KDIV.bronze)[0] + '</span>' }; }
+  return { tint: null, wood: null, line: 'rgba(255,255,255,.85)', center: '🏀' };
+}
+const _kortBack = (w = 34) => `<div class="kc-back" style="width:${w}px;height:${Math.round(w * 1.3)}px"><span>🏀</span></div>`;
+const _KBROW = { sniper: 'atk', scorer: 'atk', glass: 'obr', rim: 'obr', dime: 'roz', thief: 'roz', dd: '*', winner: 'q3', iron: 'q3' };
+function _kortFxFor(side) { // po zagraniu: błysk karty z działającą odznaką, „trafienie” osłabionej karty rywala
+  const l = _kort.st.log[_kort.st.log.length - 1]; if(!l || l.pass || l.quarter) return;
+  const c = KORT_ROWS.flatMap(r => _kort.st.p[side].board[r]).find(x => x.name === l.card && x.id === _kort.lastId) || _kort.st.p[side].board[l.row].slice(-1)[0];
+  const act = (c?.badges || []).filter(b => _KBROW[b.key] === l.row || _KBROW[b.key] === '*' || (_KBROW[b.key] === 'q3' && _kort.st.q === 3));
+  _kort.fx = { glowId: act.length ? c.id : null, pop: act.map(b => _KB[b.key]).join(''), hit: (l.ev || []).map(e => e.slice(2).replace(/\s−\d+$/, '').trim()), hitSide: 1 - side, n: _kort.st.log.length };
+}
+function _kortCelebrate(box) { // konfetti na wygraną
+  if(!box || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const cols = ['#f5c518', '#4ade80', '#38bdf8', '#f472b6', '#a855f7', '#fb923c'];
+  box = document.body; document.querySelector('body > .kc-confetti')?.remove(); // osobna warstwa — przerysowanie planszy jej nie kasuje
+  box.insertAdjacentHTML('beforeend', `<div class="kc-confetti">${[...Array(70)].map(() => `<i style="left:${Math.random() * 100}%;background:${cols[Math.floor(Math.random() * cols.length)]};animation-delay:${(Math.random() * .6).toFixed(2)}s;animation-duration:${(1.8 + Math.random() * 1.4).toFixed(2)}s;transform:rotate(${Math.floor(Math.random() * 360)}deg)"></i>`).join('')}</div>`);
+  setTimeout(() => document.querySelector('body > .kc-confetti')?.remove(), 3600);
+}
+async function _kortMvpCard() { // karta MVP meczu na ekranie końcowym (holo)
+  const box = document.getElementById('k-mvp'); if(!box) return; const mvp = Object.entries(_kort.st.contrib?.[0] || {}).sort((a, b) => b[1] - a[1])[0]; if(!mvp) { box.remove(); return; }
+  const d = _pcData(mvp[0], 'season'); if(!d) return;
+  try { const url = await _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true); if(!url || !document.getElementById('k-mvp')) return;
+    box.innerHTML = `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:#f5c518;margin-bottom:.35rem">⭐ MVP ${currentLang === 'en' ? 'OF THE MATCH' : 'MECZU'} · ${mvp[1]} ${currentLang === 'en' ? 'pts' : 'pkt'}</div><div style="max-width:230px;margin:0 auto">${_holoHtml(url, mvp[0], 1)}</div>`; _holoBind(box); } catch(e) {}
+}
+// ✋ przeciąganie karty z ławki na rząd (mysz i dotyk)
+function _kortBindDrag(root) {
+  const st = _kort.st; if(st.over || st.turn !== 0 || st.p[0].passed || _kortBusy) return;
+  root.querySelectorAll('[data-kid]').forEach(w => w.addEventListener('pointerdown', e => {
+    if(e.target.closest('button') || e.button > 0) return;
+    const id = w.dataset.kid, card = st.p[0].hand.find(c => c.id === id); if(!card) return;
+    e.preventDefault(); const r0 = w.getBoundingClientRect(), dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+    const ghost = w.cloneNode(true); ghost.classList.add('kc-ghost'); Object.assign(ghost.style, { position: 'fixed', left: r0.left + 'px', top: r0.top + 'px', width: r0.width + 'px', zIndex: 9999, pointerEvents: 'none' }); document.body.appendChild(ghost); w.style.opacity = '.35';
+    let lane = null;
+    const gain = row => { const s = JSON.parse(JSON.stringify(st)); s.turn = 0; kortPlay(s, 0, id, row); return kortTotal(s, 0) - kortTotal(st, 0); };
+    const move = ev => { ghost.style.left = (ev.clientX - dx) + 'px'; ghost.style.top = (ev.clientY - dy) + 'px';
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.kc-lane[data-side="0"]');
+      if(el !== lane) { root.querySelectorAll('.kc-drop').forEach(x => { x.classList.remove('kc-drop'); x.removeAttribute('data-gain'); }); lane = el; if(lane) { lane.classList.add('kc-drop'); lane.setAttribute('data-gain', '+' + gain(lane.dataset.row)); } } };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); ghost.remove(); w.style.opacity = '';
+      root.querySelectorAll('.kc-drop').forEach(x => x.classList.remove('kc-drop')); if(lane) kortHumanPlay(id, lane.dataset.row); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }));
+}
+
 function kortDeckPick() {
   openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, extra: _kortPickInfo,
     footer: keys => { const r = keys.map(k => (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(_cards?.cards?.[k]?.name, 'season')?.rating).filter(Boolean); return r.length ? _g('średnia', 'avg') + ' <b>' + Math.round(r.reduce((a, b) => a + b, 0) / r.length) + '</b>' : ''; }, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
@@ -16803,7 +16875,7 @@ function kortDeckPick() {
 function kortStart(mode = 'daily') {
   const own = _kortOwnDeck(), deck = mode === 'ranked' && own ? own.map(k => _kortSrc(_cards.cards[k].name, { lim: k.startsWith('lim:'), label: _cards.cards[k].label })).filter(Boolean) : _kortMyDeck();
   let opp;
-  if(mode === 'ranked') { const o = _kortOppPick; if(!o) return; opp = { id: o.id, name: o.name, icon: '🏆', deck: o.deck.names.map((n, i) => _kortSrc(n, { lim: !!o.deck.lim?.[i], label: o.deck.lim?.[i] || null })).filter(Boolean) };
+  if(mode === 'ranked') { const o = _kortOppPick; if(!o) return; opp = { id: o.id, name: o.name, icon: '🏆', div: o.div, deck: o.deck.names.map((n, i) => _kortSrc(n, { lim: !!o.deck.lim?.[i], label: o.deck.lim?.[i] || null })).filter(Boolean) };
     if(opp.deck.length < 8) { showToast(_g('Talia rywala zawiera graczy bez statystyk w tym sezonie — wybierz innego', 'The opponent’s deck has players without stats this season — pick another'), 'info'); return; } }
   else if(mode === 'boss') opp = { name: _g('Dream Team ligi', 'League Dream Team'), icon: '👑', deck: _kortBossDeck() };
   else opp = _kortOpponent(deck);
@@ -16815,11 +16887,13 @@ function kortStart(mode = 'daily') {
 function _kortCardHtml(st, side, c, row, onBoard) {
   const badges = c.badges.map(b => (_KB[b.key] || '') + (b.b > 1 ? '⁺' : '')).join(''), rt = _pcData(c.name, 'season')?.rating;
   if(onBoard) { const val = kortValue(st, side, row, c);
-    return `<div title="${_h(c.name)}" style="width:70px">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 's', rating: rt,
+    const fx = _kort.fx && _kort.fx.n === st.log.length ? _kort.fx : null, glow = fx?.glowId === c.id, hit = fx && side === fx.hitSide && fx.hit.includes(c.name);
+    return `<div title="${_h(c.name)}" style="width:70px;position:relative" class="${glow ? 'kc-glow' : ''}${hit ? ' kc-hit' : ''}">${glow && fx.pop ? `<span class="kc-badgepop">${fx.pop}</span>` : ''}${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 's', rating: rt,
       body: `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;line-height:1;color:${c.mod < 0 ? '#fca5a5' : '#fff'}">${val}</div><div style="font-size:.55rem;line-height:1">${badges}</div>` })}</div>`; }
   const myTurn = st.turn === 0 && !st.over && !st.p[0].passed && !_kortBusy, tac = st.tactics[st.q - 1];
   const hint = myTurn ? _kort?._tip : null;
-  return `<div style="width:126px;flex-shrink:0" class="${hint?.id === c.id ? 'kc-hint' : ''}">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
+  const drawn = _kort.seenHand && !_kort.seenHand.has(c.id);
+  return `<div data-kid="${c.id}" style="width:126px;flex-shrink:0;touch-action:none;cursor:${myTurn ? 'grab' : 'default'}" class="${hint?.id === c.id ? 'kc-hint' : ''}${drawn ? ' kc-drawn' : ''}">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
     body: `<div style="font-size:.66rem;margin:.1rem 0 .2rem;min-height:.85rem">${badges}${c.form === 'hot' ? ' 🔥' : c.form === 'cold' ? ' ❄️' : ''}</div>
       <div style="display:flex;flex-direction:column;gap:.2rem">${KORT_ROWS.map(r => `<button ${myTurn ? '' : 'disabled'} class="${hint?.id === c.id && hint.row === r ? 'kc-hint-btn' : ''}" onclick="kortHumanPlay('${c.id}','${r}')" style="display:flex;justify-content:space-between;align-items:center;padding:.15rem .4rem;border-radius:6px;border:1px solid ${r === tac ? '#ffd84d' : 'rgba(255,255,255,.18)'};background:${r === tac ? 'rgba(245,197,24,.22)' : 'rgba(0,0,0,.3)'};color:#fff;font-family:inherit;font-size:.72rem;cursor:${myTurn ? 'pointer' : 'default'};opacity:${myTurn ? 1 : .55}"><span>${_KR[r][0]}</span><b>${c.pw[r]}${r === tac ? ' ×2' : ''}</b></button>`).join('')}</div>` })}</div>`;
 }
@@ -16827,7 +16901,7 @@ function _kortDraw() {
   const el = document.getElementById('kort-board'); if(!el || !_kort) return; const st = _kort.st, en = currentLang === 'en', tac = st.tactics[st.q - 1];
   _kort._tip = _kortBusy ? null : _kortTip(); // raz na rysowanie (sugerowany ruch liczy silnik bota)
   const tint = { atk: 'rgba(239,68,68,.20)', roz: 'rgba(59,130,246,.20)', obr: 'rgba(34,197,94,.20)' };
-  const lane = (side, r) => `<div class="kc-lane${r === tac ? ' kc-tac' : ''}" style="background:${tint[r]}">
+  const lane = (side, r) => `<div class="kc-lane${r === tac ? ' kc-tac' : ''}" data-side="${side}" data-row="${r}" style="background:${tint[r]}">
       <div class="kc-lbl">${_KR[r][0]} ${en ? _KR[r][2] : _KR[r][1]}${r === tac ? '<br><b>×2</b>' : ''}</div>
       <div class="kc-cards">${st.p[side].board[r].map(c => `<div class="${c.id === _kort.lastId ? 'kc-pop' : ''}">${_kortCardHtml(st, side, c, r, true)}</div>`).join('')}</div>
       <div class="kc-sum">${kortRowSum(st, side, r)}</div></div>`;
@@ -16844,21 +16918,23 @@ function _kortDraw() {
         <div class="kc-led-n" style="color:${t1 > t0 ? '#f87171' : '#ffd84d'}">${String(t1).padStart(2, '0')}</div></div>
       <div class="kc-team kc-right"><div class="kc-tname">🤖 ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}<button onclick="localStorage.setItem('kort_sound',localStorage.getItem('kort_sound')==='0'?'1':'0');_kortDraw()" title="${en ? 'Sound' : 'Dźwięk'}" style="margin-left:.4rem;background:none;border:none;cursor:pointer;font-size:.9rem">${localStorage.getItem('kort_sound') === '0' ? '🔇' : '🔊'}</button></div></div>
     </div>
-    <div class="kc-opp-info">${_h(_kort.opp.icon)} ${en ? 'cards in hand' : 'kart w ręce'}: <b>${st.p[1].hand.length}</b>${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}</div>
-    <div class="kc-court">
+    <div class="kc-opp-info"><div class="kc-opp-hand">${st.p[1].hand.map(() => _kortBack(26)).join('')}</div><span>${_h(_kort.opp.icon)} ${st.p[1].hand.length} ${en ? 'in hand' : 'w ręce'} · 🂠 ${st.p[1].deck.length} ${en ? 'in deck' : 'w talii'}${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}</span></div>
+    <div class="kc-court" style="${(() => { const c = _kortCourt(); return `border-color:${c.line};${c.tint ? `background:linear-gradient(${c.tint},${c.tint}),linear-gradient(rgba(20,10,0,.28),rgba(20,10,0,.28)),repeating-linear-gradient(90deg,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[0]} 0 44px,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[1]} 44px 88px,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[2]} 88px 132px)` : ''}`; })()}">
       ${bn ? `<div class="kc-banner ${bn.good ? 'good' : 'bad'}"><div>${bn.txt}</div><small>${bn.sub}</small></div>` : ''}
       <div class="kc-half">${['obr', 'roz', 'atk'].map(r => lane(1, r)).join('')}</div>
-      <div class="kc-mid"><div class="kc-circle">🏀</div></div>
+      <div class="kc-mid" style="--kc-line:${_kortCourt().line}"><div class="kc-circle" style="border-color:${_kortCourt().line}">${_kortCourt().center}</div></div>
       <div class="kc-half">${['atk', 'roz', 'obr'].map(r => lane(0, r)).join('')}</div>
     </div>
     <div class="kc-log">${last || '&nbsp;'}</div>
     ${!st.over ? (() => { const tip = _kort._tip; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin:.1rem 0 .45rem">${tip ? `<div class="kc-tip">💡 ${tip.t || tip}</div>` : '<span></span>'}<button class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem;white-space:nowrap" onclick="_kort.tips=!_kort.tips;localStorage.setItem('kort_tips',_kort.tips?'1':'0');_kortDraw()">💡 ${_kort.tips ? (en ? 'Hide tips' : 'Ukryj podpowiedzi') : (en ? 'Show tips' : 'Podpowiedzi')}</button></div>`; })() : ''}
     ${st.over ? _kortEndHtml() : `<div class="kc-bench">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem">
-        <span style="font-size:.82rem">${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — pick a card and a row' : 'Twoja tura — wybierz kartę i rząd') : st.p[0].passed ? (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…') : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
+        <span style="font-size:.82rem">${_kortBack(20)} <span style="color:var(--muted);font-size:.72rem;margin-right:.4rem">${st.p[0].deck.length}</span>${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — drag a card onto a row or tap a row button' : 'Twoja tura — przeciągnij kartę na rząd albo kliknij przycisk rzędu') : st.p[0].passed ? (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…') : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
         <button class="btn btn-ghost" ${st.turn === 0 && !st.p[0].passed && !_kortBusy ? '' : 'disabled'} onclick="kortHumanPass()">✋ ${en ? 'Pass' : 'Pasuj'}</button></div>
       <div style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
   </div>`;
+  _kort.seenHand = new Set(st.p[0].hand.map(c => c.id)); _kortBindDrag(el);
+  if(st.over && !_kort.endShown) { _kort.endShown = true; _kortMvpCard(); if(st.result === 0) _kortCelebrate(el.querySelector('.kc-wrap')); } else if(st.over) _kortMvpCard();
 }
 function _kortEndHtml() {
   const st = _kort.st, en = currentLang === 'en', r = st.result === 0 ? 'win' : st.result === 1 ? 'loss' : 'draw';
@@ -16870,14 +16946,15 @@ function _kortEndHtml() {
   if(!_kort.claimed) { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1)); if(discordUser?.session && !_kortInfo?.me?.today) _api('/kort', 'POST', { result: r, opp: _kort.opp.name, score }, { session: true }).then(x => { if(x.ok && !x.already) { const k = (x.me?.weekWins || 0) % 3; showToast(x.pack ? _g(`🏆 Wygrana! +${x.xp} XP i 🎁 paczka za 3 wygrane w tygodniu!`, `🏆 Victory! +${x.xp} XP and a 🎁 pack for 3 wins this week!`) : r === 'win' ? _g(`🏆 Wygrana! +${x.xp} XP · do paczki: ${k}/3`, `🏆 Victory! +${x.xp} XP · towards a pack: ${k}/3`) : _g(`+${x.xp} XP`, `+${x.xp} XP`), 'success'); if(x.pack) window._cardsCanOpen = true; if(_kortInfo?.me && x.me) Object.assign(_kortInfo.me, x.me); } }).catch(() => {}); }
   return `<div style="text-align:center;padding:.7rem 0"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:${r === 'win' ? 'var(--win)' : r === 'loss' ? 'var(--loss)' : 'var(--accent)'}">${r === 'win' ? (en ? 'VICTORY' : 'WYGRANA') : r === 'loss' ? (en ? 'DEFEAT' : 'PORAŻKA') : (en ? 'DRAW' : 'REMIS')} ${score}</div>
     <div style="font-size:.8rem;color:var(--muted)">${en ? 'Rounds' : 'Rundy'}: ${qs}</div>
+    <div id="k-mvp" style="margin:.8rem auto 0;min-height:60px"></div>
     <button class="btn btn-primary" style="margin-top:.6rem" onclick="kortShare()">📸 ${en ? 'Share result' : 'Udostępnij wynik'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button>${_kort.mode === 'daily' ? ` <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button>` : ''}</div>`;
 }
-function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kSfx('play'); _kortDraw(); _kortBot(); } }
+function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kortFxFor(0); _kSfx('play'); _kortDraw(); _kortBot(); } }
 function kortHumanPass() { if(!_kort || _kortBusy) return; if(kortPass(_kort.st, 0)) { _kSfx('pass'); _kortDraw(); _kortBot(); } }
 function _kortBot() {
   const st = _kort?.st; if(!st || st.over || st.turn !== 1) { _kortDraw(); return; }
   _kortBusy = true; _kortDraw();
-  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) { kortPass(st, 1); _kSfx('pass'); } else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; _kSfx('opp'); } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
+  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) { kortPass(st, 1); _kSfx('pass'); } else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; _kortFxFor(1); _kSfx('opp'); } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
 }
 
 function goToTeamRegistrations() { showView('join'); renderTeamRegistrations(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
