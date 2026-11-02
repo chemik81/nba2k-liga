@@ -16231,11 +16231,29 @@ function _leagueSwitchHtml() {
 }
 // 📜 Rules
 function _rulesExist() { const s = _signup(); return !!(s.rulesText || s.rulesUrl); }
+// 📜 regulamin: prosty markdown (# ## ### nagłówki, - listy, **pogrubienie**, *kursywa*, --- linia, linki) + spis treści
+function _rulesMd(src) {
+  const inl = t => _h(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<i>$2</i>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>');
+  const toc = [], out = []; let list = null, n = 0;
+  const flush = () => { if(list) { out.push(`<ul style="margin:.3rem 0 .6rem;padding-left:1.25rem">${list.join('')}</ul>`); list = null; } };
+  String(src).split('\n').forEach(raw => { const l = raw.replace(/\s+$/, ''), m = l.match(/^(#{1,3})\s+(.*)$/);
+    if(m) { flush(); const lvl = m[1].length, id = 'rl-' + (++n), text = inl(m[2]); if(lvl <= 2) toc.push({ id, lvl, text: text.replace(/<[^>]+>/g, '') });
+      out.push(lvl === 1 ? `<div id="${id}" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.6rem;letter-spacing:1px;color:var(--accent);margin:1.4rem 0 .4rem;padding-top:.6rem;border-top:2px solid var(--accent);scroll-margin-top:80px">${text}</div>`
+        : lvl === 2 ? `<div id="${id}" style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.22rem;letter-spacing:.5px;margin:1.1rem 0 .35rem;scroll-margin-top:80px">${text}</div>`
+        : `<div style="font-weight:800;font-size:.95rem;margin:.8rem 0 .25rem">${text}</div>`); return; }
+    if(/^\s*[-•*]\s+/.test(l) && !/^\*\*/.test(l.trim())) { (list = list || []).push(`<li style="margin:.2rem 0">${inl(l.replace(/^\s*[-•*]\s+/, ''))}</li>`); return; }
+    if(!l.trim()) return; // pusta linia nie przerywa listy
+    flush();
+    if(/^-{3,}$/.test(l.trim())) { out.push('<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'); return; }
+    if(l.trim()) out.push(`<p style="margin:.35rem 0">${inl(l)}</p>`); });
+  flush(); return { html: out.join(''), toc };
+}
 function renderRules() {
   const el = document.getElementById('rules-wrap'); if(!el) return; const s = _signup();
-  const txt = String(s.rulesText || '').split('\n').map(l => { const t = _h(l); return /^#{1,3}\s/.test(l) ? `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.15rem;margin:.9rem 0 .3rem">${t.replace(/^#{1,3}\s/, '')}</div>` : t ? `<div style="margin:.15rem 0">${t}</div>` : '<div style="height:.4rem"></div>'; }).join('');
+  const { html: txt, toc } = _rulesMd(s.rulesText || '');
   el.innerHTML = `<div class="card" style="padding:1rem 1.2rem;line-height:1.55;font-size:.9rem" data-notr>
     ${s.rulesUrl ? `<a class="btn btn-primary" href="${_h(s.rulesUrl)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;margin-bottom:.8rem">📄 ${_g('Otwórz pełny regulamin', 'Open the full rulebook')}</a>` : ''}
+    ${toc.length > 2 ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.9rem;padding-bottom:.8rem;border-bottom:1px solid var(--border)">${toc.map(t => `<a href="#" onclick="document.getElementById('${t.id}')?.scrollIntoView({behavior:'smooth',block:'start'});return false" style="font-size:.72rem;text-decoration:none;color:${t.lvl === 1 ? '#111' : 'var(--text)'};background:${t.lvl === 1 ? 'var(--accent)' : 'var(--surface2)'};border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem;font-weight:${t.lvl === 1 ? 800 : 600}">${t.text}</a>`).join('')}</div>` : ''}
     ${txt || (!s.rulesUrl ? `<div style="color:var(--muted)">${_g('Regulamin pojawi się wkrótce.', 'The rules will be published soon.')}</div>` : '')}
     <div style="margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);font-size:.84rem;color:var(--muted)">${_g('Kapitan akceptuje regulamin w imieniu drużyny przy zapisie.', 'The captain accepts the rules on behalf of the team when registering.')}
       ${!registrationsClosed ? `<button class="btn btn-ghost" style="font-size:.76rem;margin-left:.4rem" onclick="goJoin('teams');setTimeout(openTeamRegModal,200)">🧢 ${_g('Zgłoś drużynę', 'Register your team')}</button>` : ''}</div></div>
