@@ -8729,6 +8729,10 @@ async function createAwards() {
   }
 }
 
+// 🏅 nagrody: kategorie i tytuły zapisane po polsku → wyświetlanie w języku strony
+const _AW_EN = { mvp: 'MVP of the week', def: 'Defender of the week', game: 'Game of the week', clip: 'Play of the week', upset: 'Upset of the week' };
+function _awCat(c) { return currentLang === 'en' ? (_AW_EN[c?.key] || String(c?.title || '').replace(/ tygodnia$/i, ' of the week')) : (c?.title || ''); }
+function _awTitle(t) { t = String(t || ''); return currentLang === 'en' ? t.replace(/^Nagrody\s*/i, 'Awards · ').replace(/\btygodnia\b/gi, 'of the week').replace(/\bsezonu\b/gi, 'of the season') : t; }
 function renderAwardsDashboard() {
   const el = document.getElementById('awards-dashboard-wrap');
   if(!el) return;
@@ -8741,7 +8745,7 @@ function renderAwardsDashboard() {
     const mine = myAwardVotes[a.id] || {};
     return `<div style="background:linear-gradient(135deg,rgba(245,197,24,.10),rgba(245,197,24,.02));border:1px solid rgba(245,197,24,.4);border-radius:12px;padding:.9rem 1rem;margin-bottom:.75rem">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
-        <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🗳 ${_h(a.title)}</div>
+        <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.25rem;letter-spacing:1px">🗳 ${_h(_awTitle(a.title))}</div>
           ${a.type === 'season' ? '<div style="font-size:.7rem;color:var(--muted)">Głos kapitana drużyny liczy się podwójnie</div>' : ''}
           ${a.endsAt ? `<div class="aw-cd" data-until="${_h(a.endsAt)}" style="font-size:.78rem;font-weight:700;color:var(--accent);margin-top:.15rem">${_awCdText(a.endsAt)}</div>` : ''}</div>
         ${isAdmin ? `<div style="display:flex;gap:.3rem"><button onclick="closeAwards('${a.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .6rem" title="Głosowanie i tak zamknie się samo po 3 dniach">🔒 Zakończ teraz</button>
@@ -8752,7 +8756,7 @@ function renderAwardsDashboard() {
           const cnt = a.counts?.[c.key] || {}; const tot = Object.values(cnt).reduce((x, y) => x + y, 0);
           const reveal = !!mine[c.key] || isAdmin;
           return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.55rem .65rem">
-            <div style="font-weight:800;font-size:.85rem;margin-bottom:.4rem">${c.emoji || ''} ${_h(c.title)}</div>
+            <div style="font-weight:800;font-size:.85rem;margin-bottom:.4rem">${c.emoji || ''} ${_h(_awCat(c))}</div>
             ${c.candidates.map((x, xi) => {
               const on = mine[c.key] === x.id; const pct = tot ? Math.round((cnt[x.id] || 0) / tot * 100) : 0;
               return `<button onclick="voteAward('${a.id}','${c.key}',${xi})" style="position:relative;overflow:hidden;width:100%;text-align:left;margin-bottom:.3rem;padding:.4rem .55rem;border-radius:7px;cursor:pointer;font-family:inherit;
@@ -8772,7 +8776,7 @@ function renderAwardsDashboard() {
   };
   const winners = lastClosed && lastClosed.winners ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .8rem;margin-bottom:.75rem;font-size:.8rem">
       <b>🏅 ${_h(lastClosed.title)}:</b>
-      ${lastClosed.categories.map(c => lastClosed.winners[c.key] ? `<span>${c.emoji || ''} ${_h(c.title)}: <b style="color:var(--accent)">${_h(lastClosed.winners[c.key].label)}</b></span>` : '').join('<span style="color:var(--muted)">·</span>')}
+      ${lastClosed.categories.map(c => lastClosed.winners[c.key] ? `<span>${c.emoji || ''} ${_h(_awCat(c))}: <b style="color:var(--accent)">${_h(lastClosed.winners[c.key].label)}</b></span>` : '').join('<span style="color:var(--muted)">·</span>')}
       ${_isLoggedInSync() ? `<span style="flex:1"></span><button onclick="announceAwards('${lastClosed.id}')" class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .55rem" title="Wyślij ogłoszenie zwycięzców ponownie">📣 Ogłoś zwycięzców</button>` : ''}
     </div>` : '';
   el.innerHTML = open.map(card).join('') + (open.length ? '' : winners);
@@ -11287,6 +11291,11 @@ async function openRolesSettings(keepDraft) {
       <div><label style="${_MODAL_LBL}">Rola kapitana (opcjonalnie)</label>${roleSel('rl-captain', c.captain, '— bez roli kapitana —')}</div>
     </div>
     ${o.roles ? `<div style="font-size:.7rem;color:var(--muted);margin-bottom:.7rem">Role oznaczone „⚠ wyżej niż bot” bot nie może nadać — przeciągnij rolę bota${o.bot ? ' (' + _h(o.bot) + ')' : ''} wyżej w Ustawieniach serwera → Role.</div>` : ''}
+    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;background:var(--surface2);border:1px dashed var(--border);border-radius:10px;padding:.5rem .6rem;margin-bottom:.7rem">
+      <span style="font-size:.76rem;flex:1;min-width:180px">🤖 Bot może sam założyć role (albo użyć istniejących o tych nazwach):</span>
+      <input id="rl-new-cap" value="${EU_MODE ? 'GM' : 'Kapitan'}" placeholder="Rola kapitana" style="${_MODAL_INP};width:110px;margin:0">
+      <input id="rl-new-mem" value="${EU_MODE ? 'CL Player' : 'League Member'}" placeholder="Rola gracza" style="${_MODAL_INP};width:130px;margin:0">
+      <button class="btn btn-ghost" onclick="rolesCreate()">🤖 Utwórz role</button></div>
     <div id="rl-status" style="font-size:.8rem;min-height:1.2em;margin-bottom:.7rem;line-height:1.5"></div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="testRoles()">🧪 Sprawdź</button>
@@ -11298,6 +11307,16 @@ async function openRolesSettings(keepDraft) {
 function _rolesForm() {
   const v = id => (document.getElementById(id)?.value || '').trim();
   return { guildId: v('rl-guild'), member: v('rl-member'), captain: v('rl-captain') };
+}
+async function rolesCreate() {
+  const gid = document.getElementById('rl-guild')?.value, st = document.getElementById('rl-status'); if(!gid) { st.innerHTML = '❌ Najpierw wybierz serwer'; return; }
+  const cap = document.getElementById('rl-new-cap').value.trim(), mem = document.getElementById('rl-new-mem').value.trim();
+  st.innerHTML = '⏳ Bot zakłada role…';
+  const r = await _api('/roles/create', 'POST', { guildId: gid, roles: [...(cap ? [{ key: 'captain', name: cap, color: 0xf5c518, hoist: true }] : []), ...(mem ? [{ key: 'member', name: mem, color: 0x3b82f6, hoist: true }] : [])] }, { admin: true });
+  if(!r.ok) { st.innerHTML = '❌ ' + _h(r.error || ''); return; }
+  discordRoleCfgDraft = { ...(discordRoleCfgDraft || discordRoleCfg), guildId: gid, member: r.roles.member || (discordRoleCfgDraft || discordRoleCfg).member || '', captain: r.roles.captain || (discordRoleCfgDraft || discordRoleCfg).captain || '' };
+  await _loadRoleOptions(gid); await openRolesSettings(true);
+  const st2 = document.getElementById('rl-status'); if(st2) st2.innerHTML = '✅ ' + (r.created.length ? _g('Utworzono', 'Created') + ': <b>' + r.created.map(_h).join(', ') + '</b>' : _g('Role już istniały', 'Roles already existed')) + ' — ' + _g('są wybrane powyżej. Kliknij <b>Sprawdź</b>, potem <b>Zapisz</b>.', 'selected above. Click <b>Check</b>, then <b>Save</b>.');
 }
 async function testRoles() {
   const f = _rolesForm(), st = document.getElementById('rl-status');
@@ -16110,11 +16129,11 @@ async function renderAwardsView() {
   const a = closed.find(x => x.id === _awArchId) || closed[0];
   host.innerHTML = `${open.length && dashHtml ? `<div style="margin-bottom:1.2rem">${dashHtml}</div>` : `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;color:var(--muted);font-size:.86rem">${_g('Teraz nie ma otwartego głosowania. Nowe rusza po każdej kolejce.', 'No voting open right now — a new one starts after every round.')}</div>`}
     ${closed.length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem"><div class="section-title" style="font-size:1.25rem;margin:0">🏅 ${_g('Zwycięzcy', 'Winners')}</div>
-      <select onchange="_awArchId=this.value;renderAwardsView()" style="font-size:.82rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${closed.map(x => `<option value="${x.id}" ${x.id === a.id ? 'selected' : ''}>${_h(x.title)}</option>`).join('')}</select></div>
+      <select onchange="_awArchId=this.value;renderAwardsView()" style="font-size:.82rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${closed.map(x => `<option value="${x.id}" ${x.id === a.id ? 'selected' : ''}>${_h(_awTitle(x.title))}</option>`).join('')}</select></div>
       <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.7rem">${a.categories.filter(c => a.winners[c.key]).map(c => { const w = a.winners[c.key], card = ['mvp', 'def'].includes(c.key);
         const link = c.key === 'game' && /^m/.test(String(w.id)) ? `<button class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem" onclick="openMatch('${String(w.id).slice(1)}')">🏀 ${_g('Zobacz mecz', 'View game')}</button>`
           : c.key === 'clip' ? (() => { const cl = (clipsList || []).find(x => 'c' + x.id === String(w.id)); return cl?.url ? `<a class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem;text-decoration:none" href="${_h(cl.url)}" target="_blank" rel="noopener">🎬 ${_g('Zobacz akcję', 'Watch')}</a>` : ''; })() : '';
-        return `<div class="card" style="padding:.7rem .8rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent)">${c.emoji || '🏅'} ${_h(c.title).toUpperCase()}</div>
+        return `<div class="card" style="padding:.7rem .8rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent)">${c.emoji || '🏅'} ${_h(_awCat(c)).toUpperCase()}</div>
           <div style="font-weight:800;font-size:1rem;margin-top:.2rem">${_h(w.label)}</div><div style="font-size:.74rem;color:var(--muted)">${w.team ? _h(w.team) + ' · ' : ''}${w.votes} ${_g(_plPL(w.votes, 'głos', 'głosy', 'głosów'), w.votes === 1 ? 'vote' : 'votes')}</div>
           ${card ? `<div id="awc-${c.key}" style="margin-top:.5rem;aspect-ratio:4/5;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted)">⏳</div>` : ''}${link}</div>`; }).join('')}</div>` : ''}`;
   if(!a) return;
@@ -16132,9 +16151,9 @@ async function renderDashNews() {
   const box = (inner, extra = '') => `<div class="card" style="padding:.75rem .9rem;${extra}">${inner}</div>`, hd = t => `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">${t}</div>`;
   el.innerHTML = `<div class="section-title" style="font-size:1.3rem">📣 ${_g('Ogłoszenia', 'News')}</div>
     <div data-notr style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem;margin-bottom:1.5rem">
-      ${aw ? box(`${hd('🏅 ' + _h(aw.title).toUpperCase())}<div style="display:flex;gap:.7rem;align-items:flex-start">
+      ${aw ? box(`${hd('🏅 ' + _h(_awTitle(aw.title)).toUpperCase())}<div style="display:flex;gap:.7rem;align-items:flex-start">
           <div id="dn-mvp" style="width:120px;flex-shrink:0;aspect-ratio:4/5;border-radius:10px;background:var(--surface2)"></div>
-          <div style="font-size:.82rem;line-height:1.55">${aw.categories.filter(c => aw.winners[c.key]).map(c => `<div>${c.emoji || '🏅'} <span style="color:var(--muted)">${_h(c.title)}:</span> <b>${_h(aw.winners[c.key].label)}</b></div>`).join('')}
+          <div style="font-size:.82rem;line-height:1.55">${aw.categories.filter(c => aw.winners[c.key]).map(c => `<div>${c.emoji || '🏅'} <span style="color:var(--muted)">${_h(_awCat(c))}:</span> <b>${_h(aw.winners[c.key].label)}</b></div>`).join('')}
             <button class="btn btn-ghost" style="font-size:.7rem;margin-top:.4rem" onclick="showView('awards')">${_g('Wszystkie nagrody →', 'All awards →')}</button></div></div>`) : ''}
       ${top.length ? box(`${hd('🏆 ' + _g('PIĄTKA TYGODNIA', 'TEAM OF THE WEEK') + ' · WEEK ' + tw)}${top.map((p, i) => `<div style="display:flex;justify-content:space-between;gap:.5rem;font-size:.82rem;padding:.18rem 0"><span>${['🥇', '🥈', '🥉', '4.', '5.'][i]} <b>${_h(p.name)}</b> <span style="color:var(--muted)">${_h(p.team)}</span></span><span style="color:var(--muted)">${Math.round(p.pts / p.gp)} PTS</span></div>`).join('')}
           <button class="btn btn-ghost" style="font-size:.7rem;margin-top:.4rem" onclick="showView('totw')">${_g('Zobacz karty →', 'See the cards →')}</button>`) : ''}
@@ -16283,7 +16302,7 @@ function _captainGuideHtml() {
   const s = _signup(), inv = _discordInvite();
   const steps = EU_MODE || currentLang === 'en' ? [
     ['🧢', 'Register your team', `Log in with Discord (top of the page) → <b>Join us → League sign-ups</b> → <b>Register a team</b>. Enter the team name, logo, your team’s X profile and <b>at least 5 players</b> (gamertag, platform and their X profile). Accept the rules and send.`],
-    ['💶', 'Pay the entry fee', `${_h(s.fee || '25€')} per team${s.revolutUrl ? ` via <a href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="color:var(--accent)">Revolut</a>` : ''}. Then upload a screenshot of the transfer on your team card (<b>💶 Entry fee</b>)${s.dmAccount ? ` or send it in a DM on Discord to <b>${_h(s.dmAccount)}</b>` : ''}.`],
+    ['💶', 'Pay the entry fee', `${_h(s.fee || '25€')} per team${s.revolutUrl ? ` via <a href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="color:var(--accent)">Revolut</a>` : ''}. Write your <b>team name</b> in the payment description, then upload a screenshot of the transfer on your team card (<b>💶 Entry fee</b>)${s.dmAccount ? ` or send it in a DM on Discord to <b>${_h(s.dmAccount)}</b>` : ''}.`],
     ['💬', 'Invite your players to Discord', `Send every player the server invite: <a href="${_h(inv)}" target="_blank" rel="noopener" style="color:var(--accent)">${_h(inv)}</a>. All players must be on the server.`],
     ['🔗', 'Each player links their account', `Every player opens the site, clicks <b>Log in</b> (Discord) → <b>My panel</b> → section <b>🎮 My player profile</b> → picks the <b>team</b> and <b>their nick from the roster</b> → <b>Save</b>.`],
     ['✅', 'Confirm your players', `You’ll see their requests in <b>My panel</b> — confirm each one. Missing a player in the roster? Use <b>roster change</b> on your team card or ask an admin.`]] : [
@@ -16306,6 +16325,9 @@ async function openTeamPayment(regId) {
       <div style="flex:1;min-width:220px"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:var(--accent);line-height:1">${_h(s.fee || '25€')}</div><div style="font-size:.84rem;color:var(--muted)">${_g('za drużynę', 'per team')} · ${_g('status', 'status')}: ${_payBadge(r)}</div>
         ${s.revolutUrl ? `<a class="btn btn-primary" href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;margin-top:.6rem">💳 ${_g('Zapłać przez Revolut', 'Pay with Revolut')}</a>` : `<div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">${_g('Link do płatności pojawi się wkrótce.', 'The payment link will be added soon.')}</div>`}</div>
       ${s.revolutUrl ? `<div style="text-align:center"><div id="pay-qr" style="background:#fff;padding:8px;border-radius:10px;display:inline-block"></div><div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">${_g('Zeskanuj telefonem', 'Scan with your phone')}</div></div>` : ''}</div>
+    ${st !== 'paid' ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .7rem;margin-bottom:.7rem;font-size:.8rem;line-height:1.5">
+      ✍️ ${_g(`W tytule przelewu wpisz <b>nazwę drużyny: ${_h(r.teamName)}</b>`, `In the payment description write your <b>team name: ${_h(r.teamName)}</b>`)}<br>
+      🛡️ ${_g('Wpisowe płacisz <b>tylko</b> przez link na tej stronie. Admini <b>nigdy</b> nie wysyłają linków do płatności w prywatnych wiadomościach — taki link to oszustwo.', 'Pay the entry fee <b>only</b> via the link on this website. Admins <b>never</b> send payment links in DMs — any such link is a scam.')}</div>` : ''}
     ${st === 'paid' ? `<div style="font-size:.86rem;color:var(--win)">✅ ${_g('Opłata potwierdzona — dzięki!', 'Payment confirmed — thank you!')}</div>` : `
     <div style="font-weight:800;font-size:.86rem;margin-bottom:.3rem">🧾 ${_g('Potwierdzenie przelewu', 'Payment proof')}</div>
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:.45rem">${_g('Po przelewie dodaj tu zrzut ekranu potwierdzenia', 'After paying, upload a screenshot of the transfer here')}${s.dmAccount ? _g(` — albo wyślij go w prywatnej wiadomości na Discordzie do <b>${_h(s.dmAccount)}</b>.`, ` — or send it in a DM on Discord to <b>${_h(s.dmAccount)}</b>.`) : '.'}</div>
@@ -16740,10 +16762,10 @@ function teamRegAddPlayer() {
     </select>
     <select style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.3rem .3rem;font-family:inherit;font-size:.78rem" title="Doświadczenie w NBA 2K">
       <option value="">Doświadczenie</option>
-      <option value="beginner">🌱 Początkujący</option>
-      <option value="intermediate">⚡ Średniozaawansowany</option>
-      <option value="advanced">🔥 Zaawansowany</option>
-      <option value="pro">👑 Pro / Weteran</option>
+      <option value="beginner">${_g('🌱 Początkujący', '🌱 Beginner')}</option>
+      <option value="intermediate">${_g('⚡ Średniozaawansowany', '⚡ Intermediate')}</option>
+      <option value="advanced">${_g('🔥 Zaawansowany', '🔥 Advanced')}</option>
+      <option value="pro">${_g('👑 Pro / Weteran', '👑 Pro / Veteran')}</option>
     </select>
     <button onclick="this.closest('.team-reg-player-row').remove();teamRegUpdateCount()"
       style="background:transparent;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0;line-height:1" title="Usuń">×</button>
@@ -16761,7 +16783,8 @@ function teamRegUpdateCount() {
   if(addBtn) addBtn.disabled = rows.length >= 10;
 }
 
-const _expLabels = { beginner:'🌱 Początkujący', intermediate:'⚡ Średnio-zaawansowany', advanced:'🔥 Zaawansowany', pro:'👑 Pro / Weteran' };
+const _EXP_PL = { beginner:'🌱 Początkujący', intermediate:'⚡ Średnio-zaawansowany', advanced:'🔥 Zaawansowany', pro:'👑 Pro / Weteran' }, _EXP_EN = { beginner:'🌱 Beginner', intermediate:'⚡ Intermediate', advanced:'🔥 Advanced', pro:'👑 Pro / Veteran' };
+const _expLabels = new Proxy({}, { get: (_, k) => (currentLang === 'en' ? _EXP_EN : _EXP_PL)[k] }); // etykiety poziomu w języku strony
 
 async function submitTeamRegistration() {
   if(!discordUser) { showToast('❌ Zaloguj się przez Discord', 'error'); return; }
