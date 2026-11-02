@@ -2742,7 +2742,8 @@ async function loadData() {
     setTimeout(() => { try { if(EU_MODE) renderEuDash(); else renderDashNews(); renderRecordsTicker(); renderEuBillboard(); } catch(e) { console.warn('dash news', e); } }, 300);
     if(EU_MODE) [1500, 4000].forEach(t => setTimeout(() => { try { _euPlaceholders(); } catch(e) {} }, t)); // puste sekcje widoczne także po przerysowaniu terminarza
     window._discordInviteUrl = record.discordInvite || null;
-    window._signupInfo = record.signup || {};
+    window._signupInfo = record.signup || {}; window._signupLoaded = true;
+    try { if(document.querySelector('.view.active')?.id === 'view-rules') renderRules(); } catch(e) {}
     if(window._discordInviteUrl) document.querySelectorAll('a[href*="discord.gg/"]').forEach(a => { a.href = window._discordInviteUrl; });
     setTimeout(() => { try { renderSideNav(); } catch(e) { console.warn('side nav', e); } }, 50);
     setTimeout(() => { try { _captainXNudge(); } catch(e) {} }, 1500);
@@ -16263,15 +16264,19 @@ function _rulesMd(src) {
   flush(); return { html: out.join(''), toc };
 }
 function renderRules() {
-  const el = document.getElementById('rules-wrap'); if(!el) return; const s = _signup();
+  const el = document.getElementById('rules-wrap'); if(!el) return; const s = _signup(), en = currentLang === 'en';
+  if(!window._signupLoaded && !s.rulesText && !s.rulesUrl) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">⏳ ${_g('Wczytuję regulamin…', 'Loading the rules…')}</div>`; return; }
   const { html: txt, toc } = _rulesMd(s.rulesText || '');
-  el.innerHTML = `<div class="card" style="padding:1rem 1.2rem;line-height:1.55;font-size:.9rem" data-notr>
+  const reg = `<div class="card" style="padding:1rem 1.1rem;margin-bottom:1rem;background:linear-gradient(135deg,rgba(0,51,153,.28),rgba(255,204,0,.08))" data-notr>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap">
+        <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.5rem;line-height:1.1">🧢 ${registrationsClosed ? _g('Zapisy drużyn są zamknięte', 'Team sign-ups are closed') : _g('Zgłoś swoją drużynę', 'Register your team')}</div>
+          <div style="font-size:.84rem;color:var(--muted);margin-top:.2rem">${_g('Wpisowe', 'Entry fee')}: <b style="color:var(--text)">${_h(s.fee || '25€')}</b> ${_g('za drużynę', 'per team')} · ${_g('min. 5 zawodników · kapitan akceptuje regulamin w imieniu drużyny', 'min. 5 players · the captain accepts the rules on behalf of the team')}</div></div>
+        ${registrationsClosed ? '' : `<button class="btn btn-primary" onclick="_openRegisterLink()">🧢 ${_g('Zgłoś drużynę', 'Register your team')}</button>`}</div></div>`;
+  el.innerHTML = reg + _captainGuideHtml() + `<div class="section-title" style="font-size:1.25rem;margin-top:1.4rem">📜 ${_g('Regulamin', 'Rules')}</div>
+    <div class="card" style="padding:1rem 1.2rem;line-height:1.55;font-size:.9rem" data-notr>
     ${s.rulesUrl ? `<a class="btn btn-primary" href="${_h(s.rulesUrl)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;margin-bottom:.8rem">📄 ${_g('Otwórz pełny regulamin', 'Open the full rulebook')}</a>` : ''}
     ${toc.length > 2 ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.9rem;padding-bottom:.8rem;border-bottom:1px solid var(--border)">${toc.map(t => `<a href="#" onclick="document.getElementById('${t.id}')?.scrollIntoView({behavior:'smooth',block:'start'});return false" style="font-size:.72rem;text-decoration:none;color:${t.lvl === 1 ? '#111' : 'var(--text)'};background:${t.lvl === 1 ? 'var(--accent)' : 'var(--surface2)'};border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem;font-weight:${t.lvl === 1 ? 800 : 600}">${t.text}</a>`).join('')}</div>` : ''}
-    ${txt || (!s.rulesUrl ? `<div style="color:var(--muted)">${_g('Regulamin pojawi się wkrótce.', 'The rules will be published soon.')}</div>` : '')}
-    <div style="margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--border);font-size:.84rem;color:var(--muted)">${_g('Kapitan akceptuje regulamin w imieniu drużyny przy zapisie.', 'The captain accepts the rules on behalf of the team when registering.')}
-      ${!registrationsClosed ? `<button class="btn btn-ghost" style="font-size:.76rem;margin-left:.4rem" onclick="goJoin('teams');setTimeout(openTeamRegModal,200)">🧢 ${_g('Zgłoś drużynę', 'Register your team')}</button>` : ''}</div></div>
-    ${_captainGuideHtml()}`;
+    ${txt || (!s.rulesUrl ? `<div style="color:var(--muted)">${_g('Regulamin pojawi się wkrótce.', 'The rules will be published soon.')}</div>` : '')}</div>`;
 }
 // 🧢 przewodnik kapitana: skład, Discord, łączenie kont, wpisowe
 function _captainGuideHtml() {
@@ -16286,7 +16291,7 @@ function _captainGuideHtml() {
     ['💬', 'Zaproś graczy na Discorda', `Wyślij każdemu zaproszenie: <a href="${_h(inv)}" target="_blank" rel="noopener" style="color:var(--accent)">${_h(inv)}</a>.`],
     ['🔗', 'Każdy gracz łączy konto', 'Gracz wchodzi na stronę → <b>Zaloguj</b> (Discord) → <b>Mój panel</b> → <b>🎮 Mój profil gracza</b> → drużyna i swój nick → <b>Zapisz</b>.'],
     ['✅', 'Potwierdź graczy', 'Prośby graczy zobaczysz w <b>Moim panelu</b> — potwierdź każdą.']];
-  return `<div class="section-title" style="font-size:1.2rem;margin-top:1.2rem">🧭 ${_g('Przewodnik kapitana', 'Captain’s guide')}</div>
+  return `<div class="section-title" style="font-size:1.2rem;margin-top:.4rem">🧭 ${_g('Przewodnik kapitana', 'Captain’s guide')}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.6rem" data-notr>${steps.map(([e, t, d], i) => `<div class="card" style="padding:.7rem .8rem"><div style="font-size:.68rem;font-weight:800;color:var(--accent)">${_g('KROK', 'STEP')} ${i + 1}</div><div style="font-weight:800;margin:.15rem 0 .3rem">${e} ${t}</div><div style="font-size:.8rem;color:var(--muted);line-height:1.5">${d}</div></div>`).join('')}</div>`;
 }
 // 💶 wpisowe: Revolut, kod QR, zrzut przelewu
