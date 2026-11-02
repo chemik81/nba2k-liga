@@ -824,6 +824,20 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 @media (max-width:600px){.kc-lane{grid-template-columns:74px 1fr 38px}.kc-lbl{font-size:.6rem;padding:.15rem .25rem}.kc-led-n{font-size:1.6rem}.kc-sum{width:36px;height:36px;font-size:1rem}
   .kc-board-top{grid-template-columns:1fr 1fr;row-gap:.4rem}.kc-led{grid-column:1/-1;order:-1;justify-content:center}.kc-tname{font-size:.85rem}}
 @media (prefers-reduced-motion:reduce){.kc-pop{animation:none}}
+
+.kc-tip{flex:1;font-size:.8rem;line-height:1.45;background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.45);border-radius:10px;padding:.4rem .6rem}
+.kc-hint{animation:kcHint 1.2s ease-in-out infinite;border-radius:14px}
+.kc-hint-btn{outline:3px solid #ffd84d;outline-offset:1px}
+@keyframes kcHint{0%,100%{box-shadow:0 0 0 0 rgba(255,216,77,.0)}50%{box-shadow:0 0 0 4px rgba(255,216,77,.75)}}
+@media (prefers-reduced-motion:reduce){.kc-hint{animation:none;box-shadow:0 0 0 3px rgba(255,216,77,.75)}}
+
+.kc-com{animation:kcCom .5s ease-out}
+@keyframes kcCom{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.kc-banner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;text-align:center;padding:.7rem 1.4rem;border-radius:14px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;letter-spacing:1px;color:#111;pointer-events:none;animation:kcBan 1.7s ease-out forwards;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.kc-banner small{display:block;font-size:1.2rem}
+.kc-banner.good{background:linear-gradient(135deg,#ffd84d,#f59e0b)}.kc-banner.bad{background:linear-gradient(135deg,#fca5a5,#ef4444);color:#fff}
+@keyframes kcBan{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}25%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-60%)}}
+@media (prefers-reduced-motion:reduce){.kc-com,.kc-banner{animation:none}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -15948,7 +15962,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
@@ -16451,7 +16465,7 @@ function kortNew(deckA, deckB, seed) {
   const side = (deck, k) => { const d = shuffle(deck.map((c, i) => kortCard(c, k * 100 + i))); return { hand: d.slice(0, KORT_CFG.hand), deck: d.slice(KORT_CFG.hand), board: { atk: [], roz: [], obr: [] }, passed: false, wins: 0, qScores: [] }; };
   const first = rnd() < .5 ? 0 : 1, P = [side(deckA, 0), side(deckB, 1)];
   for(let k = 0; k < KORT_CFG.firstBonus && P[first].deck.length; k++) P[first].hand.push(P[first].deck.shift()); // zaczynający dostaje dodatkową kartę (jak „moneta”)
-  const tactics = [0, 1, 2].map(() => KORT_ROWS[Math.floor(rnd() * 3)]); // taktyka każdej rundy: rząd liczony podwójnie
+  const tactics = [0, 1, 2].map(() => KORT_ROWS[Math.floor(rnd() * 3)]); // taktyka każdej kwarty: rząd liczony podwójnie
   return { p: P, q: 1, turn: first, first, tactics, log: [], over: false, result: null, seed };
 }
 const _bv = (c, k) => (c.badges.find(b => b.key === k) || {}).b || 0;
@@ -16489,6 +16503,8 @@ function _kortNextTurn(st, side) {
 }
 function _kortEndQuarter(st) {
   const a = kortTotal(st, 0), b = kortTotal(st, 1); st.p[0].qScores.push(a); st.p[1].qScores.push(b);
+  st.contrib = st.contrib || [{}, {}]; // punkty każdej karty (MVP meczu)
+  [0, 1].forEach(sd => KORT_ROWS.forEach(r => st.p[sd].board[r].forEach(c => { const v = kortValue(st, sd, r, c) * (st.tactics && st.tactics[st.q - 1] === r ? KORT_CFG.tacticMult : 1); st.contrib[sd][c.name] = (st.contrib[sd][c.name] || 0) + v; })));
   if(a >= b) st.p[0].wins++; if(b >= a) st.p[1].wins++;
   st.log.push({ quarter: st.q, score: [a, b] });
   const w0 = st.p[0].wins, w1 = st.p[1].wins;
@@ -16575,9 +16591,12 @@ async function renderKort() {
   if(discordUser?.session && !_cards) { try { const r = await _api('/cards/me', 'GET', null, { session: true }); if(r.ok) _cards = r; } catch(e) {} }
   const deck = _kortMyDeck(), opp = _kortOpponent(deck);
   if(deck.length < 8 || opp.deck.length < 8) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Gra ruszy, gdy w sezonie zagra co najmniej 16 graczy.', 'The game starts once at least 16 players have played this season.')}</div>`; return; }
+  if(_kortTab === 'ranked') { el.innerHTML = _kortTabsHtml() + await _kortRankedHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  if(_kortTab === 'boss') { el.innerHTML = _kortTabsHtml() + await _kortBossHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  if(_kortTab === 'stats') { el.innerHTML = _kortTabsHtml() + await _kortStatsHtml(); return; }
   _kortInfo = await _api('/kort', 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => null);
   const me = _kortInfo?.me, today = me?.today, avg = Math.round(deck.reduce((s, c) => s + c.rating, 0) / 8), loans = deck.filter(c => c.loan).length;
-  el.innerHTML = `<div data-notr>
+  el.innerHTML = _kortTabsHtml() + `<div data-notr>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem;margin-bottom:1rem">
       <div class="card" style="padding:.9rem 1rem;background:linear-gradient(135deg,rgba(245,197,24,.12),rgba(239,68,68,.08))">
         <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent)">⚔️ ${_g('MECZ DNIA', 'MATCH OF THE DAY')}</div>
@@ -16613,15 +16632,184 @@ function _kortPickInfo(k, c) {
   return `<div style="display:flex;justify-content:center;gap:.2rem;margin:.25rem 0 .1rem;font-size:.64rem">${KORT_ROWS.map(r => `<span style="background:rgba(0,0,0,.35);border-radius:4px;padding:.05rem .22rem;${kc.pw[r] === best ? 'color:#ffd84d;font-weight:800' : ''}">${_KR[r][0]}${kc.pw[r]}</span>`).join('')}</div>
     ${kc.badges.length ? `<div style="font-size:.7rem;line-height:1" title="${kc.badges.map(b => b.key).join(', ')}">${kc.badges.map(b => (_KB[b.key] || '') + (b.b > 1 ? '⁺' : '')).join(' ')}</div>` : ''}`;
 }
+// ═══ 🃏 KORT 2.0 — tryby (mecz dnia / ranking z kibicami / boss tygodnia), udostępnianie wyniku, podpowiedzi ═══
+let _kortTab = 'daily', _kortLadder = null, _kortBossInfo = null, _kortOppPick = null;
+const _KDIV = { galaxy: ['🌌', 'Galaktyka', 'Galaxy', '#a855f7'], diamond: ['💎', 'Diament', 'Diamond', '#38bdf8'], gold: ['🥇', 'Złoto', 'Gold', '#f5c518'], silver: ['🥈', 'Srebro', 'Silver', '#cbd5e1'], bronze: ['🥉', 'Brąz', 'Bronze', '#d08b4f'] };
+const _kDiv = d => { const x = _KDIV[d] || _KDIV.bronze; return `<span style="color:${x[3]};font-weight:800">${x[0]} ${currentLang === 'en' ? x[2] : x[1]}</span>`; };
+function _kortTabsHtml() {
+  const t = (k, l) => `<button onclick="_kortTab='${k}';renderKort()" class="btn ${_kortTab === k ? 'btn-primary' : 'btn-ghost'}" style="font-size:.8rem">${l}</button>`;
+  return `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem">${t('daily', '⚔️ ' + _g('Mecz dnia', 'Match of the day'))}${t('ranked', '🏆 ' + _g('Ranking', 'Ranked'))}${t('boss', '👑 ' + _g('Boss tygodnia', 'Weekly boss'))}${t('stats', '📈 ' + _g('Statystyki', 'Stats'))}</div>`;
+}
+function _kortOwnDeck() { // talia z samych własnych kart (bez wypożyczonych) — do rankingu
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })().filter(k => _cards?.cards?.[k]?.n > 0);
+  return saved.length === 8 ? saved : null;
+}
+async function _kortSaveDeckServer(keys) { if(!discordUser?.session || keys.length !== 8) return; const r = await _api('/kort/deck', 'POST', { keys }, { session: true }).catch(() => ({})); if(r.ok) showToast(_g('🏆 Talia zapisana też do rankingu — inni mogą z nią grać', '🏆 Deck saved for ranked — others can play against it'), 'success'); }
+async function _kortRankedHtml() {
+  _kortLadder = await _api('/kort/ladder', 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => null);
+  const me = _kortLadder?.me, own = _kortOwnDeck();
+  const box = (inner, st = '') => `<div class="card" style="padding:.9rem 1rem;${st}">${inner}</div>`;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.8rem;margin-bottom:1rem" data-notr>
+    ${box(`<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🏆 ${_g('MECZE Z KIBICAMI', 'PLAY OTHER FANS')}</div>
+      <div style="font-size:.84rem;line-height:1.5;margin:.35rem 0 .6rem">${_g('Grasz przeciwko <b>talii innego kibica</b> — jego kartami gra komputer. Wygrane podnoszą Twój ranking (ELO) i dywizję. Maks. 5 meczów dziennie, każdy rywal raz dziennie.', 'You play against <b>another fan’s deck</b> — the computer plays their cards. Wins raise your rating (ELO) and division. Max. 5 matches a day, each opponent once a day.')}</div>
+      ${!discordUser ? `<div style="font-size:.8rem;color:var(--muted)">${_g('Zaloguj się, żeby grać w rankingu.', 'Log in to play ranked.')}</div>`
+        : !own ? `<div style="font-size:.8rem;margin-bottom:.4rem">${_g('Do rankingu potrzebujesz talii z <b>8 własnych kart</b> różnych graczy.', 'Ranked needs a deck of <b>8 of your own cards</b> (different players).')}</div><button class="btn btn-primary" onclick="kortDeckPick()">🃏 ${_g('Ułóż talię', 'Build deck')}</button>`
+        : !me?.hasDeck ? `<button class="btn btn-primary" onclick="_kortSaveDeckServer(_kortOwnDeck()).then(renderKort)">📤 ${_g('Zapisz talię do rankingu', 'Save deck for ranked')}</button>`
+        : `<div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;line-height:1">${me.elo}</div><div style="font-size:.8rem">${_kDiv(me.div)}<br><span style="color:var(--muted)">${me.rk.w}-${me.rk.l}${me.rk.d ? '-' + me.rk.d : ''} · ${_g('miejsce', 'rank')} ${me.rank || '—'} · ${_g('dziś', 'today')} ${me.today}/${_kortLadder.limit}</span></div></div>
+          <div style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn btn-primary" ${me.today >= _kortLadder.limit ? 'disabled' : ''} onclick="kortFindOpp()">🔎 ${_g('Szukaj rywala', 'Find opponent')}</button><button class="btn btn-ghost" onclick="kortDeckPick()">🃏 ${_g('Zmień talię', 'Change deck')}</button></div>
+          <div id="kort-opp"></div>`}`)}
+    ${box(`<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🏅 ${_g('DYWIZJE I NAGRODY TYGODNIA', 'DIVISIONS & WEEKLY REWARDS')}</div>
+      <div style="font-size:.78rem;line-height:1.7">${_kDiv('galaxy')} 1550+ → 💎 ${_g('paczka premium', 'premium pack')}<br>${_kDiv('diamond')} 1400+ → 🎁🎁 ${_g('2 paczki', '2 packs')}<br>${_kDiv('gold')} 1250+ → 🎁 ${_g('paczka', 'pack')}<br>${_kDiv('silver')} 1100+ · ${_kDiv('bronze')} ${_g('start', 'start')} 1000</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">${_g('Nagrody w poniedziałek dla graczy z min. 3 meczami rankingowymi w tygodniu.', 'Rewards every Monday for players with at least 3 ranked matches that week.')}</div>`)}
+  </div>
+  <div class="card" style="padding:.8rem 1rem" data-notr><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📊 ${_g('RANKING', 'LADDER')}</div>
+    ${(_kortLadder?.ladder || []).map((x, i) => `<div style="display:grid;grid-template-columns:28px 24px 1fr auto auto;gap:.5rem;align-items:center;padding:.28rem 0;border-bottom:1px solid var(--border);font-size:.82rem${x.id === discordUser?.id ? ';font-weight:800' : ''}"><b style="color:${i < 3 ? 'var(--accent)' : 'var(--muted)'}">${['🥇', '🥈', '🥉'][i] || i + 1}</b>${_avatarHtml(x.avatar, 22)}<span>${_h(x.name)}</span><span>${_kDiv(x.div)}</span><b>${x.elo}</b></div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">${_g('Jeszcze nikt nie grał w rankingu — bądź pierwszy!', 'Nobody has played ranked yet — be the first!')}</div>`}</div>`;
+}
+async function kortFindOpp() {
+  const box = document.getElementById('kort-opp'); if(box) box.innerHTML = '<div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">⏳</div>';
+  const r = await _api('/kort/opp', 'GET', null, { session: true }); if(!r.ok) { if(box) box.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">${_h(_tr(r.error || ''))}</div>`; return; }
+  _kortOppPick = r.opp; const o = r.opp;
+  if(box) box.innerHTML = `<div style="margin-top:.7rem;padding:.6rem .7rem;border:1px solid var(--border);border-radius:10px;background:var(--surface2)">
+    <div style="display:flex;gap:.5rem;align-items:center">${_avatarHtml(o.avatar, 34)}<div><b>${_h(o.name)}</b><div style="font-size:.74rem">${_kDiv(o.div)} · ${o.elo} · ${o.rk.w}-${o.rk.l}</div></div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:.25rem;margin:.45rem 0">${o.deck.names.map((n, i) => `<span style="font-size:.68rem;background:var(--surface);border:1px solid ${o.deck.lim?.[i] ? '#f5c518' : 'var(--border)'};border-radius:5px;padding:.08rem .35rem">${o.deck.lim?.[i] ? '🌟 ' : ''}${_h(n)}</span>`).join('')}</div>
+    <button class="btn btn-primary" onclick="kortStart('ranked')">⚔️ ${_g('Graj', 'Play')}</button> <button class="btn btn-ghost" onclick="kortFindOpp()">🔄 ${_g('Inny rywal', 'Another opponent')}</button></div>`;
+}
+function _kortBossDeck() { const L = _kortLeague().slice().sort((a, b) => b.rating - a.rating); return L.slice(0, 8); }
+async function _kortBossHtml() {
+  _kortBossInfo = await _api('/kort/boss', 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => null);
+  const deck = _kortBossDeck(), avg = Math.round(deck.reduce((s, c) => s + c.rating, 0) / Math.max(1, deck.length)), bi = _kortBossInfo || {};
+  return `<div class="card" style="padding:1rem 1.1rem;background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(245,197,24,.1))" data-notr>
+    <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:#f5c518">👑 ${_g('BOSS TYGODNIA', 'WEEKLY BOSS')}</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.8rem;line-height:1.1;margin:.2rem 0">${_g('Dream Team ligi', 'League Dream Team')}</div>
+    <div style="font-size:.82rem;color:var(--muted)">${_g('8 najlepszych graczy sezonu · średnia', 'The season’s 8 best players · average')} <b style="color:var(--text)">${avg}</b> · ${_g('bez dopasowania siły — to ma być wyzwanie!', 'no strength matching — it’s meant to be hard!')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.25rem;margin:.6rem 0">${deck.map(c => `<span style="font-size:.7rem;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.18);border-radius:5px;padding:.1rem .4rem">${_h(c.name)} <b>${c.rating}</b></span>`).join('')}</div>
+    <div style="font-size:.82rem;margin-bottom:.6rem">🎁 ${_g('Pierwsza wygrana w tygodniu: <b>💎 paczka premium</b> i ogłoszenie na Discordzie · 1 próba dziennie', 'First win of the week: <b>💎 premium pack</b> and a Discord shout-out · 1 attempt a day')}</div>
+    ${!discordUser ? `<div style="font-size:.8rem;color:var(--muted)">${_g('Zaloguj się, żeby zmierzyć się z bossem.', 'Log in to face the boss.')}</div>` : bi.won ? `<div style="color:var(--win);font-weight:800">✅ ${_g('Boss pokonany w tym tygodniu!', 'Boss beaten this week!')}</div>` : bi.triedToday ? `<div style="color:var(--muted)">${_g('Dzisiejsza próba wykorzystana — wróć jutro.', 'Today’s attempt used — come back tomorrow.')}</div>` : `<button class="btn btn-primary" onclick="kortStart('boss')">👑 ${_g('Zmierz się z bossem', 'Face the boss')}</button>`}
+    ${(bi.winners || []).length ? `<div style="font-size:.74rem;color:var(--muted);margin-top:.6rem">🏆 ${_g('Pokonali w tym tygodniu', 'Beaten this week by')}: ${bi.winners.map(_h).join(', ')}</div>` : ''}</div>`;
+}
+// 📸 grafika wyniku do udostępnienia
+async function _kortShareImage() {
+  const st = _kort.st, en = currentLang === 'en', r = st.result === 0 ? 'win' : st.result === 1 ? 'loss' : 'draw', W = 1200, H = 675;
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'), F = "'Barlow Condensed', 'Arial Narrow', sans-serif";
+  const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#1a1208'); bg.addColorStop(1, '#3a2410'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  for(let x = 0; x < W; x += 60) { g.fillStyle = x % 120 ? 'rgba(255,255,255,.025)' : 'rgba(0,0,0,.08)'; g.fillRect(x, 0, 60, H); } // parkiet
+  g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 4; g.strokeRect(30, 30, W - 60, H - 60); g.strokeStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.arc(W / 2, H / 2, 90, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#f5c518'; g.font = `900 34px ${F}`; g.textBaseline = 'top'; g.fillText('🃏 KORT · ' + (_kort.mode === 'boss' ? (en ? 'WEEKLY BOSS' : 'BOSS TYGODNIA') : _kort.mode === 'ranked' ? (en ? 'RANKED' : 'RANKING') : (en ? 'MATCH OF THE DAY' : 'MECZ DNIA')), 70, 60);
+  g.fillStyle = '#fff'; g.font = `800 40px ${F}`; g.fillText(`${discordUser?.name || (en ? 'Me' : 'Ja')}  vs  ${_kort.opp.name}`, 70, 115);
+  const big = `${r === 'win' ? (en ? 'WIN' : 'WYGRANA') : r === 'loss' ? (en ? 'LOSS' : 'PORAŻKA') : (en ? 'DRAW' : 'REMIS')} ${st.p[0].wins}:${st.p[1].wins}`, maxW = W - 560 * .8 - 70 - 110; // miejsce obok karty MVP
+  let fs = 130; g.font = `900 ${fs}px ${F}`; while(g.measureText(big).width > maxW && fs > 60) { fs -= 4; g.font = `900 ${fs}px ${F}`; }
+  g.fillStyle = r === 'win' ? '#4ade80' : r === 'loss' ? '#f87171' : '#ffd84d'; g.fillText(big, 70, 180 + (130 - fs) / 2);
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.font = `700 36px ${F}`; g.fillText((en ? 'Rounds: ' : 'Rundy: ') + st.p[0].qScores.map((x, i) => x + ':' + st.p[1].qScores[i]).join('   '), 70, 340);
+  const mvp = Object.entries(st.contrib?.[0] || {}).sort((a, b) => b[1] - a[1])[0];
+  if(mvp) { g.fillStyle = '#f5c518'; g.font = `900 34px ${F}`; g.fillText('⭐ MVP: ' + mvp[0] + ` · ${mvp[1]} ${en ? 'pts' : 'pkt'}`, 70, 410);
+    try { const d = _pcData(mvp[0], 'season'); const url = d ? await _pcImage(d, en ? 'en' : 'pl', true) : null; if(url) { const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; }); const ch = 560, cw = ch * im.width / im.height; g.save(); g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 30; g.drawImage(im, W - cw - 70, (H - ch) / 2, cw, ch); g.restore(); } } catch(e) {} }
+  g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `700 26px ${F}`; g.fillText('chemikleagues.com · ' + (en ? 'Minigames → Kort' : 'Minigry → Kort'), 70, H - 95);
+  return c.toDataURL('image/jpeg', .86);
+}
+async function kortShare() {
+  const m = _fxModal('kshare-modal', 700); m.classList.add('open'); m.querySelector('.modal').innerHTML = _fxHead('kshare-modal', '📸 ' + _g('Udostępnij wynik', 'Share result')) + '⏳';
+  const img = await _kortShareImage(), st = _kort.st, r = st.result === 0 ? _g('Wygrana', 'Won') : st.result === 1 ? _g('Porażka', 'Lost') : _g('Remis', 'Draw');
+  const text = `${r} ${st.p[0].wins}:${st.p[1].wins} vs ${_kort.opp.name}`; window._kShareImg = img; window._kShareText = text;
+  m.querySelector('.modal').innerHTML = _fxHead('kshare-modal', '📸 ' + _g('Udostępnij wynik', 'Share result')) + `<img src="${img}" style="width:100%;border-radius:10px;display:block;margin-bottom:.7rem">
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">${discordUser?.session ? `<button class="btn btn-primary" onclick="kortShareSend(this)">💬 ${_g('Wyślij na Discord', 'Post to Discord')}</button>` : ''}
+    <a class="btn btn-ghost" href="${img}" download="kort.jpg" style="text-decoration:none">⬇ ${_g('Pobierz', 'Download')}</a></div>`;
+}
+async function kortShareSend(btn) { btn.disabled = true; const r = await _api('/kort/share', 'POST', { image: window._kShareImg, text: window._kShareText }, { session: true }); showToast(r.ok ? _g('💬 Wynik wysłany na Discord!', '💬 Posted to Discord!') : '❌ ' + _tr(r.error || ''), r.ok ? 'success' : 'error'); if(r.ok) _fxClose('kshare-modal'); else btn.disabled = false; }
+// 💡 podpowiedzi (domyślnie przez pierwsze 3 mecze)
+function _kortTip() {
+  const st = _kort.st, en = currentLang === 'en'; if(!_kort.tips || st.over) return null;
+  if(st.turn !== 0 || st.p[0].passed) return st.p[1].passed ? null : _g('🤖 Teraz ruch bota — zobacz, gdzie kładzie kartę.', '🤖 The bot’s move — watch where it plays.');
+  const m = kortBotMove(st, 0), tac = st.tactics[st.q - 1], my = kortTotal(st, 0), th = kortTotal(st, 1), first = st.log.filter(l => l.side === 0).length === 0;
+  let t = first ? _g('Wygrywa ten, kto pierwszy wygra <b>2 rundy</b>. W rundzie na zmianę dokładacie karty — liczy się suma. ', 'First to win <b>2 rounds</b> wins. You take turns adding cards — the total counts. ') : '';
+  if(m.pass) { t += st.p[1].passed ? _g(`Prowadzisz ${my}:${th}, a bot spasował — <b>spasuj</b>, runda jest Twoja i oszczędzasz karty.`, `You lead ${my}:${th} and the bot passed — <b>pass</b>: the round is yours and you save cards.`) : _g(`Prowadzisz wyraźnie (${my}:${th}) — <b>spasuj</b> i zachowaj karty na kolejne rundy.`, `You’re well ahead (${my}:${th}) — <b>pass</b> and keep cards for later rounds.`); return { t, pass: true }; }
+  const c = st.p[0].hand.find(x => x.id === m.id), why = m.row === tac ? _g('ten rząd liczy się <b>×2</b> w tej rundzie', 'this row counts <b>×2</b> this round') : c?.badges?.length ? _g('jego odznaka działa w tym rzędzie', 'its badge works in this row') : _g('to jego najmocniejszy rząd', 'it’s its strongest row');
+  t += st.p[1].passed ? _g(`Bot spasował (${th}) — wystarczy go przebić. `, `The bot passed (${th}) — you just need to beat it. `) : '';
+  t += _g(`Połóż <b>${_h(c?.name || '')}</b> w rzędzie <b>${_KR[m.row][0]} ${_KR[m.row][1]}</b> — ${why}.`, `Play <b>${_h(c?.name || '')}</b> in <b>${_KR[m.row][0]} ${_KR[m.row][2]}</b> — ${why}.`);
+  return { t, id: m.id, row: m.row };
+}
+
+// ═══ 🃏 KORT — emocje (komentarz, animacja rundy, dźwięki), moje statystyki, balans (admin) ═══
+const _KC_BADGE_NAME = { sniper: ['Snajper', 'Sniper'], scorer: ['Punktowa maszyna', 'Bucket getter'], thief: ['Złodziej', 'Thief'], rim: ['Obrońca obręczy', 'Rim protector'], dime: ['Kreator', 'Dimer'], glass: ['Zbiórki', 'Glass'], dd: ['Double-double', 'Double-double'], winner: ['Zwycięzca', 'Winner'], iron: ['Żelazny', 'Iron'] };
+const _kbName = k => (_KC_BADGE_NAME[k] || [k, k])[currentLang === 'en' ? 1 : 0];
+function _kortComment(l, i) {
+  const en = currentLang === 'en', who = l.side ? '🤖' : '🧑', pick = L => L[(i + (l.card || '').length) % L.length];
+  if(l.quarter) { const [a, b] = l.score; return a > b ? (en ? `🏁 Round ${l.quarter} is yours ${a}:${b}!` : `🏁 Runda ${l.quarter} dla Ciebie ${a}:${b}!`) : a < b ? (en ? `🏁 The bot takes round ${l.quarter} ${a}:${b}` : `🏁 Runda ${l.quarter} dla bota ${a}:${b}`) : (en ? `🏁 Round ${l.quarter} tied ${a}:${b}` : `🏁 Runda ${l.quarter} na remis ${a}:${b}`); }
+  if(l.pass) return `${who} ${pick(en ? ['passes — saving cards', 'calls a timeout and passes', 'sits back and passes'] : ['pasuje — oszczędza karty', 'bierze czas i pasuje', 'cofa się i pasuje'])}`;
+  const n = `<b>${_h(l.card)}</b>`, row = { atk: en ? [`${n} drains a three!`, `${n} attacks the rim!`, `${n} with a tough fadeaway!`] : [`${n} trafia za trzy!`, `${n} wjeżdża pod kosz!`, `${n} rzuca z odchylenia — jest!`],
+    roz: en ? [`${n} finds the open man`, `${n} runs the pick and roll`, `${n} controls the tempo`] : [`${n} znajduje wolnego kolegę`, `${n} rozgrywa pick and roll`, `${n} dyktuje tempo`],
+    obr: en ? [`${n} locks down the paint`, `${n} grabs the board`, `${n} pressures full court`] : [`${n} zamyka strefę podkoszową`, `${n} zbiera piłkę z tablicy`, `${n} naciska na całym boisku`] }[l.row];
+  const ev = (l.ev || []).map(e => e.startsWith('🦊') ? (en ? ` 🦊 Steal! ${_h(e.slice(2))}` : ` 🦊 Przechwyt! ${_h(e.slice(2))}`) : e.startsWith('🚫') ? (en ? ` 🚫 Rejected! ${_h(e.slice(2))}` : ` 🚫 Czapa! ${_h(e.slice(2))}`) : ' ' + _h(e)).join('');
+  return `${who} ${pick(row)}${ev}`;
+}
+// 🔊 dźwięki (syntezator w przeglądarce, bez plików)
+let _kAudio = null;
+function _kSfx(type) {
+  if(localStorage.getItem('kort_sound') === '0') return;
+  try { _kAudio = _kAudio || new (window.AudioContext || window.webkitAudioContext)(); const A = _kAudio, t = A.currentTime;
+    const tone = (f, d, at = 0, vol = .08, wave = 'triangle') => { const o = A.createOscillator(), g = A.createGain(); o.type = wave; o.frequency.setValueAtTime(f, t + at); g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(.0001, t + at + d); o.connect(g).connect(A.destination); o.start(t + at); o.stop(t + at + d + .02); };
+    const swish = (vol = .06) => { const len = A.sampleRate * .16, buf = A.createBuffer(1, len, A.sampleRate), d = buf.getChannelData(0); for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len); const s = A.createBufferSource(), f = A.createBiquadFilter(), g = A.createGain(); f.type = 'bandpass'; f.frequency.value = 1800; g.gain.value = vol; s.buffer = buf; s.connect(f).connect(g).connect(A.destination); s.start(); };
+    ({ play: () => swish(.07), opp: () => swish(.035), pass: () => tone(320, .09, 0, .05, 'square'), round: () => [523, 659, 784].forEach((f, i) => tone(f, .22, i * .09)), roundLost: () => [392, 330].forEach((f, i) => tone(f, .25, i * .12, .06)),
+      win: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .35, i * .12, .09)), loss: () => [330, 294, 247].forEach((f, i) => tone(f, .35, i * .16, .07, 'sine')) }[type] || (() => {}))();
+  } catch(e) {}
+}
+// zdarzenia po każdym ruchu: dźwięk, baner wygranej rundy, koniec meczu
+function _kortFx() {
+  const st = _kort.st, qs = st.log.filter(l => l.quarter);
+  if(qs.length > (_kort.seenQ || 0)) { const l = qs[qs.length - 1]; _kort.seenQ = qs.length; const [a, b] = l.score, en = currentLang === 'en';
+    if(!st.over) _kSfx(a >= b ? 'round' : 'roundLost');
+    _kort.banner = { txt: a > b ? (en ? `ROUND ${l.quarter} — YOURS!` : `RUNDA ${l.quarter} DLA CIEBIE!`) : a < b ? (en ? `ROUND ${l.quarter} — BOT` : `RUNDA ${l.quarter} DLA BOTA`) : (en ? `ROUND ${l.quarter} — TIE` : `RUNDA ${l.quarter} — REMIS`), sub: `${a}:${b}`, good: a >= b, at: Date.now() }; setTimeout(() => { if(_kort) _kortDraw(); }, 1800); }
+  if(st.over && !_kort.endFx) { _kort.endFx = true; _kSfx(st.result === 0 ? 'win' : st.result === 1 ? 'loss' : 'round'); }
+}
+// 📈 moje statystyki
+async function _kortStatsHtml() {
+  if(!discordUser?.session) return `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Zaloguj się, żeby zobaczyć swoje statystyki.', 'Log in to see your stats.')}</div>`;
+  const r = await _api('/kort/me', 'GET', null, { session: true }).catch(() => ({}));
+  if(!r.ok || !r.total?.g) return `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Rozegraj pierwszy mecz — tu pojawi się Twoja historia i najlepsze karty.', 'Play your first match — your history and best cards will show up here.')}</div>`;
+  const en = currentLang === 'en', M = { daily: ['⚔️', 'Mecz dnia', 'Daily'], ranked: ['🏆', 'Ranking', 'Ranked'], boss: ['👑', 'Boss', 'Boss'] }, tile = (v, l) => `<div class="card" style="padding:.6rem .7rem;text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.7rem;line-height:1">${v}</div><div style="font-size:.7rem;color:var(--muted)">${l}</div></div>`;
+  const rc = x => x >= 60 ? 'var(--win)' : x <= 40 ? 'var(--loss)' : 'var(--text)';
+  return `<div data-notr>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem;margin-bottom:1rem">${tile(r.total.g, _g('meczów', 'matches'))}${tile(r.total.wr + '%', _g('wygranych', 'win rate'))}${Object.entries(r.modes).map(([k, x]) => tile(`${x.w}-${x.l}${x.d ? '-' + x.d : ''}`, M[k]?.[0] + ' ' + (M[k]?.[en ? 2 : 1] || k))).join('')}${tile(r.elo, 'ELO · ' + _kDiv(r.div))}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.8rem;margin-bottom:1rem">
+      <div class="card" style="padding:.8rem .9rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">⭐ ${_g('NAJLEPSZE KARTY', 'BEST CARDS')}</div>
+        <div style="display:grid;grid-template-columns:1fr 44px 50px 48px 40px;gap:.3rem;font-size:.66rem;color:var(--muted);padding-bottom:.2rem;border-bottom:1px solid var(--border)"><span></span><span>${_g('mecze', 'games')}</span><span>${_g('wygr.', 'win %')}</span><span>${_g('pkt/m', 'pts/g')}</span><span>MVP</span></div>
+        ${r.cards.map(c => `<div style="display:grid;grid-template-columns:1fr 44px 50px 48px 40px;gap:.3rem;font-size:.8rem;padding:.22rem 0;border-bottom:1px solid var(--border)"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_h(c.k)}</b><span>${c.g}</span><span style="color:${rc(c.wr)}">${c.wr}%</span><span>${c.pts}</span><span>${c.mvp ? '⭐' + c.mvp : ''}</span></div>`).join('')}</div>
+      <div class="card" style="padding:.8rem .9rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🏅 ${_g('ODZNAKI W TWOJEJ TALII', 'BADGES IN YOUR DECK')}</div>
+        ${r.badges.map(x => `<div style="display:flex;justify-content:space-between;font-size:.8rem;padding:.22rem 0;border-bottom:1px solid var(--border)"><span>${_KB[x.k] || ''} ${_kbName(x.k)}</span><span><span style="color:var(--muted)">${x.g} ${_g('m.', 'g.')}</span> · <b style="color:${rc(x.wr)}">${x.wr}%</b></span></div>`).join('') || `<div style="font-size:.8rem;color:var(--muted)">—</div>`}</div></div>
+    <div class="card" style="padding:.8rem .9rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🕑 ${_g('OSTATNIE MECZE', 'RECENT MATCHES')}</div>
+      ${r.hist.map(h => `<div style="display:grid;grid-template-columns:70px 22px 1fr auto;gap:.45rem;align-items:center;font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted);font-size:.72rem">${new Date(h.at).toLocaleDateString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'numeric' })}</span><span>${M[h.mode]?.[0] || ''}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">vs ${_h(h.opp || '')}${h.mvp ? ` <span style="color:var(--muted)">· ⭐ ${_h(h.mvp)}</span>` : ''}</span><b style="color:${h.res === 'win' ? 'var(--win)' : h.res === 'loss' ? 'var(--loss)' : 'var(--accent)'}">${h.res === 'win' ? (en ? 'W' : 'W') : h.res === 'loss' ? (en ? 'L' : 'P') : (en ? 'D' : 'R')} ${_h(h.score || '')}</b></div>`).join('')}</div></div>`;
+}
+// 🛠 admin: balans Kortu na prawdziwych meczach
+async function openKortBalance() {
+  const m = _fxModal('kbal-modal', 820); m.classList.add('open'); m.querySelector('.modal').innerHTML = _fxHead('kbal-modal', '🃏 Kort — balans') + '⏳';
+  const r = await _api('/kort/balance', 'GET', null, { admin: true }); if(!r.ok) { m.querySelector('.modal').innerHTML = _fxHead('kbal-modal', '🃏 Kort — balans') + '❌ ' + _h(r.error || ''); return; }
+  const flag = x => x.g >= 20 && (x.wr >= 65 || x.wr <= 35) ? `<b style="color:${x.wr >= 65 ? 'var(--loss)' : '#60a5fa'}">${x.wr >= 65 ? '⚠ za mocne?' : '⚠ za słabe?'}</b>` : '';
+  const row = (l, x, extra = '') => `<div style="display:grid;grid-template-columns:1fr 60px 60px ${extra ? '60px ' : ''}110px;gap:.4rem;font-size:.8rem;padding:.22rem 0;border-bottom:1px solid var(--border)"><span>${l}</span><span>${x.g}</span><b>${x.wr}%</b>${extra}<span>${flag(x)}</span></div>`;
+  const fw = r.first.g ? Math.round(r.first.w / r.first.g * 100) : null;
+  m.querySelector('.modal').innerHTML = _fxHead('kbal-modal', '🃏 Kort — balans') + `<div data-notr style="font-size:.8rem">
+    <div style="color:var(--muted);margin-bottom:.6rem">Wszystkie rozegrane mecze: <b style="color:var(--text)">${r.games}</b> · ${Object.entries(r.modes).map(([k, x]) => `${({ daily: '⚔️ mecz dnia', ranked: '🏆 ranking', boss: '👑 boss' })[k] || k}: ${x.g} (${Math.round(x.w / x.g * 100)}% wygranych graczy)`).join(' · ')}${fw !== null ? ` · zaczynający wygrywa <b style="color:var(--text)">${fw}%</b>` : ''}</div>
+    <div style="font-size:.74rem;color:var(--muted);margin-bottom:.7rem">Procent wygranych graczy, w których talii była dana odznaka lub karta. W meczu dnia rywal jest dopasowany do siły, więc ~50% to dobry balans. Oznaczenia ⚠ pojawiają się od 20 meczów.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:.9rem">
+      <div><b>🏅 Odznaki</b><div style="display:grid;grid-template-columns:1fr 60px 60px 110px;gap:.4rem;font-size:.66rem;color:var(--muted);margin-top:.3rem"><span></span><span>mecze</span><span>wygr.</span><span></span></div>${r.badges.map(x => row(`${_KB[x.k] || ''} ${_kbName(x.k)}`, x)).join('') || '—'}</div>
+      <div><b>🃏 Karty (najczęściej grane)</b><div style="display:grid;grid-template-columns:1fr 60px 60px 60px 110px;gap:.4rem;font-size:.66rem;color:var(--muted);margin-top:.3rem"><span></span><span>mecze</span><span>wygr.</span><span>pkt/m</span><span></span></div>${r.cards.slice(0, 30).map(x => row(_h(x.k), x, `<span>${x.pts}</span>`)).join('') || '—'}</div>
+    </div></div>`;
+}
+
 function kortDeckPick() {
   openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, extra: _kortPickInfo,
     footer: keys => { const r = keys.map(k => (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(_cards?.cards?.[k]?.name, 'season')?.rating).filter(Boolean); return r.length ? _g('średnia', 'avg') + ' <b>' + Math.round(r.reduce((a, b) => a + b, 0) / r.length) + '</b>' : ''; }, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
     hint: _g('Wybierz 8 kart różnych graczy. Patrz na umiejętności (atak, rozegranie, obrona) i odznaki.', 'Pick 8 cards of different players. Mind their skills (attack, playmaking, defense) and badges.'),
-    onDone: keys => { const names = new Set(); const ok = keys.filter(k => { const n = _normNick(_cards?.cards?.[k]?.name || ''); if(names.has(n)) return false; names.add(n); return true; }); localStorage.setItem('kort_deck', JSON.stringify(ok)); showToast(_g('🃏 Talia zapisana', '🃏 Deck saved'), 'success'); renderKort(); } });
+    onDone: keys => { const names = new Set(); const ok = keys.filter(k => { const n = _normNick(_cards?.cards?.[k]?.name || ''); if(names.has(n)) return false; names.add(n); return true; }); localStorage.setItem('kort_deck', JSON.stringify(ok)); showToast(_g('🃏 Talia zapisana', '🃏 Deck saved'), 'success'); if(ok.length === 8) _kortSaveDeckServer(ok); renderKort(); } });
 }
-function kortStart() {
-  const deck = _kortMyDeck(), opp = _kortOpponent(deck), seed = _kortDayHash(opp.day + (discordUser?.id || 'guest')) + (_kortInfo?.me?.today ? Date.now() % 100000 : 0);
-  _kort = { st: kortNew(deck, opp.deck, seed), opp, claimed: false };
+function kortStart(mode = 'daily') {
+  const own = _kortOwnDeck(), deck = mode === 'ranked' && own ? own.map(k => _kortSrc(_cards.cards[k].name, { lim: k.startsWith('lim:'), label: _cards.cards[k].label })).filter(Boolean) : _kortMyDeck();
+  let opp;
+  if(mode === 'ranked') { const o = _kortOppPick; if(!o) return; opp = { id: o.id, name: o.name, icon: '🏆', deck: o.deck.names.map((n, i) => _kortSrc(n, { lim: !!o.deck.lim?.[i], label: o.deck.lim?.[i] || null })).filter(Boolean) };
+    if(opp.deck.length < 8) { showToast(_g('Talia rywala zawiera graczy bez statystyk w tym sezonie — wybierz innego', 'The opponent’s deck has players without stats this season — pick another'), 'info'); return; } }
+  else if(mode === 'boss') opp = { name: _g('Dream Team ligi', 'League Dream Team'), icon: '👑', deck: _kortBossDeck() };
+  else opp = _kortOpponent(deck);
+  const games = +localStorage.getItem('kort_games') || 0, seed = _kortDayHash((opp.day || new Date().toISOString().slice(0, 10)) + (discordUser?.id || 'guest') + mode + (opp.id || '')) + (mode === 'daily' && _kortInfo?.me?.today ? Date.now() % 100000 : 0);
+  const bc = {}; deck.forEach(c => (c.badges || []).forEach(b => bc[b.key] = (bc[b.key] || 0) + 1));
+  _kort = { deckNames: deck.map(c => c.name), badgeCounts: bc, st: kortNew(deck, opp.deck, seed), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
   _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
 }
 function _kortCardHtml(st, side, c, row, onBoard) {
@@ -16630,19 +16818,23 @@ function _kortCardHtml(st, side, c, row, onBoard) {
     return `<div title="${_h(c.name)}" style="width:70px">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 's', rating: rt,
       body: `<div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.3rem;line-height:1;color:${c.mod < 0 ? '#fca5a5' : '#fff'}">${val}</div><div style="font-size:.55rem;line-height:1">${badges}</div>` })}</div>`; }
   const myTurn = st.turn === 0 && !st.over && !st.p[0].passed && !_kortBusy, tac = st.tactics[st.q - 1];
-  return `<div style="width:126px;flex-shrink:0">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
+  const hint = myTurn ? _kort?._tip : null;
+  return `<div style="width:126px;flex-shrink:0" class="${hint?.id === c.id ? 'kc-hint' : ''}">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
     body: `<div style="font-size:.66rem;margin:.1rem 0 .2rem;min-height:.85rem">${badges}${c.form === 'hot' ? ' 🔥' : c.form === 'cold' ? ' ❄️' : ''}</div>
-      <div style="display:flex;flex-direction:column;gap:.2rem">${KORT_ROWS.map(r => `<button ${myTurn ? '' : 'disabled'} onclick="kortHumanPlay('${c.id}','${r}')" style="display:flex;justify-content:space-between;align-items:center;padding:.15rem .4rem;border-radius:6px;border:1px solid ${r === tac ? '#ffd84d' : 'rgba(255,255,255,.18)'};background:${r === tac ? 'rgba(245,197,24,.22)' : 'rgba(0,0,0,.3)'};color:#fff;font-family:inherit;font-size:.72rem;cursor:${myTurn ? 'pointer' : 'default'};opacity:${myTurn ? 1 : .55}"><span>${_KR[r][0]}</span><b>${c.pw[r]}${r === tac ? ' ×2' : ''}</b></button>`).join('')}</div>` })}</div>`;
+      <div style="display:flex;flex-direction:column;gap:.2rem">${KORT_ROWS.map(r => `<button ${myTurn ? '' : 'disabled'} class="${hint?.id === c.id && hint.row === r ? 'kc-hint-btn' : ''}" onclick="kortHumanPlay('${c.id}','${r}')" style="display:flex;justify-content:space-between;align-items:center;padding:.15rem .4rem;border-radius:6px;border:1px solid ${r === tac ? '#ffd84d' : 'rgba(255,255,255,.18)'};background:${r === tac ? 'rgba(245,197,24,.22)' : 'rgba(0,0,0,.3)'};color:#fff;font-family:inherit;font-size:.72rem;cursor:${myTurn ? 'pointer' : 'default'};opacity:${myTurn ? 1 : .55}"><span>${_KR[r][0]}</span><b>${c.pw[r]}${r === tac ? ' ×2' : ''}</b></button>`).join('')}</div>` })}</div>`;
 }
 function _kortDraw() {
   const el = document.getElementById('kort-board'); if(!el || !_kort) return; const st = _kort.st, en = currentLang === 'en', tac = st.tactics[st.q - 1];
+  _kort._tip = _kortBusy ? null : _kortTip(); // raz na rysowanie (sugerowany ruch liczy silnik bota)
   const tint = { atk: 'rgba(239,68,68,.20)', roz: 'rgba(59,130,246,.20)', obr: 'rgba(34,197,94,.20)' };
   const lane = (side, r) => `<div class="kc-lane${r === tac ? ' kc-tac' : ''}" style="background:${tint[r]}">
       <div class="kc-lbl">${_KR[r][0]} ${en ? _KR[r][2] : _KR[r][1]}${r === tac ? '<br><b>×2</b>' : ''}</div>
       <div class="kc-cards">${st.p[side].board[r].map(c => `<div class="${c.id === _kort.lastId ? 'kc-pop' : ''}">${_kortCardHtml(st, side, c, r, true)}</div>`).join('')}</div>
       <div class="kc-sum">${kortRowSum(st, side, r)}</div></div>`;
   const dots = n => '<span class="kc-dot on"></span>'.repeat(n) + '<span class="kc-dot"></span>'.repeat(Math.max(0, 2 - n));
-  const last = st.log.slice(-3).map(l => l.quarter ? `🏁 ${en ? 'Round ' : 'Runda '}${l.quarter}: ${l.score[0]}:${l.score[1]}` : l.pass ? `${l.side ? '🤖' : '🧑'} ${en ? 'passes' : 'pasuje'}` : `${l.side ? '🤖' : '🧑'} ${_h(l.card)} → ${_KR[l.row][0]}${l.ev?.length ? ' · ' + l.ev.join(', ') : ''}`).join(' · ');
+  _kortFx();
+  const last = st.log.slice(-2).map((l, i, a) => `<div class="${i === a.length - 1 && st.log.length !== _kort.lastLogN ? 'kc-com' : ''}" style="${i === a.length - 1 ? '' : 'opacity:.55;font-size:.72rem'}">${_kortComment(l, st.log.length - a.length + i)}</div>`).join(''); _kort.lastLogN = st.log.length;
+  const bn = _kort.banner && Date.now() - _kort.banner.at < 1700 ? _kort.banner : null;
   const t0 = kortTotal(st, 0), t1 = kortTotal(st, 1);
   el.innerHTML = `<div data-notr class="kc-wrap">
     <div class="kc-board-top">
@@ -16650,15 +16842,17 @@ function _kortDraw() {
       <div class="kc-led"><div class="kc-led-n" style="color:${t0 >= t1 ? '#4ade80' : '#ffd84d'}">${String(t0).padStart(2, '0')}</div>
         <div class="kc-led-mid"><div>${en ? 'ROUND' : 'RUNDA'} ${st.q}/3</div><div class="kc-led-tac">${en ? _KT[tac][1] : _KT[tac][0]} · ${_KR[tac][0]}×2</div></div>
         <div class="kc-led-n" style="color:${t1 > t0 ? '#f87171' : '#ffd84d'}">${String(t1).padStart(2, '0')}</div></div>
-      <div class="kc-team kc-right"><div class="kc-tname">🤖 ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}</div></div>
+      <div class="kc-team kc-right"><div class="kc-tname">🤖 ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}<button onclick="localStorage.setItem('kort_sound',localStorage.getItem('kort_sound')==='0'?'1':'0');_kortDraw()" title="${en ? 'Sound' : 'Dźwięk'}" style="margin-left:.4rem;background:none;border:none;cursor:pointer;font-size:.9rem">${localStorage.getItem('kort_sound') === '0' ? '🔇' : '🔊'}</button></div></div>
     </div>
     <div class="kc-opp-info">${_h(_kort.opp.icon)} ${en ? 'cards in hand' : 'kart w ręce'}: <b>${st.p[1].hand.length}</b>${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}</div>
     <div class="kc-court">
+      ${bn ? `<div class="kc-banner ${bn.good ? 'good' : 'bad'}"><div>${bn.txt}</div><small>${bn.sub}</small></div>` : ''}
       <div class="kc-half">${['obr', 'roz', 'atk'].map(r => lane(1, r)).join('')}</div>
       <div class="kc-mid"><div class="kc-circle">🏀</div></div>
       <div class="kc-half">${['atk', 'roz', 'obr'].map(r => lane(0, r)).join('')}</div>
     </div>
     <div class="kc-log">${last || '&nbsp;'}</div>
+    ${!st.over ? (() => { const tip = _kort._tip; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin:.1rem 0 .45rem">${tip ? `<div class="kc-tip">💡 ${tip.t || tip}</div>` : '<span></span>'}<button class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem;white-space:nowrap" onclick="_kort.tips=!_kort.tips;localStorage.setItem('kort_tips',_kort.tips?'1':'0');_kortDraw()">💡 ${_kort.tips ? (en ? 'Hide tips' : 'Ukryj podpowiedzi') : (en ? 'Show tips' : 'Podpowiedzi')}</button></div>`; })() : ''}
     ${st.over ? _kortEndHtml() : `<div class="kc-bench">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem">
         <span style="font-size:.82rem">${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — pick a card and a row' : 'Twoja tura — wybierz kartę i rząd') : st.p[0].passed ? (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…') : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
@@ -16669,17 +16863,21 @@ function _kortDraw() {
 function _kortEndHtml() {
   const st = _kort.st, en = currentLang === 'en', r = st.result === 0 ? 'win' : st.result === 1 ? 'loss' : 'draw';
   const score = st.p[0].wins + ':' + st.p[1].wins, qs = st.p[0].qScores.map((x, i) => x + ':' + st.p[1].qScores[i]).join(', ');
-  if(!_kort.claimed) { _kort.claimed = true; if(discordUser?.session && !_kortInfo?.me?.today) _api('/kort', 'POST', { result: r, opp: _kort.opp.name, score }, { session: true }).then(x => { if(x.ok && !x.already) { const k = (x.me?.weekWins || 0) % 3; showToast(x.pack ? _g(`🏆 Wygrana! +${x.xp} XP i 🎁 paczka za 3 wygrane w tygodniu!`, `🏆 Victory! +${x.xp} XP and a 🎁 pack for 3 wins this week!`) : r === 'win' ? _g(`🏆 Wygrana! +${x.xp} XP · do paczki: ${k}/3`, `🏆 Victory! +${x.xp} XP · towards a pack: ${k}/3`) : _g(`+${x.xp} XP`, `+${x.xp} XP`), 'success'); if(x.pack) window._cardsCanOpen = true; if(_kortInfo?.me && x.me) Object.assign(_kortInfo.me, x.me); } }).catch(() => {}); }
+  if(!_kort.logged) { _kort.logged = true; if(discordUser?.session) _api('/kort/log', 'POST', { mode: _kort.mode, result: r, score, opp: _kort.opp.name, deck: _kort.deckNames, contrib: st.contrib?.[0] || {}, badges: _kort.badgeCounts, first: st.first === 0 }, { session: true }).catch(() => {}); }
+  if(!_kort.claimed && _kort.mode !== 'daily') { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1));
+    if(_kort.mode === 'ranked') _api('/kort/ranked', 'POST', { opp: _kort.opp.id, result: r, score }, { session: true }).then(x => { if(x.ok) showToast(`🏆 ${x.delta >= 0 ? '+' : ''}${x.delta} ELO → ${x.elo}${x.promoted ? ' · ' + _g('awans', 'promoted') + ': ' + x.promoted : ''}`, 'success'); else showToast('❌ ' + _tr(x.error || ''), 'error'); });
+    if(_kort.mode === 'boss') _api('/kort/boss', 'POST', { result: r, score }, { session: true }).then(x => { if(x.ok && x.reward) showToast(_g('👑 Boss pokonany! 💎 Paczka premium jest Twoja', '👑 Boss beaten! The 💎 premium pack is yours'), 'success'); }); }
+  if(!_kort.claimed) { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1)); if(discordUser?.session && !_kortInfo?.me?.today) _api('/kort', 'POST', { result: r, opp: _kort.opp.name, score }, { session: true }).then(x => { if(x.ok && !x.already) { const k = (x.me?.weekWins || 0) % 3; showToast(x.pack ? _g(`🏆 Wygrana! +${x.xp} XP i 🎁 paczka za 3 wygrane w tygodniu!`, `🏆 Victory! +${x.xp} XP and a 🎁 pack for 3 wins this week!`) : r === 'win' ? _g(`🏆 Wygrana! +${x.xp} XP · do paczki: ${k}/3`, `🏆 Victory! +${x.xp} XP · towards a pack: ${k}/3`) : _g(`+${x.xp} XP`, `+${x.xp} XP`), 'success'); if(x.pack) window._cardsCanOpen = true; if(_kortInfo?.me && x.me) Object.assign(_kortInfo.me, x.me); } }).catch(() => {}); }
   return `<div style="text-align:center;padding:.7rem 0"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:${r === 'win' ? 'var(--win)' : r === 'loss' ? 'var(--loss)' : 'var(--accent)'}">${r === 'win' ? (en ? 'VICTORY' : 'WYGRANA') : r === 'loss' ? (en ? 'DEFEAT' : 'PORAŻKA') : (en ? 'DRAW' : 'REMIS')} ${score}</div>
     <div style="font-size:.8rem;color:var(--muted)">${en ? 'Rounds' : 'Rundy'}: ${qs}</div>
-    <button class="btn btn-primary" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button></div>`;
+    <button class="btn btn-primary" style="margin-top:.6rem" onclick="kortShare()">📸 ${en ? 'Share result' : 'Udostępnij wynik'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button>${_kort.mode === 'daily' ? ` <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button>` : ''}</div>`;
 }
-function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kortDraw(); _kortBot(); } }
-function kortHumanPass() { if(!_kort || _kortBusy) return; if(kortPass(_kort.st, 0)) { _kortDraw(); _kortBot(); } }
+function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kSfx('play'); _kortDraw(); _kortBot(); } }
+function kortHumanPass() { if(!_kort || _kortBusy) return; if(kortPass(_kort.st, 0)) { _kSfx('pass'); _kortDraw(); _kortBot(); } }
 function _kortBot() {
   const st = _kort?.st; if(!st || st.over || st.turn !== 1) { _kortDraw(); return; }
   _kortBusy = true; _kortDraw();
-  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) kortPass(st, 1); else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
+  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) { kortPass(st, 1); _kSfx('pass'); } else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; _kSfx('opp'); } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
 }
 
 function goToTeamRegistrations() { showView('join'); renderTeamRegistrations(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
