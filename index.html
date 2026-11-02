@@ -7458,7 +7458,7 @@ async function _ssAnnounceMatchInner(s, title, extraLine) {
   const [fl, banner] = await Promise.all([
     Promise.race([
       _api('/fun-line', 'POST', { kind: 'match', data: _ssMatchAiData(s) }, _isLoggedInSync() ? { admin: true } : { session: true }),
-      new Promise(r => setTimeout(() => r({}), 10000))
+      new Promise(r => setTimeout(() => r({}), 12000))
     ]).catch(() => ({})),
     _ssMatchBanner(s)
   ]);
