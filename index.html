@@ -7976,7 +7976,9 @@ function endDemo() { _demo = null; _ssDraft = {}; _ssWeek = null; renderSeasonSc
 function openDeepLink() {
   setTimeout(() => { window._routeHandled = true; }, 3000); // potem przejścia na inne widoki czyszczą adres z linku
   const _q = new URLSearchParams(location.search).get('v') || '';
-  const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q).toLowerCase();
+  const _p = location.protocol === 'file:' ? '' : location.pathname.replace(/^\/+|\/+$/g, '').replace(/(^|\/)index\.html$/, ''); // ładne adresy: /rules, /register
+  const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q || _p).toLowerCase();
+  if(_p && !location.hash && !_q) try { history.replaceState(history.state, '', '/' + location.search); } catch(e) {} // po otwarciu adres wraca na stronę główną (odświeżenie nie wraca do linku)
   if(!h) return;
   const flash = el => {
     if(!el) return;
@@ -8008,6 +8010,7 @@ function openDeepLink() {
   if(h === 'kolejka-x') { setTimeout(() => openXQueue(), 600); return; }
   if(h === 'kolekcja' || h === 'karty') { setTimeout(() => showView('cards'), 0); return; }
   if(h === 'rules' || h === 'regulamin') { setTimeout(() => showView('rules'), 0); return; }
+  if(['register', 'rejestracja', 'zapisy', 'signup', 'join'].includes(h)) { setTimeout(() => _openRegisterLink(), 300); return; }
   if(h.startsWith('kibic/')) { const id = h.split('/')[1]; setTimeout(() => openFanProfile(id), 800); return; }
   if(h.startsWith('rywalizacja/')) { const [a, b] = decodeURIComponent(h.slice(12)).split('~'); setTimeout(() => { const T = n => [...new Set(_withAllMatches(() => matches.flatMap(m => [m.team1.name, m.team2.name])))].find(x => x.toLowerCase() === n) || n; if(a && b) openRivalry(T(a), T(b)); }, 1200); return; }
   if(h.startsWith('event/') || h.startsWith('draft/')) { const id = decodeURIComponent(h.split('/').slice(1).join('/')); setTimeout(() => { showView('events'); setTimeout(() => { if(events.some(e => e.id === id)) openEventDetail(id); else showToast(_g('Nie znaleziono tego draftu', 'Draft not found'), 'info'); }, 400); }, 0); return; }
@@ -16083,6 +16086,17 @@ async function fplusVote(v) {
 // drafty: zakładka bieżącego draftu (drabinka / wyniki)
 function _evCurrent() { const L = (events || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))); return L.find(e => !['finished', 'closed', 'archived'].includes(e.status)) || L[0] || null; }
 function openCurrentDraft(tab) { const ev = _evCurrent(); if(!ev) { showView('events'); showToast(_g('Brak draftów', 'No drafts yet'), 'info'); return; } showView('events'); setTimeout(() => openEventDetail(ev.id, tab), 150); }
+// link do zapisu drużyny (/register): zalogowany → od razu formularz; niezalogowany → logowanie Discord i powrót do formularza
+function _openRegisterLink() {
+  goJoin('teams');
+  if(registrationsClosed) { showToast(_g('🔒 Zapisy drużyn są teraz zamknięte', '🔒 Team sign-ups are closed right now'), 'info'); return; }
+  if(discordUser) { setTimeout(openTeamRegModal, 250); return; }
+  const m = _fxModal('reglogin-modal', 440); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('reglogin-modal', '🧢 ' + _g('Zgłoś drużynę', 'Register your team')) + `<div data-notr style="text-align:center">
+    <div style="font-size:.88rem;line-height:1.55;margin-bottom:.9rem">${_g('Drużynę zgłasza <b>kapitan</b>. Zaloguj się przez Discord — po zalogowaniu wrócisz prosto do formularza.', 'Teams are registered by the <b>captain</b>. Log in with Discord — you\u2019ll come straight back to the form.')}</div>
+    <button class="btn btn-primary" style="width:100%" onclick="try{history.replaceState(null,'','/register')}catch(e){};loginWithDiscord()">💬 ${_g('Zaloguj przez Discord', 'Log in with Discord')}</button>
+    <div style="font-size:.74rem;color:var(--muted);margin-top:.7rem">${_g('Przed zapisem przeczytaj', 'Before registering, read the')} <a href="#" onclick="_fxClose('reglogin-modal');showView('rules');return false" style="color:var(--accent)">${_g('regulamin', 'rules')}</a>.</div></div>`;
+}
 function goJoin(tab) { setRegTab(tab); showView('join'); }
 
 // ═══ 🗳️ GŁOSOWANIE TYGODNIA — bieżące głosowanie + archiwum (zwycięzcy, karty MVP i obrońcy, link do meczu) ═══
