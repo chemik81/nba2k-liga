@@ -8670,7 +8670,7 @@ function _awardCandidates(sid, week) {
   const wd = _weekData(sid, week);
   const fmtLine = p => `${+p.pts || 0} PTS · ${+p.reb || 0} REB · ${+p.ast || 0} AST${p.gp > 1 ? ` (${p.gp} mecze)` : ''}`;
   // ta sama miara co Piątka tygodnia i MVP meczu: średnia ocena występu na mecz (game score)
-  const eff = p => ((+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.7 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + 0.7 * (+p.blk || 0) - (+p.to || 0)) / Math.max(1, p.gp || 1);
+  const eff = p => ((+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.4 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0)) / Math.max(1, p.gp || 1);
   const cats = [];
   const mvp = [...wd.players].sort((a, b) => eff(b) - eff(a)).slice(0, 3);
   if(mvp.length >= 2) cats.push({ key: 'mvp', emoji: '⭐', title: 'MVP tygodnia', candidates: mvp.map(p => ({ id: p.name + '|' + p.team, label: p.name, team: p.team, sub: `${p.team} · ${fmtLine(p)}` })) });
@@ -9574,7 +9574,7 @@ function _playerAchievementsHtml(name) {
 
 // ═══ 🖼 PLAKAT MECZU ═════════════════════════════════════════════
 function _gameMvp(m) { // ocena występu (game score) + przewaga zwycięzców; MVP z przegranych tylko przy wyraźnie lepszym występie (o 25%+)
-  const gs = p => (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.7 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + 0.7 * (+p.blk || 0) - (+p.to || 0);
+  const gs = p => (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.4 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0);
   const w1 = (+m.team1.score || 0) > (+m.team2.score || 0), W = w1 ? m.team1 : m.team2, L = w1 ? m.team2 : m.team1;
   const best = t => (t.players || []).map(p => ({ ...p, team: t.name, _gs: gs(p) })).sort((a, b) => b._gs - a._gs)[0] || null;
   const bw = best(W), bl = best(L); if(!bw) return bl; if(!bl) return bw;
@@ -12261,7 +12261,7 @@ function renderMultistream() {
     const res = _ssResult(ctx, x.s), emb = _msEmbed(x.url, x.id !== _ms.audio);
     const score = res ? `${res.w1}:${res.w2}${res.games.length ? ` <span style="font-size:.66rem;color:var(--muted)">(${res.games.map(g => g.s1 + ':' + g.s2).join(', ')})</span>` : ''}` : 'vs';
     return `<div style="background:var(--surface);border:1px solid ${x.id === _ms.audio ? 'var(--accent)' : 'var(--border)'};border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
-      <div style="display:flex;align-items:center;gap:.45rem;padding:.4rem .6rem;font-size:.8rem;flex-wrap:wrap">
+      <div id="ms-h-${x.id}" style="display:flex;align-items:center;gap:.45rem;padding:.4rem .6rem;font-size:.8rem;flex-wrap:wrap">
         ${x.live ? `<span style="background:#dc2626;color:#fff;font-size:.6rem;font-weight:900;border-radius:4px;padding:.05rem .35rem">🔴 LIVE${x.viewers != null ? ' · ' + x.viewers + ' 👁' : ''}</span>` : ''}
         ${teamLogo(x.team, 20, '.5rem')}<b>${_h(x.team)}</b><span style="color:var(--muted);font-size:.72rem">· ${_msPlatform(x.url)}</span>
         <span style="flex:1"></span>
@@ -12282,9 +12282,19 @@ function renderMultistream() {
   const chip = x => { const on = _ms.sel.includes(x.id);
     return `<button onclick="msToggle('${x.id}')" style="font-size:.72rem;padding:.2rem .55rem;border-radius:999px;cursor:pointer;font-family:inherit;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(245,197,24,.15)' : 'transparent'};color:var(--text)">
       ${x.live ? '🔴 ' : x.isToday ? '📅 ' : ''}${_h(x.team)} <span style="color:var(--muted)">· ${_h(x.side === 'team1' ? x.s.team2 : x.s.team1)}${x.s.date && !x.live ? ' · ' + _ssFmt(x.s.date) + (x.s.time ? ' ' + x.s.time : '') : ''}</span></button>`; };
+  // te same odtwarzacze co ostatnio → podmieniamy tylko napisy (wynik, LIVE, widzowie, lista), odtwarzacze zostają nietknięte (stream się nie zatrzymuje)
+  const frameKey = JSON.stringify([_ms.cols, chosen.map(x => x.id + '|' + _msEmbed(x.url, x.id !== _ms.audio))]);
+  if(el.dataset.frameKey === frameKey && el.querySelector('#ms-chips')) {
+    const tmp = document.createElement('div');
+    chosen.forEach(x => { tmp.innerHTML = tile(x); const nh = tmp.querySelector('#ms-h-' + CSS.escape(x.id)), oh = el.querySelector('#ms-h-' + CSS.escape(x.id)); if(nh && oh && oh.innerHTML !== nh.innerHTML) oh.innerHTML = nh.innerHTML; });
+    tmp.innerHTML = `<div id="ms-chips">${src.length ? src.slice(0, 16).map(chip).join('') : ''}</div>`; const oc = el.querySelector('#ms-chips'), lbl = oc.firstElementChild?.outerHTML || '';
+    if(src.length) oc.innerHTML = lbl + tmp.firstElementChild.innerHTML;
+    return;
+  }
+  el.dataset.frameKey = frameKey;
   el.innerHTML = `
     <div class="section-title">📺 Multistream</div>
-    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">
+    <div id="ms-chips" style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">
       <span style="font-size:.74rem;color:var(--muted)">Wybierz do 4 transmisji:</span>
       ${src.length ? src.slice(0, 16).map(chip).join('') : '<span style="font-size:.8rem;color:var(--muted)">Brak transmisji — drużyny nie podały linków do streamów.</span>'}
     </div>
@@ -13347,7 +13357,7 @@ function _mvpRank(untilDate) {
     (t.players || []).forEach(p => { const k = _normNick(p.name); if(!k) return;
       const a = P[k] = P[k] || { name: p.name, team: t.name, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0 };
       a.gp++; a.team = t.name; a.pts += +p.pts || 0; a.reb += +p.reb || 0; a.ast += +p.ast || 0;
-      a.gs += (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.7 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + 0.7 * (+p.blk || 0) - (+p.to || 0); });
+      a.gs += (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) + 0.4 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0); });
   }));
   return Object.values(P).filter(a => a.gp >= Math.max(2, (teamG[a.team] || 0) * 0.5)).map(a => {
     const wp = (teamW[a.team] || 0) / (teamG[a.team] || 1);
@@ -13439,7 +13449,7 @@ function _wgData(week) {
   const fx = schedule.filter(s => s.generated && !s.makeup && (s.seasonId || null) === sid && +s.week === +week);
   const all = _withAllMatches(() => matches.slice());
   const byId = new Map(all.map(m => [String(m.id), m]));
-  const gsOf = p => (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) - 0.4 * ((+p.fta || 0) - (+p.ftm || 0)) + 0.7 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + 0.7 * (+p.blk || 0) - (+p.to || 0);
+  const gsOf = p => (+p.pts || 0) + 0.4 * (+p.fgm || 0) - 0.7 * (+p.fga || 0) - 0.4 * ((+p.fta || 0) - (+p.ftm || 0)) + 0.4 * (+p.reb || 0) + 0.7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0);
   const agg = list => { const by = {}; list.forEach(({ p, team }) => { const k = _normNick(p.name); if(!k) return;
       const a = by[k] = by[k] || { name: p.name, team, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0 };
       a.gp++; a.gs += gsOf(p); ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'fgm', 'fga', 'tpm', 'tpa'].forEach(f => { a[f] += +p[f] || 0; }); });
@@ -13817,7 +13827,7 @@ function _pcData(name, scope = 'season') {
   const teams = {}; games.forEach(g => { teams[g.t.name] = (teams[g.t.name] || 0) + 1; });
   const team = Object.entries(teams).sort((a, b) => b[1] - a[1])[0][0];
   const pos = {}; games.forEach(g => { if(g.p.pos) pos[g.p.pos] = (pos[g.p.pos] || 0) + 1; });
-  const gs = g => (+g.p.pts || 0) + 0.4 * (+g.p.fgm || 0) - 0.7 * (+g.p.fga || 0) + 0.7 * (+g.p.reb || 0) + 0.7 * (+g.p.ast || 0) + (+g.p.stl || 0) + 0.7 * (+g.p.blk || 0) - (+g.p.to || 0);
+  const gs = g => (+g.p.pts || 0) + 0.4 * (+g.p.fgm || 0) - 0.7 * (+g.p.fga || 0) + 0.4 * (+g.p.reb || 0) + 0.7 * (+g.p.ast || 0) + (+g.p.stl || 0) + (+g.p.blk || 0) - (+g.p.to || 0);
   const avgGs = games.reduce((n, g) => n + gs(g), 0) / gp;
   const rating = Math.max(50, Math.min(99, Math.round(58 + avgGs * 1.55)));
   const tier = rating >= 92 ? ['GALAKTYKA', 'GALAXY', '#a855f7', '#22d3ee'] : rating >= 86 ? ['DIAMENT', 'DIAMOND', '#38bdf8', '#e0f2fe'] : rating >= 79 ? ['ZŁOTO', 'GOLD', '#f5c518', '#fff3b0'] : rating >= 70 ? ['SREBRO', 'SILVER', '#cbd5e1', '#f8fafc'] : ['BRĄZ', 'BRONZE', '#d08b4f', '#f3c9a3'];
@@ -13878,7 +13888,7 @@ function _pcSkills(name, scope, games) {
     : Object.values(attrs).filter(a => a.p >= .7).length >= 5 ? ['Wszechstronny', 'All-around'] : hi('reb') ? ['Zbierający', 'Rebounder'] : hi('def') ? ['Obrońca', 'Lockdown defender']
     : hi('inside') ? ['Wykańczający', 'Finisher'] : hi('shoot') ? ['Strzelec', 'Scorer'] : ['Zadaniowiec', 'Role player'];
   // 🔥 forma: 3 ostatnie mecze vs średnia
-  const gsOf = q => (+q.p.pts || 0) + 0.4 * (+q.p.fgm || 0) - 0.7 * (+q.p.fga || 0) + 0.7 * (+q.p.reb || 0) + 0.7 * (+q.p.ast || 0) + (+q.p.stl || 0) + 0.7 * (+q.p.blk || 0) - (+q.p.to || 0);
+  const gsOf = q => (+q.p.pts || 0) + 0.4 * (+q.p.fgm || 0) - 0.7 * (+q.p.fga || 0) + 0.4 * (+q.p.reb || 0) + 0.7 * (+q.p.ast || 0) + (+q.p.stl || 0) + (+q.p.blk || 0) - (+q.p.to || 0);
   const srt = [...games].sort((a, b) => String(a.m.date || '').localeCompare(String(b.m.date || ''))), avg = srt.reduce((s, q) => s + gsOf(q), 0) / Math.max(1, srt.length), last = srt.slice(-3), la = last.reduce((s, q) => s + gsOf(q), 0) / Math.max(1, last.length);
   const form = srt.length < 4 ? null : la >= avg * 1.15 + .5 ? { icon: '🔥', pl: 'W formie', en: 'Hot' } : la <= avg * .85 - .5 ? { icon: '❄️', pl: 'Bez formy', en: 'Cold' } : { icon: '➡️', pl: 'Stabilnie', en: 'Steady' };
   return { attrs, badges: B, arch: { pl: arch[0], en: arch[1] }, form, few: x.gp < 3 };
@@ -16004,7 +16014,7 @@ function _totwWeeks() { // tylko zakończone kolejki: każde spotkanie rozegrane
 }
 function _totwData(w) {
   const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && !x.makeup && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || []).map(String)));
-  const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + .7 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + .7 * (+p.blk || 0) - (+p.to || 0);
+  const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + 0.4 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0);
   const by = {}; _withAllMatches(() => matches.filter(m => !m.walkover && ids.has(String(m.id)))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
     const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, pos: p.pos || '' }; a.gp++; a.gs += gs(p); a.pts += +p.pts || 0; a.reb += +p.reb || 0; a.ast += +p.ast || 0; })));
   return Object.values(by).map(a => ({ ...a, avg: a.gs / a.gp })).sort((a, b) => b.avg - a.avg).slice(0, 5);
