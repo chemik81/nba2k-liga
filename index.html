@@ -866,6 +866,9 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 .kc-modbar{font-size:.82rem;background:linear-gradient(90deg,rgba(59,130,246,.18),rgba(59,130,246,.04));border:1px solid rgba(59,130,246,.45);border-radius:10px;padding:.45rem .7rem;margin-bottom:.7rem}
 .kc-mod{font-size:.7rem;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.5);border-radius:999px;padding:.05rem .45rem}
 .kc-timer{font-family:'Barlow Condensed',sans-serif;color:#ffd84d;background:rgba(0,0,0,.4);border-radius:6px;padding:.05rem .4rem}
+
+/* 📱 Kort na telefonie: ręka w siatce (wszystkie karty widoczne) */
+@media (max-width:600px){.kc-handrow{flex-wrap:wrap;overflow-x:visible!important;justify-content:center;gap:.35rem!important}.kc-handrow .kc-handcard{width:calc(33.3% - .25rem)!important;min-width:0}.kc-handrow .kc-handcard button{font-size:.66rem!important;padding:.12rem .3rem!important}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -16899,16 +16902,22 @@ function _kortBindDrag(root) {
   root.querySelectorAll('[data-kid]').forEach(w => w.addEventListener('pointerdown', e => {
     if(e.target.closest('button') || e.button > 0) return;
     const id = w.dataset.kid, card = st.p[0].hand.find(c => c.id === id); if(!card) return;
-    e.preventDefault(); const r0 = w.getBoundingClientRect(), dx = e.clientX - r0.left, dy = e.clientY - r0.top;
-    const ghost = w.cloneNode(true); ghost.classList.add('kc-ghost'); Object.assign(ghost.style, { position: 'fixed', left: r0.left + 'px', top: r0.top + 'px', width: r0.width + 'px', zIndex: 9999, pointerEvents: 'none' }); document.body.appendChild(ghost); w.style.opacity = '.35';
-    let lane = null;
+    const touch = e.pointerType === 'touch', sx = e.clientX, sy = e.clientY;
+    if(!touch) e.preventDefault();
+    const r0 = w.getBoundingClientRect(), dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+    let ghost = null, lane = null;
+    const startDrag = () => { ghost = w.cloneNode(true); ghost.classList.add('kc-ghost'); Object.assign(ghost.style, { position: 'fixed', left: r0.left + 'px', top: r0.top + 'px', width: r0.width + 'px', zIndex: 9999, pointerEvents: 'none' }); document.body.appendChild(ghost); w.style.opacity = '.35'; };
+    if(!touch) startDrag();
     const gain = row => { const s = JSON.parse(JSON.stringify(st)); s.turn = 0; kortPlay(s, 0, id, row); return kortTotal(s, 0) - kortTotal(st, 0); };
-    const move = ev => { ghost.style.left = (ev.clientX - dx) + 'px'; ghost.style.top = (ev.clientY - dy) + 'px';
+    const move = ev => {
+      if(!ghost) { const mx = ev.clientX - sx, my = ev.clientY - sy; if(Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my)) return up(true); if(my < -10 && Math.abs(my) > Math.abs(mx)) startDrag(); else return; } // dotyk: w bok = przewijanie, w górę = przeciąganie
+      ev.preventDefault?.(); ghost.style.left = (ev.clientX - dx) + 'px'; ghost.style.top = (ev.clientY - dy) + 'px';
       const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.kc-lane[data-side="0"]');
       if(el !== lane) { root.querySelectorAll('.kc-drop').forEach(x => { x.classList.remove('kc-drop'); x.removeAttribute('data-gain'); }); lane = el; if(lane) { lane.classList.add('kc-drop'); lane.setAttribute('data-gain', '+' + gain(lane.dataset.row)); } } };
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); ghost.remove(); w.style.opacity = '';
-      root.querySelectorAll('.kc-drop').forEach(x => x.classList.remove('kc-drop')); if(lane) kortHumanPlay(id, lane.dataset.row); };
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+    const onCancel = () => up(true);
+    const up = (cancel) => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', onCancel); ghost?.remove(); w.style.opacity = '';
+      root.querySelectorAll('.kc-drop').forEach(x => x.classList.remove('kc-drop')); if(lane && ghost && cancel !== true) kortHumanPlay(id, lane.dataset.row); };
+    window.addEventListener('pointermove', move, { passive: false }); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', onCancel);
   }));
 }
 
@@ -17045,7 +17054,7 @@ function _kortCardHtml(st, side, c, row, onBoard) {
   const myTurn = st.turn === 0 && !st.over && !st.p[0].passed && !_kortBusy, tac = st.tactics[st.q - 1];
   const hint = myTurn ? _kort?._tip : null;
   const drawn = _kort.seenHand && !_kort.seenHand.has(c.id);
-  return `<div data-kid="${c.id}" style="width:126px;flex-shrink:0;touch-action:none;cursor:${myTurn ? 'grab' : 'default'}" class="${hint?.id === c.id ? 'kc-hint' : ''}${drawn ? ' kc-drawn' : ''}">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
+  return `<div data-kid="${c.id}" style="width:126px;flex-shrink:0;touch-action:pan-x pinch-zoom;cursor:${myTurn ? 'grab' : 'default'}" class="kc-handcard${hint?.id === c.id ? ' kc-hint' : ''}${drawn ? ' kc-drawn' : ''}">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.lim, size: 'm', rating: rt,
     body: `<div style="font-size:.66rem;margin:.1rem 0 .2rem;min-height:.85rem">${badges}${c.form === 'hot' ? ' 🔥' : c.form === 'cold' ? ' ❄️' : ''}</div>
       <div style="display:flex;flex-direction:column;gap:.2rem">${KORT_ROWS.map(r => `<button ${myTurn ? '' : 'disabled'} class="${hint?.id === c.id && hint.row === r ? 'kc-hint-btn' : ''}" onclick="kortHumanPlay('${c.id}','${r}')" style="display:flex;justify-content:space-between;align-items:center;padding:.15rem .4rem;border-radius:6px;border:1px solid ${r === tac ? '#ffd84d' : 'rgba(255,255,255,.18)'};background:${r === tac ? 'rgba(245,197,24,.22)' : 'rgba(0,0,0,.3)'};color:#fff;font-family:inherit;font-size:.72rem;cursor:${myTurn ? 'pointer' : 'default'};opacity:${myTurn ? 1 : .55}"><span>${_KR[r][0]}</span><b>${c.pw[r]}${r === tac ? ' ×2' : ''}</b></button>`).join('')}</div>` })}</div>`;
 }
@@ -17083,7 +17092,7 @@ function _kortDraw() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem">
         <span style="font-size:.82rem">${_kortBack(20)} <span style="color:var(--muted);font-size:.72rem;margin-right:.4rem">${st.p[0].deck.length}</span>${_kort.mode === 'live' && _kort.live?.turnLeft != null ? `<b class="kc-timer" style="margin-right:.4rem">⏱ ${Math.max(0, Math.ceil((_kort.live.turnLeft - (Date.now() - _kort.live.at)) / 1000))}s</b>` : ''}${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — drag a card onto a row or tap a row button' : 'Twoja tura — przeciągnij kartę na rząd albo kliknij przycisk rzędu') : st.p[0].passed ? (_kort.mode === 'live' ? (en ? 'You passed — your opponent is playing…' : 'Spasowałeś — gra rywal…') : (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…')) : _kort.mode === 'live' ? '⏳ ' + (en ? `${_h(_kort.opp.name)} is thinking…` : `${_h(_kort.opp.name)} myśli…`) : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
         <button class="btn btn-ghost" ${st.turn === 0 && !st.p[0].passed && !_kortBusy ? '' : 'disabled'} onclick="kortHumanPass()">✋ ${en ? 'Pass' : 'Pasuj'}</button></div>
-      <div style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
+      <div class="kc-handrow" style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
   </div>`;
   _kort.seenHand = new Set(st.p[0].hand.map(c => c.id)); _kortBindDrag(el);
   if(st.over && !_kort.endShown) { _kort.endShown = true; _kortMvpCard(); if(st.result === 0) _kortCelebrate(el.querySelector('.kc-wrap')); } else if(st.over) _kortMvpCard();
