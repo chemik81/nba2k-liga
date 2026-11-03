@@ -6582,7 +6582,7 @@ function openFreeAgentModal() {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.9rem">
       <div><label style="${lbl}">${_g('Poziom', 'Level')} <span style="color:var(--loss)">*</span></label>
-        <select id="fa-experience" style="${inp}"><option value="">${_g('— wybierz —', '— choose —')}</option>${(EU_MODE ? TEAM_LEVELS.map(l => [l, '📶 ' + l]) : Object.entries(_expLabels)).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+        <select id="fa-experience" style="${inp}"><option value="">${_g('— wybierz —', '— choose —')}</option>${(EU_MODE ? FA_EU_LEVELS.map(l => [l, '📶 ' + l]) : Object.entries(_expLabels)).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div><label style="${lbl}">${_g('Sezon', 'Season')}</label>
         <select id="fa-season" style="${inp}">${seasonOpts}</select></div>
     </div>
@@ -16325,6 +16325,7 @@ async function addTeamApply() {
 // ═══ 🇪🇺 EU CHEMIK LEAGUE — baner na stronie głównej, przełącznik lig, Dashboard EU, Rules, płatność wpisowego ═══
 function _signup() { return window._signupInfo || {}; }
 const TEAM_LEVELS = ['Tryhard D1', 'D1 Participants', 'D2 Champions', 'D2 Top 4', 'D2 Playoff Players', 'D2', 'New Teams'];
+const FA_EU_LEVELS = ['New to 5s', 'Low D2 experience', 'Playoffs D2 experience', 'D2 finalists experience', 'D1 experience', 'FIBA experience']; // poziomy wolnych agentów (liga EU)
 const _levelBadge = r => r.level ? `<span style="background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:800">📶 ${_h(r.level)}</span>` : '';
 function renderEuBillboard() {
   const el = document.getElementById('eu-billboard'); if(!el) return;
@@ -17233,7 +17234,7 @@ const _EXP_PL = { beginner:'🌱 Początkujący', intermediate:'⚡ Średnio-zaa
 const _expLabels = {}; // etykiety poziomu w języku strony (zwykły obiekt — działa w każdej przeglądarce)
 function _syncExpLabels() { Object.assign(_expLabels, currentLang === 'en' ? _EXP_EN : _EXP_PL); }
 _syncExpLabels();
-function _faLevel(x) { return _expLabels[x] || (typeof TEAM_LEVELS !== 'undefined' && TEAM_LEVELS.includes(x) ? '📶 ' + x : ''); } // poziom FA: PL (początkujący…) albo EU (Tryhard D1…)
+function _faLevel(x) { return _expLabels[x] || (typeof TEAM_LEVELS !== 'undefined' && (TEAM_LEVELS.includes(x) || FA_EU_LEVELS.includes(x)) ? '📶 ' + x : ''); } // poziom FA: PL (początkujący…) albo EU (Tryhard D1…)
 
 async function submitTeamRegistration() {
   if(!discordUser) { showToast('❌ Zaloguj się przez Discord', 'error'); return; }
