@@ -17035,14 +17035,22 @@ async function kortStartServer(mode, extra = {}) {
   const bc = {}; r.my.forEach(c => (c.badges || []).forEach(b => bc[b.key] = (bc[b.key] || 0) + 1));
   const games = +localStorage.getItem('kort_games') || 0;
   _kort = { serverId: r.id, moves: [], deckNames: r.my.map(c => c.name), badgeCounts: bc, deckSrc: r.my, st: kortNew(r.my, r.opp, r.seed, r.mod, r.myCoach || null, r.oppCoach || null), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
+  if(mode === 'draft' && _kortTab === 'draft') await renderKort(); // panel draftu: bez przycisku „Graj” w trakcie meczu
   _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
+}
+function _kortDraftEndHtml() { // po meczu draftu: aktualny bilans i od razu następny mecz
+  const d = _kort.draftRun || null, en = currentLang === 'en';
+  if(!d) return `<div style="font-size:.8rem;color:var(--muted);margin:.5rem 0">⏳ ${en ? 'Saving the result…' : 'Zapisuję wynik…'}</div>`;
+  if(d.done) return `<div class="card" style="padding:.6rem .8rem;margin:.6rem auto;max-width:420px"><b>🏁 ${en ? 'Draft over' : 'Koniec draftu'}: ${d.w}–${d.l}</b>${_kortRewardTxt(d.reward)}</div>`;
+  return `<div style="margin:.6rem 0 .2rem;font-size:.86rem">🎴 Draft: <b>${d.w}–${d.l}</b> <span style="color:var(--muted)">(${en ? 'ends at 3 losses or 7 wins' : 'koniec przy 3 porażkach albo 7 wygranych'})</span></div>
+    <button class="btn btn-primary" style="margin-top:.4rem" onclick="kortStartServer('draft')">⚔️ ${en ? 'Next match' : 'Następny mecz'} #${d.games + 1}</button> `;
 }
 async function _kortServerEnd() { // wynik liczy serwer, odtwarzając mecz z ruchów gracza
   const r = await _api('/kort/match/end', 'POST', { id: _kort.serverId, moves: _kort.moves }, { session: true }).catch(() => ({}));
   if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
   if(_kort.mode === 'ranked') showToast(`🏆 ${r.delta >= 0 ? '+' : ''}${r.delta} ELO → ${r.elo}${r.promoted ? ' · ' + _g('awans', 'promoted') + ': ' + r.promoted : ''}`, 'success');
   if(_kort.mode === 'boss' && r.reward) showToast(_g('👑 Boss pokonany! 💎 Paczka premium jest Twoja', '👑 Boss beaten! The 💎 premium pack is yours'), 'success');
-  if(_kort.mode === 'draft' && r.run) { _kortDraftRun = r.run; if(r.run.done) showToast(_g(`🎴 Koniec draftu: ${r.run.w}-${r.run.l}`, `🎴 Draft over: ${r.run.w}-${r.run.l}`) + _kortRewardTxt(r.run.reward), 'success'); }
+  if(_kort.mode === 'draft' && r.run) { _kortDraftRun = r.run; _kort.draftRun = r.run; setTimeout(_kortDraw, 50); if(r.run.done) showToast(_g(`🎴 Koniec draftu: ${r.run.w}-${r.run.l}`, `🎴 Draft over: ${r.run.w}-${r.run.l}`) + _kortRewardTxt(r.run.reward), 'success'); }
 }
 const _kortRewardTxt = rw => !rw ? '' : ' · ' + [rw.xp ? `+${rw.xp} XP` : '', rw.bonus ? `🎁×${rw.bonus}` : '', rw.premium ? `💎×${rw.premium}` : ''].filter(Boolean).join(' ');
 // 🎴 DRAFT: wybór 8 kart z trójek, seria do 3 porażek albo 7 wygranych
@@ -17060,6 +17068,7 @@ async function _kortDraftHtml() {
     return `${intro}</div><div class="card" style="padding:.9rem 1rem;margin-top:.8rem"><div style="font-weight:800;margin-bottom:.5rem">${_g('Wybór', 'Pick')} ${d.deck.length + 1}/8 — ${_g('wybierz jednego', 'choose one')}</div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,150px));gap:.7rem;justify-content:center">${opts.map((n, i) => { const src = _kortSrc(n), info = src ? _kortPickInfo('x', { name: n }) : ''; return `<button onclick="kortDraftPick(${i})" style="padding:0;border:none;background:none;cursor:pointer;font-family:inherit">${_miniCard({ name: n, team: src?.team, tier: src?.tier, rating: src?.rating, body: info })}</button>`; }).join('')}</div>
       ${d.deck.length ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.7rem">${_g('Twoja talia', 'Your deck')}: ${d.deck.map(_h).join(', ')}</div>` : ''}</div>`; }
+  if(_kort?.mode === 'draft' && !_kort.dismissed) return `${intro}</div><div class="card" style="padding:.7rem 1rem;margin-top:.8rem;font-size:.84rem;color:var(--muted)">🎴 ${_g('Mecz draftu jest poniżej — po jego zakończeniu zobaczysz bilans i przycisk następnego meczu.', 'Your draft match is below — when it ends you’ll see the record and the next-match button.')}</div>`;
   return `${intro}</div><div class="card" style="padding:.9rem 1rem;margin-top:.8rem;display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap">
     <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.8rem;line-height:1">${d.w} – ${d.l}</div><div style="font-size:.74rem;color:var(--muted)">${_g('wygrane – porażki (koniec przy 3 porażkach albo 7 wygranych)', 'wins – losses (ends at 3 losses or 7 wins)')}</div>
       <div style="font-size:.74rem;margin-top:.3rem">${d.deck.map(_h).join(' · ')}</div></div>
@@ -17193,7 +17202,7 @@ function _kortEndHtml() {
   return `<div style="text-align:center;padding:.7rem 0"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:${r === 'win' ? 'var(--win)' : r === 'loss' ? 'var(--loss)' : 'var(--accent)'}">${r === 'win' ? (en ? 'VICTORY' : 'WYGRANA') : r === 'loss' ? (en ? 'DEFEAT' : 'PORAŻKA') : (en ? 'DRAW' : 'REMIS')} ${score}</div>
     <div style="font-size:.8rem;color:var(--muted)">${en ? 'Rounds' : 'Rundy'}: ${qs}</div>
     <div id="k-mvp" style="margin:.8rem auto 0;min-height:60px"></div>
-    <button class="btn btn-primary" style="margin-top:.6rem" onclick="kortShare()">📸 ${en ? 'Share result' : 'Udostępnij wynik'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button>${_kort.mode === 'daily' ? ` <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button>` : ''}</div>`;
+    <button class="btn btn-primary" style="margin-top:.6rem" onclick="kortShare()">📸 ${en ? 'Share result' : 'Udostępnij wynik'}</button> ${_kort.mode === 'draft' ? _kortDraftEndHtml() : ''}<button class="btn btn-ghost" style="margin-top:.6rem" onclick="_kort.dismissed=true;renderKort()">↩ ${en ? 'Back' : 'Wróć'}</button>${_kort.mode === 'daily' ? ` <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button>` : ''}</div>`;
 }
 function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0 && !_kort.st.p[0].passed) _kortLiveMove('play', id, row); return; } if(kortPlay(_kort.st, 0, id, row)) { if(_kort.moves) _kort.moves.push({ t: 'p', id, row }); _kort.lastId = id; _kortFxFor(0); _kSfx('play'); _kortDraw(); _kortBot(); } }
 function kortHumanPass() { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0) _kortLiveMove('pass'); return; } if(kortPass(_kort.st, 0)) { if(_kort.moves) _kort.moves.push({ t: 'x' }); _kSfx('pass'); _kortDraw(); _kortBot(); } }
