@@ -2178,6 +2178,7 @@ function _i18nStart() {
 
 
 function setLang(lang) {
+  setTimeout(() => { try { _syncExpLabels(); } catch(e) {} }, 0);
   if(lang !== 'en') lang = 'pl';
   currentLang = lang;
   localStorage.setItem('nba2k_lang', lang);
@@ -2784,7 +2785,8 @@ async function loadData() {
     setTimeout(() => { try { if(EU_MODE) renderEuDash(); else renderDashNews(); renderRecordsTicker(); renderEuBillboard(); } catch(e) { console.warn('dash news', e); } }, 300);
     if(EU_MODE) [1500, 4000].forEach(t => setTimeout(() => { try { _euPlaceholders(); } catch(e) {} }, t)); // puste sekcje widoczne także po przerysowaniu terminarza
     window._discordInviteUrl = record.discordInvite || null;
-    window._signupInfo = record.signup || {}; window._signupLoaded = true;
+    window._signupInfo = record.signup || {}; window._signupLoaded = true; window._leagueLoaded = true;
+    try { if(document.querySelector('.view.active')?.id === 'view-kort') setTimeout(renderKort, 50); } catch(e) {}
     try { if(document.querySelector('.view.active')?.id === 'view-rules') renderRules(); } catch(e) {}
     if(window._discordInviteUrl) document.querySelectorAll('a[href*="discord.gg/"]').forEach(a => { a.href = window._discordInviteUrl; });
     setTimeout(() => { try { renderSideNav(); } catch(e) { console.warn('side nav', e); } }, 50);
@@ -15314,7 +15316,7 @@ async function renderCardsView() {
       ${me?.premium ? `<button class="btn" style="font-size:.95rem;padding:.55rem 1.2rem;margin-left:.4rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none" onclick="cardsOpen(true)">💎 ${_g('Paczka premium', 'Premium pack')} (${me.premium})</button>` : ''}
       ${me && !me.canOpen ? `<div style="font-size:.84rem;margin-top:.45rem">⏳ ${_cdHtml('Nowa paczka za', 'Next pack in')}</div>` : ''}
       <div style="font-size:.78rem;margin-top:.45rem">♻️ ${_g('Bonus: <b>5 duplikatów = 1 dodatkowa paczka</b> (3 karty)', 'Bonus: <b>5 duplicates = 1 extra pack</b> (3 cards)')} · ${_g('masz', 'you have')} <b>${Math.min(dups, 5)}/5</b>${dups >= 5 ? ` — <a href="#" onclick="cardsRecycle();return false" style="color:var(--accent);font-weight:800">${_g('wymień teraz', 'trade them now')}</a>` : ''}</div>
-      <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)}</div>`}
+      <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)} · <a href="#" onclick="openMyPackHistory();return false" style="color:var(--accent)">📜 ${_g('Historia paczek', 'Pack history')}</a></div>`}
       <div id="cards-pack" style="display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:.8rem"></div>
     </div>
     ${discordUser ? `<div class="streak-slot" style="margin-bottom:.8rem">${streakChip()}</div>` : ''}
@@ -15845,8 +15847,28 @@ async function openChallengeLog() {
     <div style="font-weight:800;margin:.8rem 0 .3rem">Dziennik (najnowsze)</div>
     ${r.log.map(e => `<div style="padding:.3rem 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;gap:.5rem"><span><b>${_h(e.name)}</b> · ${_h(e.label)}</span><span style="color:var(--muted);white-space:nowrap">${new Date(e.at).toLocaleString('pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
       <div style="color:var(--muted);font-size:.74rem">Oddał: ${(e.cards || []).map(_h).join(', ')} · nagroda: ${rw(e.reward)} · po przyznaniu: 🎁 ${e.after?.bonus ?? '?'} · 💎 ${e.after?.premium ?? '?'}</div></div>`).join('') || '<div style="color:var(--muted)">Dziennik zbiera wpisy od tej aktualizacji.</div>'}
-    <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">Jeśli ktoś zgłasza brak nagrody: sprawdź, czy jest na liście i ile ma teraz paczek („teraz: 🎁 …”). Paczki z wyzwania dodają się do licznika dodatkowych paczek — otwiera się je przyciskiem „Otwórz paczkę (+N)”. Brakujące możesz dać przez <a href="#" onclick="_fxClose('chlog-modal');openGrantPacks();return false" style="color:var(--accent)">🎁 Daj paczki</a>.</div></div>`;
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">Jeśli ktoś zgłasza brak nagrody: sprawdź, czy jest na liście i ile ma teraz paczek („teraz: 🎁 …”). Paczki z wyzwania dodają się do licznika dodatkowych paczek — otwiera się je przyciskiem „Otwórz paczkę (+N)”. Brakujące możesz dać przez <a href="#" onclick="_fxClose('chlog-modal');openGrantPacks();return false" style="color:var(--accent)">🎁 Daj paczki</a>, a co ktoś dostał i otworzył sprawdzisz w <a href="#" onclick="_fxClose('chlog-modal');openPackAdmin();return false" style="color:var(--accent)">📦 Historii paczek</a>.</div></div>`;
 }
+// 📦 HISTORIA PACZEK — otrzymane (skąd) i otwarte (co wypadło); gracz widzi swoją, admin szuka po osobie
+const _PK = { daily: ['📅', 'dzienna', 'daily'], bonus: ['🎁', 'dodatkowa', 'extra'], premium: ['💎', 'premium', 'premium'] };
+function _packHistHtml(packIn, packLog) {
+  const en = currentLang === 'en', dt = a => new Date(a).toLocaleString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }), k = x => (_PK[x] || ['📦', x, x]);
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem;font-size:.8rem" data-notr>
+    <div><b>📥 ${_g('Otrzymane', 'Received')}</b>${(packIn || []).map(x => `<div style="display:flex;justify-content:space-between;gap:.4rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${k(x.kind)[0]} ×${x.n} <span style="color:var(--muted)">· ${_h(x.src || '')}</span></span><span style="color:var(--muted);white-space:nowrap">${dt(x.at)}</span></div>`).join('') || `<div style="color:var(--muted);margin-top:.3rem">—</div>`}</div>
+    <div><b>📤 ${_g('Otwarte', 'Opened')}</b>${(packLog || []).map(x => `<div style="padding:.25rem 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;gap:.4rem"><span>${k(x.kind)[0]} ${en ? k(x.kind)[2] : k(x.kind)[1]}</span><span style="color:var(--muted);white-space:nowrap">${dt(x.at)}</span></div><div style="color:var(--muted);font-size:.74rem">${(x.cards || []).map(c => `${c.t === 'limited' ? '🌟' : c.t === 'galaxy' ? '🌌' : c.t === 'diamond' ? '💎' : ''}${_h(c.n)}`).join(', ')}</div></div>`).join('') || `<div style="color:var(--muted);margin-top:.3rem">—</div>`}</div></div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.6rem">${_g('Historia zbierana od tej aktualizacji, ostatnie 60 wpisów.', 'History collected since this update, last 60 entries.')}</div>`;
+}
+function openMyPackHistory() { const m = _fxModal('mypacks-modal', 720); m.classList.add('open'); m.querySelector('.modal').innerHTML = _fxHead('mypacks-modal', '📜 ' + _g('Historia paczek', 'Pack history')) + _packHistHtml(_cards?.packIn, _cards?.packLog); }
+function openPackAdmin() {
+  const m = _fxModal('packadm-modal', 820); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('packadm-modal', '📦 Historia paczek') + `<div style="display:flex;gap:.4rem;margin-bottom:.7rem"><input id="pk-q" placeholder="Nick albo Discord ID" style="${_MODAL_INP};margin:0" onkeydown="if(event.key==='Enter')packAdminSearch()"><button class="btn btn-primary" onclick="packAdminSearch()">🔎 Szukaj</button></div><div id="pk-res"></div>`;
+}
+async function packAdminSearch() {
+  const q = document.getElementById('pk-q').value.trim(), box = document.getElementById('pk-res'); if(!q) return; box.innerHTML = '⏳';
+  const r = await _api('/kort/packs?q=' + encodeURIComponent(q), 'GET', null, { admin: true }); if(!r.ok) { box.innerHTML = '❌ ' + _h(r.error || ''); return; }
+  box.innerHTML = r.users.map(u => `<details class="card" style="padding:.6rem .8rem;margin-bottom:.5rem" ${r.users.length === 1 ? 'open' : ''}><summary style="cursor:pointer"><b>${_h(u.name)}</b> <span style="color:var(--muted);font-size:.78rem">· otwarte ${u.opened} · teraz do otwarcia: 🎁 ${u.bonus} · 💎 ${u.premium}</span></summary><div style="margin-top:.5rem">${_packHistHtml(u.packIn, u.packLog)}</div></details>`).join('') || '<div style="color:var(--muted)">Nie znaleziono.</div>';
+}
+
 function openGrantPacks() {
   const m = _fxModal('grant-modal', 520); m.classList.add('open');
   const known = new Map(); (playersList || []).forEach(p => p.id && known.set(p.id, p.name || p.gamertag)); (teamRegistrations || []).forEach(r => r.captain?.id && !known.has(r.captain.id) && known.set(r.captain.id, r.captain.name)); (freeAgents || []).forEach(f => f.discordId && !known.has(f.discordId) && known.set(f.discordId, f.name));
@@ -15991,7 +16013,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
@@ -16630,13 +16652,15 @@ let _kortInfo = null;
 async function renderKort() {
   const el = document.getElementById('kort-wrap'); if(!el) return;
   if(discordUser?.session && !_cards) { try { const r = await _api('/cards/me', 'GET', null, { session: true }); if(r.ok) _cards = r; } catch(e) {} }
-  const deck = _kortMyDeck(), opp = _kortOpponent(deck);
-  if(deck.length < 8 || opp.deck.length < 8) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Gra ruszy, gdy w sezonie zagra co najmniej 16 graczy.', 'The game starts once at least 16 players have played this season.')}</div>`; return; }
+  if(!window._leagueLoaded && !(typeof matches !== 'undefined' && matches.length)) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">⏳ ${_g('Wczytuję dane ligi…', 'Loading league data…')}</div>`; return; } // po wczytaniu danych Kort narysuje się ponownie
   if(_kortTab === 'ranked') { el.innerHTML = _kortTabsHtml() + await _kortRankedHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'boss') { el.innerHTML = _kortTabsHtml() + await _kortBossHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'stats') { _kortLiveStop(); el.innerHTML = _kortTabsHtml() + await _kortStatsHtml(); return; }
   if(_kortTab === 'live') { el.innerHTML = _kortTabsHtml() + await _kortLiveHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  if(_kortTab === 'draft') { el.innerHTML = _kortTabsHtml() + await _kortDraftHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   _kortLiveStop();
+  const deck = _kortMyDeck(), opp = _kortOpponent(deck);
+  if(deck.length < 8 || opp.deck.length < 8) { el.innerHTML = _kortTabsHtml() + `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Mecz dnia ruszy, gdy w sezonie zagra co najmniej 16 graczy. Pozostałe tryby (Draft, Z kolegą) działają już teraz.', 'The match of the day starts once at least 16 players have played this season. Other modes (Draft, With a friend) work already.')}</div>`; return; }
   _kortInfo = await _api('/kort', 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => null);
   const me = _kortInfo?.me, today = me?.today, avg = Math.round(deck.reduce((s, c) => s + c.rating, 0) / 8), loans = deck.filter(c => c.loan).length;
   el.innerHTML = _kortTabsHtml() + `<div data-notr>
@@ -16684,7 +16708,7 @@ function _kortModHtml(compact) { const k = _kortModToday(), m = KORT_MODS[k]; if
   return compact ? `<span class="kc-mod">${m.icon} ${t}</span>` : `<div class="kc-modbar">🎲 ${_g('Modyfikator dnia', 'Modifier of the day')}: <b>${m.icon} ${t}</b> — ${d}<span style="color:var(--muted)"> · ${_g('obowiązuje dziś we wszystkich meczach', 'applies to all matches today')}</span></div>`; }
 function _kortTabsHtml() {
   const t = (k, l) => `<button onclick="_kortTab='${k}';renderKort()" class="btn ${_kortTab === k ? 'btn-primary' : 'btn-ghost'}" style="font-size:.8rem">${l}</button>`;
-  return _kortModHtml() + `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem">${t('daily', '⚔️ ' + _g('Mecz dnia', 'Match of the day'))}${t('ranked', '🏆 ' + _g('Ranking', 'Ranked'))}${t('boss', '👑 ' + _g('Boss tygodnia', 'Weekly boss'))}${t('live', '🤝 ' + _g('Z kolegą', 'With a friend'))}${t('stats', '📈 ' + _g('Statystyki', 'Stats'))}</div>`;
+  return _kortModHtml() + `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem">${t('daily', '⚔️ ' + _g('Mecz dnia', 'Match of the day'))}${t('ranked', '🏆 ' + _g('Ranking', 'Ranked'))}${t('boss', '👑 ' + _g('Boss tygodnia', 'Weekly boss'))}${t('draft', '🎴 Draft')}${t('live', '🤝 ' + _g('Z kolegą', 'With a friend'))}${t('stats', '📈 ' + _g('Statystyki', 'Stats'))}</div>`;
 }
 function _kortOwnDeck() { // talia z samych własnych kart (bez wypożyczonych) — do rankingu
   const saved = (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })().filter(k => _cards?.cards?.[k]?.n > 0);
@@ -16948,6 +16972,50 @@ async function _kortLiveMove(action, id, row) {
   if(action === 'pass') _kSfx('pass'); else { _kort.lastId = id; _kortFxFor(0); _kSfx('play'); } _kortDraw();
 }
 
+// ═══ 🃏 KORT — mecze liczone na serwerze (ranking, boss, draft) + 🎴 DRAFT ═══
+async function kortStartServer(mode, extra = {}) {
+  if(!discordUser?.session) { showToast(_g('Zaloguj się przez Discord', 'Log in with Discord'), 'info'); return; }
+  if(_kort?._starting) return; window._kortStarting = true;
+  const keys = (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })();
+  const r = await _api('/kort/match/start', 'POST', { mode, keys, ...extra }, { session: true }).catch(() => ({})); window._kortStarting = false;
+  if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  const opp = mode === 'ranked' ? { id: _kortOppPick?.id, name: r.oppName, icon: '🏆', div: _kortOppPick?.div } : mode === 'boss' ? { name: _g('Dream Team ligi', 'League Dream Team'), icon: '👑' } : { name: r.oppName, icon: '🎴' };
+  const bc = {}; r.my.forEach(c => (c.badges || []).forEach(b => bc[b.key] = (bc[b.key] || 0) + 1));
+  const games = +localStorage.getItem('kort_games') || 0;
+  _kort = { serverId: r.id, moves: [], deckNames: r.my.map(c => c.name), badgeCounts: bc, st: kortNew(r.my, r.opp, r.seed, r.mod), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
+  _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
+}
+async function _kortServerEnd() { // wynik liczy serwer, odtwarzając mecz z ruchów gracza
+  const r = await _api('/kort/match/end', 'POST', { id: _kort.serverId, moves: _kort.moves }, { session: true }).catch(() => ({}));
+  if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  if(_kort.mode === 'ranked') showToast(`🏆 ${r.delta >= 0 ? '+' : ''}${r.delta} ELO → ${r.elo}${r.promoted ? ' · ' + _g('awans', 'promoted') + ': ' + r.promoted : ''}`, 'success');
+  if(_kort.mode === 'boss' && r.reward) showToast(_g('👑 Boss pokonany! 💎 Paczka premium jest Twoja', '👑 Boss beaten! The 💎 premium pack is yours'), 'success');
+  if(_kort.mode === 'draft' && r.run) { _kortDraftRun = r.run; if(r.run.done) showToast(_g(`🎴 Koniec draftu: ${r.run.w}-${r.run.l}`, `🎴 Draft over: ${r.run.w}-${r.run.l}`) + _kortRewardTxt(r.run.reward), 'success'); }
+}
+const _kortRewardTxt = rw => !rw ? '' : ' · ' + [rw.xp ? `+${rw.xp} XP` : '', rw.bonus ? `🎁×${rw.bonus}` : '', rw.premium ? `💎×${rw.premium}` : ''].filter(Boolean).join(' ');
+// 🎴 DRAFT: wybór 8 kart z trójek, seria do 3 porażek albo 7 wygranych
+let _kortDraftRun = null, _kortDraftInfo = null;
+async function _kortDraftHtml() {
+  if(!discordUser?.session) return `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Zaloguj się, żeby zagrać w drafcie.', 'Log in to play the draft.')}</div>`;
+  _kortDraftInfo = await _api('/kort/draft', 'GET', null, { session: true }).catch(() => ({})); const d = _kortDraftRun = _kortDraftInfo.run, en = currentLang === 'en';
+  const rewards = `<div style="font-size:.78rem;line-height:1.7">${[[0, '+10 XP'], [2, '🎁 ' + _g('paczka', 'pack')], [4, '🎁🎁 ' + _g('2 paczki', '2 packs')], [6, '💎 ' + _g('paczka premium', 'premium pack')], [7, '💎 + 🎁']].map(([t, l]) => `<div>${t}+ ${_g('wygranych', 'wins')} → <b>${l}</b></div>`).join('')}</div>`;
+  const intro = `<div class="card" style="padding:.9rem 1rem;background:linear-gradient(135deg,rgba(56,189,248,.15),rgba(168,85,247,.1))"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:#38bdf8">🎴 DRAFT</div>
+    <div style="font-size:.85rem;line-height:1.55;margin:.3rem 0 .6rem">${_g('Wybierasz 8 kart — za każdym razem <b>1 z 3</b> losowych graczy ligi. Potem grasz serię meczów z rywalami o podobnej sile, <b>aż do 3 porażek albo 7 wygranych</b>. Twoja kolekcja nie ma znaczenia — liczy się wybór i taktyka. Jeden draft dziennie.', 'Pick 8 cards — each time <b>1 of 3</b> random league players. Then play a series against similar-strength opponents <b>until 3 losses or 7 wins</b>. Your collection doesn’t matter — picks and tactics do. One draft a day.')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;align-items:start">${rewards}<div style="font-size:.74rem;color:var(--muted)">🏆 ${_g('Najlepsi w tym tygodniu', 'Best this week')}:<br>${(_kortDraftInfo.best || []).map((x, i) => `${i + 1}. ${_h(x.name)} — <b style="color:var(--text)">${x.w}</b>`).join('<br>') || '—'}</div></div>`;
+  if(!d || d.done) return `${intro}${d?.done ? `<div style="margin-top:.6rem;font-size:.84rem">${_g('Ostatni draft', 'Last draft')}: <b>${d.w}-${d.l}</b>${_kortRewardTxt(d.reward)}</div>` : ''}
+    <div style="margin-top:.7rem">${_kortDraftInfo.canNew ? `<button class="btn btn-primary" onclick="kortDraftNew()">🎴 ${_g('Rozpocznij draft', 'Start a draft')}</button>` : `<span style="font-size:.8rem;color:var(--muted)">${_g('Kolejny draft jutro.', 'Next draft tomorrow.')}</span>`}</div></div>`;
+  if(d.deck.length < 8) { const opts = d.options || [];
+    return `${intro}</div><div class="card" style="padding:.9rem 1rem;margin-top:.8rem"><div style="font-weight:800;margin-bottom:.5rem">${_g('Wybór', 'Pick')} ${d.deck.length + 1}/8 — ${_g('wybierz jednego', 'choose one')}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,150px));gap:.7rem;justify-content:center">${opts.map((n, i) => { const src = _kortSrc(n), info = src ? _kortPickInfo('x', { name: n }) : ''; return `<button onclick="kortDraftPick(${i})" style="padding:0;border:none;background:none;cursor:pointer;font-family:inherit">${_miniCard({ name: n, team: src?.team, tier: src?.tier, rating: src?.rating, body: info })}</button>`; }).join('')}</div>
+      ${d.deck.length ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.7rem">${_g('Twoja talia', 'Your deck')}: ${d.deck.map(_h).join(', ')}</div>` : ''}</div>`; }
+  return `${intro}</div><div class="card" style="padding:.9rem 1rem;margin-top:.8rem;display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap">
+    <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.8rem;line-height:1">${d.w} – ${d.l}</div><div style="font-size:.74rem;color:var(--muted)">${_g('wygrane – porażki (koniec przy 3 porażkach albo 7 wygranych)', 'wins – losses (ends at 3 losses or 7 wins)')}</div>
+      <div style="font-size:.74rem;margin-top:.3rem">${d.deck.map(_h).join(' · ')}</div></div>
+    <button class="btn btn-primary" onclick="kortStartServer('draft')">⚔️ ${_g('Graj mecz', 'Play match')} #${d.games + 1}</button></div>`;
+}
+async function kortDraftNew() { const r = await _api('/kort/draft/new', 'POST', {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; } renderKort(); }
+async function kortDraftPick(i) { const r = await _api('/kort/draft/pick', 'POST', { i }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; } renderKort(); }
+
 function kortDeckPick() {
   openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, extra: _kortPickInfo,
     footer: keys => { const r = keys.map(k => (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(_cards?.cards?.[k]?.name, 'season')?.rating).filter(Boolean); return r.length ? _g('średnia', 'avg') + ' <b>' + Math.round(r.reduce((a, b) => a + b, 0) / r.length) + '</b>' : ''; }, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
@@ -16955,6 +17023,8 @@ function kortDeckPick() {
     onDone: keys => { const names = new Set(); const ok = keys.filter(k => { const n = _normNick(_cards?.cards?.[k]?.name || ''); if(names.has(n)) return false; names.add(n); return true; }); localStorage.setItem('kort_deck', JSON.stringify(ok)); showToast(_g('🃏 Talia zapisana', '🃏 Deck saved'), 'success'); if(ok.length === 8) _kortSaveDeckServer(ok); renderKort(); } });
 }
 function kortStart(mode = 'daily') {
+  if(mode === 'ranked') return kortStartServer('ranked', { opp: _kortOppPick?.id });
+  if(mode === 'boss' || mode === 'draft') return kortStartServer(mode);
   const own = _kortOwnDeck(), deck = mode === 'ranked' && own ? own.map(k => _kortSrc(_cards.cards[k].name, { lim: k.startsWith('lim:'), label: _cards.cards[k].label })).filter(Boolean) : _kortMyDeck();
   let opp;
   if(mode === 'ranked') { const o = _kortOppPick; if(!o) return; opp = { id: o.id, name: o.name, icon: '🏆', div: o.div, deck: o.deck.names.map((n, i) => _kortSrc(n, { lim: !!o.deck.lim?.[i], label: o.deck.lim?.[i] || null })).filter(Boolean) };
@@ -17023,16 +17093,15 @@ function _kortEndHtml() {
   const score = st.p[0].wins + ':' + st.p[1].wins, qs = st.p[0].qScores.map((x, i) => x + ':' + st.p[1].qScores[i]).join(', ');
   if(!_kort.logged) { _kort.logged = true; if(discordUser?.session) _api('/kort/log', 'POST', { mode: _kort.mode, result: r, score, opp: _kort.opp.name, deck: _kort.deckNames, contrib: st.contrib?.[0] || {}, badges: _kort.badgeCounts, first: st.first === 0 }, { session: true }).catch(() => {}); }
   if(!_kort.claimed && _kort.mode !== 'daily') { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1));
-    if(_kort.mode === 'ranked') _api('/kort/ranked', 'POST', { opp: _kort.opp.id, result: r, score }, { session: true }).then(x => { if(x.ok) showToast(`🏆 ${x.delta >= 0 ? '+' : ''}${x.delta} ELO → ${x.elo}${x.promoted ? ' · ' + _g('awans', 'promoted') + ': ' + x.promoted : ''}`, 'success'); else showToast('❌ ' + _tr(x.error || ''), 'error'); });
-    if(_kort.mode === 'boss') _api('/kort/boss', 'POST', { result: r, score }, { session: true }).then(x => { if(x.ok && x.reward) showToast(_g('👑 Boss pokonany! 💎 Paczka premium jest Twoja', '👑 Boss beaten! The 💎 premium pack is yours'), 'success'); }); }
+    if(_kort.serverId) _kortServerEnd(); }
   if(!_kort.claimed) { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1)); if(discordUser?.session && !_kortInfo?.me?.today) _api('/kort', 'POST', { result: r, opp: _kort.opp.name, score }, { session: true }).then(x => { if(x.ok && !x.already) { const k = (x.me?.weekWins || 0) % 3; showToast(x.pack ? _g(`🏆 Wygrana! +${x.xp} XP i 🎁 paczka za 3 wygrane w tygodniu!`, `🏆 Victory! +${x.xp} XP and a 🎁 pack for 3 wins this week!`) : r === 'win' ? _g(`🏆 Wygrana! +${x.xp} XP · do paczki: ${k}/3`, `🏆 Victory! +${x.xp} XP · towards a pack: ${k}/3`) : _g(`+${x.xp} XP`, `+${x.xp} XP`), 'success'); if(x.pack) window._cardsCanOpen = true; if(_kortInfo?.me && x.me) Object.assign(_kortInfo.me, x.me); } }).catch(() => {}); }
   return `<div style="text-align:center;padding:.7rem 0"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:${r === 'win' ? 'var(--win)' : r === 'loss' ? 'var(--loss)' : 'var(--accent)'}">${r === 'win' ? (en ? 'VICTORY' : 'WYGRANA') : r === 'loss' ? (en ? 'DEFEAT' : 'PORAŻKA') : (en ? 'DRAW' : 'REMIS')} ${score}</div>
     <div style="font-size:.8rem;color:var(--muted)">${en ? 'Rounds' : 'Rundy'}: ${qs}</div>
     <div id="k-mvp" style="margin:.8rem auto 0;min-height:60px"></div>
     <button class="btn btn-primary" style="margin-top:.6rem" onclick="kortShare()">📸 ${en ? 'Share result' : 'Udostępnij wynik'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button>${_kort.mode === 'daily' ? ` <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button>` : ''}</div>`;
 }
-function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0 && !_kort.st.p[0].passed) _kortLiveMove('play', id, row); return; } if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kortFxFor(0); _kSfx('play'); _kortDraw(); _kortBot(); } }
-function kortHumanPass() { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0) _kortLiveMove('pass'); return; } if(kortPass(_kort.st, 0)) { _kSfx('pass'); _kortDraw(); _kortBot(); } }
+function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0 && !_kort.st.p[0].passed) _kortLiveMove('play', id, row); return; } if(kortPlay(_kort.st, 0, id, row)) { if(_kort.moves) _kort.moves.push({ t: 'p', id, row }); _kort.lastId = id; _kortFxFor(0); _kSfx('play'); _kortDraw(); _kortBot(); } }
+function kortHumanPass() { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0) _kortLiveMove('pass'); return; } if(kortPass(_kort.st, 0)) { if(_kort.moves) _kort.moves.push({ t: 'x' }); _kSfx('pass'); _kortDraw(); _kortBot(); } }
 function _kortBot() {
   if(_kort?.mode === 'live') { _kortDraw(); return; }
   const st = _kort?.st; if(!st || st.over || st.turn !== 1) { _kortDraw(); return; }
@@ -17152,7 +17221,9 @@ function teamRegUpdateCount() {
 }
 
 const _EXP_PL = { beginner:'🌱 Początkujący', intermediate:'⚡ Średnio-zaawansowany', advanced:'🔥 Zaawansowany', pro:'👑 Pro / Weteran' }, _EXP_EN = { beginner:'🌱 Beginner', intermediate:'⚡ Intermediate', advanced:'🔥 Advanced', pro:'👑 Pro / Veteran' };
-const _expLabels = new Proxy({}, { get: (_, k) => (currentLang === 'en' ? _EXP_EN : _EXP_PL)[k], ownKeys: () => Object.keys(_EXP_PL), getOwnPropertyDescriptor: (_, k) => k in _EXP_PL ? { enumerable: true, configurable: true, value: (currentLang === 'en' ? _EXP_EN : _EXP_PL)[k] } : undefined }); // etykiety poziomu w języku strony
+const _expLabels = {}; // etykiety poziomu w języku strony (zwykły obiekt — działa w każdej przeglądarce)
+function _syncExpLabels() { Object.assign(_expLabels, currentLang === 'en' ? _EXP_EN : _EXP_PL); }
+_syncExpLabels();
 function _faLevel(x) { return _expLabels[x] || (typeof TEAM_LEVELS !== 'undefined' && TEAM_LEVELS.includes(x) ? '📶 ' + x : ''); } // poziom FA: PL (początkujący…) albo EU (Tryhard D1…)
 
 async function submitTeamRegistration() {
@@ -19140,9 +19211,14 @@ function openEventMatchDetail(eventId, matchIdx) {
   document.getElementById('match-modal').classList.add('open');
 }
 
+// data i godzina eventu po angielsku (godzina z pola „time” albo z daty)
+function _notifyDateStr(ev) {
+  if(!ev?.date) return '—'; const d = new Date(String(ev.date).slice(0, 10) + 'T12:00:00'), t = ev.time || (/T(\d{2}:\d{2})/.exec(String(ev.date)) || [])[1] || '';
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (t ? ', ' + t + ' (CET)' : '');
+}
 // domyślna wiadomość DM o evencie — po angielsku (serwer jest wspólny dla lig PL i EU)
 function _notifyDefaultMsg(ev) {
-  const d = ev.date ? new Date(ev.date) : null, dateStr = d ? d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (/T\d/.test(String(ev.date)) ? ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '') : '—';
+  const dateStr = _notifyDateStr(ev);
   return `🏀 **${ev.title}**\n\n📅 Date: **${dateStr}**\n${ev.description ? '📝 ' + ev.description + '\n' : ''}\nSign-ups are open — join us!\n🔗 ${location.origin}/#event/${ev.id}`;
 }
 function openNotifyModal(eventId) {
@@ -19168,7 +19244,7 @@ async function sendDraftNotification() {
   const ev = events.find(e => e.id === eventId);
   if(!ev || !workerUrl) return;
   const custom = document.getElementById('notify-custom-msg').value.trim();
-  const defaultMsg = _notifyDefaultMsg(ev);
+  const defaultMsg = _notifyDefaultMsg(ev), dateStr = _notifyDateStr(ev);
   const message = custom || defaultMsg;
 
   document.getElementById('notify-draft-modal').classList.remove('open');
