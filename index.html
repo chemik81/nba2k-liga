@@ -15319,7 +15319,7 @@ async function renderCardsView() {
       ${me?.premium ? `<button class="btn" style="font-size:.95rem;padding:.55rem 1.2rem;margin-left:.4rem;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;border:none" onclick="cardsOpen(true)">💎 ${_g('Paczka premium', 'Premium pack')} (${me.premium})</button>` : ''}
       ${me && !me.canOpen ? `<div style="font-size:.84rem;margin-top:.45rem">⏳ ${_cdHtml('Nowa paczka za', 'Next pack in')}</div>` : ''}
       <div style="font-size:.78rem;margin-top:.45rem">♻️ ${_g('Bonus: <b>5 duplikatów = 1 dodatkowa paczka</b> (3 karty)', 'Bonus: <b>5 duplicates = 1 extra pack</b> (3 cards)')} · ${_g('masz', 'you have')} <b>${Math.min(dups, 5)}/5</b>${dups >= 5 ? ` — <a href="#" onclick="cardsRecycle();return false" style="color:var(--accent);font-weight:800">${_g('wymień teraz', 'trade them now')}</a>` : ''}</div>
-      <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)} · <a href="#" onclick="openMyPackHistory();return false" style="color:var(--accent)">📜 ${_g('Historia paczek', 'Pack history')}</a></div>`}
+      <div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">${_g(`Masz ${uniq} z ${pool.length} kart · duplikaty: ${dups}`, `You have ${uniq} of ${pool.length} cards · duplicates: ${dups}`)} · <a href="#" onclick="openMyPackHistory();return false" style="color:var(--accent)">📜 ${_g('Historia paczek', 'Pack history')}</a>${_coachOwned().length ? `<div style="margin-top:.35rem">🧑‍🏫 ${_g('Karty trenerskie', 'Coach cards')}: ${_coachOwned().map(x => `<span title="${_h(_coachDesc(x.t))}" style="background:rgba(168,85,247,.18);border:1px solid #a855f7;border-radius:6px;padding:.05rem .4rem;margin-right:.25rem;color:var(--text)">${_coachName(x.t)} ×${x.n}</span>`).join('')} <span style="font-size:.7rem">(${_g('do użycia w Korcie', 'use them in Kort')})</span></div>` : ''}</div>`}
       <div id="cards-pack" style="display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:.8rem"></div>
     </div>
     ${discordUser ? `<div class="streak-slot" style="margin-bottom:.8rem">${streakChip()}</div>` : ''}
@@ -15350,7 +15350,8 @@ async function _dailyRefresh() {
   try { updateMyPanelBadge(); if(document.getElementById('view-mypanel')?.classList.contains('active')) renderMyPanelView(); } catch(e) {}
 }
 async function cardsOpen(premium) {
-  const r = await _api('/cards/open', 'POST', premium ? { premium: true } : {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
+  const r = await _api('/cards/open', 'POST', premium ? { premium: true } : {}, { session: true });
+  if(r?.coach && KORT_COACH[r.coach]) setTimeout(() => showToast(`🧑‍🏫 ${_g('Bonus w paczce: karta trenerska', 'Pack bonus: coach card')} — ${_coachName(r.coach)}!`, 'success'), 2600); if(!r.ok) { showToast('❌ ' + _tr(r.error), 'error'); return; }
   setTimeout(() => _setRewardToast(r.setRewards), 3500);
   const box = document.getElementById('cards-pack'); box.innerHTML = r.pack.map((c, i) => `<div id="cp-${i}" style="width:180px;height:225px;perspective:800px"><div style="width:100%;height:100%;border-radius:12px;background:linear-gradient(135deg,#1a1f2e,#0b0e14);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.5rem;animation:cpShake .6s ${i * .15}s">🃏</div></div>`).join('');
   _dnSound();
@@ -15572,6 +15573,7 @@ function _miniCard({ name, team, tier, rating, lim, label, size = 'm', body = ''
 }
 
 function openCardPicker({ title, hint, max, exact, filter, preselect, onDone, extra, footer }) {
+  const _f0 = filter; filter = c => !c?.coach && c?.tier !== 'coach' && (!_f0 || _f0(c)); // karty trenerskie nie są graczami
   const tierNow = (k, c) => k.startsWith('lim:') ? 'limited' : ((_cards?.pool || []).find(p => p.k === k)?.tier || c.tier); // aktualny poziom karty gracza
   const own = Object.entries(_cards?.cards || {}).map(([k, c]) => [k, { ...c, tier: tierNow(k, c) }]).filter(([, c]) => c.n > 0 && (!filter || filter(c)));
   const sel = new Set((preselect || []).filter(k => own.some(([kk]) => kk === k)));
@@ -16526,13 +16528,31 @@ function kortCard(src, i, CFG) { // src: {name, team, tier:'galaxy'|…, lim, fo
     pw, badges: (src.badges || []).map(b => ({ key: b.key, b: b.l >= 3 ? 2 : 1 })), mod: 0, immune: !!src.lim || (src.badges || []).some(b => b.key === 'iron') };
 }
 function kortRng(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
-function kortNew(deckA, deckB, seed, mod) {
+// 🧑‍🏫 karty trenerskie: jednorazowe akcje (najwyżej 1 w talii), darmowe — po użyciu grasz dalej w tej samej turze
+const KORT_COACH = { timeout: { icon: '⏸️', pl: 'Czas na żądanie', en: 'Timeout', dpl: 'w 2. rundzie: zamień najsłabszą kartę z ręki na wierzchnią z talii (albo najlepszą z 1. rundy), jeśli jest lepsza', den: 'in round 2: swap your weakest card for the top of your deck (or your best from round 1) if it is better', row: false },
+  press: { icon: '🔒', pl: 'Pressing', en: 'Full-court press', dpl: 'suma wybranego rzędu rywala −2 w 1. rundzie albo −1 w 2. rundzie', den: 'opponent’s chosen row total −2 in round 1 or −1 in round 2', row: true },
+  hot: { icon: '🔥', pl: 'Gorąca ręka', en: 'Heat check', dpl: 'suma Twojego wybranego rzędu +2 w 1. rundzie albo +1 w 2. rundzie', den: 'your chosen row total +2 in round 1 or +1 in round 2', row: true } };
+function kortCoach(st, side, row) {
+  const me = st.p[side], t = me.coach; if(st.over || st.turn !== side || me.passed || !t || me.coachUsed || st.q > (st.cfg?.coachRounds || 2)) return false; // tylko w 1. i 2. rundzie
+  const opp = 1 - side, ev = [];
+  if(t === 'timeout') { if(st.q !== 2 || !me.hand.length) return false; const pw = x => Math.max(...KORT_ROWS.map(r => x.pw[r]));
+    let got = null; if(me.deck.length) got = me.deck.shift(); else { const D = me.discard || []; if(!D.length) return false; got = D.reduce((b, x) => pw(x) > pw(b) ? x : b, D[0]); D.splice(D.indexOf(got), 1); got.mod = 0; }
+    const w = me.hand.reduce((b, x) => pw(x) < pw(b) ? x : b, me.hand[0]); if(pw(got) <= pw(w)) { if(me.deck.length || !me.discard?.includes(got)) { if(!(me.discard || []).includes(got)) me.deck.unshift(got); else me.discard.push(got); } return false; } // tylko gdy dobrana karta jest lepsza
+    me.hand.push(got); me.hand.splice(me.hand.indexOf(w), 1); (me.discard = me.discard || []).push(w); ev.push(`${got.name} ↔ ${w.name}`); }
+  else { if(!KORT_ROWS.includes(row)) return false;
+    const pts = st.q === 1 ? 2 : 1; // 1. runda: 2 pkt, 2. runda: 1 pkt
+    if(t === 'press') { if(!st.p[opp].board[row].length) return false; const a = st.p[opp].adj = st.p[opp].adj || {}; a[row] = (a[row] || 0) - pts; ev.push('−' + pts); }
+    if(t === 'hot') { if(!me.board[row].length) return false; const a = me.adj = me.adj || {}; a[row] = (a[row] || 0) + pts; ev.push('+' + pts); } }
+  me.coachUsed = true; st.log.push({ side, coach: t, row: row || null, ev }); return true; // darmowa akcja — gracz gra dalej w tej samej turze
+}
+function kortNew(deckA, deckB, seed, mod, coachA, coachB) {
   const C = kortCfg(mod);
   const rnd = kortRng(seed), shuffle = L => { const a = L.slice(); for(let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const side = (deck, k) => { const d = shuffle(deck.map((c, i) => kortCard(c, k * 100 + i, C))); return { hand: d.slice(0, C.hand), deck: d.slice(C.hand), board: { atk: [], roz: [], obr: [] }, passed: false, wins: 0, qScores: [] }; };
   const first = rnd() < .5 ? 0 : 1, P = [side(deckA, 0), side(deckB, 1)];
   for(let k = 0; k < C.firstBonus && P[first].deck.length; k++) P[first].hand.push(P[first].deck.shift()); // zaczynający dostaje dodatkową kartę (jak „moneta”)
   const tactics = [0, 1, 2].map(() => { const r = KORT_ROWS[Math.floor(rnd() * 3)]; return C.forceTactic || r; }); // taktyka każdej rundy: rząd liczony podwójnie
+  if(KORT_COACH[coachA]) P[0].coach = coachA; if(KORT_COACH[coachB]) P[1].coach = coachB;
   return { p: P, q: 1, turn: first, first, tactics, log: [], over: false, result: null, seed, mod: mod || null, cfg: C };
 }
 const _bv = (c, k) => (c.badges.find(b => b.key === k) || {}).b || 0;
@@ -16549,7 +16569,8 @@ function kortValue(st, side, row, c) { // aktualna siła karty na planszy
   if(all.some(o => o !== c && o.team && o.team === c.team)) v += C.chem;
   return Math.max(0, Math.round(v));
 }
-function kortRowSum(st, side, r) { const sum = st.p[side].board[r].reduce((t, c) => t + kortValue(st, side, r, c), 0); return st.tactics && st.tactics[st.q - 1] === r ? Math.round(sum * (st.cfg || KORT_CFG).tacticMult) : sum; }
+function kortRowSum(st, side, r) { const sum = st.p[side].board[r].reduce((t, c) => t + kortValue(st, side, r, c), 0), adj = st.p[side].adj?.[r] || 0; // adj: karty trenerskie (stałe punkty, bez mnożnika)
+  return Math.max(0, (st.tactics && st.tactics[st.q - 1] === r ? Math.round(sum * (st.cfg || KORT_CFG).tacticMult) : sum) + adj); }
 function kortTotal(st, side) { return KORT_ROWS.reduce((s, r) => s + kortRowSum(st, side, r), 0); }
 function _kortStrongest(st, side, rowFilter) { let best = null; KORT_ROWS.filter(r => !rowFilter || r === rowFilter).forEach(r => st.p[side].board[r].forEach(c => { if(c.immune) return; const v = kortValue(st, side, r, c); if(!best || v > best.v) best = { c, v, r }; })); return best; }
 function kortPlay(st, side, cardId, row) {
@@ -16577,7 +16598,7 @@ function _kortEndQuarter(st) {
   const w0 = st.p[0].wins, w1 = st.p[1].wins;
   if(w0 >= 2 || w1 >= 2 || st.q >= 3) { st.over = true; st.result = w0 > w1 ? 0 : w1 > w0 ? 1 : 'draw'; return; }
   const loser = a < b ? 0 : b < a ? 1 : st.turn;
-  st.q++; st.p.forEach(p => { p.board = { atk: [], roz: [], obr: [] }; p.passed = false; for(let k = 0; k < (st.cfg || KORT_CFG).drawAfter && p.deck.length; k++) p.hand.push(p.deck.shift()); if(!p.hand.length) p.passed = true; });
+  st.q++; st.p.forEach(p => { p.discard = (p.discard || []).concat(KORT_ROWS.flatMap(r => p.board[r])); p.adj = {}; p.board = { atk: [], roz: [], obr: [] }; p.passed = false; for(let k = 0; k < (st.cfg || KORT_CFG).drawAfter && p.deck.length; k++) p.hand.push(p.deck.shift()); if(!p.hand.length) p.passed = true; });
   st.turn = loser; if(st.p[st.turn].passed) st.turn = 1 - st.turn;
   if(st.p[0].passed && st.p[1].passed) _kortEndQuarter(st);
 }
@@ -16585,10 +16606,15 @@ function _kortClone(st) { return JSON.parse(JSON.stringify(st)); }
 function kortBotMove(st, side) { // prosta, „ludzka” sztuczna inteligencja trenera
   const me = st.p[side], opp = st.p[1 - side], my = kortTotal(st, side), th = kortTotal(st, 1 - side);
   const decisive = me.wins === 1 || st.q === 3, oppDecisive = opp.wins === 1;
-  if(!me.hand.length) return { pass: true };
+  const coachOk = me.coach && !me.coachUsed;
+  if(!me.hand.length && !coachOk) return { pass: true };
   const moves = []; me.hand.forEach(c => KORT_ROWS.forEach(r => { const s = _kortClone(st); s.turn = side; s.p[side].passed = false; kortPlay(s, side, c.id, r); const save = st.q < 3 && c.badges.some(b => b.key === 'winner' || b.key === 'iron') ? 2.5 : 0; // karty na 3. kwartę bot zostawia na później
     moves.push({ id: c.id, row: r, gain: kortTotal(s, side) - kortTotal(s, 1 - side) - (my - th) - save, raw: Math.max(...KORT_ROWS.map(x => c.pw[x])) }); }));
+  if(me.coach && !me.coachUsed) { const t = me.coach; // karta trenerska: używana, gdy daje realny zysk (wcześniej zachowywana na później)
+    if(t === 'timeout') { const s2 = _kortClone(st); s2.turn = side; s2.p[side].passed = false; if(kortCoach(s2, side, null)) return { coach: true, row: null }; } // tylko gdy zamiana się powiedzie
+    else KORT_ROWS.forEach(r => { const s2 = _kortClone(st); s2.turn = side; s2.p[side].passed = false; if(kortCoach(s2, side, r)) { const g = kortTotal(s2, side) - kortTotal(s2, 1 - side) - (my - th); if(g >= 1 && (st.q === 2 || decisive || g >= 2)) moves.push({ coach: true, row: r, gain: 100 + g, raw: 0 }); } }); } // wyczucie: 2. pkt w 1. rundzie albo 2. runda / decydujący moment // darmowa akcja: jeśli warto — najpierw ona
   moves.sort((a, b) => b.gain - a.gain || a.raw - b.raw);
+  if(!me.hand.length) return moves[0] || { pass: true };
   if(opp.passed) {
     if(my > th) return { pass: true };
     const win = moves.filter(m => my - th + m.gain > 0).sort((a, b) => a.raw - b.raw || b.gain - a.gain)[0];
@@ -16657,8 +16683,9 @@ async function renderKort() {
   const el = document.getElementById('kort-wrap'); if(!el) return;
   if(discordUser?.session && !_cards) { try { const r = await _api('/cards/me', 'GET', null, { session: true }); if(r.ok) _cards = r; } catch(e) {} }
   if(!window._leagueLoaded && !(typeof matches !== 'undefined' && matches.length)) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">⏳ ${_g('Wczytuję dane ligi…', 'Loading league data…')}</div>`; return; } // po wczytaniu danych Kort narysuje się ponownie
-  if(_kortTab === 'ranked') { el.innerHTML = _kortTabsHtml() + await _kortRankedHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
-  if(_kortTab === 'boss') { el.innerHTML = _kortTabsHtml() + await _kortBossHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  const qh = await _kortQuestsHtml();
+  if(_kortTab === 'ranked') { el.innerHTML = qh + _kortTabsHtml() + _kortTopHtml() + await _kortRankedHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  if(_kortTab === 'boss') { el.innerHTML = qh + _kortTabsHtml() + _kortTopHtml() + await _kortBossHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'stats') { _kortLiveStop(); el.innerHTML = _kortTabsHtml() + await _kortStatsHtml(); return; }
   if(_kortTab === 'live') { el.innerHTML = _kortTabsHtml() + await _kortLiveHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'draft') { el.innerHTML = _kortTabsHtml() + await _kortDraftHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
@@ -16667,7 +16694,7 @@ async function renderKort() {
   if(deck.length < 8 || opp.deck.length < 8) { el.innerHTML = _kortTabsHtml() + `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Mecz dnia ruszy, gdy w sezonie zagra co najmniej 16 graczy. Pozostałe tryby (Draft, Z kolegą) działają już teraz.', 'The match of the day starts once at least 16 players have played this season. Other modes (Draft, With a friend) work already.')}</div>`; return; }
   _kortInfo = await _api('/kort', 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => null);
   const me = _kortInfo?.me, today = me?.today, avg = Math.round(deck.reduce((s, c) => s + c.rating, 0) / 8), loans = deck.filter(c => c.loan).length;
-  el.innerHTML = _kortTabsHtml() + `<div data-notr>
+  el.innerHTML = qh + _kortTabsHtml() + _kortTopHtml() + `<div data-notr>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem;margin-bottom:1rem">
       <div class="card" style="padding:.9rem 1rem;background:linear-gradient(135deg,rgba(245,197,24,.12),rgba(239,68,68,.08))">
         <div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent)">⚔️ ${_g('MECZ DNIA', 'MATCH OF THE DAY')}</div>
@@ -16710,6 +16737,7 @@ const _kDiv = d => { const x = _KDIV[d] || _KDIV.bronze; return `<span style="co
 function _kortModToday() { return kortModOfDay(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' })); }
 function _kortModHtml(compact) { const k = _kortModToday(), m = KORT_MODS[k]; if(!m) return ''; const [t, d] = currentLang === 'en' ? m.en : m.pl;
   return compact ? `<span class="kc-mod">${m.icon} ${t}</span>` : `<div class="kc-modbar">🎲 ${_g('Modyfikator dnia', 'Modifier of the day')}: <b>${m.icon} ${t}</b> — ${d}<span style="color:var(--muted)"> · ${_g('obowiązuje dziś we wszystkich meczach', 'applies to all matches today')}</span></div>`; }
+function _kortTopHtml() { return (_kortTab === 'daily' || _kortTab === 'ranked' || _kortTab === 'boss') ? _coachPickerHtml() : ''; }
 function _kortTabsHtml() {
   const t = (k, l) => `<button onclick="_kortTab='${k}';renderKort()" class="btn ${_kortTab === k ? 'btn-primary' : 'btn-ghost'}" style="font-size:.8rem">${l}</button>`;
   return _kortModHtml() + `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem">${t('daily', '⚔️ ' + _g('Mecz dnia', 'Match of the day'))}${t('ranked', '🏆 ' + _g('Ranking', 'Ranked'))}${t('boss', '👑 ' + _g('Boss tygodnia', 'Weekly boss'))}${t('draft', '🎴 Draft')}${t('live', '🤝 ' + _g('Z kolegą', 'With a friend'))}${t('stats', '📈 ' + _g('Statystyki', 'Stats'))}</div>`;
@@ -16796,6 +16824,7 @@ function _kortTip() {
   const m = kortBotMove(st, 0), tac = st.tactics[st.q - 1], my = kortTotal(st, 0), th = kortTotal(st, 1), first = st.log.filter(l => l.side === 0).length === 0;
   let t = first ? _g('Wygrywa ten, kto pierwszy wygra <b>2 rundy</b>. W rundzie na zmianę dokładacie karty — liczy się suma. ', 'First to win <b>2 rounds</b> wins. You take turns adding cards — the total counts. ') : '';
   if(m.pass) { t += st.p[1].passed ? _g(`Prowadzisz ${my}:${th}, a bot spasował — <b>spasuj</b>, runda jest Twoja i oszczędzasz karty.`, `You lead ${my}:${th} and the bot passed — <b>pass</b>: the round is yours and you save cards.`) : _g(`Prowadzisz wyraźnie (${my}:${th}) — <b>spasuj</b> i zachowaj karty na kolejne rundy.`, `You’re well ahead (${my}:${th}) — <b>pass</b> and keep cards for later rounds.`); return { t, pass: true }; }
+  if(m.coach) return { t: t + _g(`Użyj karty trenerskiej <b>${_coachName(st.p[0].coach)}</b>${m.row ? ' na rzędzie <b>' + _KR[m.row][0] + ' ' + _KR[m.row][1] + '</b>' : ''} — to darmowa akcja, potem grasz dalej.`, `Use your coach card <b>${_coachName(st.p[0].coach)}</b>${m.row ? ' on <b>' + _KR[m.row][0] + ' ' + _KR[m.row][2] + '</b>' : ''} — it’s a free action, then keep playing.`) };
   const c = st.p[0].hand.find(x => x.id === m.id), why = m.row === tac ? _g('ten rząd liczy się <b>×2</b> w tej rundzie', 'this row counts <b>×2</b> this round') : c?.badges?.length ? _g('jego odznaka działa w tym rzędzie', 'its badge works in this row') : _g('to jego najmocniejszy rząd', 'it’s its strongest row');
   t += st.p[1].passed ? _g(`Bot spasował (${th}) — wystarczy go przebić. `, `The bot passed (${th}) — you just need to beat it. `) : '';
   t += _g(`Połóż <b>${_h(c?.name || '')}</b> w rzędzie <b>${_KR[m.row][0]} ${_KR[m.row][1]}</b> — ${why}.`, `Play <b>${_h(c?.name || '')}</b> in <b>${_KR[m.row][0]} ${_KR[m.row][2]}</b> — ${why}.`);
@@ -16808,6 +16837,7 @@ const _kbName = k => (_KC_BADGE_NAME[k] || [k, k])[currentLang === 'en' ? 1 : 0]
 function _kortComment(l, i) {
   const en = currentLang === 'en', who = l.side ? '🤖' : '🧑', pick = L => L[(i + (l.card || '').length) % L.length];
   if(l.quarter) { const [a, b] = l.score; return a > b ? (en ? `🏁 Round ${l.quarter} is yours ${a}:${b}!` : `🏁 Runda ${l.quarter} dla Ciebie ${a}:${b}!`) : a < b ? (en ? `🏁 The bot takes round ${l.quarter} ${a}:${b}` : `🏁 Runda ${l.quarter} dla bota ${a}:${b}`) : (en ? `🏁 Round ${l.quarter} tied ${a}:${b}` : `🏁 Runda ${l.quarter} na remis ${a}:${b}`); }
+  if(l.coach) return `${who} 🧑‍🏫 <b>${_coachName(l.coach)}</b>${l.row ? ' → ' + _KR[l.row][0] : ''} ${(l.ev || []).map(_h).join(' ')}`;
   if(l.pass) return `${who} ${pick(en ? ['passes — saving cards', 'calls a timeout and passes', 'sits back and passes'] : ['pasuje — oszczędza karty', 'bierze czas i pasuje', 'cofa się i pasuje'])}`;
   const n = `<b>${_h(l.card)}</b>`, row = { atk: en ? [`${n} drains a three!`, `${n} attacks the rim!`, `${n} with a tough fadeaway!`] : [`${n} trafia za trzy!`, `${n} wjeżdża pod kosz!`, `${n} rzuca z odchylenia — jest!`],
     roz: en ? [`${n} finds the open man`, `${n} runs the pick and roll`, `${n} controls the tempo`] : [`${n} znajduje wolnego kolegę`, `${n} rozgrywa pick and roll`, `${n} dyktuje tempo`],
@@ -16987,12 +17017,12 @@ async function kortStartServer(mode, extra = {}) {
   if(!discordUser?.session) { showToast(_g('Zaloguj się przez Discord', 'Log in with Discord'), 'info'); return; }
   if(_kort?._starting) return; window._kortStarting = true;
   const keys = (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })();
-  const r = await _api('/kort/match/start', 'POST', { mode, keys, ...extra }, { session: true }).catch(() => ({})); window._kortStarting = false;
+  const r = await _api('/kort/match/start', 'POST', { mode, keys, coach: _coachSel(), ...extra }, { session: true }).catch(() => ({})); window._kortStarting = false;
   if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
   const opp = mode === 'ranked' ? { id: _kortOppPick?.id, name: r.oppName, icon: '🏆', div: _kortOppPick?.div } : mode === 'boss' ? { name: _g('Dream Team ligi', 'League Dream Team'), icon: '👑' } : { name: r.oppName, icon: '🎴' };
   const bc = {}; r.my.forEach(c => (c.badges || []).forEach(b => bc[b.key] = (bc[b.key] || 0) + 1));
   const games = +localStorage.getItem('kort_games') || 0;
-  _kort = { serverId: r.id, moves: [], deckNames: r.my.map(c => c.name), badgeCounts: bc, st: kortNew(r.my, r.opp, r.seed, r.mod), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
+  _kort = { serverId: r.id, moves: [], deckNames: r.my.map(c => c.name), badgeCounts: bc, deckSrc: r.my, st: kortNew(r.my, r.opp, r.seed, r.mod, r.myCoach || null, r.oppCoach || null), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
   _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
 }
 async function _kortServerEnd() { // wynik liczy serwer, odtwarzając mecz z ruchów gracza
@@ -17026,6 +17056,49 @@ async function _kortDraftHtml() {
 async function kortDraftNew() { const r = await _api('/kort/draft/new', 'POST', {}, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; } renderKort(); }
 async function kortDraftPick(i) { const r = await _api('/kort/draft/pick', 'POST', { i }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; } renderKort(); }
 
+// ═══ 🧑‍🏫 KARTY TRENERSKIE (kolekcja, wybór przed meczem, użycie na boisku) + 🎯 WYZWANIA KORTU ═══
+const _coachName = t => { const c = KORT_COACH[t]; return c ? `${c.icon} ${currentLang === 'en' ? c.en : c.pl}` : ''; };
+const _coachDesc = t => { const c = KORT_COACH[t]; return c ? (currentLang === 'en' ? c.den : c.dpl) : ''; };
+function _coachOwned() { return Object.entries(_cards?.cards || {}).filter(([k, c]) => k.startsWith('coach:') && c.n > 0).map(([k, c]) => ({ t: k.slice(6), n: c.n })).filter(x => KORT_COACH[x.t]); }
+function _coachSel() { const t = localStorage.getItem('kort_coach') || ''; return _coachOwned().some(x => x.t === t) ? t : null; }
+function _coachPickerHtml() {
+  const own = _coachOwned(); if(!discordUser) return '';
+  return `<div class="card" style="padding:.7rem .9rem;margin-bottom:.8rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap" data-notr>
+    <b style="font-size:.84rem">🧑‍🏫 ${_g('Karta trenerska', 'Coach card')}:</b>
+    ${own.length ? `<select onchange="localStorage.setItem('kort_coach', this.value); _kortCoachSync(); renderKort()" style="font-size:.8rem;padding:.25rem .4rem;border-radius:7px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"><option value="">${_g('— bez karty —', '— none —')}</option>${own.map(x => `<option value="${x.t}" ${_coachSel() === x.t ? 'selected' : ''}>${_coachName(x.t)} ×${x.n}</option>`).join('')}</select>
+      <span style="font-size:.74rem;color:var(--muted);flex:1;min-width:200px">${_coachSel() ? _coachDesc(_coachSel()) + ' · ' + _g('darmowa akcja, raz na mecz', 'free action, once per match') : _g('Wybierz kartę, by użyć jej w meczu (jedna na mecz, darmowa akcja).', 'Pick a card to use in a match (one per match, free action).')}</span>`
+      : `<span style="font-size:.76rem;color:var(--muted)">${_g('Nie masz jeszcze kart trenerskich — wypadają rzadko z paczek (z premium częściej).', 'No coach cards yet — they drop rarely from packs (more often from premium).')}</span>`}</div>`;
+}
+async function _kortCoachSync() { const keys = _kortOwnDeck(); if(keys && discordUser?.session) await _api('/kort/deck', 'POST', { keys, coach: _coachSel() }, { session: true }).catch(() => {}); } // ranking: karta trenerska w talii na serwerze
+function _coachBenchHtml(st) { // kafelek karty trenerskiej na ławce (darmowa akcja)
+  const me = st.p[0], t = me.coach; if(!t) return '';
+  const c = KORT_COACH[t], en = currentLang === 'en', can = !st.over && st.turn === 0 && !me.passed && !_kortBusy && !me.coachUsed && st.q <= 2;
+  const btn = (row, label) => { const ok = can && (() => { const s2 = JSON.parse(JSON.stringify(st)); return kortCoach(s2, 0, row); })(); return `<button ${ok ? '' : 'disabled'} onclick="kortHumanCoach(${row ? `'${row}'` : 'null'})" style="flex:1;padding:.2rem .3rem;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.3);color:#fff;font-family:inherit;font-size:.72rem;cursor:${ok ? 'pointer' : 'default'};opacity:${ok ? 1 : .45}">${label}</button>`; };
+  return `<div style="width:126px;flex-shrink:0;border-radius:12px;padding:.45rem;background:linear-gradient(160deg,#4c1d95,#1e1b4b);border:2px solid ${me.coachUsed ? '#555' : '#a855f7'};color:#fff;text-align:center;${me.coachUsed ? 'opacity:.5' : ''}" class="kc-handcard">
+    <div style="font-size:.6rem;letter-spacing:1px;font-weight:800;color:#d8b4fe">🧑‍🏫 ${en ? 'COACH' : 'TRENER'}</div><div style="font-size:1.6rem;line-height:1.2">${c.icon}</div><div style="font-weight:800;font-size:.74rem">${en ? c.en : c.pl}</div>
+    <div style="font-size:.58rem;opacity:.8;margin:.2rem 0 .35rem;min-height:2.2em">${en ? c.den : c.dpl}</div>
+    ${me.coachUsed ? `<div style="font-size:.7rem">✓ ${en ? 'used' : 'użyta'}</div>` : c.row ? `<div style="display:flex;gap:.2rem">${KORT_ROWS.map(r => btn(r, _KR[r][0])).join('')}</div>` : btn(null, en ? 'Use' : 'Użyj')}</div>`;
+}
+function kortHumanCoach(row) { if(!_kort || _kortBusy) return; if(kortCoach(_kort.st, 0, row || null)) { if(_kort.moves) _kort.moves.push({ t: 'c', row: row || null }); _kort.coachUsed = true; _kSfx('round'); _kortDraw(); } } // darmowa akcja — tura zostaje
+// 🎯 wyzwania Kortu
+let _kortQuests = null;
+async function _kortQuestsHtml() {
+  if(!discordUser?.session) return '';
+  if(!_kortQuests) _kortQuests = await _api('/kort/quests', 'GET', null, { session: true }).catch(() => null);
+  const q = _kortQuests; if(!q?.daily) return ''; const en = currentLang === 'en';
+  const row = (x, rew) => `<div style="display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px solid var(--border)"><div><div style="font-size:.8rem;${x.done ? 'text-decoration:line-through;color:var(--muted)' : ''}">${x.done ? '✅' : '🎯'} ${_h(en ? x.en : x.pl)}</div>
+      <div style="height:5px;background:var(--surface2);border-radius:3px;margin-top:.2rem;overflow:hidden"><div style="height:100%;width:${Math.round(x.p / x.n * 100)}%;background:${x.done ? 'var(--win)' : 'var(--accent)'}"></div></div></div><span style="font-size:.74rem;white-space:nowrap">${x.p}/${x.n} · <b>${rew}</b></span></div>`;
+  return `<div class="card" style="padding:.7rem .9rem;margin-bottom:.8rem" data-notr><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.2rem">🎯 ${_g('WYZWANIA KORTU', 'KORT QUESTS')}</div>
+    ${q.daily.map(x => row(x, '+' + x.xp + ' XP')).join('')}<div style="font-size:.66rem;color:var(--muted);margin:.35rem 0 .1rem">${_g('Tygodniowe', 'Weekly')}</div>${row(q.weekly, '🎁')}</div>`;
+}
+function _kortLogExtras() { // dane do wyzwań: 3 z jednej drużyny, runda wygrana samą Obroną, zagrane 🦊/🚫, karta trenerska
+  const st = _kort.st, src = (_kort.deckSrc || []), teams = {}; src.forEach(c => { if(c.team) teams[c.team] = (teams[c.team] || 0) + 1; });
+  let rows = new Set(), defRound = false, steals = 0;
+  st.log.forEach(l => { if(l.quarter) { if(l.score[0] > l.score[1] && rows.size === 1 && rows.has('obr')) defRound = true; rows = new Set(); return; }
+    if(l.side === 0 && l.card) { rows.add(l.row); const c = src.find(x => x.name === l.card); if(c && (c.badges || []).some(b => b.key === 'thief' || b.key === 'rim')) steals++; } });
+  return { team3: Object.values(teams).some(n => n >= 3), defRound, steals, coachUsed: !!st.p[0].coachUsed };
+}
+
 function kortDeckPick() {
   openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, extra: _kortPickInfo,
     footer: keys => { const r = keys.map(k => (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(_cards?.cards?.[k]?.name, 'season')?.rating).filter(Boolean); return r.length ? _g('średnia', 'avg') + ' <b>' + Math.round(r.reduce((a, b) => a + b, 0) / r.length) + '</b>' : ''; }, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
@@ -17043,7 +17116,7 @@ function kortStart(mode = 'daily') {
   else opp = _kortOpponent(deck);
   const games = +localStorage.getItem('kort_games') || 0, seed = _kortDayHash((opp.day || new Date().toISOString().slice(0, 10)) + (discordUser?.id || 'guest') + mode + (opp.id || '')) + (mode === 'daily' && _kortInfo?.me?.today ? Date.now() % 100000 : 0);
   const bc = {}; deck.forEach(c => (c.badges || []).forEach(b => bc[b.key] = (bc[b.key] || 0) + 1));
-  _kort = { deckNames: deck.map(c => c.name), badgeCounts: bc, st: kortNew(deck, opp.deck, seed, _kortModToday()), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
+  _kort = { deckNames: deck.map(c => c.name), badgeCounts: bc, deckSrc: deck, st: kortNew(deck, opp.deck, seed, _kortModToday(), mode === 'daily' ? _coachSel() : null, null), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
   _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
 }
 function _kortCardHtml(st, side, c, row, onBoard) {
@@ -17080,7 +17153,7 @@ function _kortDraw() {
         <div class="kc-led-n" style="color:${t1 > t0 ? '#f87171' : '#ffd84d'}">${String(t1).padStart(2, '0')}</div></div>
       <div class="kc-team kc-right"><div class="kc-tname">${_kort.mode === 'live' ? '🤝' : '🤖'} ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}<button onclick="localStorage.setItem('kort_sound',localStorage.getItem('kort_sound')==='0'?'1':'0');_kortDraw()" title="${en ? 'Sound' : 'Dźwięk'}" style="margin-left:.4rem;background:none;border:none;cursor:pointer;font-size:.9rem">${localStorage.getItem('kort_sound') === '0' ? '🔇' : '🔊'}</button></div></div>
     </div>
-    <div class="kc-opp-info"><div class="kc-opp-hand">${st.p[1].hand.map(() => _kortBack(26)).join('')}</div><span>${_h(_kort.opp.icon)} ${st.p[1].hand.length} ${en ? 'in hand' : 'w ręce'} · 🂠 ${st.p[1].deck.length} ${en ? 'in deck' : 'w talii'}${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}</span></div>
+    <div class="kc-opp-info"><div class="kc-opp-hand">${st.p[1].hand.map(() => _kortBack(26)).join('')}</div><span>${_h(_kort.opp.icon)} ${st.p[1].hand.length} ${en ? 'in hand' : 'w ręce'} · 🂠 ${st.p[1].deck.length} ${en ? 'in deck' : 'w talii'}${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}${st.p[1].coach ? ` · 🧑‍🏫 ${_coachName(st.p[1].coach)}${st.p[1].coachUsed ? ' ✓' : ''}` : ''}</span></div>
     <div class="kc-court" style="${(() => { const c = _kortCourt(); return `border-color:${c.line};${c.tint ? `background:linear-gradient(${c.tint},${c.tint}),linear-gradient(rgba(20,10,0,.28),rgba(20,10,0,.28)),repeating-linear-gradient(90deg,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[0]} 0 44px,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[1]} 44px 88px,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[2]} 88px 132px)` : ''}`; })()}">
       ${bn ? `<div class="kc-banner ${bn.good ? 'good' : 'bad'}"><div>${bn.txt}</div><small>${bn.sub}</small></div>` : ''}
       <div class="kc-half">${['obr', 'roz', 'atk'].map(r => lane(1, r)).join('')}</div>
@@ -17093,7 +17166,7 @@ function _kortDraw() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem">
         <span style="font-size:.82rem">${_kortBack(20)} <span style="color:var(--muted);font-size:.72rem;margin-right:.4rem">${st.p[0].deck.length}</span>${_kort.mode === 'live' && _kort.live?.turnLeft != null ? `<b class="kc-timer" style="margin-right:.4rem">⏱ ${Math.max(0, Math.ceil((_kort.live.turnLeft - (Date.now() - _kort.live.at)) / 1000))}s</b>` : ''}${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — drag a card onto a row or tap a row button' : 'Twoja tura — przeciągnij kartę na rząd albo kliknij przycisk rzędu') : st.p[0].passed ? (_kort.mode === 'live' ? (en ? 'You passed — your opponent is playing…' : 'Spasowałeś — gra rywal…') : (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…')) : _kort.mode === 'live' ? '⏳ ' + (en ? `${_h(_kort.opp.name)} is thinking…` : `${_h(_kort.opp.name)} myśli…`) : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
         <button class="btn btn-ghost" ${st.turn === 0 && !st.p[0].passed && !_kortBusy ? '' : 'disabled'} onclick="kortHumanPass()">✋ ${en ? 'Pass' : 'Pasuj'}</button></div>
-      <div class="kc-handrow" style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
+      <div class="kc-handrow" style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${_coachBenchHtml(st)}${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
   </div>`;
   _kort.seenHand = new Set(st.p[0].hand.map(c => c.id)); _kortBindDrag(el);
   if(st.over && !_kort.endShown) { _kort.endShown = true; _kortMvpCard(); if(st.result === 0) _kortCelebrate(el.querySelector('.kc-wrap')); } else if(st.over) _kortMvpCard();
@@ -17101,7 +17174,7 @@ function _kortDraw() {
 function _kortEndHtml() {
   const st = _kort.st, en = currentLang === 'en', r = st.result === 0 ? 'win' : st.result === 1 ? 'loss' : 'draw';
   const score = st.p[0].wins + ':' + st.p[1].wins, qs = st.p[0].qScores.map((x, i) => x + ':' + st.p[1].qScores[i]).join(', ');
-  if(!_kort.logged) { _kort.logged = true; if(discordUser?.session) _api('/kort/log', 'POST', { mode: _kort.mode, result: r, score, opp: _kort.opp.name, deck: _kort.deckNames, contrib: st.contrib?.[0] || {}, badges: _kort.badgeCounts, first: st.first === 0 }, { session: true }).catch(() => {}); }
+  if(!_kort.logged) { _kort.logged = true; if(discordUser?.session) _api('/kort/log', 'POST', { mode: _kort.mode, result: r, score, opp: _kort.opp.name, deck: _kort.deckNames, contrib: st.contrib?.[0] || {}, badges: _kort.badgeCounts, first: st.first === 0, ..._kortLogExtras() }, { session: true }).then(x => { if(x?.questView) _kortQuests = x.questView; (x?.quests || []).forEach((q, i) => setTimeout(() => showToast(`🎯 ${_g('Wyzwanie ukończone', 'Quest complete')}: ${currentLang === 'en' ? q.en : q.pl} · ${q.xp ? '+' + q.xp + ' XP' : '🎁 ' + _g('paczka', 'pack')}`, 'success'), 1200 + i * 1500)); }).catch(() => {}); }
   if(!_kort.claimed && _kort.mode !== 'daily') { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1));
     if(_kort.serverId) _kortServerEnd(); }
   if(!_kort.claimed) { _kort.claimed = true; localStorage.setItem('kort_games', String((+localStorage.getItem('kort_games') || 0) + 1)); if(discordUser?.session && !_kortInfo?.me?.today) _api('/kort', 'POST', { result: r, opp: _kort.opp.name, score }, { session: true }).then(x => { if(x.ok && !x.already) { const k = (x.me?.weekWins || 0) % 3; showToast(x.pack ? _g(`🏆 Wygrana! +${x.xp} XP i 🎁 paczka za 3 wygrane w tygodniu!`, `🏆 Victory! +${x.xp} XP and a 🎁 pack for 3 wins this week!`) : r === 'win' ? _g(`🏆 Wygrana! +${x.xp} XP · do paczki: ${k}/3`, `🏆 Victory! +${x.xp} XP · towards a pack: ${k}/3`) : _g(`+${x.xp} XP`, `+${x.xp} XP`), 'success'); if(x.pack) window._cardsCanOpen = true; if(_kortInfo?.me && x.me) Object.assign(_kortInfo.me, x.me); } }).catch(() => {}); }
@@ -17116,7 +17189,7 @@ function _kortBot() {
   if(_kort?.mode === 'live') { _kortDraw(); return; }
   const st = _kort?.st; if(!st || st.over || st.turn !== 1) { _kortDraw(); return; }
   _kortBusy = true; _kortDraw();
-  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) { kortPass(st, 1); _kSfx('pass'); } else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; _kortFxFor(1); _kSfx('opp'); } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
+  setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) { kortPass(st, 1); _kSfx('pass'); } else if(m.coach) { if(!kortCoach(st, 1, m.row)) kortPass(st, 1); _kSfx('round'); } else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; _kortFxFor(1); _kSfx('opp'); } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
 }
 
 function goToTeamRegistrations() { showView('join'); renderTeamRegistrations(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
