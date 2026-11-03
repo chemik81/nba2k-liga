@@ -862,6 +862,10 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 .kc-confetti i{position:absolute;top:-12px;width:9px;height:14px;border-radius:2px;animation-name:kcConf;animation-timing-function:linear;animation-fill-mode:forwards}
 @keyframes kcConf{to{transform:translateY(1100px) rotate(720deg);opacity:.6}}
 @media (prefers-reduced-motion:reduce){.kc-drawn,.kc-glow>div:last-child,.kc-badgepop,.kc-hit{animation:none}}
+
+.kc-modbar{font-size:.82rem;background:linear-gradient(90deg,rgba(59,130,246,.18),rgba(59,130,246,.04));border:1px solid rgba(59,130,246,.45);border-radius:10px;padding:.45rem .7rem;margin-bottom:.7rem}
+.kc-mod{font-size:.7rem;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.5);border-radius:999px;padding:.05rem .45rem}
+.kc-timer{font-family:'Barlow Condensed',sans-serif;color:#ffd84d;background:rgba(0,0,0,.4);border-radius:6px;padding:.05rem .4rem}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -6470,7 +6474,7 @@ function renderFreeAgents(wrap) {
             </div>
             <div style="font-size:.75rem;color:var(--muted);margin-bottom:${f.description ? '.45rem' : '0'}">
               ${f.platform === 'xbox' ? '🎮' : '🎯'} <b style="color:var(--text)">${_h(f.gamertag)}</b> · ${(f.platform || 'psn').toUpperCase()}
-              ${f.experience && _expLabels[f.experience] ? ` · <span style="color:var(--text)">${_expLabels[f.experience]}</span>` : ''}
+              ${f.experience && _faLevel(f.experience) ? ` · <span style="color:var(--text)">${_faLevel(f.experience)}</span>` : ''}
               · ${new Date(f.updatedAt || f.createdAt).toLocaleDateString('pl-PL')}
             </div>
             ${f.description ? `<div style="font-size:.84rem;line-height:1.45;white-space:pre-wrap;word-break:break-word">${_h(f.description)}</div>` : ''}
@@ -6573,7 +6577,7 @@ function openFreeAgentModal() {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.9rem">
       <div><label style="${lbl}">${_g('Poziom', 'Level')} <span style="color:var(--loss)">*</span></label>
-        <select id="fa-experience" style="${inp}"><option value="">— wybierz —</option>${Object.entries(_expLabels).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+        <select id="fa-experience" style="${inp}"><option value="">${_g('— wybierz —', '— choose —')}</option>${(EU_MODE ? TEAM_LEVELS.map(l => [l, '📶 ' + l]) : Object.entries(_expLabels)).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div><label style="${lbl}">${_g('Sezon', 'Season')}</label>
         <select id="fa-season" style="${inp}">${seasonOpts}</select></div>
     </div>
@@ -8019,6 +8023,7 @@ function openDeepLink() {
   const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q || _p).toLowerCase();
   if(_p && !location.hash && !_q) try { history.replaceState(history.state, '', '/' + location.search); } catch(e) {} // po otwarciu adres wraca na stronę główną (odświeżenie nie wraca do linku)
   if(!h) return;
+  if(/^duel-[a-z0-9]{6}$/.test(h)) { _kortLiveCode = h.slice(5); _kortTab = 'live'; setTimeout(() => showView('kort'), 300); return; }
   const flash = el => {
     if(!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -16475,8 +16480,19 @@ const KORT_CFG = {
   hand: 6, deck: 8, drawAfter: 1, firstBonus: 1, tacticMult: 2
 };
 const KORT_ROWS = ['atk', 'roz', 'obr'];
-function kortCard(src, i) { // src: {name, team, tier:'galaxy'|…, lim, form:'hot'|'cold'|'', attrs:{shoot,three,inside,play,ball,def,reb}(0..1), badges:[{key,l}]}
-  const a = src.attrs || {}, v = x => +(x ?? .5), C = KORT_CFG, raw = {
+// 🎲 modyfikatory dnia: zmiana zasad na jeden mecz (ta sama dla obu stron)
+const KORT_MODS = {
+  threes: { icon: '🎯', pl: ['Dzień trójek', 'Snajper działa podwójnie'], en: ['Threes day', 'Sniper counts double'], cfg: { badge: { sniper: 2 } } },
+  defense: { icon: '🛡️', pl: ['Defensywny dzień', 'Obrona ×2 w każdej rundzie'], en: ['Defense day', 'Defense ×2 every round'], cfg: { forceTactic: 'obr' } },
+  hot: { icon: '🔥', pl: ['Gorąca ręka', 'forma liczy się podwójnie (±2)'], en: ['Hot hand', 'form counts double (±2)'], cfg: { form: { hot: 2, cold: -2 } } },
+  chem: { icon: '🤝', pl: ['Dzień drużyny', 'chemia drużyny +2'], en: ['Team day', 'team chemistry +2'], cfg: { chem: 2 } },
+  thief: { icon: '🦊', pl: ['Złodziejski dzień', 'Złodziej osłabia o 2'], en: ['Thieves day', 'Thief weakens by 2'], cfg: { badge: { thief: 2 } } },
+  stars: { icon: '🌌', pl: ['Noc gwiazd', 'galaktyka +2, diament +1'], en: ['Night of stars', 'galaxy +2, diamond +1'], cfg: { tier: { galaxy: 2, diamond: 1 } } }
+};
+function kortCfg(mod) { const m = KORT_MODS[mod]?.cfg || {}; return { ...KORT_CFG, ...m, tier: { ...KORT_CFG.tier, ...(m.tier || {}) }, form: { ...KORT_CFG.form, ...(m.form || {}) }, badge: { ...KORT_CFG.badge, ...(m.badge || {}) } }; }
+function kortModOfDay(day) { const k = Object.keys(KORT_MODS), h = [...String(day)].reduce((a, c) => (a * 33 + c.charCodeAt(0)) >>> 0, 11); return k[h % k.length]; }
+function kortCard(src, i, CFG) { // src: {name, team, tier:'galaxy'|…, lim, form:'hot'|'cold'|'', attrs:{shoot,three,inside,play,ball,def,reb}(0..1), badges:[{key,l}]}
+  const a = src.attrs || {}, v = x => +(x ?? .5), C = CFG || KORT_CFG, raw = {
     atk: Math.max(v(a.shoot), v(a.three), v(a.inside)), roz: (v(a.play) + v(a.ball)) / 2, obr: Math.max(v(a.def), v(a.reb)) };
   const bonus = (C.tier[src.tier] || 0) + (src.lim ? C.limited : 0) + (C.form[src.form] || 0);
   const pw = {}; KORT_ROWS.forEach(r => pw[r] = Math.max(1, Math.round(C.base + C.scale * raw[r] + bonus)));
@@ -16484,17 +16500,18 @@ function kortCard(src, i) { // src: {name, team, tier:'galaxy'|…, lim, form:'h
     pw, badges: (src.badges || []).map(b => ({ key: b.key, b: b.l >= 3 ? 2 : 1 })), mod: 0, immune: !!src.lim || (src.badges || []).some(b => b.key === 'iron') };
 }
 function kortRng(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
-function kortNew(deckA, deckB, seed) {
+function kortNew(deckA, deckB, seed, mod) {
+  const C = kortCfg(mod);
   const rnd = kortRng(seed), shuffle = L => { const a = L.slice(); for(let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const side = (deck, k) => { const d = shuffle(deck.map((c, i) => kortCard(c, k * 100 + i))); return { hand: d.slice(0, KORT_CFG.hand), deck: d.slice(KORT_CFG.hand), board: { atk: [], roz: [], obr: [] }, passed: false, wins: 0, qScores: [] }; };
+  const side = (deck, k) => { const d = shuffle(deck.map((c, i) => kortCard(c, k * 100 + i, C))); return { hand: d.slice(0, C.hand), deck: d.slice(C.hand), board: { atk: [], roz: [], obr: [] }, passed: false, wins: 0, qScores: [] }; };
   const first = rnd() < .5 ? 0 : 1, P = [side(deckA, 0), side(deckB, 1)];
-  for(let k = 0; k < KORT_CFG.firstBonus && P[first].deck.length; k++) P[first].hand.push(P[first].deck.shift()); // zaczynający dostaje dodatkową kartę (jak „moneta”)
-  const tactics = [0, 1, 2].map(() => KORT_ROWS[Math.floor(rnd() * 3)]); // taktyka każdej kwarty: rząd liczony podwójnie
-  return { p: P, q: 1, turn: first, first, tactics, log: [], over: false, result: null, seed };
+  for(let k = 0; k < C.firstBonus && P[first].deck.length; k++) P[first].hand.push(P[first].deck.shift()); // zaczynający dostaje dodatkową kartę (jak „moneta”)
+  const tactics = [0, 1, 2].map(() => { const r = KORT_ROWS[Math.floor(rnd() * 3)]; return C.forceTactic || r; }); // taktyka każdej rundy: rząd liczony podwójnie
+  return { p: P, q: 1, turn: first, first, tactics, log: [], over: false, result: null, seed, mod: mod || null, cfg: C };
 }
 const _bv = (c, k) => (c.badges.find(b => b.key === k) || {}).b || 0;
 function kortValue(st, side, row, c) { // aktualna siła karty na planszy
-  const C = KORT_CFG, me = st.p[side], all = KORT_ROWS.flatMap(r => me.board[r]);
+  const C = st.cfg || KORT_CFG, me = st.p[side], all = KORT_ROWS.flatMap(r => me.board[r]);
   let v = c.pw[row] + c.mod;
   const B = (k, on = true) => on ? Math.round(_bv(c, k) * C.badge[k]) : 0;
   if(row === 'atk') v += B('sniper') + B('scorer', me.board.atk.length > 1);
@@ -16506,15 +16523,15 @@ function kortValue(st, side, row, c) { // aktualna siła karty na planszy
   if(all.some(o => o !== c && o.team && o.team === c.team)) v += C.chem;
   return Math.max(0, Math.round(v));
 }
-function kortRowSum(st, side, r) { const sum = st.p[side].board[r].reduce((t, c) => t + kortValue(st, side, r, c), 0); return st.tactics && st.tactics[st.q - 1] === r ? Math.round(sum * KORT_CFG.tacticMult) : sum; }
+function kortRowSum(st, side, r) { const sum = st.p[side].board[r].reduce((t, c) => t + kortValue(st, side, r, c), 0); return st.tactics && st.tactics[st.q - 1] === r ? Math.round(sum * (st.cfg || KORT_CFG).tacticMult) : sum; }
 function kortTotal(st, side) { return KORT_ROWS.reduce((s, r) => s + kortRowSum(st, side, r), 0); }
 function _kortStrongest(st, side, rowFilter) { let best = null; KORT_ROWS.filter(r => !rowFilter || r === rowFilter).forEach(r => st.p[side].board[r].forEach(c => { if(c.immune) return; const v = kortValue(st, side, r, c); if(!best || v > best.v) best = { c, v, r }; })); return best; }
 function kortPlay(st, side, cardId, row) {
   if(st.over || st.turn !== side || st.p[side].passed) return false;
   const me = st.p[side], i = me.hand.findIndex(c => c.id === cardId); if(i < 0 || !KORT_ROWS.includes(row)) return false;
   const c = me.hand.splice(i, 1)[0]; me.board[row].push(c); const opp = 1 - side, ev = [];
-  if(_bv(c, 'thief') && row === 'roz') { const t = _kortStrongest(st, opp, 'roz'), d = Math.max(1, Math.round(KORT_CFG.badge.thief)); if(t) { t.c.mod -= d; ev.push(`🦊 ${t.c.name} −${d}`); } } // złodziej: w Rozegraniu przechwytuje — osłabia najsilniejszego rozgrywającego rywala
-  if(_bv(c, 'rim') && row === 'obr') { const t = _kortStrongest(st, opp), d = Math.max(1, Math.round(_bv(c, 'rim') * KORT_CFG.badge.rim)); if(t) { t.c.mod -= d; ev.push(`🚫 ${t.c.name} −${d}`); } }
+  if(_bv(c, 'thief') && row === 'roz') { const t = _kortStrongest(st, opp, 'roz'), d = Math.max(1, Math.round((st.cfg || KORT_CFG).badge.thief)); if(t) { t.c.mod -= d; ev.push(`🦊 ${t.c.name} −${d}`); } } // złodziej: w Rozegraniu przechwytuje — osłabia najsilniejszego rozgrywającego rywala
+  if(_bv(c, 'rim') && row === 'obr') { const t = _kortStrongest(st, opp), d = Math.max(1, Math.round(_bv(c, 'rim') * (st.cfg || KORT_CFG).badge.rim)); if(t) { t.c.mod -= d; ev.push(`🚫 ${t.c.name} −${d}`); } }
   st.log.push({ side, card: c.name, row, ev });
   _kortNextTurn(st, side); return true;
 }
@@ -16528,13 +16545,13 @@ function _kortNextTurn(st, side) {
 function _kortEndQuarter(st) {
   const a = kortTotal(st, 0), b = kortTotal(st, 1); st.p[0].qScores.push(a); st.p[1].qScores.push(b);
   st.contrib = st.contrib || [{}, {}]; // punkty każdej karty (MVP meczu)
-  [0, 1].forEach(sd => KORT_ROWS.forEach(r => st.p[sd].board[r].forEach(c => { const v = kortValue(st, sd, r, c) * (st.tactics && st.tactics[st.q - 1] === r ? KORT_CFG.tacticMult : 1); st.contrib[sd][c.name] = (st.contrib[sd][c.name] || 0) + v; })));
+  [0, 1].forEach(sd => KORT_ROWS.forEach(r => st.p[sd].board[r].forEach(c => { const v = kortValue(st, sd, r, c) * (st.tactics && st.tactics[st.q - 1] === r ? (st.cfg || KORT_CFG).tacticMult : 1); st.contrib[sd][c.name] = (st.contrib[sd][c.name] || 0) + v; })));
   if(a >= b) st.p[0].wins++; if(b >= a) st.p[1].wins++;
   st.log.push({ quarter: st.q, score: [a, b] });
   const w0 = st.p[0].wins, w1 = st.p[1].wins;
   if(w0 >= 2 || w1 >= 2 || st.q >= 3) { st.over = true; st.result = w0 > w1 ? 0 : w1 > w0 ? 1 : 'draw'; return; }
   const loser = a < b ? 0 : b < a ? 1 : st.turn;
-  st.q++; st.p.forEach(p => { p.board = { atk: [], roz: [], obr: [] }; p.passed = false; for(let k = 0; k < KORT_CFG.drawAfter && p.deck.length; k++) p.hand.push(p.deck.shift()); if(!p.hand.length) p.passed = true; });
+  st.q++; st.p.forEach(p => { p.board = { atk: [], roz: [], obr: [] }; p.passed = false; for(let k = 0; k < (st.cfg || KORT_CFG).drawAfter && p.deck.length; k++) p.hand.push(p.deck.shift()); if(!p.hand.length) p.passed = true; });
   st.turn = loser; if(st.p[st.turn].passed) st.turn = 1 - st.turn;
   if(st.p[0].passed && st.p[1].passed) _kortEndQuarter(st);
 }
@@ -16617,7 +16634,9 @@ async function renderKort() {
   if(deck.length < 8 || opp.deck.length < 8) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">${_g('Gra ruszy, gdy w sezonie zagra co najmniej 16 graczy.', 'The game starts once at least 16 players have played this season.')}</div>`; return; }
   if(_kortTab === 'ranked') { el.innerHTML = _kortTabsHtml() + await _kortRankedHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'boss') { el.innerHTML = _kortTabsHtml() + await _kortBossHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
-  if(_kortTab === 'stats') { el.innerHTML = _kortTabsHtml() + await _kortStatsHtml(); return; }
+  if(_kortTab === 'stats') { _kortLiveStop(); el.innerHTML = _kortTabsHtml() + await _kortStatsHtml(); return; }
+  if(_kortTab === 'live') { el.innerHTML = _kortTabsHtml() + await _kortLiveHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  _kortLiveStop();
   _kortInfo = await _api('/kort', 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => null);
   const me = _kortInfo?.me, today = me?.today, avg = Math.round(deck.reduce((s, c) => s + c.rating, 0) / 8), loans = deck.filter(c => c.loan).length;
   el.innerHTML = _kortTabsHtml() + `<div data-notr>
@@ -16657,12 +16676,15 @@ function _kortPickInfo(k, c) {
     ${kc.badges.length ? `<div style="font-size:.7rem;line-height:1" title="${kc.badges.map(b => b.key).join(', ')}">${kc.badges.map(b => (_KB[b.key] || '') + (b.b > 1 ? '⁺' : '')).join(' ')}</div>` : ''}`;
 }
 // ═══ 🃏 KORT 2.0 — tryby (mecz dnia / ranking z kibicami / boss tygodnia), udostępnianie wyniku, podpowiedzi ═══
-let _kortTab = 'daily', _kortLadder = null, _kortBossInfo = null, _kortOppPick = null;
+var _kortTab = window._kortTab || 'daily', _kortLadder = null, _kortBossInfo = null, _kortOppPick = null;
 const _KDIV = { galaxy: ['🌌', 'Galaktyka', 'Galaxy', '#a855f7'], diamond: ['💎', 'Diament', 'Diamond', '#38bdf8'], gold: ['🥇', 'Złoto', 'Gold', '#f5c518'], silver: ['🥈', 'Srebro', 'Silver', '#cbd5e1'], bronze: ['🥉', 'Brąz', 'Bronze', '#d08b4f'] };
 const _kDiv = d => { const x = _KDIV[d] || _KDIV.bronze; return `<span style="color:${x[3]};font-weight:800">${x[0]} ${currentLang === 'en' ? x[2] : x[1]}</span>`; };
+function _kortModToday() { return kortModOfDay(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' })); }
+function _kortModHtml(compact) { const k = _kortModToday(), m = KORT_MODS[k]; if(!m) return ''; const [t, d] = currentLang === 'en' ? m.en : m.pl;
+  return compact ? `<span class="kc-mod">${m.icon} ${t}</span>` : `<div class="kc-modbar">🎲 ${_g('Modyfikator dnia', 'Modifier of the day')}: <b>${m.icon} ${t}</b> — ${d}<span style="color:var(--muted)"> · ${_g('obowiązuje dziś we wszystkich meczach', 'applies to all matches today')}</span></div>`; }
 function _kortTabsHtml() {
   const t = (k, l) => `<button onclick="_kortTab='${k}';renderKort()" class="btn ${_kortTab === k ? 'btn-primary' : 'btn-ghost'}" style="font-size:.8rem">${l}</button>`;
-  return `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem">${t('daily', '⚔️ ' + _g('Mecz dnia', 'Match of the day'))}${t('ranked', '🏆 ' + _g('Ranking', 'Ranked'))}${t('boss', '👑 ' + _g('Boss tygodnia', 'Weekly boss'))}${t('stats', '📈 ' + _g('Statystyki', 'Stats'))}</div>`;
+  return _kortModHtml() + `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem">${t('daily', '⚔️ ' + _g('Mecz dnia', 'Match of the day'))}${t('ranked', '🏆 ' + _g('Ranking', 'Ranked'))}${t('boss', '👑 ' + _g('Boss tygodnia', 'Weekly boss'))}${t('live', '🤝 ' + _g('Z kolegą', 'With a friend'))}${t('stats', '📈 ' + _g('Statystyki', 'Stats'))}</div>`;
 }
 function _kortOwnDeck() { // talia z samych własnych kart (bez wypożyczonych) — do rankingu
   const saved = (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })().filter(k => _cards?.cards?.[k]?.n > 0);
@@ -16718,7 +16740,7 @@ async function _kortShareImage() {
   const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#1a1208'); bg.addColorStop(1, '#3a2410'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
   for(let x = 0; x < W; x += 60) { g.fillStyle = x % 120 ? 'rgba(255,255,255,.025)' : 'rgba(0,0,0,.08)'; g.fillRect(x, 0, 60, H); } // parkiet
   g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 4; g.strokeRect(30, 30, W - 60, H - 60); g.strokeStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.arc(W / 2, H / 2, 90, 0, Math.PI * 2); g.stroke();
-  g.fillStyle = '#f5c518'; g.font = `900 34px ${F}`; g.textBaseline = 'top'; g.fillText('🃏 KORT · ' + (_kort.mode === 'boss' ? (en ? 'WEEKLY BOSS' : 'BOSS TYGODNIA') : _kort.mode === 'ranked' ? (en ? 'RANKED' : 'RANKING') : (en ? 'MATCH OF THE DAY' : 'MECZ DNIA')), 70, 60);
+  g.fillStyle = '#f5c518'; g.font = `900 34px ${F}`; g.textBaseline = 'top'; g.fillText('🃏 KORT · ' + (_kort.mode === 'boss' ? (en ? 'WEEKLY BOSS' : 'BOSS TYGODNIA') : _kort.mode === 'ranked' ? (en ? 'RANKED' : 'RANKING') : _kort.mode === 'live' ? (en ? 'LIVE MATCH' : 'MECZ NA ŻYWO') : (en ? 'MATCH OF THE DAY' : 'MECZ DNIA')), 70, 60);
   g.fillStyle = '#fff'; g.font = `800 40px ${F}`; g.fillText(`${discordUser?.name || (en ? 'Me' : 'Ja')}  vs  ${_kort.opp.name}`, 70, 115);
   const big = `${r === 'win' ? (en ? 'WIN' : 'WYGRANA') : r === 'loss' ? (en ? 'LOSS' : 'PORAŻKA') : (en ? 'DRAW' : 'REMIS')} ${st.p[0].wins}:${st.p[1].wins}`, maxW = W - 560 * .8 - 70 - 110; // miejsce obok karty MVP
   let fs = 130; g.font = `900 ${fs}px ${F}`; while(g.measureText(big).width > maxW && fs > 60) { fs -= 4; g.font = `900 ${fs}px ${F}`; }
@@ -16741,7 +16763,7 @@ async function kortShare() {
 async function kortShareSend(btn) { btn.disabled = true; const r = await _api('/kort/share', 'POST', { image: window._kShareImg, text: window._kShareText }, { session: true }); showToast(r.ok ? _g('💬 Wynik wysłany na Discord!', '💬 Posted to Discord!') : '❌ ' + _tr(r.error || ''), r.ok ? 'success' : 'error'); if(r.ok) _fxClose('kshare-modal'); else btn.disabled = false; }
 // 💡 podpowiedzi (domyślnie przez pierwsze 3 mecze)
 function _kortTip() {
-  const st = _kort.st, en = currentLang === 'en'; if(!_kort.tips || st.over) return null;
+  const st = _kort.st, en = currentLang === 'en'; if(!_kort.tips || st.over || _kort.mode === 'live') return null;
   if(st.turn !== 0 || st.p[0].passed) return st.p[1].passed ? null : _g('🤖 Teraz ruch bota — zobacz, gdzie kładzie kartę.', '🤖 The bot’s move — watch where it plays.');
   const m = kortBotMove(st, 0), tac = st.tactics[st.q - 1], my = kortTotal(st, 0), th = kortTotal(st, 1), first = st.log.filter(l => l.side === 0).length === 0;
   let t = first ? _g('Wygrywa ten, kto pierwszy wygra <b>2 rundy</b>. W rundzie na zmianę dokładacie karty — liczy się suma. ', 'First to win <b>2 rounds</b> wins. You take turns adding cards — the total counts. ') : '';
@@ -16866,6 +16888,66 @@ function _kortBindDrag(root) {
   }));
 }
 
+// ═══ 🤝 KORT NA ŻYWO — wyzwanie z linkiem, gra tura po turze przez serwer ═══
+var _kortLiveCode = window._kortLiveCode || null, _kortLivePoll = null; // var: ustawiane przez link /duel-… zanim skrypt dojdzie do tej linii
+setInterval(() => { const t = document.querySelector('.kc-timer'); if(t && _kort?.live) t.textContent = '⏱ ' + Math.max(0, Math.ceil((_kort.live.turnLeft - (Date.now() - _kort.live.at)) / 1000)) + 's'; }, 1000);
+function _kortLiveStop() { clearInterval(_kortLivePoll); _kortLivePoll = null; }
+async function _kortLiveHtml() {
+  _kortLiveStop();
+  const en = currentLang === 'en', box = inner => `<div class="card" style="padding:1rem 1.1rem" data-notr>${inner}</div>`;
+  if(!_kortLiveCode) return box(`<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🤝 ${_g('MECZ Z KOLEGĄ NA ŻYWO', 'LIVE MATCH WITH A FRIEND')}</div>
+    <div style="font-size:.86rem;line-height:1.55;margin:.4rem 0 .7rem">${_g('Rzuć wyzwanie, wyślij link koledze na Discordzie i grajcie razem, tura po turze. Na ruch masz 75 sekund. Mecz towarzyski — bez nagród, ale trafia do Twoich statystyk.', 'Send a challenge link to a friend on Discord and play together, turn by turn. You have 75 seconds per move. Friendly match — no rewards, but it counts in your stats.')}</div>
+    ${discordUser?.session ? `<button class="btn btn-primary" onclick="kortLiveNew()">⚔️ ${_g('Rzuć wyzwanie', 'Create a challenge')}</button>` : `<button class="btn btn-primary" onclick="loginWithDiscord()">💬 ${_g('Zaloguj się, żeby grać', 'Log in to play')}</button>`}`);
+  const r = await _api('/kort/live/' + _kortLiveCode, 'GET', null, discordUser?.session ? { session: true } : {}).catch(() => ({}));
+  if(!r.ok) { const c = _kortLiveCode; _kortLiveCode = null; return box(`<div style="color:var(--muted)">❌ ${_h(_tr(r.error || ''))} (${_h(c)})</div><button class="btn btn-ghost" style="margin-top:.5rem" onclick="renderKort()">↩ ${_g('Wróć', 'Back')}</button>`); }
+  if(r.state === 'live' || r.state === 'over') { if(r.side !== null && r.st) { setTimeout(() => kortLiveStart(r), 50); return box(`⏳ ${_g('Wczytuję mecz…', 'Loading the match…')}`); } return box(`<div style="color:var(--muted)">${_g('Ten mecz już trwa między innymi graczami.', 'This match is already being played by others.')}</div>`); }
+  const m = KORT_MODS[r.mod], link = `${location.origin}/duel-${r.code}`;
+  if(r.side === 0) { _kortLivePoll = setInterval(async () => { const x = await _api('/kort/live/' + r.code, 'GET', null, { session: true }).catch(() => ({})); if(x.ok && x.state === 'live') { _kortLiveStop(); kortLiveStart(x); } }, 2000);
+    return box(`<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">⏳ ${_g('CZEKAM NA RYWALA', 'WAITING FOR AN OPPONENT')}</div>
+      <div style="font-size:.86rem;margin:.4rem 0">${_g('Wyślij ten link koledze — mecz zacznie się, gdy przyjmie wyzwanie:', 'Send this link to a friend — the match starts when they accept:')}</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center"><code style="background:var(--surface2);padding:.35rem .6rem;border-radius:8px;font-size:.86rem">${_h(link)}</code>
+        <button class="btn btn-primary" onclick="navigator.clipboard?.writeText('${_h(link)}').then(()=>showToast('🔗 ${_g('Link skopiowany', 'Link copied')}','success'))">🔗 ${_g('Kopiuj link', 'Copy link')}</button>
+        <button class="btn btn-ghost" onclick="kortLiveCancel('${r.code}')">✕ ${_g('Anuluj', 'Cancel')}</button></div>
+      ${m ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.5rem">🎲 ${m.icon} ${(en ? m.en : m.pl).join(' — ')}</div>` : ''}`); }
+  return box(`<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">⚔️ ${_g('WYZWANIE', 'CHALLENGE')}</div>
+    <div style="display:flex;gap:.6rem;align-items:center;margin:.5rem 0">${_avatarHtml(r.host.avatar, 40)}<div><b style="font-size:1.05rem">${_h(r.host.name)}</b><div style="font-size:.8rem;color:var(--muted)">${_g('wyzywa Cię na mecz w Korcie!', 'challenges you to a Kort match!')}</div></div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:.6rem">${(r.hostDeck || []).map(n => `<span style="font-size:.7rem;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.08rem .35rem">${_h(n)}</span>`).join('')}</div>
+    ${m ? `<div style="font-size:.78rem;margin-bottom:.6rem">🎲 ${m.icon} ${(en ? m.en : m.pl).join(' — ')}</div>` : ''}
+    ${discordUser?.session ? `<button class="btn btn-primary" onclick="kortLiveJoin('${r.code}')">⚔️ ${_g('Przyjmij wyzwanie', 'Accept the challenge')}</button>` : `<button class="btn btn-primary" onclick="try{history.replaceState(null,'','/duel-${r.code}')}catch(e){};loginWithDiscord()">💬 ${_g('Zaloguj się, żeby przyjąć', 'Log in to accept')}</button>`}`);
+}
+async function kortLiveNew() {
+  const deck = _kortMyDeck(); const r = await _api('/kort/live/new', 'POST', { deck }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  _kortLiveCode = r.code; renderKort();
+}
+async function kortLiveCancel(code) { await _api('/kort/live/cancel', 'POST', { code }, { session: true }).catch(() => {}); _kortLiveCode = null; renderKort(); }
+async function kortLiveJoin(code) {
+  const r = await _api('/kort/live/join', 'POST', { code, deck: _kortMyDeck() }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  const x = await _api('/kort/live/' + code, 'GET', null, { session: true }); if(x.ok) kortLiveStart(x);
+}
+function kortLiveStart(r) {
+  const opp = r.side === 0 ? r.guest : r.host;
+  _kort = { mode: 'live', live: { code: r.code, side: r.side, turnLeft: r.turnLeft, at: Date.now() }, st: r.st, opp: { name: opp?.name || '?', icon: '🤝' }, claimed: true, logged: true, tips: false, deckNames: [], badgeCounts: {} };
+  _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  _kortLiveStop(); _kortLivePoll = setInterval(_kortLiveTick, 1500);
+}
+async function _kortLiveTick() {
+  if(!_kort || _kort.mode !== 'live' || !document.getElementById('kort-board')) { _kortLiveStop(); return; }
+  const x = await _api('/kort/live/' + _kort.live.code, 'GET', null, { session: true }).catch(() => ({})); if(!x.ok || !x.st) return;
+  const changed = x.st.log.length !== _kort.st.log.length || x.st.over !== _kort.st.over;
+  _kort.live.turnLeft = x.turnLeft; _kort.live.at = Date.now();
+  if(changed) { const before = _kort.st.log.length; _kort.st = x.st; const l = x.st.log[x.st.log.length - 1];
+    if(l && l.side === 1 && x.st.log.length > before) { if(l.pass) _kSfx('pass'); else { _kort.lastId = KORT_ROWS.flatMap(r => _kort.st.p[1].board[r]).slice(-1)[0]?.id; _kortFxFor(1); _kSfx('opp'); } } }
+  if(x.abandoned && !_kort.abandonNote) { _kort.abandonNote = true; showToast(_g('⏱ Mecz zakończony — brak ruchów przez 10 minut', '⏱ Match ended — no moves for 10 minutes'), 'info'); }
+  _kortDraw(); if(x.st.over) _kortLiveStop();
+}
+async function _kortLiveMove(action, id, row) {
+  if(_kort._sending) return; _kort._sending = true;
+  const r = await _api('/kort/live/move', 'POST', { code: _kort.live.code, action, id, row }, { session: true }).catch(() => ({})); _kort._sending = false;
+  if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  _kort.st = r.st; _kort.live.turnLeft = r.turnLeft; _kort.live.at = Date.now();
+  if(action === 'pass') _kSfx('pass'); else { _kort.lastId = id; _kortFxFor(0); _kSfx('play'); } _kortDraw();
+}
+
 function kortDeckPick() {
   openCardPicker({ title: '🃏 ' + _g('Talia do Kortu (8 kart)', 'Kort deck (8 cards)'), max: 8, exact: true, extra: _kortPickInfo,
     footer: keys => { const r = keys.map(k => (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(_cards?.cards?.[k]?.name, 'season')?.rating).filter(Boolean); return r.length ? _g('średnia', 'avg') + ' <b>' + Math.round(r.reduce((a, b) => a + b, 0) / r.length) + '</b>' : ''; }, preselect: (() => { try { return JSON.parse(localStorage.getItem('kort_deck') || '[]'); } catch(e) { return []; } })(),
@@ -16881,7 +16963,7 @@ function kortStart(mode = 'daily') {
   else opp = _kortOpponent(deck);
   const games = +localStorage.getItem('kort_games') || 0, seed = _kortDayHash((opp.day || new Date().toISOString().slice(0, 10)) + (discordUser?.id || 'guest') + mode + (opp.id || '')) + (mode === 'daily' && _kortInfo?.me?.today ? Date.now() % 100000 : 0);
   const bc = {}; deck.forEach(c => (c.badges || []).forEach(b => bc[b.key] = (bc[b.key] || 0) + 1));
-  _kort = { deckNames: deck.map(c => c.name), badgeCounts: bc, st: kortNew(deck, opp.deck, seed), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
+  _kort = { deckNames: deck.map(c => c.name), badgeCounts: bc, st: kortNew(deck, opp.deck, seed, _kortModToday()), opp, mode, claimed: false, tips: localStorage.getItem('kort_tips') ? localStorage.getItem('kort_tips') === '1' : games < 3 };
   _kortDraw(); document.getElementById('kort-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _kortBot();
 }
 function _kortCardHtml(st, side, c, row, onBoard) {
@@ -16914,9 +16996,9 @@ function _kortDraw() {
     <div class="kc-board-top">
       <div class="kc-team"><div class="kc-tname">🧑 ${en ? 'YOU' : 'TY'}</div><div class="kc-dots">${dots(st.p[0].wins)}</div></div>
       <div class="kc-led"><div class="kc-led-n" style="color:${t0 >= t1 ? '#4ade80' : '#ffd84d'}">${String(t0).padStart(2, '0')}</div>
-        <div class="kc-led-mid"><div>${en ? 'ROUND' : 'RUNDA'} ${st.q}/3</div><div class="kc-led-tac">${en ? _KT[tac][1] : _KT[tac][0]} · ${_KR[tac][0]}×2</div></div>
+        <div class="kc-led-mid"><div>${en ? 'ROUND' : 'RUNDA'} ${st.q}/3</div><div class="kc-led-tac">${en ? _KT[tac][1] : _KT[tac][0]} · ${_KR[tac][0]}×${(st.cfg || KORT_CFG).tacticMult}</div>${st.mod && KORT_MODS[st.mod] ? `<div class="kc-led-tac" style="color:#93c5fd">${KORT_MODS[st.mod].icon} ${(en ? KORT_MODS[st.mod].en : KORT_MODS[st.mod].pl)[0]}</div>` : ''}</div>
         <div class="kc-led-n" style="color:${t1 > t0 ? '#f87171' : '#ffd84d'}">${String(t1).padStart(2, '0')}</div></div>
-      <div class="kc-team kc-right"><div class="kc-tname">🤖 ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}<button onclick="localStorage.setItem('kort_sound',localStorage.getItem('kort_sound')==='0'?'1':'0');_kortDraw()" title="${en ? 'Sound' : 'Dźwięk'}" style="margin-left:.4rem;background:none;border:none;cursor:pointer;font-size:.9rem">${localStorage.getItem('kort_sound') === '0' ? '🔇' : '🔊'}</button></div></div>
+      <div class="kc-team kc-right"><div class="kc-tname">${_kort.mode === 'live' ? '🤝' : '🤖'} ${_h(_kort.opp.name)}</div><div class="kc-dots">${dots(st.p[1].wins)}<button onclick="localStorage.setItem('kort_sound',localStorage.getItem('kort_sound')==='0'?'1':'0');_kortDraw()" title="${en ? 'Sound' : 'Dźwięk'}" style="margin-left:.4rem;background:none;border:none;cursor:pointer;font-size:.9rem">${localStorage.getItem('kort_sound') === '0' ? '🔇' : '🔊'}</button></div></div>
     </div>
     <div class="kc-opp-info"><div class="kc-opp-hand">${st.p[1].hand.map(() => _kortBack(26)).join('')}</div><span>${_h(_kort.opp.icon)} ${st.p[1].hand.length} ${en ? 'in hand' : 'w ręce'} · 🂠 ${st.p[1].deck.length} ${en ? 'in deck' : 'w talii'}${st.p[1].passed ? ` · <span class="kc-passed">${en ? 'PASSED' : 'SPASOWAŁ'}</span>` : ''}</span></div>
     <div class="kc-court" style="${(() => { const c = _kortCourt(); return `border-color:${c.line};${c.tint ? `background:linear-gradient(${c.tint},${c.tint}),linear-gradient(rgba(20,10,0,.28),rgba(20,10,0,.28)),repeating-linear-gradient(90deg,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[0]} 0 44px,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[1]} 44px 88px,${(c.wood || ['#b8743f', '#c3804a', '#ad6c3a'])[2]} 88px 132px)` : ''}`; })()}">
@@ -16929,7 +17011,7 @@ function _kortDraw() {
     ${!st.over ? (() => { const tip = _kort._tip; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin:.1rem 0 .45rem">${tip ? `<div class="kc-tip">💡 ${tip.t || tip}</div>` : '<span></span>'}<button class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem;white-space:nowrap" onclick="_kort.tips=!_kort.tips;localStorage.setItem('kort_tips',_kort.tips?'1':'0');_kortDraw()">💡 ${_kort.tips ? (en ? 'Hide tips' : 'Ukryj podpowiedzi') : (en ? 'Show tips' : 'Podpowiedzi')}</button></div>`; })() : ''}
     ${st.over ? _kortEndHtml() : `<div class="kc-bench">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem">
-        <span style="font-size:.82rem">${_kortBack(20)} <span style="color:var(--muted);font-size:.72rem;margin-right:.4rem">${st.p[0].deck.length}</span>${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — drag a card onto a row or tap a row button' : 'Twoja tura — przeciągnij kartę na rząd albo kliknij przycisk rzędu') : st.p[0].passed ? (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…') : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
+        <span style="font-size:.82rem">${_kortBack(20)} <span style="color:var(--muted);font-size:.72rem;margin-right:.4rem">${st.p[0].deck.length}</span>${_kort.mode === 'live' && _kort.live?.turnLeft != null ? `<b class="kc-timer" style="margin-right:.4rem">⏱ ${Math.max(0, Math.ceil((_kort.live.turnLeft - (Date.now() - _kort.live.at)) / 1000))}s</b>` : ''}${st.turn === 0 && !st.p[0].passed ? '👉 ' + (en ? 'Your turn — drag a card onto a row or tap a row button' : 'Twoja tura — przeciągnij kartę na rząd albo kliknij przycisk rzędu') : st.p[0].passed ? (_kort.mode === 'live' ? (en ? 'You passed — your opponent is playing…' : 'Spasowałeś — gra rywal…') : (en ? 'You passed — the bot is playing…' : 'Spasowałeś — gra bot…')) : _kort.mode === 'live' ? '⏳ ' + (en ? `${_h(_kort.opp.name)} is thinking…` : `${_h(_kort.opp.name)} myśli…`) : '🤖 ' + (en ? 'Bot is thinking…' : 'Bot myśli…')}</span>
         <button class="btn btn-ghost" ${st.turn === 0 && !st.p[0].passed && !_kortBusy ? '' : 'disabled'} onclick="kortHumanPass()">✋ ${en ? 'Pass' : 'Pasuj'}</button></div>
       <div style="display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem">${st.p[0].hand.map(c => _kortCardHtml(st, 0, c, null, false)).join('')}</div></div>`}
   </div>`;
@@ -16949,9 +17031,10 @@ function _kortEndHtml() {
     <div id="k-mvp" style="margin:.8rem auto 0;min-height:60px"></div>
     <button class="btn btn-primary" style="margin-top:.6rem" onclick="kortShare()">📸 ${en ? 'Share result' : 'Udostępnij wynik'}</button> <button class="btn btn-ghost" style="margin-top:.6rem" onclick="renderKort().then(()=>{})">↩ ${en ? 'Back' : 'Wróć'}</button>${_kort.mode === 'daily' ? ` <button class="btn btn-ghost" style="margin-top:.6rem" onclick="kortStart()">🔁 ${en ? 'Rematch (no reward)' : 'Rewanż (bez nagrody)'}</button>` : ''}</div>`;
 }
-function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kortFxFor(0); _kSfx('play'); _kortDraw(); _kortBot(); } }
-function kortHumanPass() { if(!_kort || _kortBusy) return; if(kortPass(_kort.st, 0)) { _kSfx('pass'); _kortDraw(); _kortBot(); } }
+function kortHumanPlay(id, row) { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0 && !_kort.st.p[0].passed) _kortLiveMove('play', id, row); return; } if(kortPlay(_kort.st, 0, id, row)) { _kort.lastId = id; _kortFxFor(0); _kSfx('play'); _kortDraw(); _kortBot(); } }
+function kortHumanPass() { if(!_kort || _kortBusy) return; if(_kort.mode === 'live') { if(_kort.st.turn === 0) _kortLiveMove('pass'); return; } if(kortPass(_kort.st, 0)) { _kSfx('pass'); _kortDraw(); _kortBot(); } }
 function _kortBot() {
+  if(_kort?.mode === 'live') { _kortDraw(); return; }
   const st = _kort?.st; if(!st || st.over || st.turn !== 1) { _kortDraw(); return; }
   _kortBusy = true; _kortDraw();
   setTimeout(() => { const m = kortBotMove(st, 1); if(m.pass) { kortPass(st, 1); _kSfx('pass'); } else { kortPlay(st, 1, m.id, m.row); _kort.lastId = m.id; _kortFxFor(1); _kSfx('opp'); } _kortBusy = false; _kortDraw(); if(st.turn === 1 && !st.over) _kortBot(); }, 650);
@@ -17069,7 +17152,8 @@ function teamRegUpdateCount() {
 }
 
 const _EXP_PL = { beginner:'🌱 Początkujący', intermediate:'⚡ Średnio-zaawansowany', advanced:'🔥 Zaawansowany', pro:'👑 Pro / Weteran' }, _EXP_EN = { beginner:'🌱 Beginner', intermediate:'⚡ Intermediate', advanced:'🔥 Advanced', pro:'👑 Pro / Veteran' };
-const _expLabels = new Proxy({}, { get: (_, k) => (currentLang === 'en' ? _EXP_EN : _EXP_PL)[k] }); // etykiety poziomu w języku strony
+const _expLabels = new Proxy({}, { get: (_, k) => (currentLang === 'en' ? _EXP_EN : _EXP_PL)[k], ownKeys: () => Object.keys(_EXP_PL), getOwnPropertyDescriptor: (_, k) => k in _EXP_PL ? { enumerable: true, configurable: true, value: (currentLang === 'en' ? _EXP_EN : _EXP_PL)[k] } : undefined }); // etykiety poziomu w języku strony
+function _faLevel(x) { return _expLabels[x] || (typeof TEAM_LEVELS !== 'undefined' && TEAM_LEVELS.includes(x) ? '📶 ' + x : ''); } // poziom FA: PL (początkujący…) albo EU (Tryhard D1…)
 
 async function submitTeamRegistration() {
   if(!discordUser) { showToast('❌ Zaloguj się przez Discord', 'error'); return; }
@@ -19056,6 +19140,11 @@ function openEventMatchDetail(eventId, matchIdx) {
   document.getElementById('match-modal').classList.add('open');
 }
 
+// domyślna wiadomość DM o evencie — po angielsku (serwer jest wspólny dla lig PL i EU)
+function _notifyDefaultMsg(ev) {
+  const d = ev.date ? new Date(ev.date) : null, dateStr = d ? d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (/T\d/.test(String(ev.date)) ? ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '') : '—';
+  return `🏀 **${ev.title}**\n\n📅 Date: **${dateStr}**\n${ev.description ? '📝 ' + ev.description + '\n' : ''}\nSign-ups are open — join us!\n🔗 ${location.origin}/#event/${ev.id}`;
+}
 function openNotifyModal(eventId) {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
@@ -19070,13 +19159,7 @@ function updateNotifyPreview() {
   const ev = events.find(e => e.id === eventId);
   if(!ev) return;
   const custom = document.getElementById('notify-custom-msg').value.trim();
-  const dateStr = ev.date ? new Date(ev.date).toLocaleDateString('pl-PL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '—';
-  const signupUrl = window.location.href.split('?')[0];
-  const defaultMsg =
-    `🏀 **${ev.title}**\n\n` +
-    `📅 Data: **${dateStr}**\n` +
-    `${ev.description ? '📝 ' + ev.description + '\n' : ''}` +
-    `\nZapraszamy do zapisów!\n🔗 ${signupUrl}`;
+  const defaultMsg = _notifyDefaultMsg(ev);
   document.getElementById('notify-preview').textContent = custom || defaultMsg;
 }
 
@@ -19085,13 +19168,7 @@ async function sendDraftNotification() {
   const ev = events.find(e => e.id === eventId);
   if(!ev || !workerUrl) return;
   const custom = document.getElementById('notify-custom-msg').value.trim();
-  const dateStr = ev.date ? new Date(ev.date).toLocaleDateString('pl-PL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '—';
-  const signupUrl = window.location.href.split('?')[0];
-  const defaultMsg =
-    `🏀 **${ev.title}**\n\n` +
-    `📅 Data: **${dateStr}**\n` +
-    `${ev.description ? '📝 ' + ev.description + '\n' : ''}` +
-    `\nZapraszamy do zapisów!\n🔗 ${signupUrl}`;
+  const defaultMsg = _notifyDefaultMsg(ev);
   const message = custom || defaultMsg;
 
   document.getElementById('notify-draft-modal').classList.remove('open');
