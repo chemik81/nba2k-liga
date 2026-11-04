@@ -10280,8 +10280,9 @@ function _clipEmbed(url) {
   return null;
 }
 // 🎬 wgrywanie pliku z akcją (kapitanowie obu drużyn meczu, admin) → kanał „Akcje meczów” na Discordzie → odtwarzanie na stronie
-function _canUploadClip(s) { if(_isLoggedInSync()) return true; if(!discordUser?.id || !s) return false;
-  return (teamRegistrations || []).some(r => r.status === 'approved' && [s.team1, s.team2].includes(r.teamName) && String(r.captain?.id) === String(discordUser.id)); }
+function _canUploadClip(s) { // kapitanowie i gracze obu drużyn meczu (konto połączone z nickiem w składzie); admin
+  if(_isLoggedInSync()) return true; if(!discordUser?.id || !s) return false; const me = _normNick((typeof _myGamertag === 'function' && _myGamertag()) || '');
+  return (teamRegistrations || []).some(r => r.status === 'approved' && [s.team1, s.team2].includes(r.teamName) && (String(r.captain?.id) === String(discordUser.id) || (r.players || []).some(p => String(p.discordId || '') === String(discordUser.id) || (me && _normNick(p.gamertag) === me)))); }
 function uploadClip(k) {
   if(!_ensureSession()) return;
   const f = document.getElementById('clip-file')?.files?.[0], title = document.getElementById('clip-title').value.trim(), st = document.getElementById('clip-up-status'), bar = document.getElementById('clip-up-bar');
@@ -10328,14 +10329,14 @@ function openClips(k) {
       ${_canUploadClip(s) ? `<div style="background:var(--surface2);border:1px dashed var(--accent);border-radius:10px;padding:.65rem .75rem;margin-bottom:.8rem">
         <label style="${_MODAL_LBL}">📁 ${_g('Wgraj plik z akcją (do 100 MB)', 'Upload a highlight file (up to 100 MB)')}</label>
         <input id="clip-file" type="file" accept="video/*" style="${_MODAL_INP};margin-bottom:.4rem;padding:.35rem">
-        <div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">${_g('Film trafi na kanał akcji na Discordzie i odtworzy się tutaj. Opis wpisz w polu „Opis” niżej. Limit: 3 akcje na drużynę w meczu, 5 dziennie.', 'The video goes to the highlights channel on Discord and plays here. Write the description in the field below. Limit: 3 per team per match, 5 a day.')}</div>
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">${_g('Film trafi na kanał akcji na Discordzie i odtworzy się tutaj. Opis wpisz w polu „Opis” niżej. Limity: 5 akcji na drużynę w meczu (w tym 3 pliki), 10 dziennie na osobę (w tym 5 plików).', 'The video goes to the highlights channel on Discord and plays here. Write the description in the field below. Limits: 5 highlights per team per match (up to 3 files), 10 a day per person (up to 5 files).')}</div>
         <div style="display:none;height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-bottom:.3rem"><div id="clip-up-bar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem"><span id="clip-up-status" style="font-size:.74rem"></span><button class="btn btn-primary" onclick="uploadClip('${k}')">📤 ${_g('Wgraj plik', 'Upload file')}</button></div></div>` : ''}
-      <label style="${_MODAL_LBL}">${_g('Dodaj akcję (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)', 'Add a highlight (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)')}</label>
+${_canUploadClip(s) ? `      <label style="${_MODAL_LBL}">${_g('Dodaj akcję (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)', 'Add a highlight (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)')}</label>
       <div style="font-size:.72rem;color:var(--muted);margin:-.15rem 0 .35rem">💬 ${_g('Film na Discordzie? Prawy klik na wiadomość z filmem → <b>Kopiuj link do wiadomości</b> i wklej tutaj.', 'Video on Discord? Right-click the message with the video → <b>Copy Message Link</b> and paste it here.')}</div>
       <input id="clip-url" placeholder="https://discord.com/channels/… / https://youtu.be/…" style="${_MODAL_INP};margin-bottom:.45rem">
       <input id="clip-title" maxlength="80" placeholder="Opis, np. Wsad nad dwoma obrońcami" style="${_MODAL_INP};margin-bottom:.6rem">
-      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="addClip('${k}')">➕ Dodaj</button></div>
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="addClip('${k}')">➕ Dodaj</button></div>` : `<div style="font-size:.78rem;color:var(--muted);text-align:center">🎬 ${_g('Akcje tego meczu mogą dodawać kapitanowie i gracze obu drużyn.', 'Highlights for this game can be added by the captains and players of both teams.')}</div>`}
     </div>`;
   m.classList.add('open');
 }
@@ -10343,7 +10344,7 @@ async function addClip(k) {
   if(!_ensureSession()) return;
   const url = document.getElementById('clip-url').value.trim(), title = document.getElementById('clip-title').value.trim();
   if(!url) return;
-  const res = await _api('/clips', 'POST', { scheduleId: k, url, title }, { session: true });
+  const res = await _api('/clips', 'POST', { scheduleId: k, url, title }, { session: true, admin: _isLoggedInSync() });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   clipsList.unshift(res.clip);
   openClips(k); renderSeasonSchedule();
