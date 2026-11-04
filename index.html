@@ -8096,6 +8096,8 @@ function openDeepLink() {
   if(h === 'druzyny' || h === 'teams') { showView('teams'); return; }
   if(h === 'multistream') { openMultistream(); return; }
   if(h === 'podcast') { showView('podcast'); return; }
+  if(h.startsWith('akcje/') || h.startsWith('highlights/')) { const id = decodeURIComponent(h.split('/')[1] || ''); showView('schedule'); // 🎬 link do akcji konkretnego meczu (z ogłoszenia bota)
+    let n = 0; const t = setInterval(() => { if(_ssItem(id) || ++n > 40) { clearInterval(t); if(_ssItem(id)) openClips(id); } }, 250); return; }
   if(h.startsWith('podcast/')) { window._podFocusId = decodeURIComponent(h.slice(8)); showView('podcast'); return; }
   if(h.startsWith('gracz/')) { const n = decodeURIComponent(h.slice(6)); setTimeout(() => { try { const pl = _withAllMatches(() => matches.slice()).flatMap(m => [m.team1, m.team2]).flatMap(t => (t.players || []).map(p => ({ p, t: t.name }))).find(x => _normNick(x.p.name) === _normNick(n)); openPlayerModal(pl?.p.name || n, pl?.t || ''); } catch(e) {} }, 400); return; }
   if(h.startsWith('druzyna/')) { const n = decodeURIComponent(h.slice(8)); setTimeout(() => { try { openTeamModal(n); } catch(e) {} }, 400); return; }
