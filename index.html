@@ -3459,7 +3459,7 @@ function openMatch(id) {
   if(!m) return;
   const modal = document.getElementById('modal-content');
   const w1 = m.team1.score > m.team2.score;
-  modal.innerHTML = `
+  modal.innerHTML = `${m.merged ? `<div style="font-size:.78rem;background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.4);border-radius:8px;padding:.35rem .6rem;margin-bottom:.6rem">🔌 ${_g('Mecz dogrywany po rozłączeniu — połączono 2 zrzuty (wynik i statystyki zsumowane)', 'Match finished after a disconnect — 2 screenshots merged (score and stats combined)')}</div>` : ''}
     <div class="modal-score-row">
       <div>
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.25rem">${teamLogo(m.team1.name,44,'1rem')}<div class="modal-team">${m.team1.name}</div></div>
@@ -3480,7 +3480,7 @@ function openMatch(id) {
           <button id="recap-model-haiku" onclick="setRecapModel('claude-haiku-4-5-20251001')" style="${recapModel === 'claude-haiku-4-5-20251001' ? 'padding:.2rem .5rem;border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:6px' : 'padding:.2rem .5rem;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:6px'}">Haiku</button>
           <button id="recap-model-sonnet" onclick="setRecapModel('claude-sonnet-4-20250514')" style="${recapModel === 'claude-sonnet-4-20250514' ? 'padding:.2rem .5rem;border:2px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:6px' : 'padding:.2rem .5rem;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;border-radius:6px'}">Sonnet</button>
         </div>` : ''}
-        ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="editMatch(${id})">&#x270f;&#xfe0f; Edytuj</button><button class="btn btn-danger" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button>` : ''}
+        ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="editMatch(${id})">&#x270f;&#xfe0f; Edytuj</button>${m.merged ? `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="unmergeMatch('${id}')">↩ Rozdziel</button>` : `<button class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.75rem" title="Mecz przerwany (rozłączenie) — połącz dwa zrzuty w jeden mecz" onclick="openMergeMatch('${id}')">🔗 Połącz</button>`}<button class="btn btn-danger" style="font-size:0.75rem;padding:0.4rem 0.75rem" onclick="deleteMatch(${id})">🗑 Usuń</button>` : ''}
       </div>
       </div>
       <div style="text-align:right">
@@ -3560,6 +3560,51 @@ function closeModal() {
 }
 
 let pendingDeleteId = null;
+
+// 🔌 MECZ PRZERWANY (rozłączenie): połączenie dwóch zrzutów w jeden mecz — suma wyniku i statystyk; da się rozdzielić z powrotem
+const _MSUM = ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta'];
+function _numToGrade(n) { const L = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+']; return L[Math.max(0, Math.min(12, Math.round(n) - 1))]; }
+function _mergeTeams(ta, tb) { // ta: część 1, tb: część 2 (ta sama drużyna)
+  const out = { ...ta, score: (+ta.score || 0) + (+tb.score || 0), players: (ta.players || []).map(p => ({ ...p })) };
+  (tb.players || []).forEach(q => { const p = out.players.find(x => _normNick(x.name) === _normNick(q.name));
+    if(!p) { out.players.push({ ...q }); return; }
+    const w1 = (+p.pts || 0) + (+p.reb || 0) + (+p.ast || 0) + 1, w2 = (+q.pts || 0) + (+q.reb || 0) + (+q.ast || 0) + 1;
+    const g1 = gradeToNum(p.grade), g2 = gradeToNum(q.grade); if(g1 && g2) p.grade = _numToGrade((g1 * w1 + g2 * w2) / (w1 + w2)); else if(!g1 && g2) p.grade = q.grade;
+    _MSUM.forEach(k => p[k] = (+p[k] || 0) + (+q[k] || 0)); });
+  return out;
+}
+function openMergeMatch(id) {
+  const A = matches.find(m => String(m.id) === String(id)); if(!A) return;
+  const teams = [A.team1.name, A.team2.name].map(_normNick).sort().join('|'), dA = Date.parse(A.date) || 0;
+  const C = matches.filter(m => m !== A && !m.walkover && !m.merged && [m.team1.name, m.team2.name].map(_normNick).sort().join('|') === teams && (m.seasonId || null) === (A.seasonId || null) && Math.abs((Date.parse(m.date) || 0) - dA) <= 7 * 864e5);
+  const md = _fxModal('merge-modal', 600); md.classList.add('open');
+  md.querySelector('.modal').innerHTML = _fxHead('merge-modal', '🔗 Połącz mecze (dogrywka po rozłączeniu)') + `<div data-notr>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.7rem">Gdy mecz został przerwany (rozłączenie) i drużyny dograły resztę, są dwa zrzuty jednego meczu. Połączenie sumuje wynik i statystyki każdego gracza (ocena — średnia ważona), a drugi zapis znika z meczów i z terminarza. Można to potem cofnąć.</div>
+    <div style="font-size:.84rem;margin-bottom:.4rem"><b>Ten mecz:</b> ${_h(A.team1.name)} ${A.team1.score}:${A.team2.score} ${_h(A.team2.name)} · ${_h(A.date || '')}</div>
+    ${C.length ? `<div style="font-size:.8rem;font-weight:700;margin:.6rem 0 .3rem">Druga część (te same drużyny, ±7 dni):</div>${C.map(m => { const same = _normNick(m.team1.name) === _normNick(A.team1.name), s1 = same ? m.team1.score : m.team2.score, s2 = same ? m.team2.score : m.team1.score;
+      return `<label style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.4rem .5rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.3rem;cursor:pointer;font-size:.82rem;text-transform:none;letter-spacing:0;color:var(--text)"><span><input type="radio" name="mrg" value="${m.id}" style="width:auto;margin:0 .4rem 0 0">${_h(A.team1.name)} ${s1}:${s2} ${_h(A.team2.name)} · ${_h(m.date || '')}</span><span style="color:var(--muted)">→ razem <b style="color:var(--text)">${(+A.team1.score || 0) + (+s1 || 0)}:${(+A.team2.score || 0) + (+s2 || 0)}</b></span></label>`; }).join('')}
+      <div style="display:flex;justify-content:flex-end;margin-top:.6rem"><button class="btn btn-primary" onclick="mergeMatchesConfirm('${A.id}')">🔗 Połącz w jeden mecz</button></div>`
+      : `<div style="font-size:.82rem;color:var(--muted);margin-top:.5rem">Brak innych meczów tych samych drużyn z ±7 dni.</div>`}</div>`;
+}
+async function mergeMatchesConfirm(aId) {
+  const bId = document.querySelector('input[name="mrg"]:checked')?.value; if(!bId) { showToast('Wybierz drugą część meczu', 'info'); return; }
+  const A0 = matches.find(m => String(m.id) === String(aId)), B0 = matches.find(m => String(m.id) === String(bId)); if(!A0 || !B0) return;
+  const [P1, P2] = [A0, B0].sort((x, y) => String(x.date).localeCompare(String(y.date)) || (+x.id - +y.id)); // część 1 = wcześniejsza
+  const same = _normNick(P2.team1.name) === _normNick(P1.team1.name), t1 = same ? P2.team1 : P2.team2, t2 = same ? P2.team2 : P2.team1;
+  if(!confirm(`Połączyć w jeden mecz?\n${P1.team1.name} ${(+P1.team1.score || 0) + (+t1.score || 0)}:${(+P1.team2.score || 0) + (+t2.score || 0)} ${P1.team2.name}`)) return;
+  const M = { ...P1, team1: _mergeTeams(P1.team1, t1), team2: _mergeTeams(P1.team2, t2), merged: { parts: 2, at: new Date().toISOString(), partA: JSON.parse(JSON.stringify(P1)), partB: JSON.parse(JSON.stringify(P2)) } };
+  matches = matches.filter(m => String(m.id) !== String(P2.id)).map(m => String(m.id) === String(P1.id) ? M : m);
+  (schedule || []).forEach(s => { const ids = (s.matchIds || []).map(String); if(ids.includes(String(P2.id))) { s.matchIds = (s.matchIds || []).filter(x => String(x) !== String(P2.id)); if(!s.matchIds.map(String).includes(String(P1.id))) s.matchIds.push(P1.id); } if(String(s.matchId) === String(P2.id)) s.matchId = P1.id; });
+  await saveData(); _fxClose('merge-modal'); try { closeModal(); } catch(e) {} try { renderMatches(); renderDashboard(); renderSchedule(); } catch(e) {}
+  showToast(`🔗 Połączono: ${M.team1.name} ${M.team1.score}:${M.team2.score} ${M.team2.name}`, 'success');
+}
+async function unmergeMatch(id) {
+  const M = matches.find(m => String(m.id) === String(id)); if(!M?.merged?.partA) return;
+  if(!confirm('Rozdzielić z powrotem na dwa osobne mecze?')) return;
+  const A = M.merged.partA, B = M.merged.partB; matches = matches.map(m => String(m.id) === String(id) ? A : m); if(!matches.some(m => String(m.id) === String(B.id))) matches.push(B);
+  (schedule || []).forEach(s => { if((s.matchIds || []).map(String).includes(String(A.id)) && !(s.matchIds || []).map(String).includes(String(B.id))) s.matchIds.push(B.id); });
+  await saveData(); try { closeModal(); renderMatches(); renderDashboard(); renderSchedule(); } catch(e) {} showToast('↩ Rozdzielono na dwa mecze', 'success');
+}
 
 function deleteMatch(id) {
   pendingDeleteId = Number(id);
