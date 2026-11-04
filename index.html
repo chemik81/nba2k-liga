@@ -16085,7 +16085,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
@@ -16964,6 +16964,21 @@ async function _kortStatsHtml() {
       ${r.hist.map(h => `<div style="display:grid;grid-template-columns:70px 22px 1fr auto;gap:.45rem;align-items:center;font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted);font-size:.72rem">${new Date(h.at).toLocaleDateString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'numeric' })}</span><span>${M[h.mode]?.[0] || ''}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">vs ${_h(h.opp || '')}${h.mvp ? ` <span style="color:var(--muted)">· ⭐ ${_h(h.mvp)}</span>` : ''}</span><b style="color:${h.res === 'win' ? 'var(--win)' : h.res === 'loss' ? 'var(--loss)' : 'var(--accent)'}">${h.res === 'win' ? (en ? 'W' : 'W') : h.res === 'loss' ? (en ? 'L' : 'P') : (en ? 'D' : 'R')} ${_h(h.score || '')}</b></div>`).join('')}</div></div>`;
 }
 // 🛠 admin: balans Kortu na prawdziwych meczach
+// 🔁 admin: przeliczenie ELO z historii meczów rankingowych (podgląd → zastosuj)
+async function openEloRecalc(apply) {
+  const m = _fxModal('elorc-modal', 640); m.classList.add('open'); const head = _fxHead('elorc-modal', '🔁 Kort — przelicz ELO z historii');
+  m.querySelector('.modal').innerHTML = head + '⏳ Liczę…';
+  if(apply && !confirm('Zapisać przeliczone ELO i bilanse wszystkim graczom rankingowym?')) { apply = false; }
+  const r = await _api('/kort/elo-recalc', apply ? 'POST' : 'GET', apply ? {} : null, { admin: true }); if(!r.ok) { m.querySelector('.modal').innerHTML = head + '❌ ' + _h(r.error || ''); return; }
+  const ch = r.rows.filter(x => x.diff), sgn = d => (d > 0 ? '+' : '') + d;
+  m.querySelector('.modal').innerHTML = head + `<div data-notr style="font-size:.82rem">
+    <div style="color:var(--muted);margin-bottom:.6rem">${r.applied ? '✅ <b style="color:var(--win)">Zapisano.</b> ' : ''}Serwer odtworzył ELO od zera (1000) z <b style="color:var(--text)">${r.games}</b> meczów rankingowych zapisanych w historii graczy, w kolejności rozegrania — tym samym wzorem co w grze, dla obu stron każdego meczu. Usuwa skutki błędu zapisu (utracone punkty i fałszywe „porzucone mecze”).</div>
+    ${ch.length ? `<div style="display:grid;grid-template-columns:1fr 70px 70px 64px 70px;gap:.3rem;font-size:.7rem;color:var(--muted);padding-bottom:.2rem;border-bottom:1px solid var(--border)"><span>Gracz</span><span>Teraz</span><span>Po przeliczeniu</span><span>Zmiana</span><span>Bilans</span></div>
+      ${r.rows.map(x => `<div style="display:grid;grid-template-columns:1fr 70px 70px 64px 70px;gap:.3rem;padding:.25rem 0;border-bottom:1px solid var(--border);${x.diff ? '' : 'opacity:.55'}"><b>${_h(x.name)}</b><span>${r.applied ? '—' : x.now}</span><span><b>${x.calc}</b></span><span style="color:${x.diff > 0 ? 'var(--win)' : x.diff < 0 ? 'var(--loss)' : 'var(--muted)'}">${x.diff ? sgn(x.diff) : '0'}</span><span>${x.rkCalc.w}-${x.rkCalc.l}${x.rkCalc.d ? '-' + x.rkCalc.d : ''}</span></div>`).join('')}`
+      : `<div style="color:var(--win)">✅ Wszystkie ELO zgadzają się z historią meczów — nic do poprawy.</div>`}
+    ${!r.applied && ch.length ? `<div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem"><button class="btn btn-ghost" onclick="_fxClose('elorc-modal')">Anuluj</button><button class="btn btn-primary" onclick="openEloRecalc(true)">✅ Zastosuj (${ch.length} graczy)</button></div>` : ''}</div>`;
+}
+
 async function openKortBalance() {
   const m = _fxModal('kbal-modal', 820); m.classList.add('open'); m.querySelector('.modal').innerHTML = _fxHead('kbal-modal', '🃏 Kort — balans') + '⏳';
   const r = await _api('/kort/balance', 'GET', null, { admin: true }); if(!r.ok) { m.querySelector('.modal').innerHTML = _fxHead('kbal-modal', '🃏 Kort — balans') + '❌ ' + _h(r.error || ''); return; }
