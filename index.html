@@ -13814,6 +13814,8 @@ async function openWeekGraphics() {
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem">
         <button class="btn btn-ghost" style="font-size:.72rem" onclick="weekGraphicsBot(true)">🧪 Do mnie (DM)</button>
         <button class="btn btn-ghost" style="font-size:.72rem" onclick="weekGraphicsBot(false)">📣 Na kanał podsumowania tygodnia</button>
+        <button class="btn btn-ghost" style="font-size:.72rem" title="Ponowna publikacja samej Piątki tygodnia — bez wyników, ciekawostek i bez nowych kart limitowanych" onclick="weekGraphicsBot(true, true)">🏀 Tylko Piątka → do mnie (DM)</button>
+        <button class="btn btn-ghost" style="font-size:.72rem" title="Ponowna publikacja samej Piątki tygodnia — bez wyników, ciekawostek i bez nowych kart limitowanych" onclick="weekGraphicsBot(false, true)">🏀 Tylko Piątka → na kanał</button>
       </div><div id="wg-bot-status" style="margin-top:.3rem;min-height:1em"></div>
     </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .75rem;margin-bottom:.8rem;font-size:.76rem">
@@ -13880,12 +13882,12 @@ async function xPublishNow() {
   st.style.color = r.ok ? 'var(--win)' : 'var(--loss)';
   st.textContent = r.ok ? '✅ Zlecone — za kilka sekund tweet będzie na koncie (link przyjdzie Ci w DM).' : '❌ ' + (r.error || 'Błąd');
 }
-async function weekGraphicsBot(test) {
+async function weekGraphicsBot(test, onlyTow) {
   const week = +document.getElementById('wg-week').value, st = document.getElementById('wg-bot-status');
   if(test && !_ensureSession()) return;
-  if(!test && !confirm(`Wysłać grafiki Week ${week} (PL + EN) na kanał Discord?`)) return;
+  if(!test && !confirm(onlyTow ? `Opublikować ponownie Piątkę tygodnia Week ${week} (PL + EN) na kanale podsumowania tygodnia? Bez wyników, ciekawostek i bez nowych kart limitowanych.` : `Wysłać grafiki Week ${week} (PL + EN) na kanał Discord?`)) return;
   st.style.color = 'var(--muted)'; st.textContent = '⏳ Zlecam botowi…';
-  const r = await _api('/week-graphics', 'POST', { week, test, seasonId: currentSeasonId || null }, { admin: true, session: true });
+  const r = await _api('/week-graphics', 'POST', { week, test, seasonId: currentSeasonId || null, ...(onlyTow ? { onlyTow: true } : {}) }, { admin: true, session: true });
   st.style.color = r.ok ? 'var(--win)' : 'var(--loss)';
   st.textContent = r.ok ? `✅ Bot rysuje grafiki Week ${week} — za kilka sekund ${test ? 'przyjdą w DM' : 'pojawią się na kanale'}.` : '❌ ' + (r.error || 'Błąd');
 }
@@ -15819,7 +15821,7 @@ async function openLimitedAdmin() {
         <div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-ghost" onclick="recPreview()">👁 Podgląd kart</button><button class="btn btn-primary" onclick="recCreate()">🏛 Wydaj kolekcję</button></div>
       </div>
       <div style="border-top:1px solid var(--border);margin-top:.9rem;padding-top:.6rem;font-size:.8rem">Domyślna szansa na kartę limitowaną w paczce: <input id="lim-gc" type="number" min="0" max="100" value="${Math.round((st.limitedChance ?? .1) * 100)}" style="${_MODAL_INP};width:70px;display:inline-block"> % <button class="btn btn-ghost" style="font-size:.72rem" onclick="_api('/cards/limited','POST',{chance:(+document.getElementById('lim-gc').value||0)/100},{admin:true}).then(r=>showToast(r.ok?'💾 Zapisano':'❌','success'))">💾</button></div>
-      ${L.length ? `<div style="margin-top:.7rem;font-size:.78rem"><b>Karty (aktywne i z ostatnich dni):</b>${L.slice().reverse().map(c => { const act = Date.parse(c.until) > now; return `<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${act ? '🟢' : '⚪'} ${_h(c.name)} — ${_h(c.label)} <span style="color:var(--muted)">${c.theme && c.theme !== 'gold' ? '· ' + c.theme : ''}${c.chance != null ? ' · ' + Math.round(c.chance * 100) + '%' : ''}</span></span><span>${act ? `<a href="#" onclick="_api('/cards/limited','POST',{end:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:#f59e0b">zakończ</a> · ` : ''}<a href="#" onclick="if(confirm('Usunąć kartę? Zdobyte egzemplarze zostaną w kolekcjach.')) _api('/cards/limited','POST',{remove:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:var(--loss)">usuń</a></span></div>`; }).join('')}</div>` : ''}
+      ${L.length ? `<div style="margin-top:.7rem;font-size:.78rem"><b>Karty (aktywne i z ostatnich 30 dni):</b>${L.slice().reverse().map(c => { const act = Date.parse(c.until) > now; return `<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.25rem 0;border-bottom:1px solid var(--border)"><span>${act ? '🟢' : '⚪'} ${_h(c.name)} — ${_h(c.label)} <span style="color:var(--muted)">${c.theme && c.theme !== 'gold' ? '· ' + c.theme : ''}${c.chance != null ? ' · ' + Math.round(c.chance * 100) + '%' : ''}</span></span><span>${act ? `<a href="#" onclick="_api('/cards/limited','POST',{end:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:#f59e0b">zakończ</a> · ` : ''}<a href="#" onclick="if(confirm('Usunąć kartę? Zdobyte egzemplarze zostaną w kolekcjach.')) _api('/cards/limited','POST',{remove:'${c.id}'},{admin:true}).then(()=>openLimitedAdmin());return false" style="color:var(--loss)">usuń</a></span></div>`; }).join('')}</div>` : ''}
     </div>
     <div><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">PODGLĄD</div><div id="lim-prev" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-start;color:var(--muted);font-size:.8rem">Kliknij „👁 Podgląd”.</div></div>
   </div>`;
