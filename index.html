@@ -10144,13 +10144,13 @@ function changeTeamLogo(regId) {
     const f = inp.files?.[0];
     if(!f) return;
     try {
-      showToast('⏳ Wgrywam logo…', 'info');
+      showToast(_g('⏳ Wgrywam logo…', '⏳ Uploading the logo…'), 'info');
       const dataUrl = await _resizeLogo(f);
       const res = await _api('/team-logo', 'POST', { regId, dataUrl }, isAdmin ? { admin: true } : { session: true });
       if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
       Object.assign(reg, res.registration);
       renderTeamRegistrations(); renderDashboard(); renderSchedule();
-      showToast(`🖼 Nowe logo: ${reg.teamName}`, 'success');
+      showToast(_g(`🖼 Nowe logo: ${reg.teamName}`, `🖼 New logo: ${reg.teamName}`), 'success');
     } catch(e) { showToast('❌ ' + e.message, 'error'); }
   };
   inp.click();
@@ -10960,39 +10960,40 @@ async function saveEuTeamEdit() {
   const r = await _api('/team-registration/edit', 'POST', { id: _euEd.id, players: rows.map(({ orig, ...p }) => p), renames, xHandle: _euEd.xHandle }, { session: true });
   if(!r.ok) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + (r.error || 'Error'); return; }
   const i = teamRegistrations.findIndex(x => x.id === _euEd.id); if(i >= 0) teamRegistrations[i] = { ...teamRegistrations[i], ...r.registration };
-  _fxClose('euedit-modal'); showToast('✅ Team saved', 'success'); try { renderDashboard(); } catch(e) {}
+  _fxClose('euedit-modal'); showToast('✅ Team saved', 'success'); try { renderDashboard(); } catch(e) {} try { renderTeamRegistrations(); } catch(e) {}
 }
 
 function openRosterChange(regId) {
   const r = teamRegistrations.find(x => x.id === regId);
   if(!r || !_ensureSession()) return;
+  if(EU_MODE && !registrationsClosed && String(r.captain?.id) === String(discordUser?.id)) return openEuTeamEdit(regId); // EU, zapisy otwarte: kapitan edytuje bezpośrednio
   const m = _fxModal('roster-modal', 560);
-  m.querySelector('.modal').innerHTML = _fxHead('roster-modal', `✏️ Zmiana składu — ${_h(r.teamName)}`) + `
-    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">Popraw literówki w nickach, zaznacz graczy do usunięcia i dopisz nowych. Zmiany zatwierdza admin. Poprawki nicków nie tworzą transferów — połączone konta graczy przepną się na poprawiony nick.${rosterLockDate ? ` Okno transferowe (dopisywanie / usuwanie) do <b>${_ssFmt(rosterLockDate)}</b>.` : ''}</div>
-    <label style="${_MODAL_LBL}">Obecny skład</label>
+  m.querySelector('.modal').innerHTML = _fxHead('roster-modal', `✏️ ${_g('Zmiana składu', 'Roster change')} — ${_h(r.teamName)}`) + `
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">${_g('Popraw literówki w nickach, zaznacz graczy do usunięcia i dopisz nowych. Zmiany zatwierdza admin. Poprawki nicków nie tworzą transferów — połączone konta graczy przepną się na poprawiony nick.', 'Fix typos in gamertags, tick players to remove and add new ones. An admin approves the changes. Gamertag fixes are not transfers — linked player accounts follow the corrected gamertag.')}${rosterLockDate ? _g(` Okno transferowe (dopisywanie / usuwanie) do <b>${_ssFmt(rosterLockDate)}</b>.`, ` Transfer window (adding / removing) until <b>${_ssFmt(rosterLockDate)}</b>.`) : ''}</div>
+    <label style="${_MODAL_LBL}">${_g('Obecny skład', 'Current roster')}</label>
     <div style="display:flex;flex-direction:column;gap:.3rem;margin-bottom:.8rem">
       ${(r.players || []).map(p => `<div style="display:grid;grid-template-columns:1fr auto;gap:.4rem;align-items:center">
         <input class="ro-nick" data-orig="${_h(p.gamertag)}" value="${_h(p.gamertag)}" maxlength="32" style="${_MODAL_INP};padding:.35rem .55rem">
-        <label style="font-size:.74rem;white-space:nowrap;cursor:pointer;color:var(--loss)"><input type="checkbox" class="ro-rm" value="${_h(p.gamertag)}" style="accent-color:var(--loss)"> usuń</label>
+        <label style="font-size:.74rem;white-space:nowrap;cursor:pointer;color:var(--loss)"><input type="checkbox" class="ro-rm" value="${_h(p.gamertag)}" style="accent-color:var(--loss)"> ${_g('usuń', 'remove')}</label>
       </div>`).join('')}
     </div>
-    <label style="${_MODAL_LBL}">Nowi gracze (jeden nick w linii)</label>
+    <label style="${_MODAL_LBL}">${_g('Nowi gracze (jeden nick w linii)', 'New players (one gamertag per line)')}</label>
     <textarea id="ro-add" rows="3" placeholder="Nick1&#10;Nick2" style="${_MODAL_INP};margin-bottom:.6rem"></textarea>
-    <input id="ro-note" maxlength="200" placeholder="Notka dla admina (opcjonalnie)" style="${_MODAL_INP};margin-bottom:.9rem">
-    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('roster-modal')">Anuluj</button><button class="btn btn-primary" onclick="sendRosterChange('${regId}')">📤 Wyślij do admina</button></div>`;
+    <input id="ro-note" maxlength="200" placeholder="${_g('Notka dla admina (opcjonalnie)', 'Note for the admin (optional)')}" style="${_MODAL_INP};margin-bottom:.9rem">
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('roster-modal')">${_g('Anuluj', 'Cancel')}</button><button class="btn btn-primary" onclick="sendRosterChange('${regId}')">📤 ${_g('Wyślij do admina', 'Send to the admin')}</button></div>`;
   m.classList.add('open');
 }
 async function sendRosterChange(regId) {
   const remove = [...document.querySelectorAll('#roster-modal .ro-rm:checked')].map(x => x.value);
   const rename = [...document.querySelectorAll('#roster-modal .ro-nick')].map(x => ({ from: x.dataset.orig, to: x.value.trim() }))
     .filter(x => x.to && x.to !== x.from && !remove.includes(x.from));
-  if([...document.querySelectorAll('#roster-modal .ro-nick')].some(x => !x.value.trim() && !remove.includes(x.dataset.orig))) { showToast('Nick nie może być pusty — zaznacz „usuń”, jeśli gracz odchodzi', 'info'); return; }
+  if([...document.querySelectorAll('#roster-modal .ro-nick')].some(x => !x.value.trim() && !remove.includes(x.dataset.orig))) { showToast(_g('Nick nie może być pusty — zaznacz „usuń”, jeśli gracz odchodzi', 'A gamertag can’t be empty — tick “remove” if the player is leaving'), 'info'); return; }
   const add = document.getElementById('ro-add').value.split('\n').map(x => x.trim()).filter(Boolean).map(g => ({ gamertag: g }));
   const res = await _api('/roster-change', 'POST', { regId, add, remove, rename, note: document.getElementById('ro-note').value.trim() }, { session: true });
-  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  if(!res.ok) { showToast('❌ ' + _tr(res.error || ''), 'error'); return; }
   const i = teamRegistrations.findIndex(x => x.id === regId); if(i >= 0) teamRegistrations[i] = res.registration;
   _fxClose('roster-modal'); renderTeamRegistrations();
-  showToast('📤 Wysłano — czeka na admina', 'success');
+  showToast(_g('📤 Wysłano — czeka na admina', '📤 Sent — waiting for an admin'), 'success');
 }
 
 // ── admin: bezpośrednia edycja składu ──
@@ -17657,6 +17658,7 @@ function renderTeamRegistrations() {
           ${r.status !== 'pending'  ? btn('pending','↩ Cofnij do oczekujących','var(--muted)') : ''}
           <button onclick="openRosterEditor('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">✏️ Edytuj skład</button>
           <button onclick="openCaptainChange('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">👤 Zmień kapitana</button>
+          ${r.status !== 'rejected' ? `<button onclick="teamRegAnnounceBtn('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--accent)" title="${r.status === 'approved' ? 'Kanał: Zatwierdzenie drużyny' : 'Kanał: Nowe zgłoszenie drużyny'}">📣 Ogłoś na Discordzie</button>` : ''}
           <button onclick="teamRegDelete('${r.id}')" class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .5rem;color:var(--muted)">🗑 Usuń</button>
         </div>` : '');
       const rejectNote = (isAdmin || isMyTeam(r)) && r.status === 'rejected' && r.rejectReason
@@ -17729,10 +17731,19 @@ async function teamRegSetStatus(id, status) {
   if(status === 'pending') { showToast('↩ Przywrócono do oczekujących', 'info'); return; }
   if(status === 'rejected') { showToast('❌ Zgłoszenie odrzucone', 'info'); return; }
 
+  const sent = await teamRegAnnounce(reg, status, reason);
+  showToast(
+    (status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona') + (sent ? ' · wysłano na Discord' : ' · ⚠ Discord nie odpowiedział'),
+    sent ? 'success' : 'info'
+  );
+}
+
+// 📣 ogłoszenie drużyny na Discordzie (przy zatwierdzaniu i z przycisku admina); liga EU — po angielsku
+async function teamRegAnnounce(reg, status, reason = '') {
   const seasonName = reg.seasonId ? (seasons.find(s => s.id === reg.seasonId)?.name || reg.seasonId) : '—';
   const approvedCount = teamRegistrations.filter(r => r.status === 'approved' && r.seasonId === reg.seasonId).length;
   const playerLines = (reg.players||[]).map((p,i) =>
-    `${i+1}. **${p.gamertag}** [${(p.platform||'psn').toUpperCase()}]${p.experience ? ' · ' + (_expLabels[p.experience]||'') : ''}`
+    `${i+1}. **${p.gamertag}** [${(p.platform||'psn').toUpperCase()}]${p.experience && !EU_MODE ? ' · ' + (_expLabels[p.experience]||'') : ''}${p.x ? ` · [𝕏](https://x.com/${p.x})` : ''}`
   ).join('\n') || '—';
   const captainId = reg.captain?.id && /^\d+$/.test(String(reg.captain.id)) ? String(reg.captain.id) : null;
 
@@ -17745,24 +17756,27 @@ async function teamRegSetStatus(id, status) {
     funLine = fl?.line || '';
   }
 
+  if(status === 'pending') status = 'approved', reg = { ...reg, _pending: true };
   const embed = status === 'approved' ? {
-    title: `✅ ${reg.teamName} dołącza do ligi NBA 2K27!`,
+    title: reg._pending ? (EU_MODE ? `🆕 New team registered: ${reg.teamName}` : `🆕 Nowe zgłoszenie: ${reg.teamName}`) : EU_MODE ? `✅ ${reg.teamName} joins the EU Chemik League!` : `✅ ${reg.teamName} dołącza do ligi NBA 2K27!`,
     description: funLine ? `*${funLine}*` : undefined,
     color: 0x16a34a,
     fields: [
-      { name: 'Sezon', value: seasonName, inline: true },
-      { name: 'Kapitan', value: captainId ? `<@${captainId}>` : (reg.captain?.name || '?'), inline: true },
-      { name: 'Zatwierdzone drużyny', value: String(approvedCount), inline: true },
-      { name: `Skład (${reg.players?.length||0})`, value: playerLines, inline: false }
+      { name: EU_MODE ? 'Season' : 'Sezon', value: seasonName, inline: true },
+      { name: EU_MODE ? 'Captain' : 'Kapitan', value: captainId ? `<@${captainId}>` : (reg.captain?.name || '?'), inline: true },
+      { name: EU_MODE ? 'Approved teams' : 'Zatwierdzone drużyny', value: String(approvedCount), inline: true },
+      ...(EU_MODE && reg.level ? [{ name: 'Level', value: String(reg.level), inline: true }] : []),
+      ...(reg.xHandle ? [{ name: 'X', value: `[@${reg.xHandle}](https://x.com/${reg.xHandle})`, inline: true }] : []),
+      { name: `${EU_MODE ? 'Roster' : 'Skład'} (${reg.players?.length||0})`, value: playerLines, inline: false }
     ],
-    footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
+    footer: { text: EU_MODE ? 'EU Chemik League · NBA 2K Pro-Am' : 'NBA 2K Pro-Am Ekstraklasa' },
     timestamp: new Date().toISOString()
   } : {
-    title: `❌ Zgłoszenie odrzucone — ${reg.teamName}`,
-    description: reason ? `**Powód:** ${reason}` : undefined,
+    title: EU_MODE ? `❌ Application rejected — ${reg.teamName}` : `❌ Zgłoszenie odrzucone — ${reg.teamName}`,
+    description: reason ? `**${EU_MODE ? 'Reason' : 'Powód'}:** ${reason}` : undefined,
     color: 0xdc2626,
-    fields: [ { name: 'Kapitan', value: captainId ? `<@${captainId}>` : (reg.captain?.name || '?'), inline: true } ],
-    footer: { text: 'NBA 2K Pro-Am Ekstraklasa' },
+    fields: [ { name: EU_MODE ? 'Captain' : 'Kapitan', value: captainId ? `<@${captainId}>` : (reg.captain?.name || '?'), inline: true } ],
+    footer: { text: EU_MODE ? 'EU Chemik League · NBA 2K Pro-Am' : 'NBA 2K Pro-Am Ekstraklasa' },
     timestamp: new Date().toISOString()
   };
 
@@ -17772,12 +17786,15 @@ async function teamRegSetStatus(id, status) {
     payload.allowed_mentions = { users: [captainId] };
   }
   let sent = false;
-  payload.route = status === 'approved' ? 'teamApproved' : 'teamRejected';
+  payload.route = reg._pending ? 'teamNew' : status === 'approved' ? 'teamApproved' : 'teamRejected';
   try { sent = await _teamRegDiscordSend(payload, reg.logo); } catch(e) { console.warn('Discord notify failed', e); }
-  showToast(
-    (status === 'approved' ? '✅ Zatwierdzona' : '❌ Odrzucona') + (sent ? ' · wysłano na Discord' : ' · ⚠ Discord nie odpowiedział'),
-    sent ? 'success' : 'info'
-  );
+  return sent;
+}
+async function teamRegAnnounceBtn(id) {
+  const reg = teamRegistrations.find(r => r.id === id); if(!reg) return;
+  if(!confirm(`Wysłać ogłoszenie drużyny „${reg.teamName}” na Discord (${reg.status === 'approved' ? 'kanał: Zatwierdzenie drużyny' : 'kanał: Nowe zgłoszenie drużyny'})?`)) return;
+  const ok = await teamRegAnnounce(reg, reg.status === 'approved' ? 'approved' : 'pending');
+  showToast(ok ? '📣 Wysłano na Discord' : '⚠ Discord nie odpowiedział — sprawdź kanał w 📣 Kanałach powiadomień', ok ? 'success' : 'info');
 }
 
 async function teamRegDelete(id) {
