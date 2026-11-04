@@ -15124,17 +15124,22 @@ function xqManual(id) {
     ${parts.map((p, pi) => `<div class="card" style="padding:.65rem .8rem;margin-bottom:.6rem">
       <div style="font-weight:800;margin-bottom:.3rem">${pi + 1}. ${pi === 0 ? _g('Wpis', 'Post') : _g('Odpowiedź do wpisu (w tym samym wątku)', 'Reply to the post (same thread)')} ${p.lang === 'en' ? '🇬🇧' : '🇵🇱'} <span style="font-weight:400;color:var(--muted);font-size:.74rem">· ${p.images.length} ${_g('graf.', 'img')}</span></div>
       <div style="white-space:pre-wrap;font-size:.78rem;background:var(--surface2);border-radius:8px;padding:.45rem .55rem;max-height:120px;overflow:auto">${_h(p.text)}</div>
-      ${pi > 0 ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">${_g('Najpierw opublikuj wpis 1, potem na X kliknij „Odpowiedz” pod nim i wklej ten tekst z grafikami.', 'Post #1 first, then on X tap “Reply” under it and paste this text with the graphics.')}</div>` : ''}
+      ${pi > 0 ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">${_g('Najpierw opublikuj wpis 1 i wklej jego link w polu na dole — wtedy „Otwórz X” otworzy odpowiedź pod nim (ten sam wątek).', 'Post #1 first and paste its link in the field below — then “Open X” opens a reply under it (same thread).')}</div>` : ''}
       <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.45rem">
         ${canShare ? `<button class="btn btn-primary" style="font-size:.74rem" onclick="xqmShare(${pi})">📤 ${_g('Udostępnij', 'Share')}</button>` : ''}
         <button class="btn btn-ghost" style="font-size:.74rem" onclick="xqmCopy(${pi})">📋 ${_g('Kopiuj tekst', 'Copy text')}</button>
         ${p.images.length ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="xqmDownload(${pi})">⬇️ ${_g('Pobierz grafiki', 'Download graphics')} (${p.images.length})</button>` : ''}
-        ${pi === 0 ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="window.open('https://x.com/intent/post?text=' + encodeURIComponent(_xqm.parts[0].text), '_blank')">↗ ${_g('Otwórz X', 'Open X')}</button>` : ''}
+        <button class="btn btn-ghost" style="font-size:.74rem" onclick="xqmOpen(${pi})">↗ ${pi === 0 ? _g('Otwórz X', 'Open X') : _g('Otwórz X (odpowiedź)', 'Open X (reply)')}</button>
       </div></div>`).join('')}
     <div style="border-top:1px solid var(--border);padding-top:.6rem;margin-top:.2rem">
       <div style="font-size:.78rem;margin-bottom:.3rem">${_g('Po publikacji wklej link do wpisu (opcjonalnie — wtedy wpis pojawi się też na Discordzie):', 'After posting paste the post link (optional — then it’s also announced on Discord):')}</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap"><input id="xqm-link" placeholder="https://x.com/…/status/…" style="${_MODAL_INP};flex:1;min-width:220px;margin:0">
         <button class="btn btn-primary" onclick="xqmDone()">✅ ${_g('Oznacz jako opublikowane', 'Mark as posted')}</button></div></div></div>`;
+}
+function xqmOpen(pi) { // ↗ X z gotowym tekstem; część 2+ jako odpowiedź pod wpisem 1 (gdy wklejono jego link)
+  const p = _xqm.parts[pi], id = pi > 0 ? (/\/status\/(\d+)/.exec(document.getElementById('xqm-link')?.value || '') || [])[1] : null;
+  if(pi > 0 && !id) showToast(_g('Wklej najpierw link wpisu 1 na dole — wtedy X otworzy odpowiedź w wątku. Otwieram jako nowy wpis.', 'Paste the link of post #1 below first — then X opens a reply in the thread. Opening as a new post.'), 'info');
+  window.open('https://x.com/intent/post?text=' + encodeURIComponent(p.text) + (id ? '&in_reply_to=' + id : ''), '_blank');
 }
 async function xqmCopy(pi) { try { await navigator.clipboard.writeText(_xqm.parts[pi].text); showToast(_g('📋 Skopiowano tekst', '📋 Text copied'), 'success'); } catch(e) { prompt(_g('Skopiuj tekst:', 'Copy the text:'), _xqm.parts[pi].text); } }
 async function xqmDownload(pi) {
