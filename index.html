@@ -16151,8 +16151,11 @@ function _totwData(w) {
   const sid = currentSeasonId || null, ids = new Set((schedule || []).filter(x => x.generated && !x.makeup && (x.seasonId || null) === sid && +x.week === +w).flatMap(x => (x.matchIds || []).map(String)));
   const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + 0.4 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0);
   const by = {}; _withAllMatches(() => matches.filter(m => !m.walkover && ids.has(String(m.id)))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => {
-    const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, pos: p.pos || '' }; a.gp++; a.gs += gs(p); a.pts += +p.pts || 0; a.reb += +p.reb || 0; a.ast += +p.ast || 0; })));
-  return Object.values(by).map(a => ({ ...a, avg: a.gs / a.gp })).sort((a, b) => b.avg - a.avg).slice(0, 5);
+    const k = _normNick(p.name); if(!k) return; const a = by[k] = by[k] || { name: p.name, team: t.name, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, posN: {} }; a.gp++; a.gs += gs(p); a.pts += +p.pts || 0; a.reb += +p.reb || 0; a.ast += +p.ast || 0;
+    const ps = String(p.pos || '').toUpperCase().split(/[\/,\s]+/)[0]; if(ps) a.posN[ps] = (a.posN[ps] || 0) + 1; })));
+  // Piątka po pozycjach (jak grafika bota): na każdą pozycję najlepszy występ wśród grających głównie tam; brak → grający tam choć raz → najlepszy z pozostałych
+  const list = Object.values(by).map(a => ({ ...a, avg: a.gs / a.gp, mainPos: Object.entries(a.posN).sort((x, y) => y[1] - x[1])[0]?.[0] || '' })).sort((a, b) => b.avg - a.avg), used = new Set();
+  return ['PG', 'SG', 'SF', 'PF', 'C'].map(slot => { const free = list.filter(x => !used.has(x.name)); const x = free.find(y => y.mainPos === slot) || free.find(y => y.posN[slot]) || free[0]; if(!x) return null; used.add(x.name); return { ...x, pos: slot, slot }; }).filter(Boolean);
 }
 async function renderTotw() {
   const el = document.getElementById('totw-wrap'); if(!el) return;
@@ -16163,7 +16166,7 @@ async function renderTotw() {
       <select onchange="_totwWeek=this.value;renderTotw()" style="font-size:.82rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${weeks.map(x => `<option value="${x}" ${x === w ? 'selected' : ''}>Week ${x}</option>`).join('')}</select></div>
     <div id="totw-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.7rem">${list.map((p, i) => `<div data-notr>
       <div id="totw-c${i}" style="aspect-ratio:4/5;border-radius:14px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted)">⏳</div>
-      <div style="text-align:center;margin-top:.35rem;font-size:.8rem"><b>${['🥇', '🥈', '🥉'][i] || '#' + (i + 1)} ${_h(p.name)}</b><br><span style="color:var(--muted)">${_h(p.team)} · ${f1(p.pts / p.gp)} PTS · ${f1(p.reb / p.gp)} REB · ${f1(p.ast / p.gp)} AST</span></div></div>`).join('')}</div>`;
+      <div style="text-align:center;margin-top:.35rem;font-size:.8rem"><b><span style="color:var(--accent)">${_h(p.slot || p.pos || '#' + (i + 1))}</span> ${_h(p.name)}</b><br><span style="color:var(--muted)">${_h(p.team)} · ${f1(p.pts / p.gp)} PTS · ${f1(p.reb / p.gp)} REB · ${f1(p.ast / p.gp)} AST</span></div></div>`).join('')}</div>`;
   for(const [i, p] of list.entries()) { // karty limitowane Piątki tygodnia (jak MVP): złota ramka, statystyki z tej kolejki, od razu holo; bez otwierania i pobierania
     const box = document.getElementById('totw-c' + i); if(!box) continue;
     try { const url = await _pcLimitedImage(p.name, `PIĄTKA TYGODNIA · WEEK ${w}`, `week:${currentSeasonId || ''}:${w}`, 'gold', 0, null);
