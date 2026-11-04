@@ -10892,6 +10892,48 @@ function _rosterBlock(r) {
   if(isCap && !pend.length) html += `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin-top:.5rem" onclick="openRosterChange('${r.id}')">✏️ ${locked ? 'Popraw nicki (okno transferowe zamknięte)' : 'Zmień skład / popraw nicki'}</button>`;
   return membersHtml + html;
 }
+// 🧢 EU: skład zgłoszonej drużyny (na stronie głównej) + ✏️ edycja przez kapitana, dopóki zapisy są otwarte
+const _platIcon = p => p === 'xbox' ? '<span title="Xbox" style="color:#16a34a">Ⓧ</span>' : '<span title="PlayStation" style="color:#3b82f6">Ⓟ</span>';
+function _euRosterHtml(r) {
+  return `<div style="margin-top:.5rem;border-top:1px solid var(--border);padding-top:.4rem;display:flex;flex-direction:column;gap:.15rem">
+    ${(r.players || []).map(p => `<div style="display:flex;justify-content:space-between;gap:.4rem;font-size:.76rem"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_platIcon(p.platform)} ${_h(p.gamertag)}</span>${p.x ? `<a href="https://x.com/${_h(p.x)}" target="_blank" rel="noopener" style="color:var(--muted);font-size:.7rem">𝕏</a>` : ''}</div>`).join('')}
+    ${r.captain?.name ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">👑 Captain: ${_h(r.captain.name)}</div>` : ''}
+    ${discordUser && String(r.captain?.id) === String(discordUser.id) && !registrationsClosed ? `<button class="btn btn-ghost" style="font-size:.7rem;margin-top:.35rem;padding:.25rem .5rem" onclick="openEuTeamEdit('${r.id}')">✏️ Edit team</button>` : ''}</div>`;
+}
+let _euEd = null;
+function openEuTeamEdit(id) {
+  const r = teamRegistrations.find(x => x.id === id); if(!r || !_ensureSession()) return;
+  _euEd = { id, xHandle: r.xHandle || '', rows: (r.players || []).map(p => ({ orig: p.gamertag, gamertag: p.gamertag, platform: p.platform || 'psn', x: p.x || '', experience: p.experience || '' })) };
+  _euEdDraw();
+}
+function _euEdDraw() {
+  const r = teamRegistrations.find(x => x.id === _euEd.id), m = _fxModal('euedit-modal', 600); m.classList.add('open');
+  const sel = 'padding:.35rem .4rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:.8rem';
+  m.querySelector('.modal').innerHTML = _fxHead('euedit-modal', `✏️ Edit team — ${_h(r.teamName)}`) + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">You can edit your roster until registration closes: fix gamertags, change platforms, swap or add players (min. 5, max. 15). Fixed gamertags keep the player’s linked account.</div>
+    <div style="display:grid;grid-template-columns:1fr 92px 120px 32px;gap:.35rem;font-size:.68rem;color:var(--muted);margin-bottom:.2rem"><span>Gamertag</span><span>Platform</span><span>X profile (optional)</span><span></span></div>
+    ${_euEd.rows.map((p, i) => `<div style="display:grid;grid-template-columns:1fr 92px 120px 32px;gap:.35rem;margin-bottom:.3rem">
+      <input value="${_h(p.gamertag)}" maxlength="32" oninput="_euEd.rows[${i}].gamertag=this.value" placeholder="Gamertag" style="${_MODAL_INP};margin:0;padding:.35rem .55rem">
+      <select onchange="_euEd.rows[${i}].platform=this.value" style="${sel}"><option value="psn" ${p.platform !== 'xbox' ? 'selected' : ''}>PlayStation</option><option value="xbox" ${p.platform === 'xbox' ? 'selected' : ''}>Xbox</option></select>
+      <input value="${_h(p.x)}" maxlength="40" oninput="_euEd.rows[${i}].x=this.value" placeholder="@handle" style="${_MODAL_INP};margin:0;padding:.35rem .55rem">
+      <button class="btn btn-ghost" title="Remove player" style="padding:0;color:var(--loss)" onclick="_euEd.rows.splice(${i},1);_euEdDraw()">✕</button></div>`).join('')}
+    ${_euEd.rows.length < 15 ? `<button class="btn btn-ghost" style="font-size:.74rem;margin:.2rem 0 .7rem" onclick="_euEd.rows.push({gamertag:'',platform:'psn',x:''});_euEdDraw()">➕ Add player</button>` : ''}
+    <label style="${_MODAL_LBL}">Team X profile (optional)</label>
+    <input value="${_h(_euEd.xHandle)}" maxlength="40" oninput="_euEd.xHandle=this.value" placeholder="@yourteam" style="${_MODAL_INP};margin-bottom:.9rem">
+    <div id="euedit-status" style="font-size:.78rem;min-height:1.1em;margin-bottom:.4rem"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('euedit-modal')">Cancel</button><button class="btn btn-primary" onclick="saveEuTeamEdit()">💾 Save team</button></div></div>`;
+}
+async function saveEuTeamEdit() {
+  const rows = _euEd.rows.map(p => ({ ...p, gamertag: String(p.gamertag || '').trim() })).filter(p => p.gamertag), st = document.getElementById('euedit-status');
+  if(rows.length < 5) { st.style.color = 'var(--loss)'; st.textContent = 'Minimum 5 players'; return; }
+  const renames = rows.filter(p => p.orig && p.orig !== p.gamertag).map(p => ({ from: p.orig, to: p.gamertag }));
+  st.style.color = 'var(--muted)'; st.textContent = '⏳ Saving…';
+  const r = await _api('/team-registration/edit', 'POST', { id: _euEd.id, players: rows.map(({ orig, ...p }) => p), renames, xHandle: _euEd.xHandle }, { session: true });
+  if(!r.ok) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + (r.error || 'Error'); return; }
+  const i = teamRegistrations.findIndex(x => x.id === _euEd.id); if(i >= 0) teamRegistrations[i] = { ...teamRegistrations[i], ...r.registration };
+  _fxClose('euedit-modal'); showToast('✅ Team saved', 'success'); try { renderDashboard(); } catch(e) {}
+}
+
 function openRosterChange(regId) {
   const r = teamRegistrations.find(x => x.id === regId);
   if(!r || !_ensureSession()) return;
@@ -16612,10 +16654,10 @@ function renderEuDash() {
     </div>`;
   const tm = document.getElementById('eu-teams');
   if(tm) tm.innerHTML = `<div class="section-title" style="font-size:1.3rem">🧢 Registered teams <span style="color:var(--muted);font-size:1rem">(${regs.length})</span></div>
-    <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem;margin-bottom:1.5rem">${regs.map(r => `<div class="card" style="padding:.6rem .75rem;display:flex;gap:.6rem;align-items:center">
+    <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.6rem;margin-bottom:1.5rem;align-items:start">${regs.map(r => `<div class="card" style="padding:.6rem .75rem"><div style="display:flex;gap:.6rem;align-items:center">
       ${r.logo ? `<img src="${r.logo}" style="width:42px;height:42px;border-radius:8px;object-fit:cover">` : `<div style="width:42px;height:42px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center">🏀</div>`}
       <div style="min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(r.teamName)}</div><div style="font-size:.72rem;color:var(--muted)">${(r.players || []).length} players${r.xHandle ? ` · <a href="https://x.com/${_h(r.xHandle)}" target="_blank" rel="noopener" style="color:var(--accent)">@${_h(r.xHandle)}</a>` : ''}</div>
-        <div style="margin-top:.2rem;display:flex;gap:.25rem;flex-wrap:wrap">${r.status === 'approved' ? '<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">APPROVED</span>' : '<span style="background:var(--accent);color:#111;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">PENDING</span>'} ${_levelBadge(r)} ${_payBadge(r)}</div></div></div>`).join('') || `<div class="card" style="padding:.9rem;color:var(--muted)">No teams yet — be the first! 🏀</div>`}</div>`;
+        <div style="margin-top:.2rem;display:flex;gap:.25rem;flex-wrap:wrap">${r.status === 'approved' ? '<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">APPROVED</span>' : '<span style="background:var(--accent);color:#111;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">PENDING</span>'} ${_levelBadge(r)} ${_payBadge(r)}</div></div></div>${_euRosterHtml(r)}</div>`).join('') || `<div class="card" style="padding:.9rem;color:var(--muted)">No teams yet — be the first! 🏀</div>`}</div>`;
   _euPlaceholders();
 }
 function _euPlaceholders() {
