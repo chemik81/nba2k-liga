@@ -15112,6 +15112,50 @@ async function djTest() { const st = document.getElementById('dj-st'); st.textCo
 const _xLen = t => [...String(t || '')].reduce((n, ch) => n + (ch.codePointAt(0) > 0x10FF ? 2 : 1), 0);
 function _isXEditor() { return _isLoggedInSync() || (discordUser && (window._xEditors || []).includes(discordUser.id)); }
 let _xq = [];
+// 📋 RĘCZNA PUBLIKACJA NA X (bez API i kredytów): kopiuj tekst, pobierz / udostępnij grafiki, otwórz X, oznacz jako opublikowane
+function _xqParts(id) { const d = _xq.find(x => x.id === id); return d ? d.parts.map((p, pi) => ({ lang: p.lang, text: document.getElementById(`xq-t-${id}-${pi}`)?.value ?? p.text, images: [...document.querySelectorAll(`.xq-i-${id}-${pi}:checked`)].map(x => +x.value) })) : []; }
+const _xqImgUrl = (id, n) => `${workerUrl.replace(/\/+$/, '')}/x-drafts/img/${id}/${n}.jpg`;
+async function _xqFiles(id, ns) { const out = []; for(const n of ns) { const r = await fetch(_xqImgUrl(id, n)); const b = await r.blob(); out.push(new File([b], `chemik-${id}-${n}.jpg`, { type: 'image/jpeg' })); } return out; }
+function xqManual(id) {
+  const d = _xq.find(x => x.id === id); if(!d) return; const parts = _xqParts(id); window._xqm = { id, parts };
+  const canShare = !!(navigator.canShare && navigator.share), m = _fxModal('xqm-modal', 620); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('xqm-modal', '📋 ' + _g('Publikacja ręczna na X', 'Manual posting to X')) + `<div data-notr style="font-size:.84rem">
+    <div style="color:var(--muted);margin-bottom:.7rem">${_g('Bez API i bez kredytów — publikujesz ze swojego konta X. ', 'No API, no credits — you post from your own X account. ')}${canShare ? _g('Na telefonie najszybciej: <b>📤 Udostępnij</b> → aplikacja X (tekst i grafiki naraz).', 'On a phone the quickest way: <b>📤 Share</b> → the X app (text and graphics together).') : _g('Pobierz grafiki, otwórz X (tekst wklei się sam) i dołącz grafiki.', 'Download the graphics, open X (the text is pre-filled) and attach the graphics.')}</div>
+    ${parts.map((p, pi) => `<div class="card" style="padding:.65rem .8rem;margin-bottom:.6rem">
+      <div style="font-weight:800;margin-bottom:.3rem">${pi + 1}. ${pi === 0 ? _g('Wpis', 'Post') : _g('Odpowiedź do wpisu (w tym samym wątku)', 'Reply to the post (same thread)')} ${p.lang === 'en' ? '🇬🇧' : '🇵🇱'} <span style="font-weight:400;color:var(--muted);font-size:.74rem">· ${p.images.length} ${_g('graf.', 'img')}</span></div>
+      <div style="white-space:pre-wrap;font-size:.78rem;background:var(--surface2);border-radius:8px;padding:.45rem .55rem;max-height:120px;overflow:auto">${_h(p.text)}</div>
+      ${pi > 0 ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">${_g('Najpierw opublikuj wpis 1, potem na X kliknij „Odpowiedz” pod nim i wklej ten tekst z grafikami.', 'Post #1 first, then on X tap “Reply” under it and paste this text with the graphics.')}</div>` : ''}
+      <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.45rem">
+        ${canShare ? `<button class="btn btn-primary" style="font-size:.74rem" onclick="xqmShare(${pi})">📤 ${_g('Udostępnij', 'Share')}</button>` : ''}
+        <button class="btn btn-ghost" style="font-size:.74rem" onclick="xqmCopy(${pi})">📋 ${_g('Kopiuj tekst', 'Copy text')}</button>
+        ${p.images.length ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="xqmDownload(${pi})">⬇️ ${_g('Pobierz grafiki', 'Download graphics')} (${p.images.length})</button>` : ''}
+        ${pi === 0 ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="window.open('https://x.com/intent/post?text=' + encodeURIComponent(_xqm.parts[0].text), '_blank')">↗ ${_g('Otwórz X', 'Open X')}</button>` : ''}
+      </div></div>`).join('')}
+    <div style="border-top:1px solid var(--border);padding-top:.6rem;margin-top:.2rem">
+      <div style="font-size:.78rem;margin-bottom:.3rem">${_g('Po publikacji wklej link do wpisu (opcjonalnie — wtedy wpis pojawi się też na Discordzie):', 'After posting paste the post link (optional — then it’s also announced on Discord):')}</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap"><input id="xqm-link" placeholder="https://x.com/…/status/…" style="${_MODAL_INP};flex:1;min-width:220px;margin:0">
+        <button class="btn btn-primary" onclick="xqmDone()">✅ ${_g('Oznacz jako opublikowane', 'Mark as posted')}</button></div></div></div>`;
+}
+async function xqmCopy(pi) { try { await navigator.clipboard.writeText(_xqm.parts[pi].text); showToast(_g('📋 Skopiowano tekst', '📋 Text copied'), 'success'); } catch(e) { prompt(_g('Skopiuj tekst:', 'Copy the text:'), _xqm.parts[pi].text); } }
+async function xqmDownload(pi) {
+  const p = _xqm.parts[pi];
+  try { const files = await _xqFiles(_xqm.id, p.images); files.forEach((f, i) => setTimeout(() => { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }, i * 350)); showToast(_g(`⬇️ Pobieram ${files.length} grafiki`, `⬇️ Downloading ${files.length} graphics`), 'success'); }
+  catch(e) { p.images.forEach(n => window.open(_xqImgUrl(_xqm.id, n), '_blank')); }
+}
+async function xqmShare(pi) {
+  const p = _xqm.parts[pi];
+  try { const files = await _xqFiles(_xqm.id, p.images), data = { text: p.text, ...(files.length && navigator.canShare({ files }) ? { files } : {}) };
+    try { await navigator.clipboard.writeText(p.text); } catch(e) {} // część aplikacji pomija tekst przy udostępnianiu plików — wtedy wystarczy wkleić
+    await navigator.share(data); } catch(e) { if(e?.name !== 'AbortError') showToast(_g('Udostępnianie niedostępne — użyj „Pobierz grafiki” i „Kopiuj tekst”', 'Sharing unavailable — use “Download graphics” and “Copy text”'), 'info'); }
+}
+async function xqmDone() {
+  const link = document.getElementById('xqm-link').value.trim();
+  if(link && !/^https:\/\/(x|twitter)\.com\/\w+\/status\/\d+/.test(link)) { showToast(_g('To nie wygląda na link do wpisu na X', 'That doesn’t look like an X post link'), 'info'); return; }
+  const r = await _api('/x-drafts/manual', 'POST', { id: _xqm.id, parts: _xqm.parts, link }, { admin: _isLoggedInSync(), session: !!discordUser?.session });
+  if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  _fxClose('xqm-modal'); showToast(link ? _g('✅ Oznaczono i ogłoszono na Discordzie', '✅ Marked and announced on Discord') : _g('✅ Oznaczono jako opublikowane', '✅ Marked as posted'), 'success'); openXQueue();
+}
+
 async function openXQueue() {
   if(!_isXEditor()) { showToast(_g('Brak dostępu do kolejki X', 'No access to the X queue'), 'info'); return; }
   const m = _fxModal('xq-modal', 760); m.classList.add('open');
@@ -15136,11 +15180,12 @@ function _xqDraw() {
       </div>`).join('')}
       <div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">${_g('Zaznacz grafiki do wpisu (maks. 4). Emoji liczą się jak 2 znaki.', 'Tick the graphics for the post (max 4). Emoji count as 2 characters.')}</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
-        <button class="btn btn-primary" onclick="xqAct('${d.id}','publish')">🐦 ${_g('Opublikuj na X', 'Post to X')}</button>
+        <button class="btn btn-primary" onclick="xqAct('${d.id}','publish')">🐦 ${_g('Opublikuj na X (API)', 'Post to X (API)')}</button>
+        <button class="btn btn-primary" style="background:#1d9bf0;border-color:#1d9bf0" onclick="xqManual('${d.id}')">📋 ${_g('Publikuj ręcznie', 'Post manually')}</button>
         <button class="btn btn-ghost" onclick="xqAct('${d.id}','update')">💾 ${_g('Zapisz poprawki', 'Save edits')}</button>
         <button class="btn btn-ghost" style="color:var(--loss)" onclick="xqAct('${d.id}','reject')">🗑 ${_g('Odrzuć', 'Reject')}</button>
       </div></div>`).join('') || `<div style="font-size:.84rem;color:var(--muted);margin-bottom:.8rem">${_g('Nic nie czeka na publikację 👍', 'Nothing waiting to be posted 👍')}</div>`}
-    ${done.length ? `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.5rem 0 .3rem">${_g('HISTORIA', 'HISTORY')}</div>${done.map(d => `<div style="font-size:.78rem;padding:.3rem 0;border-bottom:1px solid var(--border)">${d.status === 'published' ? '✅' : '🗑'} <b>${_h(d.title)}</b> <span style="color:var(--muted)">· ${_h(d.by || '')}</span>${(d.links || []).map((l, i) => ` · <a href="${_h(l)}" target="_blank" rel="noopener" style="color:var(--accent)">${_g('wpis', 'post')} ${i + 1} ↗</a>`).join('')}</div>`).join('')}` : ''}
+    ${done.length ? `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.5rem 0 .3rem">${_g('HISTORIA', 'HISTORY')}</div>${done.map(d => `<div style="font-size:.78rem;padding:.3rem 0;border-bottom:1px solid var(--border)">${d.status === 'published' ? (d.manual ? '✅📋' : '✅') : '🗑'} <b>${_h(d.title)}</b> <span style="color:var(--muted)">· ${_h(d.by || '')}</span>${(d.links || []).map((l, i) => ` · <a href="${_h(l)}" target="_blank" rel="noopener" style="color:var(--accent)">${_g('wpis', 'post')} ${i + 1} ↗</a>`).join('')}</div>`).join('')}` : ''}
   </div>`;
 }
 // 👥 redaktorzy X (admin): lista z nazwami, dodawanie z listy znanych osób albo po Discord ID
