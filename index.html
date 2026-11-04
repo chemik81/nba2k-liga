@@ -8096,6 +8096,7 @@ function openDeepLink() {
   if(h === 'druzyny' || h === 'teams') { showView('teams'); return; }
   if(h === 'multistream') { openMultistream(); return; }
   if(h === 'podcast') { showView('podcast'); return; }
+  if(h.startsWith('podcast/')) { window._podFocusId = decodeURIComponent(h.slice(8)); showView('podcast'); return; }
   if(h.startsWith('gracz/')) { const n = decodeURIComponent(h.slice(6)); setTimeout(() => { try { const pl = _withAllMatches(() => matches.slice()).flatMap(m => [m.team1, m.team2]).flatMap(t => (t.players || []).map(p => ({ p, t: t.name }))).find(x => _normNick(x.p.name) === _normNick(n)); openPlayerModal(pl?.p.name || n, pl?.t || ''); } catch(e) {} }, 400); return; }
   if(h.startsWith('druzyna/')) { const n = decodeURIComponent(h.slice(8)); setTimeout(() => { try { openTeamModal(n); } catch(e) {} }, 400); return; }
   if(h === '2kordle' || h === 'kordle') { showView('kordle'); return; }
@@ -13143,6 +13144,10 @@ async function podToDiscord() {
 }
 
 // ═══ 🎧 PODCAST — publiczna zakładka z odcinkami ═══
+// 🔗 link do odcinka podcastu: chemikleagues.com/#podcast/<id> (otwiera stronę na tym odcinku)
+function podCopyLink(id) { const u = location.origin + location.pathname.replace(/\/[^/]*$/, '/') + '#podcast/' + encodeURIComponent(id); (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => showToast(_g('🔗 Skopiowano link do odcinka', '🔗 Episode link copied'), 'success')).catch(() => prompt(_g('Link do odcinka:', 'Episode link:'), u)); }
+function _podFocus() { const id = window._podFocusId; if(!id) return; window._podFocusId = null; const el = document.getElementById('pod-ep-' + id); if(!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.outline = '2px solid var(--accent)'; el.style.outlineOffset = '2px'; setTimeout(() => { el.style.outline = ''; }, 4000); }
 async function renderPodcastView() {
   const el = document.getElementById('podcast-view'); if(!el) return;
   el.innerHTML = '<div class="section-title">🎧 Ekstraklasa Weekly</div><div style="color:var(--muted)">⏳ Wczytuję odcinki…</div>';
@@ -13177,16 +13182,18 @@ async function renderPodcastView() {
         </div>
         <div id="pod-up-status" style="font-size:.76rem;margin-top:.35rem"></div>
       </div></details>` : ''}
-    ${eps.length ? `<div style="display:flex;flex-direction:column;gap:.6rem">${eps.map((e, i) => `<div class="card" style="padding:.75rem .9rem;margin:0">
+    ${eps.length ? `<div style="display:flex;flex-direction:column;gap:.6rem">${eps.map((e, i) => `<div class="card" id="pod-ep-${_h(e.id)}" style="padding:.75rem .9rem;margin:0">
         <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:baseline;flex-wrap:wrap">
           <div style="font-weight:800">${i === 0 ? '<span style="background:#dc2626;color:#fff;font-size:.6rem;font-weight:900;border-radius:4px;padding:.05rem .35rem;margin-right:.35rem">NOWY</span>' : ''}${_h(e.title)}</div>
           <div style="font-size:.72rem;color:var(--muted)">${new Date(e.at).toLocaleDateString(currentLang === 'en' ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })}${e.duration ? ' · ' + dur(e.duration) : ''}
+            <a href="#" onclick="podCopyLink('${_h(e.id)}');return false" style="color:var(--accent);margin-left:.4rem" title="${_g('Kopiuj link do odcinka', 'Copy episode link')}">🔗 Link</a>
             ${admin ? `<a href="#" onclick="podDeleteEp('${_h(e.id)}');return false" style="color:var(--loss);margin-left:.4rem">usuń</a>` : ''}</div>
         </div>
         <audio controls preload="none" src="${_h(e.url)}" style="width:100%;margin-top:.5rem"></audio>
         ${e.description ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.35rem;white-space:pre-line;line-height:1.5" data-notr>${_h(e.description.split('\n').slice(0, 4).join('\n'))}</div>` : ''}
       </div>`).join('')}</div>`
       : `<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">Pierwszy odcinek pojawi się po zakończeniu kolejki 🎙</div>`}`;
+  setTimeout(_podFocus, 200);
 }
 async function podUploadFile() {
   const f = document.getElementById('pod-up-file')?.files?.[0], week = +document.getElementById('pod-up-week').value, st = document.getElementById('pod-up-status');
