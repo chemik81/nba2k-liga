@@ -10277,6 +10277,28 @@ function _clipEmbed(url) {
   if(st) return `https://streamable.com/e/${st[1]}`;
   return null;
 }
+// 🎬 wgrywanie pliku z akcją (kapitanowie obu drużyn meczu, admin) → kanał „Akcje meczów” na Discordzie → odtwarzanie na stronie
+function _canUploadClip(s) { if(_isLoggedInSync()) return true; if(!discordUser?.id || !s) return false;
+  return (teamRegistrations || []).some(r => r.status === 'approved' && [s.team1, s.team2].includes(r.teamName) && String(r.captain?.id) === String(discordUser.id)); }
+function uploadClip(k) {
+  if(!_ensureSession()) return;
+  const f = document.getElementById('clip-file')?.files?.[0], title = document.getElementById('clip-title').value.trim(), st = document.getElementById('clip-up-status'), bar = document.getElementById('clip-up-bar');
+  if(!f) { showToast(_g('Wybierz plik wideo', 'Choose a video file'), 'info'); return; }
+  if(!/^video\//.test(f.type)) { showToast(_g('To nie jest plik wideo', 'That is not a video file'), 'info'); return; }
+  if(f.size > 100 * 1048576) { showToast(_g(`Plik ma ${(f.size / 1048576).toFixed(0)} MB — maks. 100 MB`, `The file is ${(f.size / 1048576).toFixed(0)} MB — max. 100 MB`), 'info'); return; }
+  const x = new XMLHttpRequest(); x.open('POST', workerUrl.replace(/\/+$/, '') + '/clips/upload');
+  x.setRequestHeader('Content-Type', f.type); x.setRequestHeader('X-Discord-Session', discordUser.session);
+  if(_isLoggedInSync()) x.setRequestHeader('X-Admin-Token', _adminToken());
+  x.setRequestHeader('X-Meta', encodeURIComponent(JSON.stringify({ scheduleId: k, title, filename: f.name })));
+  bar.parentElement.style.display = 'block'; st.style.color = 'var(--muted)';
+  x.upload.onprogress = e => { if(e.lengthComputable) { const p = Math.round(e.loaded / e.total * 100); bar.style.width = p + '%'; st.textContent = p < 100 ? `⏳ ${_g('Wysyłam', 'Uploading')} ${p}%…` : '⏳ ' + _g('Bot wrzuca film na Discord…', 'The bot is posting the video to Discord…'); } };
+  x.onload = () => { let r = {}; try { r = JSON.parse(x.responseText); } catch(e) {}
+    if(x.status === 200 && r.ok) { clipsList.unshift(r.clip); showToast(_g('🎬 Akcja dodana', '🎬 Highlight added'), 'success'); openClips(k); }
+    else { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + _tr(r.error || _g('Wysyłka nie powiodła się', 'Upload failed')); bar.parentElement.style.display = 'none'; } };
+  x.onerror = () => { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + _g('Błąd sieci', 'Network error'); };
+  x.send(f);
+}
+
 function openClips(k) {
   const s = _ssItem(k);
   const list = _clipsFor(k).sort((a, b) => b.likes - a.likes);
@@ -10301,6 +10323,12 @@ function openClips(k) {
       }).join('') || '<div style="color:var(--muted);text-align:center;padding:1rem">Jeszcze nikt nie dodał akcji z tego meczu</div>'}
     </div>
     <div style="border-top:1px solid var(--border);padding-top:.8rem">
+      ${_canUploadClip(s) ? `<div style="background:var(--surface2);border:1px dashed var(--accent);border-radius:10px;padding:.65rem .75rem;margin-bottom:.8rem">
+        <label style="${_MODAL_LBL}">📁 ${_g('Wgraj plik z akcją (do 100 MB)', 'Upload a highlight file (up to 100 MB)')}</label>
+        <input id="clip-file" type="file" accept="video/*" style="${_MODAL_INP};margin-bottom:.4rem;padding:.35rem">
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">${_g('Film trafi na kanał akcji na Discordzie i odtworzy się tutaj. Opis wpisz w polu „Opis” niżej. Limit: 3 akcje na drużynę w meczu, 5 dziennie.', 'The video goes to the highlights channel on Discord and plays here. Write the description in the field below. Limit: 3 per team per match, 5 a day.')}</div>
+        <div style="display:none;height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-bottom:.3rem"><div id="clip-up-bar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem"><span id="clip-up-status" style="font-size:.74rem"></span><button class="btn btn-primary" onclick="uploadClip('${k}')">📤 ${_g('Wgraj plik', 'Upload file')}</button></div></div>` : ''}
       <label style="${_MODAL_LBL}">${_g('Dodaj akcję (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)', 'Add a highlight (Discord, YouTube, Twitch, Medal, Streamable, X, TikTok)')}</label>
       <div style="font-size:.72rem;color:var(--muted);margin:-.15rem 0 .35rem">💬 ${_g('Film na Discordzie? Prawy klik na wiadomość z filmem → <b>Kopiuj link do wiadomości</b> i wklej tutaj.', 'Video on Discord? Right-click the message with the video → <b>Copy Message Link</b> and paste it here.')}</div>
       <input id="clip-url" placeholder="https://discord.com/channels/… / https://youtu.be/…" style="${_MODAL_INP};margin-bottom:.45rem">
@@ -16561,7 +16589,7 @@ function _captainGuideHtml() {
   const s = _signup(), inv = _discordInvite();
   const steps = EU_MODE || currentLang === 'en' ? [
     ['🧢', 'Register your team', `Log in with Discord (top of the page) → <b>Join us → League sign-ups</b> → <b>Register a team</b>. Enter the team name, logo, your team’s X profile and <b>at least 5 players</b> (gamertag, platform and their X profile). Accept the rules and send.`],
-    ['💶', 'Pay the entry fee', `${_h(s.fee || '25€')} per team${s.revolutUrl ? ` via <a href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="color:var(--accent)">Revolut</a>` : ''}. Write your <b>team name</b> in the payment description, then upload a screenshot of the transfer on your team card (<b>💶 Entry fee</b>)${s.dmAccount ? ` or send it in a DM on Discord to <b>${_h(s.dmAccount)}</b>` : ''}.`],
+    ['💶', 'Pay the entry fee', `${_h(s.fee || '25€')} per team${_payMethod(s) === 'skrill' ? ` via <b>Skrill</b> (to ${_h(s.skrillEmail)})` : _payMethod(s) === 'revolut' ? ` via <a href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="color:var(--accent)">Revolut</a>` : ''}. Write your <b>team name</b> in the payment description, then upload a screenshot of the transfer on your team card (<b>💶 Entry fee</b>)${s.dmAccount ? ` or send it in a DM on Discord to <b>${_h(s.dmAccount)}</b>` : ''}.`],
     ['💬', 'Invite your players to Discord', `Send every player the server invite: <a href="${_h(inv)}" target="_blank" rel="noopener" style="color:var(--accent)">${_h(inv)}</a>. All players must be on the server.`],
     ['🔗', 'Each player links their account', `Every player opens the site, clicks <b>Log in</b> (Discord) → <b>My panel</b> → section <b>🎮 My player profile</b> → picks the <b>team</b> and <b>their nick from the roster</b> → <b>Save</b>.`],
     ['✅', 'Confirm your players', `You’ll see their requests in <b>My panel</b> — confirm each one. Missing a player in the roster? Use <b>roster change</b> on your team card or ask an admin.`]] : [
@@ -16575,6 +16603,15 @@ function _captainGuideHtml() {
 // 💶 wpisowe: Revolut, kod QR, zrzut przelewu
 function _payBadge(r) { const st = r.payment?.status; if(!st) return ''; return st === 'paid' ? `<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">💶 ${_g('OPŁACONE', 'PAID')}</span>` : st === 'sent' ? `<span style="background:#f59e0b;color:#111;border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">🧾 ${_g('PRZELEW WYSŁANY', 'PROOF SENT')}</span>` : `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem;font-size:.65rem;font-weight:700">💶 ${_g('NIEOPŁACONE', 'UNPAID')}</span>`; }
 function _qrLoad() { return window.QRCode ? Promise.resolve() : (window._qrP = window._qrP || new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); })); }
+// 💶 metoda płatności wpisowego: Skrill (e-mail) albo Revolut (link) — wybór w ustawieniach zapisów
+function _payMethod(s) { s = s || _signup(); const m = s.payMethod || (s.skrillEmail ? 'skrill' : s.revolutUrl ? 'revolut' : ''); return m === 'skrill' && s.skrillEmail ? 'skrill' : m === 'revolut' && s.revolutUrl ? 'revolut' : s.skrillEmail ? 'skrill' : s.revolutUrl ? 'revolut' : ''; }
+function _skrillBoxHtml(s, team) {
+  const row = (label, val) => `<div style="display:flex;align-items:center;gap:.4rem;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.35rem .55rem;margin-top:.3rem"><span style="font-size:.74rem;color:var(--muted)">${label}</span><b style="font-size:.86rem;word-break:break-all">${_h(val)}</b><button class="btn btn-ghost" style="font-size:.66rem;padding:.15rem .4rem" onclick="navigator.clipboard?.writeText('${_h(val).replace(/'/g, "\\'")}').then(()=>showToast('📋 ' + _g('Skopiowano', 'Copied'),'success'))">📋</button></div>`;
+  return `<div style="margin-top:.6rem"><div style="font-weight:800;font-size:.86rem">💜 ${_g('Zapłać przez Skrill', 'Pay with Skrill')}</div>
+    <div style="font-size:.76rem;color:var(--muted);margin:.2rem 0 .1rem;line-height:1.5">${_g('W aplikacji lub na stronie Skrill wybierz <b>Wyślij</b> (Send money), wpisz adres e-mail poniżej, kwotę i nazwę drużyny w opisie.', 'In the Skrill app or website choose <b>Send money</b>, enter the email below, the amount and your team name in the description.')}</div>
+    ${row(_g('E-mail Skrill', 'Skrill email'), s.skrillEmail)}${s.skrillId ? row('Customer ID', s.skrillId) : ''}${team ? row(_g('Opis przelewu', 'Payment description'), team) : ''}
+    <a class="btn btn-primary" href="https://www.skrill.com/" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;margin-top:.5rem">💜 ${_g('Otwórz Skrill', 'Open Skrill')}</a></div>`;
+}
 async function openTeamPayment(regId) {
   const r = teamRegistrations.find(x => x.id === regId); if(!r) return; const s = _signup();
   const m = _fxModal('pay-modal', 640); m.classList.add('open');
@@ -16582,11 +16619,11 @@ async function openTeamPayment(regId) {
   m.querySelector('.modal').innerHTML = _fxHead('pay-modal', '💶 ' + _g('Wpisowe', 'Entry fee') + ' · ' + _h(r.teamName)) + `<div data-notr>
     <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:.8rem">
       <div style="flex:1;min-width:220px"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;color:var(--accent);line-height:1">${_h(s.fee || '25€')}</div><div style="font-size:.84rem;color:var(--muted)">${_g('za drużynę', 'per team')} · ${_g('status', 'status')}: ${_payBadge(r)}</div>
-        ${s.revolutUrl ? `<a class="btn btn-primary" href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;margin-top:.6rem">💳 ${_g('Zapłać przez Revolut', 'Pay with Revolut')}</a>` : `<div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">${_g('Link do płatności pojawi się wkrótce.', 'The payment link will be added soon.')}</div>`}</div>
-      ${s.revolutUrl ? `<div style="text-align:center"><div id="pay-qr" style="background:#fff;padding:8px;border-radius:10px;display:inline-block"></div><div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">${_g('Zeskanuj telefonem', 'Scan with your phone')}</div></div>` : ''}</div>
+        ${_payMethod(s) === 'skrill' ? (st !== 'paid' ? _skrillBoxHtml(s, r.teamName) : '') : s.revolutUrl ? `<a class="btn btn-primary" href="${_h(s.revolutUrl)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block;margin-top:.6rem">💳 ${_g('Zapłać przez Revolut', 'Pay with Revolut')}</a>` : `<div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">${_g('Dane do płatności pojawią się wkrótce.', 'Payment details will be added soon.')}</div>`}</div>
+      ${_payMethod(s) === 'revolut' ? `<div style="text-align:center"><div id="pay-qr" style="background:#fff;padding:8px;border-radius:10px;display:inline-block"></div><div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">${_g('Zeskanuj telefonem', 'Scan with your phone')}</div></div>` : ''}</div>
     ${st !== 'paid' ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .7rem;margin-bottom:.7rem;font-size:.8rem;line-height:1.5">
       ✍️ ${_g(`W tytule przelewu wpisz <b>nazwę drużyny: ${_h(r.teamName)}</b>`, `In the payment description write your <b>team name: ${_h(r.teamName)}</b>`)}<br>
-      🛡️ ${_g('Wpisowe płacisz <b>tylko</b> przez link na tej stronie. Admini <b>nigdy</b> nie wysyłają linków do płatności w prywatnych wiadomościach — taki link to oszustwo.', 'Pay the entry fee <b>only</b> via the link on this website. Admins <b>never</b> send payment links in DMs — any such link is a scam.')}</div>` : ''}
+      🛡️ ${_g('Wpisowe płacisz <b>tylko</b> według danych na tej stronie. Admini <b>nigdy</b> nie wysyłają innych danych ani linków do płatności w prywatnych wiadomościach — to oszustwo.', 'Pay the entry fee <b>only</b> using the details on this website. Admins <b>never</b> send other payment details or links in DMs — that is a scam.')}</div>` : ''}
     ${st === 'paid' ? `<div style="font-size:.86rem;color:var(--win)">✅ ${_g('Opłata potwierdzona — dzięki!', 'Payment confirmed — thank you!')}</div>` : `
     <div style="font-weight:800;font-size:.86rem;margin-bottom:.3rem">🧾 ${_g('Potwierdzenie przelewu', 'Payment proof')}</div>
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:.45rem">${_g('Po przelewie dodaj tu zrzut ekranu potwierdzenia', 'After paying, upload a screenshot of the transfer here')}${s.dmAccount ? _g(` — albo wyślij go w prywatnej wiadomości na Discordzie do <b>${_h(s.dmAccount)}</b>.`, ` — or send it in a DM on Discord to <b>${_h(s.dmAccount)}</b>.`) : '.'}</div>
@@ -16594,7 +16631,7 @@ async function openTeamPayment(regId) {
     <div style="display:flex;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-primary" onclick="uploadPayment('${r.id}')">📤 ${_g('Wyślij potwierdzenie', 'Send proof')}</button></div>
     ${st === 'sent' ? `<div style="font-size:.78rem;color:#f59e0b;margin-top:.4rem">🧾 ${_g('Potwierdzenie wysłane — czeka na sprawdzenie przez admina.', 'Proof sent — waiting for an admin to check it.')}</div>` : ''}`}
     ${_captainGuideHtml()}</div>`;
-  if(s.revolutUrl) { try { await _qrLoad(); new QRCode(document.getElementById('pay-qr'), { text: s.revolutUrl, width: 132, height: 132 }); } catch(e) {} }
+  if(_payMethod(s) === 'revolut') { try { await _qrLoad(); new QRCode(document.getElementById('pay-qr'), { text: s.revolutUrl, width: 132, height: 132 }); } catch(e) {} }
 }
 async function uploadPayment(regId) {
   const f = document.getElementById('pay-file')?.files?.[0]; if(!f) { showToast(_g('Wybierz zrzut ekranu', 'Choose a screenshot'), 'info'); return; }
@@ -16628,6 +16665,9 @@ function openSignupSettings() {
   const inp = (id, label, v, ph = '') => `<label style="${_MODAL_LBL};margin-top:.5rem">${label}</label><input id="${id}" value="${_h(v || '')}" placeholder="${_h(ph)}" style="${_MODAL_INP}">`;
   m.querySelector('.modal').innerHTML = _fxHead('signup-modal', '💶 Zapisy: wpisowe i regulamin') + `<div data-notr>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">${inp('su-fee', 'Wpisowe (tekst)', s.fee, '25€')}${inp('su-dm', 'Konto Discord do DM', s.dmAccount, 'ChemikLeague')}</div>
+    <div style="margin-bottom:.6rem"><label style="${_MODAL_LBL}">Metoda płatności wpisowego</label><select id="su-pm" style="${_MODAL_INP}"><option value="skrill" ${(s.payMethod || (s.skrillEmail ? 'skrill' : 'revolut')) === 'skrill' ? 'selected' : ''}>💜 Skrill (przelew na e-mail)</option><option value="revolut" ${(s.payMethod || (s.skrillEmail ? 'skrill' : 'revolut')) === 'revolut' ? 'selected' : ''}>💳 Revolut (link)</option></select></div>
+    ${inp('su-skr', 'E-mail konta Skrill (do wpłat)', s.skrillEmail, 'payments@…')}
+    ${inp('su-skid', 'Skrill Customer ID (opcjonalnie)', s.skrillId, '123456789')}
     ${inp('su-rev', 'Link do płatności (Revolut)', s.revolutUrl, 'https://revolut.me/…')}
     ${inp('su-rurl', 'Link do pełnego regulaminu (opcjonalnie)', s.rulesUrl, 'https://docs.google.com/…')}
     <label style="${_MODAL_LBL};margin-top:.5rem">Treść regulaminu (zakładka Rules; # na początku linii = nagłówek)</label><textarea id="su-rtxt" rows="9" style="${_MODAL_INP};font-family:inherit">${_h(s.rulesText || '')}</textarea>
@@ -16638,7 +16678,7 @@ function openSignupSettings() {
 }
 async function signupSave() {
   const v = id => document.getElementById(id).value;
-  const r = await _api('/signup-settings', 'POST', { fee: v('su-fee'), dmAccount: v('su-dm'), revolutUrl: v('su-rev'), rulesUrl: v('su-rurl'), rulesText: v('su-rtxt'), euBanner: document.getElementById('su-eub').checked, euUrl: v('su-euu'), euText: v('su-eut') }, { admin: true });
+  const r = await _api('/signup-settings', 'POST', { fee: v('su-fee'), dmAccount: v('su-dm'), revolutUrl: v('su-rev'), skrillEmail: v('su-skr'), skrillId: v('su-skid'), payMethod: v('su-pm'), rulesUrl: v('su-rurl'), rulesText: v('su-rtxt'), euBanner: document.getElementById('su-eub').checked, euUrl: v('su-euu'), euText: v('su-eut') }, { admin: true });
   if(!r.ok) { showToast('❌ ' + r.error, 'error'); return; }
   window._signupInfo = r.signup; _fxClose('signup-modal'); showToast('💾 Zapisano', 'success'); try { renderEuBillboard(); renderSideNav(); renderRules(); } catch(e) {}
 }
@@ -17566,7 +17606,7 @@ async function submitTeamRegistration() {
   document.getElementById('team-reg-modal').style.display = 'none';
   showToast('✅ ' + _g('Drużyna zgłoszona! Czeka na weryfikację.', 'Team registered! Waiting for verification.'), 'success');
   renderTeamRegistrations(); try { renderEuDash(); } catch(e) {}
-  const su = _signup(); if(EU_MODE || su.revolutUrl || su.fee) setTimeout(() => openTeamPayment(reg.id), 400); // następny krok: wpisowe
+  const su = _signup(); if(EU_MODE || su.revolutUrl || su.skrillEmail || su.fee) setTimeout(() => openTeamPayment(reg.id), 400); // następny krok: wpisowe
 }
 
 function renderTeamRegistrations() {
