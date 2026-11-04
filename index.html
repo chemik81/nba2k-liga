@@ -15508,7 +15508,8 @@ async function renderCardsView() {
   const board = await _api('/cards/board', 'GET', null, {});
   if(discordUser?.session) { const r = await _api('/cards/me', 'GET', null, { session: true }); _cards = r.ok ? r : null; _setRewardToast(r.setRewards); }
   const me = _cards, pool = me?.pool || [], own = me?.cards || {}, uniq = Object.keys(own).length, dups = Object.values(own).reduce((s, c) => s + Math.max(0, c.n - 1), 0);
-  const byTeam = {}; pool.forEach(c => (byTeam[c.team] = byTeam[c.team] || []).push(c));
+  const _cf = x => _normNick(String(x || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')), byTeam = {}, _seenT = {}; // ten sam gracz w drużynie — raz
+  pool.forEach(c => { const sk = (_seenT[c.team] = _seenT[c.team] || new Set()), key = _cf(c.name); if(sk.has(key)) return; sk.add(key); (byTeam[c.team] = byTeam[c.team] || []).push(c); });
   el.innerHTML = `<div class="section-title">🃏 ${_g('Kolekcja kart', 'Card collection')}</div><div data-notr>
     <div class="card" style="padding:.9rem 1rem;margin-bottom:1rem;text-align:center">
       ${!discordUser ? `<div style="font-size:.86rem">${_g('Zaloguj się przez Discord, żeby otwierać paczki i zbierać karty.', 'Log in with Discord to open packs and collect cards.')}</div>` : `
