@@ -8443,6 +8443,15 @@ function openReportResult(k) {
       <input type="file" id="report-file" accept="image/*" style="display:none" onchange="_reportPreview(this)">
       <div id="report-preview" style="font-size:.82rem;color:var(--muted)">🖼 Kliknij, aby wybrać screen</div>
     </label>
+    ${(() => { const ids = (s.matchIds || (s.matchId ? [s.matchId] : [])), last = ids.length ? matches.find(x => String(x.id) === String(ids[ids.length - 1])) : null; if(!last) return '';
+      return `<label style="display:flex;gap:.5rem;align-items:flex-start;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.35);border-radius:10px;padding:.55rem .7rem;margin-bottom:.8rem;cursor:pointer;font-size:.8rem;text-transform:none;letter-spacing:0;color:var(--text)">
+        <input type="checkbox" id="report-merge" value="${last.id}" style="width:auto;margin:.15rem 0 0">
+        <span>🔌 <b>${_g('To dogrywka po rozłączeniu', 'This is the rest of a disconnected game')}</b> — ${_g('dolicz wynik i statystyki do meczu', 'add the score and stats to the game')} <b>${_h(last.team1.name)} ${last.team1.score}:${last.team2.score} ${_h(last.team2.name)}</b>${_g(' (zamiast nowego meczu w serii). Kapitan rywala to potwierdza.', ' (instead of a new game in the series). The opposing captain confirms it.')}</span></label>`; })()}
+    <div id="report-two-wrap" style="margin-bottom:.8rem">
+      <button class="btn btn-ghost" style="font-size:.76rem" onclick="document.getElementById('report-two').style.display='block';this.style.display='none';document.getElementById('report-merge')?.closest('label')?.remove()">➕ ${_g('Dodaj drugi zrzut (mecz przerwany przez rozłączenie)', 'Add a second screenshot (game interrupted by a disconnect)')}</button>
+      <label id="report-two" style="display:none;border:2px dashed rgba(245,197,24,.5);border-radius:10px;padding:.8rem;text-align:center;cursor:pointer">
+        <input type="file" accept="image/*" style="display:none" onchange="_reportPreview2(this)">
+        <div id="report-preview2" style="font-size:.8rem;color:var(--muted)">🔌 ${_g('Drugi zrzut — dogrywka po rozłączeniu. Wynik i statystyki obu części zostaną zsumowane w jeden mecz.', 'Second screenshot — the rest of the game after the disconnect. Both parts will be added up into one game.')}</div></label></div>
     <div id="report-status" style="font-size:.8rem;min-height:1.1em;margin-bottom:.6rem"></div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="_fxClose('report-modal')">Anuluj</button>
@@ -8451,6 +8460,13 @@ function openReportResult(k) {
   m.classList.add('open');
 }
 
+let _reportImage2 = null;
+function _reportPreview2(input) { // drugi zrzut (mecz przerwany) — zmniejszony jak pierwszy
+  const f = input.files?.[0]; if(!f) return; const reader = new FileReader();
+  reader.onload = () => { const img = new Image(); img.onload = () => { const sc = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    _reportImage2 = c.toDataURL('image/jpeg', 0.9); document.getElementById('report-preview2').innerHTML = `<img src="${_reportImage2}" style="max-width:100%;max-height:180px;border-radius:6px"><div style="font-size:.74rem;margin-top:.3rem">🔌 ${_g('część 2', 'part 2')}</div>`; }; img.src = reader.result; };
+  reader.readAsDataURL(f);
+}
 let _reportImage = null;
 function _reportPreview(input) {
   const f = input.files?.[0];
@@ -8480,7 +8496,10 @@ async function sendReportResult(k) {
   btn.disabled = true; btn.style.opacity = '.45';
   st.style.color = 'var(--muted)'; st.textContent = '⏳ AI odczytuje screen… (do 30 s)';
   const asAdmin = _reportAsAdmin(k);
-  const res = await _api('/captain-result', 'POST', { scheduleId: k, imageBase64: _reportImage.split(',')[1], mimeType: 'image/jpeg' }, asAdmin ? { admin: true } : { session: true });
+  const mergeWith = !_reportImage2 && document.getElementById('report-merge')?.checked ? document.getElementById('report-merge').value : undefined;
+  if(_reportImage2) st.textContent = '⏳ ' + _g('AI odczytuje oba zrzuty… (do 60 s)', 'AI is reading both screenshots… (up to 60 s)');
+  const res = await _api('/captain-result', 'POST', { scheduleId: k, imageBase64: _reportImage.split(',')[1], mimeType: 'image/jpeg', ...(mergeWith ? { mergeWith } : {}), ...(_reportImage2 ? { imageBase64b: _reportImage2.split(',')[1] } : {}) }, asAdmin ? { admin: true } : { session: true });
+  _reportImage2 = null;
   if(res.ok && res.accepted) {
     _reportImage = null;
     _fxClose('report-modal');
@@ -8598,7 +8617,7 @@ async function ssDecideResult(id, accept) {
   const p = pendingResults.find(x => x.id === id);
   if(!p) return;
   const md = p.matchData;
-  if(!confirm(`${accept ? 'Potwierdzić' : 'Odrzucić'} wynik: ${md.team1.name} ${md.team1.score}:${md.team2.score} ${md.team2.name}?`)) return;
+  if(!confirm(`${accept ? 'Potwierdzić' : 'Odrzucić'} wynik: ${md.team1.name} ${md.team1.score}:${md.team2.score} ${md.team2.name}?${p.mergeWith != null ? '\n\n🔌 To druga część meczu przerwanego przez rozłączenie — po potwierdzeniu wynik i statystyki zostaną doliczone do pierwszej części.' : ''}`)) return;
   const isAdmin = _isLoggedInSync();
   if(!isAdmin && !_ensureSession()) return;
   if(window._ssDeciding) return; window._ssDeciding = true; // bez podwójnego kliknięcia
@@ -8608,7 +8627,7 @@ async function ssDecideResult(id, accept) {
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); document.querySelectorAll(`[onclick*="ssDecideResult('${id}'"]`).forEach(b => { b.disabled = false; b.style.opacity = ''; }); return; }
   pendingResults = pendingResults.filter(x => x.id !== id);
   if(accept) {
-    showToast('✅ Wynik zapisany', 'success');
+    showToast(res.merged ? `🔌 Doliczono drugą część: ${res.match.team1.name} ${res.match.team1.score}:${res.match.team2.score} ${res.match.team2.name}` : '✅ Wynik zapisany', 'success');
     await loadData();
     renderDashboard();
     renderSchedule();
