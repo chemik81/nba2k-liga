@@ -17743,7 +17743,7 @@ async function teamRegAnnounce(reg, status, reason = '') {
   const seasonName = reg.seasonId ? (seasons.find(s => s.id === reg.seasonId)?.name || reg.seasonId) : '—';
   const approvedCount = teamRegistrations.filter(r => r.status === 'approved' && (r.seasonId || null) === (reg.seasonId || null)).length;
   const playerLines = (reg.players||[]).map((p,i) =>
-    `${i+1}. **${p.gamertag}** [${(p.platform||'psn').toUpperCase()}]${p.experience && !EU_MODE ? ' · ' + (_expLabels[p.experience]||'') : ''}${p.x ? ` · 𝕏 @${p.x}` : ''}`
+    `${i+1}. **${p.gamertag}** [${(p.platform||'psn').toUpperCase()}]${p.experience && !EU_MODE ? ' · ' + (_expLabels[p.experience]||'') : ''}${p.x ? ` · [𝕏 @${p.x}](https://x.com/${p.x})` : ''}`
   ).join('\n') || '—';
   const captainId = reg.captain?.id && /^\d+$/.test(String(reg.captain.id)) ? String(reg.captain.id) : null;
 
@@ -17759,7 +17759,7 @@ async function teamRegAnnounce(reg, status, reason = '') {
   if(status === 'pending') status = 'approved', reg = { ...reg, _pending: true };
   const embed = status === 'approved' ? {
     title: reg._pending ? (EU_MODE ? `🆕 New team registered: ${reg.teamName}` : `🆕 Nowe zgłoszenie: ${reg.teamName}`) : EU_MODE ? `✅ ${reg.teamName} joins the EU Chemik League!` : `✅ ${reg.teamName} dołącza do ligi NBA 2K27!`,
-    description: funLine ? `*${funLine}*` : undefined,
+    description: [funLine ? `*${funLine}*` : '', `**${EU_MODE ? 'Roster' : 'Skład'} (${reg.players?.length||0})**\n${playerLines}`].filter(Boolean).join('\n\n').slice(0, 4000),
     color: 0x16a34a,
     fields: [
       { name: EU_MODE ? 'Season' : 'Sezon', value: seasonName, inline: true },
@@ -17767,7 +17767,6 @@ async function teamRegAnnounce(reg, status, reason = '') {
       ...(reg._pending ? [] : [{ name: EU_MODE ? 'Approved teams' : 'Zatwierdzone drużyny', value: String(approvedCount), inline: true }]),
       ...(EU_MODE && reg.level ? [{ name: 'Level', value: String(reg.level), inline: true }] : []),
       ...(reg.xHandle ? [{ name: 'X', value: `https://x.com/${reg.xHandle}`, inline: true }] : []),
-      { name: `${EU_MODE ? 'Roster' : 'Skład'} (${reg.players?.length||0})`, value: playerLines, inline: false }
     ],
     footer: { text: EU_MODE ? 'EU Chemik League · NBA 2K Pro-Am' : 'NBA 2K Pro-Am Ekstraklasa' },
     timestamp: new Date().toISOString()
