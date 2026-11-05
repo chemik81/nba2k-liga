@@ -1424,7 +1424,7 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
       </div>
 
       <div style="display:grid;grid-template-columns:72px 1fr;gap:1rem;align-items:end;margin-bottom:1rem">
-        <label style="cursor:pointer" title="Logo (max 300 KB)">
+        <label style="cursor:pointer" title="Logo">
           <div id="team-reg-logo-preview" style="width:72px;height:72px;border-radius:8px;background:var(--surface2);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:1.8rem;overflow:hidden">🏀</div>
           <input type="file" accept="image/*" style="display:none" onchange="teamRegLogoChange(this)">
         </label>
@@ -10151,7 +10151,7 @@ function changeTeamLogo(regId) {
       const res = await _api('/team-logo', 'POST', { regId, dataUrl }, isAdmin ? { admin: true } : { session: true });
       if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
       Object.assign(reg, res.registration);
-      renderTeamRegistrations(); renderDashboard(); renderSchedule();
+      renderTeamRegistrations(); renderDashboard(); renderSchedule(); if(document.querySelector('#euedit-modal.open')) _euEdDraw();
       showToast(_g(`🖼 Nowe logo: ${reg.teamName}`, `🖼 New logo: ${reg.teamName}`), 'success');
     } catch(e) { showToast('❌ ' + e.message, 'error'); }
   };
@@ -10942,6 +10942,10 @@ function _euEdDraw() {
   const r = teamRegistrations.find(x => x.id === _euEd.id), m = _fxModal('euedit-modal', 600); m.classList.add('open');
   const sel = 'padding:.35rem .4rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:.8rem';
   m.querySelector('.modal').innerHTML = _fxHead('euedit-modal', `✏️ Edit team — ${_h(r.teamName)}`) + `<div data-notr>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .7rem">
+      <div style="width:56px;height:56px;border-radius:10px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--surface)">${teamLogo(r.teamName, 56, '1rem')}</div>
+      <div style="flex:1"><div style="font-weight:700;font-size:.85rem">Team logo</div><div style="font-size:.72rem;color:var(--muted)">PNG, JPG, WEBP or GIF — square works best.</div></div>
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="changeTeamLogo('${r.id}')">🖼 ${r.logo ? 'Change logo' : 'Add logo'}</button></div>
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">You can edit your roster until registration closes: fix gamertags, change platforms, swap or add players (min. 5, max. 15). Fixed gamertags keep the player’s linked account.</div>
     <div style="display:grid;grid-template-columns:1fr 92px 120px 32px;gap:.35rem;font-size:.68rem;color:var(--muted);margin-bottom:.2rem"><span>Gamertag</span><span>Platform</span><span>X profile (optional)</span><span></span></div>
     ${_euEd.rows.map((p, i) => `<div style="display:grid;grid-template-columns:1fr 92px 120px 32px;gap:.35rem;margin-bottom:.3rem">
@@ -17497,7 +17501,7 @@ function openTeamRegModal() {
   if(rulesWrap) rulesWrap.style.borderColor = 'var(--border)';
   _teamRegLogo = null;
   const prev = document.getElementById('team-reg-logo-preview');
-  if(prev) prev.innerHTML = '🏀';
+  if(prev) { prev.innerHTML = '<div style="text-align:center;line-height:1.15;pointer-events:none"><div style="font-size:1.45rem">🏀</div><div style="font-size:.56rem;font-weight:800;letter-spacing:.4px;color:var(--accent);text-transform:uppercase">' + _g('+ Dodaj logo', '+ Add logo') + '</div></div>'; prev.style.borderColor = 'var(--accent)'; } // wyraźne „dodaj logo”
   document.getElementById('team-reg-players').innerHTML = '';
   teamRegUpdateCount();
 
@@ -17505,18 +17509,14 @@ function openTeamRegModal() {
   for(let i=0;i<5;i++) teamRegAddPlayer();
 }
 
-function teamRegLogoChange(input) {
-  const file = input.files[0];
-  if(!file) return;
-  if(file.size > 300*1024) { showToast('❌ Plik za duży — max 300 KB', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    _teamRegLogo = e.target.result;
-    const prev = document.getElementById('team-reg-logo-preview');
-    if(prev) prev.innerHTML = `<img src="${_teamRegLogo}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
-  };
-  reader.readAsDataURL(file);
+async function teamRegLogoChange(input) { // logo w formularzu: zmniejszane automatycznie (jak przy zmianie logo drużyny)
+  const file = input.files[0]; if(!file) return;
+  if(!/^image\//.test(file.type)) { showToast(_g('❌ Wybierz obrazek (PNG, JPG, WEBP, GIF)', '❌ Choose an image (PNG, JPG, WEBP, GIF)'), 'error'); return; }
+  try { _teamRegLogo = await _resizeLogo(file); } catch(e) { showToast('❌ ' + _g('Nie udało się wczytać obrazka', 'Could not read the image'), 'error'); return; }
+  const prev = document.getElementById('team-reg-logo-preview');
+  if(prev) prev.innerHTML = `<div style="position:relative;width:100%;height:100%"><img src="${_teamRegLogo}" style="width:100%;height:100%;object-fit:cover;border-radius:6px"><div style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);color:#fff;font-size:.52rem;font-weight:800;text-align:center;padding:.1rem 0;text-transform:uppercase">${_g('zmień', 'change')}</div></div>`;
 }
+
 
 function teamRegAddPlayer() {
   const container = document.getElementById('team-reg-players');
