@@ -10116,25 +10116,31 @@ function openStreamModal(k) {
   m.classList.add('open');
 }
 // ═══ 🖼 LOGO DRUŻYNY (kapitan swojej drużyny, admin każdej) ═══
-function _resizeLogo(file) {
+function _resizeLogo(file) { // logo drużyny: do 512 px, skalowanie wieloetapowe; małe pliki bez obróbki; przezroczystość zachowana
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
-      const img = new Image();
+      const src = e.target.result, img = new Image();
       img.onload = () => {
-        const MAX = 256, sc = Math.min(MAX / img.width, MAX / img.height, 1);
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/png'));
+        const MAX = 512;
+        if(img.width <= MAX && img.height <= MAX && file.size <= 300 * 1024 && /^data:image\/(png|jpe?g|webp|gif);/.test(src)) { resolve(src); return; } // oryginał
+        const sc = Math.min(MAX / img.width, MAX / img.height, 1), W = Math.round(img.width * sc), H = Math.round(img.height * sc);
+        let cur = img, cw = img.width, ch = img.height;
+        while(cw / 2 >= W && ch / 2 >= H) { const t = document.createElement('canvas'); t.width = Math.round(cw / 2); t.height = Math.round(ch / 2); const g = t.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(cur, 0, 0, t.width, t.height); cur = t; cw = t.width; ch = t.height; }
+        const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(cur, 0, 0, W, H);
+        let out = c.toDataURL('image/png');
+        if(out.length > 1300000) { const wp = c.toDataURL('image/webp', 0.92); if(wp.startsWith('data:image/webp')) out = wp; } // PNG za duży → WebP (z przezroczystością)
+        if(out.length > 1300000) out = c.toDataURL('image/jpeg', 0.9);
+        resolve(out);
       };
-      img.onerror = () => reject(new Error('To nie jest obrazek'));
-      img.src = e.target.result;
+      img.onerror = () => reject(new Error(_g('To nie jest obrazek', 'That is not an image')));
+      img.src = src;
     };
-    reader.onerror = () => reject(new Error('Nie udało się odczytać pliku'));
+    reader.onerror = () => reject(new Error(_g('Nie udało się odczytać pliku', 'Could not read the file')));
     reader.readAsDataURL(file);
   });
 }
+
 function changeTeamLogo(regId) {
   const reg = teamRegistrations.find(r => r.id === regId);
   if(!reg) return;
