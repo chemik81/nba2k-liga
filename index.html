@@ -10912,7 +10912,7 @@ function _rosterBlock(r) {
   const isCap = discordUser && r.captain?.id === discordUser.id && r.status === 'approved';
   const membersHtml = r.status === 'approved' && (isAdmin || isCap) ? _membersHtml(r.teamName, true, 'card') +
     `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="openTeamRoster(this.dataset.t, 'g')" data-t="${_h(r.teamName)}">👥 Skład i dostępność</button>` +
-    `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="changeTeamLogo('${r.id}')">🖼 Zmień logo</button>` : '';
+    `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="changeTeamLogo('${r.id}')">🖼 Zmień logo</button>` : r.status === 'pending' && (isAdmin || (discordUser && r.captain?.id === discordUser.id)) ? `<button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;margin:.45rem .35rem 0 0" onclick="changeTeamLogo('${r.id}')">🖼 ${r.logo ? _g('Zmień logo', 'Change logo') : _g('Dodaj logo', 'Add logo')}</button>` : ''; // drużyna oczekująca: logo może dodać admin i kapitan
   const pend = (r.rosterRequests || []).filter(q => q.status === 'pending');
   const locked = rosterLockDate && _today() > rosterLockDate;
   let html = pend.map(q => `<div style="margin-top:.5rem;font-size:.76rem;background:rgba(245,197,24,.07);border:1px dashed var(--accent);border-radius:8px;padding:.45rem .6rem">
