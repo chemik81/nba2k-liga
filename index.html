@@ -16404,10 +16404,7 @@ function _gmdDraw() {
       <button class="btn btn-primary" onclick="gmDemoSeason()">🏀 ${_g('Zobacz sezon demo', 'See the demo season')}</button>` : ''}
     <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:.8rem;margin-top:.8rem" class="gmd-grid">
       <div>${A ? A.list : done ? '' : `<input placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" value="${_h(d.q)}" oninput="_gmd.q=this.value;_gmdDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin:0 0 .4rem">
-        <div style="font-size:.66rem;color:var(--muted);display:grid;grid-template-columns:1fr 70px 52px 76px;gap:.3rem;padding:0 .2rem .2rem"><span>${_g('Zawodnik', 'Player')}</span><span>FP/${_g('mecz', 'game')}</span><span>${_g('mecze', 'games')}</span><span></span></div>
-        <div style="max-height:420px;overflow:auto">${avail.map(p => `<div style="display:grid;grid-template-columns:1fr 70px 52px 76px;gap:.3rem;align-items:center;padding:.3rem .2rem;border-bottom:1px solid var(--border);font-size:.8rem">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${_h(p.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(p.team || '')}</span></span><b>${p.avg}</b><span>${p.gp}</span>
-          <button class="btn ${myTurn ? 'btn-primary' : 'btn-ghost'}" ${myTurn ? '' : 'disabled'} style="font-size:.68rem;padding:.2rem .4rem" onclick="gmDemoPick('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wybierz', 'Pick')}</button></div>`).join('')}</div>`}</div>
+        ${_gmdListHtml(avail, p => `<button class="btn ${myTurn ? 'btn-primary' : 'btn-ghost'}" ${myTurn ? '' : 'disabled'} style="font-size:.66rem;padding:.2rem .35rem" onclick="gmDemoPick('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wybierz', 'Pick')}</button>`)}`}</div>
       <div style="${done ? 'grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem' : ''}">${d.gms.map(g => `<div style="background:var(--surface2);border:1px solid ${g.id === d.meId ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:.45rem .6rem;margin-bottom:.45rem">
         <div style="display:flex;justify-content:space-between;font-size:.8rem"><b>${g.id === d.meId ? '⭐ ' : ''}${_h(g.name)}</b><span style="color:var(--muted)">${sum(g.id)} FP${d.mode === 'auction' ? ` · 💰 ${d.budget[g.id]}` : ''}</span></div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${d.rosters[g.id].map(p => _h(p.name) + (d.mode === 'auction' ? ` (${p.price})` : '')).join(' · ') || '—'}${d.mode === 'auction' ? ` <span style="opacity:.7">· ${d.rosters[g.id].length}/${d.cfg.roster}</span>` : ''}</div></div>`).join('')}</div></div></div>`;
@@ -16449,16 +16446,41 @@ function _gdaHtml() {
   let head;
   if(done) head = `<div style="font-size:1.05rem;font-weight:800">✅ ${_g('Licytacja zakończona!', 'Auction complete!')}</div>`;
   else if(d.lot) { const lead = d.lot.leader === me, max = _gdaMax(d, me), full = d.rosters[me].length >= d.cfg.roster;
-    head = `<div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap"><div><div style="font-size:.72rem;color:var(--muted)">${_g('Na licytacji', 'On the block')}</div><div style="font-size:1.15rem;font-weight:900">${_h(d.lot.p.name)} <span style="font-size:.78rem;font-weight:400;color:var(--muted)">${_h(d.lot.p.team || '')} · ${d.lot.p.avg} FP/${_g('mecz', 'game')}</span></div></div>
+    _gmdLotImg(d.lot.p.name); const im = d.img?.[d.lot.p.name];
+    head = `<div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap">${im ? `<img src="${im}" onclick="openPlayerCardImg('${_h(d.lot.p.name).replace(/'/g, "\\'")}')" title="${_g('Otwórz kartę', 'Open card')}" style="width:96px;border-radius:8px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.45)">` : `<div style="width:96px;height:120px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--muted)">🃏</div>`}<div style="flex:1;min-width:160px"><div style="font-size:.72rem;color:var(--muted)">${_g('Na licytacji', 'On the block')}</div><div style="font-size:1.15rem;font-weight:900">${_h(d.lot.p.name)} <span style="font-size:.78rem;font-weight:400;color:var(--muted)">${_h(d.lot.p.team || '')} · ${d.lot.p.avg} FP/${_g('mecz', 'game')}</span></div></div>
       <div style="text-align:right"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.9rem;line-height:1;color:${lead ? 'var(--win)' : 'var(--text)'}">💰 ${d.lot.price}</div><div style="font-size:.74rem">${lead ? '✅ ' + _g('Prowadzisz!', 'You lead!') : _g('Prowadzi', 'Leading') + ': ' + _h(name(d.lot.leader))} · ⏱ <b>${d.lot.left}s</b></div></div></div>
       <div style="display:flex;gap:.4rem;margin-top:.55rem;flex-wrap:wrap;align-items:center">${full ? `<span style="font-size:.76rem;color:var(--muted)">${_g('Twój skład jest pełny', 'Your roster is full')}</span>` : [1, 5, 10].map(s => `<button class="btn ${lead ? 'btn-ghost' : 'btn-primary'}" ${lead || d.lot.price + s > max ? 'disabled' : ''} onclick="gmDemoBid(${s})">+${s} → ${d.lot.price + s}</button>`).join('')}
         <span style="font-size:.72rem;color:var(--muted);margin-left:auto">${_g('Twój budżet', 'Your budget')}: <b>${d.budget[me]}</b> · ${_g('maks. oferta', 'max bid')}: <b>${max}</b></span></div>`; }
   else head = d.nominator === me ? `<div style="font-weight:800;color:var(--win)">👉 ${_g('Twoja kolej — wystaw zawodnika na licytację', 'Your turn — put a player up for auction')}</div>` : `<div style="color:var(--muted)">⏳ ${_g('Wystawia', 'Nominating')}: ${_h(name(d.nominator))}…</div>`;
   const avail = _gmdAvail().filter(p => !d.q || _normNick(p.name).includes(_normNick(d.q)) || _normNick(p.team || '').includes(_normNick(d.q))).slice(0, 40), canNom = !d.lot && d.nominator === me && !done;
   return { head, list: done ? '' : `<input placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" value="${_h(d.q)}" oninput="_gmd.q=this.value;_gmdDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin:0 0 .4rem">
-      <div style="max-height:420px;overflow:auto">${avail.map(p => `<div style="display:grid;grid-template-columns:1fr 70px 52px 86px;gap:.3rem;align-items:center;padding:.3rem .2rem;border-bottom:1px solid var(--border);font-size:.8rem">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${_h(p.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(p.team || '')}</span></span><b>${p.avg}</b><span>${p.gp}</span>
-        <button class="btn ${canNom ? 'btn-primary' : 'btn-ghost'}" ${canNom ? '' : 'disabled'} style="font-size:.68rem;padding:.2rem .4rem" onclick="gmDemoNominate('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wystaw', 'Nominate')}</button></div>`).join('')}</div>` };
+      ${_gmdListHtml(avail, p => `<button class="btn ${canNom ? 'btn-primary' : 'btn-ghost'}" ${canNom ? '' : 'disabled'} style="font-size:.66rem;padding:.2rem .35rem" onclick="gmDemoNominate('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wystaw', 'Nominate')}</button>`)}` };
+}
+
+// 📋 lista zawodników w demo: widok FP / statystyki / atrybuty (litery jak na kartach), sortowanie po kolumnie, karta po kliknięciu
+const _GMD_ATTR = [['shoot', 'RZT', 'SHT'], ['three', '3PT', '3PT'], ['inside', 'POD', 'INS'], ['play', 'ROZ', 'PLY'], ['def', 'OBR', 'DEF'], ['reb', 'ZB', 'REB'], ['ball', 'KP', 'BAL']];
+function _gmdInfo(p) { if(!p._d) { const d = _pcData(p.name, 'season') || {}; p._d = { ppg: d.ppg || 0, rpg: d.rpg || 0, apg: d.apg || 0, spg: d.spg || 0, bpg: d.bpg || 0, fg: d.fg || 0, attrs: d.sk?.attrs || {}, rating: d.rating || 0 }; } return p._d; }
+const _gmdGradeCol = g => /^A/.test(g) ? '#22c55e' : /^B/.test(g) ? '#84cc16' : /^C/.test(g) ? '#eab308' : /^D/.test(g) ? '#f97316' : '#ef4444';
+function gmdSort(k) { const d = _gmd; if(!d) return; d.dir = d.sort === k ? -d.dir : -1; d.sort = k; _gmdDraw(); }
+function _gmdListHtml(list, btn) {
+  const d = _gmd, en = currentLang === 'en', view = d.view || 'fp';
+  const cols = view === 'stats' ? [['ppg', 'PTS'], ['rpg', en ? 'REB' : 'ZB'], ['apg', en ? 'AST' : 'AS'], ['spg', en ? 'STL' : 'PRZ'], ['bpg', en ? 'BLK' : 'BL'], ['fg', 'FG%']]
+    : view === 'attr' ? _GMD_ATTR.map(([k, pl, e]) => ['a_' + k, en ? e : pl]) : [['avg', 'FP/' + (en ? 'g' : 'm')], ['gp', en ? 'GP' : 'M'], ['rating', 'OVR']];
+  const val = (p, k) => { const i = _gmdInfo(p); return k === 'avg' ? p.avg : k === 'gp' ? p.gp : k === 'rating' ? i.rating : k.startsWith('a_') ? (i.attrs[k.slice(2)]?.p ?? -1) : (i[k] || 0); };
+  const L = d.sort ? list.slice().sort((a, b) => (val(b, d.sort) - val(a, d.sort)) * (d.dir === 1 ? -1 : 1)) : list;
+  const gcol = `1fr repeat(${cols.length}, ${view === 'attr' ? '34px' : '46px'}) 78px`, arrow = k => d.sort === k ? (d.dir === 1 ? ' ▲' : ' ▼') : '';
+  const cell = (p, k) => { const i = _gmdInfo(p); if(k.startsWith('a_')) { const a = i.attrs[k.slice(2)]; return `<b style="color:${_gmdGradeCol(a?.g || 'F')}">${a?.g || '—'}</b>`; }
+    if(k === 'fg') return `${Math.round((i.fg || 0) * 100)}%`; if(k === 'avg') return `<b>${p.avg}</b>`; if(k === 'gp') return p.gp; if(k === 'rating') return i.rating || '—'; return (Math.round((i[k] || 0) * 10) / 10); };
+  const tab = (v, l) => `<button class="btn ${view === v ? 'btn-primary' : 'btn-ghost'}" style="font-size:.66rem;padding:.15rem .45rem" onclick="_gmd.view='${v}';_gmd.sort=null;_gmdDraw()">${l}</button>`;
+  return `<div style="display:flex;gap:.3rem;margin-bottom:.35rem;flex-wrap:wrap">${tab('fp', '⭐ FP')}${tab('stats', '📊 ' + _g('Statystyki', 'Stats'))}${tab('attr', '🔤 ' + _g('Atrybuty', 'Attributes'))}</div>
+    <div style="font-size:.64rem;color:var(--muted);display:grid;grid-template-columns:${gcol};gap:.25rem;padding:0 .2rem .2rem;text-align:center"><span style="text-align:left">${_g('Zawodnik', 'Player')} · <span style="opacity:.7">${_g('klik = karta', 'tap = card')}</span></span>${cols.map(([k, l]) => `<span style="cursor:pointer;user-select:none" onclick="gmdSort('${k}')">${l}${arrow(k)}</span>`).join('')}<span></span></div>
+    <div style="max-height:420px;overflow:auto">${L.map(p => `<div style="display:grid;grid-template-columns:${gcol};gap:.25rem;align-items:center;padding:.3rem .2rem;border-bottom:1px solid var(--border);font-size:.78rem;text-align:center">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;cursor:pointer" onclick="openPlayerCardImg('${_h(p.name).replace(/'/g, "\\'")}')"><b style="text-decoration:underline dotted">${_h(p.name)}</b> <span style="color:var(--muted);font-size:.68rem">${_h(p.team || '')}</span></span>
+      ${cols.map(([k]) => `<span>${cell(p, k)}</span>`).join('')}${btn(p)}</div>`).join('')}</div>`;
+}
+async function _gmdLotImg(name) { // karta licytowanego zawodnika (raz na nazwisko)
+  const d = _gmd; if(!d) return; d.img = d.img || {}; if(d.img[name] !== undefined) return; d.img[name] = null;
+  try { const pd = _pcData(name, 'season'); d.img[name] = pd ? await _pcImage(pd, currentLang === 'en' ? 'en' : 'pl', true) : ''; } catch(e) { d.img[name] = ''; } if(_gmd?.lot?.p.name === name) _gmdDraw();
 }
 
 function gmDemoSeason() { // sezon demo: prawdziwe ekrany Ligi GM na danych z draftu demo
