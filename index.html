@@ -869,6 +869,9 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 
 /* 📱 Kort na telefonie: ręka w siatce (wszystkie karty widoczne) */
 @media (max-width:600px){.kc-handrow{flex-wrap:wrap;overflow-x:visible!important;justify-content:center;gap:.35rem!important}.kc-handrow .kc-handcard{width:calc(33.3% - .25rem)!important;min-width:0}.kc-handrow .kc-handcard button{font-size:.66rem!important;padding:.12rem .3rem!important}}
+
+.sn-b.new{background:#ef4444;color:#fff;font-weight:800;font-size:.55rem}
+@media (max-width:760px){.gmd-grid{grid-template-columns:1fr!important}}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -2929,7 +2932,7 @@ function showView(id) {
   // link z adresu (np. #multistream, #kolekcja) obsłużony — przy przejściu na inny widok czyścimy adres, żeby odświeżenie nie wracało do linku
   try { const h = location.hash.replace('#', ''); if(h && !h.startsWith('bin=') && !h.startsWith('{') && window._routeHandled && h !== id) history.replaceState(history.state, '', location.pathname + location.search); } catch(e) {}
   try { _gmNavSync(); } catch(e) {}
-  if(id === 'gm' && typeof _gmVisible === 'function' && !_gmVisible()) id = 'dashboard';
+  if(id === 'gm' && typeof _gmVisible === 'function' && !_gmVisible() && !window._gmDemo) id = 'dashboard'; // demo Ligi GM działa też przed startem ligi
   if(id==='schedule') { setTimeout(renderSchedule, 50); }
   if(id==='events') { setTimeout(renderEvents, 50); }
   if(id==='totw') setTimeout(renderTotw, 30);
@@ -6405,6 +6408,8 @@ function _ensureSession() {
   return true;
 }
 async function _api(path, method, body, opts = {}) {
+  if(window._gmDemo && /^\/gm-presence/.test(path)) return { ok: true, online: [] };
+  if(window._gmDemo && /^\/gm/.test(path)) { if(!method || method === 'GET') return path.startsWith('/gm/market/bids') ? { ok: true, bids: [] } : { ...window._gmDemo.state }; showToast(_g('🎮 To demo — w prawdziwej Lidze GM ta akcja zostałaby zapisana', '🎮 This is a demo — in the real GM League this action would be saved'), 'info'); return { ok: false, error: 'demo' }; }
   if(!workerUrl) return { ok: false, error: 'Brak Worker URL' };
   const headers = { 'Content-Type': 'application/json' };
   if(opts.session && discordUser?.session) headers['X-Discord-Session'] = discordUser.session;
@@ -8073,6 +8078,8 @@ function openDeepLink() {
   const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q || _p).toLowerCase();
   if(_p && !location.hash && !_q) try { history.replaceState(history.state, '', '/' + location.search); } catch(e) {} // po otwarciu adres wraca na stronę główną (odświeżenie nie wraca do linku)
   if(!h) return;
+  if(['fantasy-plus', 'fantasyplus', 'fplus', 'fantasy+'].includes(h)) { setTimeout(() => showView('fplus'), 300); return; }
+  if(['gm-demo', 'demo-gm', 'liga-gm-demo', 'gmdemo'].includes(h)) { window._gmdAuto = true; setTimeout(() => showView('fplus'), 300); return; }
   if(/^duel-[a-z0-9]{6}$/.test(h)) { _kortLiveCode = h.slice(5); _kortTab = 'live'; setTimeout(() => showView('kort'), 300); return; }
   const flash = el => {
     if(!el) return;
@@ -14015,17 +14022,19 @@ const __encode = async c => c.toDataURL('image/png');
 function _pcMatch(scope) { return typeof scope === 'string' && scope.startsWith('match:') ? scope.slice(6) : null; }
 function _pcWeek(scope) {
   if(typeof scope !== 'string' || !scope.startsWith('week:')) return null;
-  const [, s2, w] = scope.split(':'), sid2 = s2 || null, sch = (typeof schedule !== 'undefined' ? schedule : []).find(x => (x.seasonId || null) === sid2 && +x.week === +w && x.weekStart);
-  if(!sch) return null; const e = new Date(sch.weekStart + 'T12:00:00Z'); e.setUTCDate(e.getUTCDate() + 7);
-  return { sid: sid2, w: +w, from: sch.weekStart, to: e.toISOString().slice(0, 10) };
+  const [, s2, w] = scope.split(':'), sid2 = s2 || null, all = (typeof schedule !== 'undefined' ? schedule : []).filter(x => (x.seasonId || null) === sid2 && +x.week === +w), sch = all.find(x => x.weekStart);
+  const ids = new Set(all.flatMap(x => [...(x.matchIds || []), ...(x.matchId != null ? [x.matchId] : [])]).map(String)); // mecze przypisane do tej kolejki w terminarzu (jak nagrody i Piątka tygodnia)
+  if(!sch && !ids.size) return null; const e = sch ? new Date(sch.weekStart + 'T12:00:00Z') : null; if(e) e.setUTCDate(e.getUTCDate() + 7);
+  return { sid: sid2, w: +w, from: sch?.weekStart || '', to: e ? e.toISOString().slice(0, 10) : '', ids };
 }
+function _pcWeekHas(wk, m) { return wk.ids?.size ? wk.ids.has(String(m.id)) : (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to; }
 function _pcData(name, scope = 'season') {
   const key = _normNick(name), sid = currentSeasonId || null;
   const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
   const all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
   const mine = (pool) => pool.map(m => { for(const [t, o] of [[m.team1, m.team2], [m.team2, m.team1]]) { const p = (t.players || []).find(x => _normNick(x.name) === key); if(p) return { p, t, o, m, won: +t.score > +o.score }; } return null; }).filter(Boolean);
   const wk = _pcWeek(scope), mid = _pcMatch(scope), mm = mid ? all.find(m => String(m.id) === String(mid)) : null;
-  const pool = mm ? [mm] : wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
+  const pool = mm ? [mm] : wk ? all.filter(m => _pcWeekHas(wk, m)) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
   const games = mine(pool);
   const scopeLbl = mm ? `${String(mm.date || '').split('-').reverse().join('.')} · vs ${mm.team1.players?.some(p => _normNick(p.name) === _normNick(name)) ? mm.team2.name : mm.team1.name}|${String(mm.date || '').split('-').reverse().join('.')} · vs ${mm.team1.players?.some(p => _normNick(p.name) === _normNick(name)) ? mm.team2.name : mm.team1.name}` : wk ? `WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}|WEEK ${wk.w} · ${_seasonName(wk.sid) || ''}` : scope === 'career' ? 'KARIERA|CAREER' : scope === 'edition' ? edOf(sid) || 'EDYCJA|EDITION' : _seasonName(sid) || 'SEZON|SEASON';
   if(!games.length) return null;
@@ -14057,7 +14066,7 @@ function _pcLeague(scope) {
   const sid = currentSeasonId || null, all = _withAllMatches(() => matches.slice()).filter(m => !m.walkover);
   const edOf = id => { const m = _seasonName(id).match(/2k\s*(\d{2})/i); return m ? 'NBA 2K' + m[1] : (_seasonName(id) || ''); };
   const wk = _pcWeek(scope), _mid = _pcMatch(scope); if(_mid) { const _m = all.find(m => String(m.id) === String(_mid)); if(_m) scope = 'season'; }
-  const pool = wk ? all.filter(m => (m.seasonId || null) === wk.sid && String(m.date) >= wk.from && String(m.date) < wk.to) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
+  const pool = wk ? all.filter(m => _pcWeekHas(wk, m)) : scope === 'career' ? all : scope === 'edition' ? all.filter(m => edOf(m.seasonId) === edOf(sid)) : all.filter(m => (m.seasonId || null) === sid);
   const key = scope + ':' + sid + ':' + all.length; if(_pcLgCache[key]) return _pcLgCache[key];
   const P = {};
   pool.forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => (t.players || []).forEach(p => {
@@ -14493,7 +14502,7 @@ function _gmVisible() { return GM_LEAGUE_PUBLIC || _isLoggedInSync(); }
 function _gmNavSync() { const el = document.getElementById('nav-gm'); if(el) el.style.display = _gmVisible() ? '' : 'none'; }
 function _g(pl, en) { return currentLang === 'en' ? en : pl; }
 let _gmState = null;
-async function _gmLoad() { const r = await _api('/gm?season=' + encodeURIComponent(currentSeasonId || '_'), 'GET', null, {}); if(r.ok) _gmState = r; return _gmState; }
+async function _gmLoad() { if(window._gmDemo) { _gmState = window._gmDemo.state; return _gmState; } const r = await _api('/gm?season=' + encodeURIComponent(currentSeasonId || '_'), 'GET', null, {}); if(r.ok) _gmState = r; return _gmState; }
 function _gmPool() {
   const sid = currentSeasonId || null, set = new Map();
   teamRegistrations.filter(r => r.status === 'approved' && (!r.seasonId || r.seasonId === (sid || r.seasonId))).forEach(r => (r.players || []).forEach(p => { if(p.gamertag) set.set(_normNick(p.gamertag), { name: p.gamertag, team: r.teamName }); }));
@@ -14505,10 +14514,11 @@ async function renderGmView() {
   el.innerHTML = `<div class="section-title">🏆 ${_g('Liga GM', 'GM League')}</div><div style="color:var(--muted)">⏳</div>`;
   const st = await _gmLoad(); if(!st) { el.innerHTML += `<div style="color:var(--loss)">${_g('Nie udało się wczytać', 'Failed to load')}</div>`; return; }
   if(st.config.dynasty && !st.rosters) await _gmPrevLoad();
-  const c = st.config, gms = st.gms || [], admin = _isLoggedInSync(), me = discordUser ? gms.find(g => g.id === discordUser.id) : null;
+  const c = st.config, gms = st.gms || [], admin = _isLoggedInSync(), me = _gmMeId() ? gms.find(g => g.id === _gmMeId()) : null;
   const pool = _gmPool(), maxByPool = Math.floor(pool.length / c.roster), fa = Math.max(0, pool.length - Math.min(c.maxGm, maxByPool) * c.roster);
   const stLbl = { setup: _g('🛠 przygotowanie', '🛠 setup'), signups: _g('📝 zapisy GM-ów', '📝 GM sign-ups'), draft: _g('🎯 draft', '🎯 draft'), season: _g('🏀 sezon trwa', '🏀 season in progress'), done: _g('🏁 zakończony', '🏁 finished') }[c.status];
   el.innerHTML = `<div class="section-title">🏆 ${_g('Liga GM', 'GM League')} <span style="font-size:.9rem;color:var(--muted)">${_h(_seasonName(currentSeasonId) || '')}</span></div>
+  ${st.demo ? `<div class="card" style="padding:.7rem .9rem;margin-bottom:1rem;border:2px solid var(--accent);display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap" data-notr><div style="font-size:.84rem">🎮 <b>DEMO</b> — ${_g('Twoja drużyna z draftu demo kontra boty. Punkty liczą się z prawdziwych meczów ligi w tym sezonie. Nic nie jest zapisywane.', 'Your demo draft team vs bots. Points come from real league games this season. Nothing is saved.')}</div><button class="btn btn-ghost" style="font-size:.74rem" onclick="gmDemoExit()">✕ ${_g('Zakończ demo', 'Exit demo')}</button></div>` : ''}
   <div data-notr>
     <div class="card" style="padding:.9rem 1rem;margin-bottom:1rem;line-height:1.6;font-size:.84rem">
       <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap"><b style="font-size:1rem">${st.rosters ? _g('Zasady Ligi GM', 'GM League rules') : _g('Zostań GM-em sezonu', 'Become a GM this season')}</b><span style="color:var(--accent);font-weight:700">${stLbl}</span></div>
@@ -14516,7 +14526,7 @@ async function renderGmView() {
         `Każdy GM buduje drużynę z zawodników naszej ligi — w drafcie ${c.draftMode === 'auction' ? 'aukcyjnym (budżet ' + c.budget + ' monet)' : 'snake (po kolei)'}. Skład: ${c.roster} zawodników, liczy się ${c.starters} najlepszych występów z tygodnia. Punkty pochodzą z prawdziwych meczów ligi (jak w fantasy). ${c.tableMode === 'h2h' ? 'Co tydzień pojedynek z innym GM-em — kto zdobędzie więcej punktów, wygrywa.' : 'Liczy się suma punktów z całego sezonu.'} Skład zmienisz tylko wymianą z innym GM-em albo przez rynek wolnych agentów — w granicach salary cap (${c.cap ?? c.budget}).${c.noSelf ? ' GM nie może mieć w składzie siebie.' : ''}`,
         `Each GM builds a team from our league's players — in ${c.draftMode === 'auction' ? 'an auction draft (budget ' + c.budget + ' coins)' : 'a snake draft'}. Roster: ${c.roster} players, the best ${c.starters} performances of the week count. Points come from real league games (fantasy scoring). ${c.tableMode === 'h2h' ? 'Every week you face another GM — more points wins.' : 'The season-long point total counts.'} You can only change your roster by trading with another GM or via the free-agent market — within the salary cap (${c.cap ?? c.budget}).${c.noSelf ? ' A GM can\'t have themselves on the roster.' : ''}`)}</div>
     </div>
-    ${c.status === 'signups' ? (discordUser ? `<div class="card" style="padding:.9rem 1rem;margin-bottom:1rem">
+    ${c.status === 'signups' ? (_gmMeId() ? `<div class="card" style="padding:.9rem 1rem;margin-bottom:1rem">
       <b>${me ? _g('✅ Jesteś zapisany jako GM', '✅ You are signed up as a GM') : _g('📝 Zapisz się jako GM', '📝 Sign up as a GM')}</b>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem">
         <div><label style="${_MODAL_LBL}">${_g('Nazwa Twojej drużyny GM', 'Your GM team name')}</label><input id="gm-team" maxlength="40" value="${_h(me?.teamName || '')}" style="${_MODAL_INP}"></div>
@@ -14840,7 +14850,7 @@ function _gmSeasonHtml(st) {
     ${_isLoggedInSync() ? `<button class="btn btn-ghost" style="float:right;font-size:.7rem;padding:.15rem .5rem" onclick="openGmWeekGraphic()">🖼 ${_g('Grafika tygodnia', 'Weekly graphic')}</button>` : ''}
     <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📊 ${_g('TABELA LIGI GM', 'GM LEAGUE STANDINGS')} · ${c.tableMode === 'h2h' ? _g('pojedynki tygodniowe', 'weekly head-to-head') : _g('suma punktów', 'points total')}</div>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead><tr style="color:var(--muted);font-size:.68rem"><th style="text-align:left">#</th><th style="text-align:left">${_g('Drużyna', 'Team')}</th>${c.tableMode === 'h2h' ? `<th>W</th><th>L</th><th>${_g('R', 'T')}</th>` : ''}<th style="text-align:right">${_g('Pkt', 'PF')}</th>${c.tableMode === 'h2h' ? `<th style="text-align:right">${_g('Str.', 'PA')}</th>` : ''}</tr></thead>
-    <tbody>${S.standings.map((r, i) => `<tr style="border-top:${i && i === (+c.playoffTeams || 0) && c.tableMode === 'h2h' && c.playoffStart ? '2px dashed var(--accent)' : '1px solid var(--border)'}${r.id === discordUser?.id ? ';background:rgba(245,197,24,.08)' : ''}"><td style="padding:.35rem .2rem;text-align:left;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'};font-weight:800">${i + 1}</td><td style="text-align:left">${tName(r.id)} <span style="font-size:.7rem;color:var(--muted)">${_h(r.gm)}</span></td>${c.tableMode === 'h2h' ? `<td>${r.w}</td><td>${r.l}</td><td>${r.t}</td>` : ''}<td style="text-align:right;font-weight:800">${f1(r.pf)}</td>${c.tableMode === 'h2h' ? `<td style="text-align:right;color:var(--muted)">${f1(r.pa)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+    <tbody>${S.standings.map((r, i) => `<tr style="border-top:${i && i === (+c.playoffTeams || 0) && c.tableMode === 'h2h' && c.playoffStart ? '2px dashed var(--accent)' : '1px solid var(--border)'}${r.id === _gmMeId() ? ';background:rgba(245,197,24,.08)' : ''}"><td style="padding:.35rem .2rem;text-align:left;color:${i < 3 ? 'var(--accent)' : 'var(--muted)'};font-weight:800">${i + 1}</td><td style="text-align:left">${tName(r.id)} <span style="font-size:.7rem;color:var(--muted)">${_h(r.gm)}</span></td>${c.tableMode === 'h2h' ? `<td>${r.w}</td><td>${r.l}</td><td>${r.t}</td>` : ''}<td style="text-align:right;font-weight:800">${f1(r.pf)}</td>${c.tableMode === 'h2h' ? `<td style="text-align:right;color:var(--muted)">${f1(r.pa)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
   </div>
   <div class="card" style="padding:.7rem 1rem;margin-bottom:1rem">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
@@ -14937,7 +14947,7 @@ let _gmMyBids = null;
 function _gmRosterAt(st, date) { const h = (st.rosterHist || []).filter(x => x.from <= date).pop(); return h ? h.rosters : (st.rosters || {}); }
 function _gmSeasonFp() { const sid = currentSeasonId || null, o = {}; _withAllMatches(() => matches.filter(m => !m.walkover && (m.seasonId || null) === sid)).forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, op]) => (t.players || []).forEach(p => { const k = _normNick(p.name); o[k] = Math.round(((o[k] || 0) + _gmFp(p, +t.score > +op.score)) * 10) / 10; }))); return o; }
 function _gmMarketHtml(st) {
-  const c = st.config, mk = st.market || { faab: {}, trades: [], log: [] }, me = discordUser ? (st.gms || []).find(g => g.id === discordUser.id) : null, admin = _isLoggedInSync();
+  const c = st.config, mk = st.market || { faab: {}, trades: [], log: [] }, me = _gmMeId() ? (st.gms || []).find(g => g.id === _gmMeId()) : null, admin = _isLoggedInSync();
   const gm = Object.fromEntries((st.gms || []).map(g => [g.id, g])), tab = window._gmMkTab || 'trades', f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
   const fp = _gmSeasonFp(), taken = new Set(Object.values(st.rosters || {}).flat().map(p => _normNick(p.name)));
   const tabBtn = (id, label) => `<button class="btn ${tab === id ? 'btn-primary' : 'btn-ghost'}" style="font-size:.74rem" onclick="window._gmMkTab='${id}';renderGmView()">${label}</button>`;
@@ -15106,8 +15116,8 @@ function _gmKeepersSplit(st) {
 }
 function _gmDynastyHtml(st) {
   const c = st.config; if(!c.dynasty || !['setup', 'signups'].includes(c.status)) return '';
-  const me = discordUser ? (st.gms || []).find(g => g.id === discordUser.id) : null, prevR = _gmPrev?.rosters?.[discordUser?.id] || null;
-  const pool = new Set(_gmPool().map(p => _normNick(p.name))), mine = (st.keepers || {})[discordUser?.id] || [], split = _gmKeepersSplit(st), raise = 1 + (c.keeperRaise ?? 10) / 100;
+  const me = _gmMeId() ? (st.gms || []).find(g => g.id === _gmMeId()) : null, prevR = _gmPrev?.rosters?.[_gmMeId()] || null;
+  const pool = new Set(_gmPool().map(p => _normNick(p.name))), mine = (st.keepers || {})[_gmMeId()] || [], split = _gmKeepersSplit(st), raise = 1 + (c.keeperRaise ?? 10) / 100;
   const gm = Object.fromEntries((st.gms || []).map(g => [g.id, g]));
   return `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem">
     <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin-bottom:.4rem">👑 ${_g('DYNASTIA — ZATRZYMANI ZAWODNICY', 'DYNASTY — KEEPERS')}</div>
@@ -16281,7 +16291,7 @@ function renderSideNav() {
     ${sec(_g('Dołącz', 'Join us'))}
     ${it('join:teams', '🧢', _g('Zapisy do ligi', 'League sign-ups'), "goJoin('teams')")}${it('join:fa', '🆓', _g('Wolni agenci', 'Free agents'), "goJoin('fa')", faN || '')}${it('join:tr', '🔁', _g('Transfery', 'Transfers'), "goJoin('tr')")}
     ${sec(_g('Minigry', 'Minigames'))}
-    ${it('fans', '🏅', _g('Liga kibiców', 'Fan league'))}${it('fantasy', '🏀', 'Fantasy')}${it('fplus', '⭐', 'Fantasy+')}${it('kordle', '🧩', '2Kordle')}${it('kort', '🃏', _g('Kort — gra karciana', 'Kort — card game'), '', 'NEW', 'live')}
+    ${it('fans', '🏅', _g('Liga kibiców', 'Fan league'))}${it('fantasy', '🏀', 'Fantasy')}${it('fplus', '⭐', 'Fantasy+', null, 'NEW', 'new')}${it('kordle', '🧩', '2Kordle')}${it('kort', '🃏', _g('Kort — gra karciana', 'Kort — card game'), '', 'NEW', 'live')}
     ${sec(_g('Nagrody', 'Awards'))}
     ${it('cards', '🃏', _g('Kolekcja kart', 'Card collection'))}${it('totw', '🏆', _g('Piątka tygodnia', 'Team of the Week'))}${it('awards', '🗳️', _g('Głosowanie tygodnia', 'Weekly vote'), '', (awardsList || []).some(a => a.status === 'open') ? '●' : '', 'red')}
     ${sec(_g('Drafty', 'Drafts'))}
@@ -16336,8 +16346,86 @@ async function renderTotw() {
 }
 
 // ═══ ⭐ FANTASY+ — zapowiedź (podgląd, opis, wpisowe) + ankieta ═══
+// 🎮 DEMO LIGI GM — draft z botami i sezon na prawdziwych meczach ligi; wszystko w przeglądarce, nic nie trafia na serwer
+const _GMD_BOTS = ['🤖 Bot Kobe', '🤖 Bot Shaq', '🤖 Bot Curry', '🤖 Bot LeBron', '🤖 Bot Dirk'];
+let _gmd = null;
+function _gmMeId() { return window._gmDemo?.meId || discordUser?.id || null; }
+function _gmdPool() { // zawodnicy ligi + średnie punkty fantasy w tym sezonie
+  const sid = currentSeasonId || null, by = new Map(), key = n => _normNick(n);
+  _gmPool().forEach(p => by.set(key(p.name), { name: p.name, team: p.team, fp: 0, gp: 0 }));
+  _withAllMatches(() => matches.filter(m => !m.walkover && (m.seasonId || null) === sid)).forEach(m => [[m.team1, m.team2], [m.team2, m.team1]].forEach(([t, o]) => (t.players || []).forEach(p => {
+    const k = key(p.name); if(!k) return; const x = by.get(k) || { name: p.name, team: t.name, fp: 0, gp: 0 }; x.fp += _gmFp(p, (+t.score || 0) > (+o.score || 0)); x.gp++; by.set(k, x); })));
+  return [...by.values()].map(x => ({ ...x, avg: x.gp ? Math.round(x.fp / x.gp * 10) / 10 : 0 })).sort((a, b) => b.avg - a.avg);
+}
+async function gmDemoStart() {
+  const real = await _api('/gm?season=' + encodeURIComponent(currentSeasonId || '_'), 'GET', null, {}).catch(() => ({}));
+  const cfg = { roster: 6, starters: 5, tableMode: 'h2h', budget: 200, cap: 200, ...(real?.config || {}) }, pool = _gmdPool(), N = 1 + _GMD_BOTS.length;
+  const R = Math.max(3, Math.min(cfg.roster || 6, Math.floor(pool.length / N)));
+  if(pool.length < N * 3) { showToast(_g('Za mało zawodników w sezonie, żeby uruchomić demo', 'Not enough players this season to run the demo'), 'info'); return; }
+  const meId = discordUser?.id || 'demo_me', meName = discordUser?.name || _g('Ty', 'You');
+  const gms = [{ id: meId, name: meName, me: true }, ..._GMD_BOTS.map((n, i) => ({ id: 'bot' + i, name: n }))].sort(() => Math.random() - .5);
+  const order = []; for(let r = 0; r < R; r++) (r % 2 ? [...gms].reverse() : gms).forEach(g => order.push(g.id));
+  _gmd = { cfg: { ...cfg, roster: R }, pool, gms, meId, order, pick: 0, rosters: Object.fromEntries(gms.map(g => [g.id, []])), q: '', left: 30 };
+  _gmdDraw(); document.getElementById('gmd-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _gmdNext();
+}
+function _gmdTaken() { return new Set(Object.values(_gmd.rosters).flat().map(p => _normNick(p.name))); }
+function _gmdAvail() { const t = _gmdTaken(); return _gmd.pool.filter(p => !t.has(_normNick(p.name))); }
+function _gmdNext() {
+  clearInterval(_gmd.tick); if(_gmd.pick >= _gmd.order.length) { _gmdDraw(); return; }
+  const who = _gmd.order[_gmd.pick];
+  if(who === _gmd.meId) { _gmd.left = 30; _gmd.tick = setInterval(() => { if(!_gmd) return; _gmd.left--; const t = document.getElementById('gmd-timer'); if(t) t.textContent = _gmd.left + 's'; if(_gmd.left <= 0) gmDemoPick(_gmdAvail()[0].name, true); }, 1000); _gmdDraw(); return; }
+  _gmdDraw(); setTimeout(() => { if(!_gmd) return; const a = _gmdAvail(), top = a.slice(0, 4), p = top[Math.floor(Math.pow(Math.random(), 2) * top.length)]; _gmd.rosters[who].push(p); _gmd.last = { who, p }; _gmd.pick++; _gmdNext(); }, 900 + Math.random() * 700);
+}
+function gmDemoPick(name, auto) {
+  if(!_gmd || _gmd.order[_gmd.pick] !== _gmd.meId) return; const p = _gmdAvail().find(x => x.name === name); if(!p) return;
+  clearInterval(_gmd.tick); _gmd.rosters[_gmd.meId].push(p); _gmd.last = { who: _gmd.meId, p }; _gmd.pick++; if(auto) showToast(_g(`⏱ Czas minął — wybrano za Ciebie: ${p.name}`, `⏱ Time's up — picked for you: ${p.name}`), 'info'); _gmdNext();
+}
+function gmDemoExit() { if(_gmd) clearInterval(_gmd.tick); _gmd = null; window._gmDemo = null; _gmState = null; showView('fplus'); setTimeout(renderFantasyPlus, 60); }
+function _gmdDraw() {
+  const el = document.getElementById('gmd-wrap'); if(!el || !_gmd) return; const en = currentLang === 'en', d = _gmd, N = d.gms.length, done = d.pick >= d.order.length;
+  const who = d.gms.find(g => g.id === d.order[d.pick]), myTurn = !done && who?.id === d.meId, round = Math.floor(d.pick / N) + 1;
+  const sum = id => Math.round(d.rosters[id].reduce((s, p) => s + p.avg, 0) * 10) / 10;
+  const avail = _gmdAvail().filter(p => !d.q || _normNick(p.name).includes(_normNick(d.q)) || _normNick(p.team || '').includes(_normNick(d.q))).slice(0, 40);
+  const head = done ? `<div style="font-size:1.05rem;font-weight:800">✅ ${_g('Draft zakończony!', 'Draft complete!')}</div>`
+    : `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap"><div><b>${_g('Runda', 'Round')} ${round}/${d.cfg.roster}</b> · ${_g('wybór', 'pick')} ${d.pick + 1}/${d.order.length}</div>
+      <div style="font-weight:800;${myTurn ? 'color:var(--win)' : 'color:var(--muted)'}">${myTurn ? `👉 ${_g('Twój ruch!', 'Your pick!')} ⏱ <span id="gmd-timer">${d.left}s</span>` : `⏳ ${_g('Wybiera', 'On the clock')}: ${_h(who.name)}…`}</div></div>
+      ${d.last ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.25rem">${_g('Ostatni wybór', 'Last pick')}: <b>${_h(d.gms.find(g => g.id === d.last.who).name)}</b> → ${_h(d.last.p.name)} (${d.last.p.avg} FP)</div>` : ''}`;
+  const myRank = [...d.gms].sort((a, b) => sum(b.id) - sum(a.id)).findIndex(g => g.id === d.meId) + 1;
+  el.innerHTML = `<div class="card" style="padding:.9rem 1rem;border:2px solid var(--accent)" data-notr>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--accent)">🎮 DEMO · ${_g('DRAFT LIGI GM (SNAKE)', 'GM LEAGUE DRAFT (SNAKE)')}</div><button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="gmDemoExit()">✕ ${_g('Zakończ demo', 'Exit demo')}</button></div>
+    <div style="background:var(--surface2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.7rem">${head}</div>
+    ${done ? `<div style="font-size:.85rem;margin-bottom:.7rem">${_g(`Twoja drużyna ma <b>${sum(d.meId)} FP</b> średnio na mecz — <b>${myRank}. miejsce</b> z ${N} po drafcie. Teraz zobacz, jak wyglądałby sezon na prawdziwych meczach ligi.`, `Your team averages <b>${sum(d.meId)} FP</b> per game — <b>#${myRank}</b> of ${N} after the draft. Now see how the season would look on real league games.`)}</div>
+      <button class="btn btn-primary" onclick="gmDemoSeason()">🏀 ${_g('Zobacz sezon demo', 'See the demo season')}</button>` : ''}
+    <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:.8rem;margin-top:.8rem" class="gmd-grid">
+      <div>${done ? '' : `<input placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" value="${_h(d.q)}" oninput="_gmd.q=this.value;_gmdDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin:0 0 .4rem">
+        <div style="font-size:.66rem;color:var(--muted);display:grid;grid-template-columns:1fr 70px 52px 76px;gap:.3rem;padding:0 .2rem .2rem"><span>${_g('Zawodnik', 'Player')}</span><span>FP/${_g('mecz', 'game')}</span><span>${_g('mecze', 'games')}</span><span></span></div>
+        <div style="max-height:420px;overflow:auto">${avail.map(p => `<div style="display:grid;grid-template-columns:1fr 70px 52px 76px;gap:.3rem;align-items:center;padding:.3rem .2rem;border-bottom:1px solid var(--border);font-size:.8rem">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${_h(p.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(p.team || '')}</span></span><b>${p.avg}</b><span>${p.gp}</span>
+          <button class="btn ${myTurn ? 'btn-primary' : 'btn-ghost'}" ${myTurn ? '' : 'disabled'} style="font-size:.68rem;padding:.2rem .4rem" onclick="gmDemoPick('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wybierz', 'Pick')}</button></div>`).join('')}</div>`}</div>
+      <div style="${done ? 'grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem' : ''}">${d.gms.map(g => `<div style="background:var(--surface2);border:1px solid ${g.id === d.meId ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:.45rem .6rem;margin-bottom:.45rem">
+        <div style="display:flex;justify-content:space-between;font-size:.8rem"><b>${g.id === d.meId ? '⭐ ' : ''}${_h(g.name)}</b><span style="color:var(--muted)">${sum(g.id)} FP</span></div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${d.rosters[g.id].map(p => _h(p.name)).join(' · ') || '—'}</div></div>`).join('')}</div></div></div>`;
+}
+function gmDemoSeason() { // sezon demo: prawdziwe ekrany Ligi GM na danych z draftu demo
+  const d = _gmd; if(!d) return; clearInterval(d.tick);
+  const sid = currentSeasonId || null, ws = schedule.filter(s => s.generated && (s.seasonId || null) === sid && s.weekStart).map(s => s.weekStart).sort()[0];
+  const cfg = { ...d.cfg, status: 'season', maxGm: d.gms.length, dynasty: false }, total = d.order.length, cap = cfg.cap ?? cfg.budget ?? 200;
+  const sal = (() => { try { return _gmRookieScale(total, cap, cfg.roster); } catch(e) { return i => Math.max(1, Math.round(cap / cfg.roster * (1.6 - i / total))); } })(), pickNo = {};
+  d.order.forEach((id, i) => { (pickNo[id] = pickNo[id] || []).push(i); });
+  const teamNames = { bot0: 'Kobe’s Mamba', bot1: 'Shaq Attack', bot2: 'Splash Bros', bot3: 'King’s Court', bot4: 'Dirk Diggler' };
+  const st = { ok: true, demo: true, seasonId: sid, config: cfg, gms: d.gms.map(g => ({ id: g.id, name: g.name, teamName: g.me ? _g('Twoja drużyna', 'Your team') : (teamNames[g.id] || g.name), avatar: g.me ? discordUser?.avatar || null : null, at: new Date().toISOString() })),
+    keepers: {}, champion: null, weekSummaries: null, rosters: Object.fromEntries(Object.entries(d.rosters).map(([id, L]) => [id, L.map((p, k) => ({ name: p.name, team: p.team, price: sal(pickNo[id][k]) }))])), draftedAt: ws ? ws + 'T00:00:00Z' : null, rosterHist: null, market: { fa: [], bids: [], trades: [], log: [] } };
+  window._gmDemo = { meId: d.meId, state: st }; _gmState = st; showView('gm');
+}
+
 async function renderFantasyPlus() {
   const el = document.getElementById('fplus-wrap'); if(!el) return;
+  setTimeout(() => { if(document.getElementById('gmd-wrap') || !document.getElementById('fplus-wrap')) return; const box = document.createElement('div'); box.id = 'gmd-wrap'; box.style.marginBottom = '1rem';
+    box.innerHTML = `<div class="card" style="padding:1rem 1.1rem;border:2px solid var(--accent);background:linear-gradient(135deg,rgba(245,197,24,.14),rgba(59,130,246,.08))" data-notr>
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem"><span style="background:#ef4444;color:#fff;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:5px">NEW</span><b style="font-size:1.05rem">🎮 ${_g('Wypróbuj demo Ligi GM', 'Try the GM League demo')}</b></div>
+      <div style="font-size:.84rem;line-height:1.55;color:var(--muted);margin-bottom:.7rem">${_g('Przejdź prawdziwy <b>draft</b> z 5 botami (zawodnicy naszej ligi, ich punkty fantasy), a potem zobacz <b>sezon od środka</b>: tabelę, pojedynki tygodnia, oceny i playoffy — liczone z prawdziwych meczów ligi. Nic się nie zapisuje, możesz grać ile chcesz.', 'Go through a real <b>draft</b> with 5 bots (our league players and their fantasy points), then see the <b>season from the inside</b>: standings, weekly matchups, ratings and playoffs — computed from real league games. Nothing is saved, play as often as you like.')}</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-primary" onclick="gmDemoStart()">▶ ${_g('Uruchom demo', 'Start the demo')}</button><button class="btn btn-ghost" onclick="navigator.clipboard?.writeText(location.origin + '/gm-demo').then(()=>showToast('🔗 ' + _g('Skopiowano link do demo', 'Demo link copied'),'success'))">🔗 ${_g('Kopiuj link do demo', 'Copy demo link')}</button></div></div>`;
+    document.getElementById('fplus-wrap').prepend(box); if(window._gmdAuto) { window._gmdAuto = false; gmDemoStart(); } }, 0);
   const T = (pl, en) => _g(pl, en), pill = (t, c) => `<span style="display:inline-block;font-size:.66rem;font-weight:800;padding:.1rem .45rem;border-radius:6px;background:${c};color:#111">${t}</span>`;
   const screen = (title, body) => `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)"><div style="display:flex;align-items:center;gap:.35rem;padding:.4rem .6rem;background:var(--surface2);border-bottom:1px solid var(--border)"><span style="width:9px;height:9px;border-radius:50%;background:#ef4444"></span><span style="width:9px;height:9px;border-radius:50%;background:#f59e0b"></span><span style="width:9px;height:9px;border-radius:50%;background:#22c55e"></span><span style="font-size:.7rem;font-weight:700;color:var(--muted);margin-left:.4rem">${title}</span></div><div style="padding:.75rem">${body}</div></div>`;
   const h = t => `<div class="section-title" style="font-size:1.25rem;margin:1.3rem 0 .6rem">${t}</div>`;
