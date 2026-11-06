@@ -1246,7 +1246,7 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 <div id="view-standings" class="view"><div class="section-title">📋 <span>Tabela</span></div><div class="card" style="padding:0;overflow:hidden"><div class="stats-table-wrap"><table style="min-width:500px"><thead><tr><th style="text-align:left; padding-left:1.5rem">#</th><th style="text-align:left">Drużyna</th><th>M</th><th>W</th><th>L</th><th>PTS</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th></tr></thead><tbody id="standings-body-2"></tbody></table></div></div></div>
 <div id="view-awards" class="view"><div class="section-title">🗳️ <span>Głosowanie tygodnia</span></div><div id="awards-view-wrap"></div></div>
 <div id="view-totw" class="view"><div class="section-title">🏀 <span>Piątka tygodnia</span></div><div id="totw-wrap"></div></div>
-<div id="view-fplus" class="view"><div class="section-title">⭐ <span>Fantasy+</span></div><div id="fplus-wrap"></div></div>
+<div id="view-fplus" class="view"><div class="section-title">⭐ <span>Fantasy+</span></div><div id="gmd-wrap" style="margin-bottom:1rem"></div><div id="fplus-wrap"></div></div>
 <div id="view-cards" class="view">
     <div id="cards-view"></div>
   </div>
@@ -16357,7 +16357,9 @@ function _gmdPool() { // zawodnicy ligi + średnie punkty fantasy w tym sezonie
     const k = key(p.name); if(!k) return; const x = by.get(k) || { name: p.name, team: t.name, fp: 0, gp: 0 }; x.fp += _gmFp(p, (+t.score || 0) > (+o.score || 0)); x.gp++; by.set(k, x); })));
   return [...by.values()].map(x => ({ ...x, avg: x.gp ? Math.round(x.fp / x.gp * 10) / 10 : 0 })).sort((a, b) => b.avg - a.avg);
 }
-async function gmDemoStart() {
+async function gmDemoStart(mode) {
+  if(!mode) { gmDemoChoose(); return; }
+  const gw = document.getElementById('gmd-wrap'); if(gw) delete gw.dataset.choosing;
   const real = await _api('/gm?season=' + encodeURIComponent(currentSeasonId || '_'), 'GET', null, {}).catch(() => ({}));
   const cfg = { roster: 6, starters: 5, tableMode: 'h2h', budget: 200, cap: 200, ...(real?.config || {}) }, pool = _gmdPool(), N = 1 + _GMD_BOTS.length;
   const R = Math.max(3, Math.min(cfg.roster || 6, Math.floor(pool.length / N)));
@@ -16365,7 +16367,10 @@ async function gmDemoStart() {
   const meId = discordUser?.id || 'demo_me', meName = discordUser?.name || _g('Ty', 'You');
   const gms = [{ id: meId, name: meName, me: true }, ..._GMD_BOTS.map((n, i) => ({ id: 'bot' + i, name: n }))].sort(() => Math.random() - .5);
   const order = []; for(let r = 0; r < R; r++) (r % 2 ? [...gms].reverse() : gms).forEach(g => order.push(g.id));
-  _gmd = { cfg: { ...cfg, roster: R }, pool, gms, meId, order, pick: 0, rosters: Object.fromEntries(gms.map(g => [g.id, []])), q: '', left: 30 };
+  _gmd = { mode, cfg: { ...cfg, roster: R }, pool, gms, meId, order, pick: 0, rosters: Object.fromEntries(gms.map(g => [g.id, []])), q: '', left: 30 };
+  if(mode === 'auction') { const B = +cfg.budget || 200, top = pool.slice(0, N * R), tot = top.reduce((s, p) => s + p.avg, 0) || 1; _gmd.budget = Object.fromEntries(gms.map(g => [g.id, B])); _gmd.nomIdx = -1; _gmd.order = Array(N * R).fill(null);
+    _gmd.val = Object.fromEntries(gms.map(g => [g.id, Object.fromEntries(pool.map(p => [_normNick(p.name), Math.max(1, Math.round(B * N * (p.avg / tot) * (0.8 + Math.random() * 0.4)))]))])); // wycena botów
+    _gmdDraw(); document.getElementById('gmd-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _gdaAdvance(); return; }
   _gmdDraw(); document.getElementById('gmd-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); _gmdNext();
 }
 function _gmdTaken() { return new Set(Object.values(_gmd.rosters).flat().map(p => _normNick(p.name))); }
@@ -16380,52 +16385,103 @@ function gmDemoPick(name, auto) {
   if(!_gmd || _gmd.order[_gmd.pick] !== _gmd.meId) return; const p = _gmdAvail().find(x => x.name === name); if(!p) return;
   clearInterval(_gmd.tick); _gmd.rosters[_gmd.meId].push(p); _gmd.last = { who: _gmd.meId, p }; _gmd.pick++; if(auto) showToast(_g(`⏱ Czas minął — wybrano za Ciebie: ${p.name}`, `⏱ Time's up — picked for you: ${p.name}`), 'info'); _gmdNext();
 }
-function gmDemoExit() { if(_gmd) clearInterval(_gmd.tick); _gmd = null; window._gmDemo = null; _gmState = null; showView('fplus'); setTimeout(renderFantasyPlus, 60); }
+function gmDemoExit() { if(_gmd) clearInterval(_gmd.tick); _gmd = null; const gw = document.getElementById('gmd-wrap'); if(gw) delete gw.dataset.choosing; window._gmDemo = null; _gmState = null; showView('fplus'); setTimeout(renderFantasyPlus, 60); }
 function _gmdDraw() {
-  const el = document.getElementById('gmd-wrap'); if(!el || !_gmd) return; const en = currentLang === 'en', d = _gmd, N = d.gms.length, done = d.pick >= d.order.length;
+  const el = document.getElementById('gmd-wrap'); if(!el || !_gmd) return; const en = currentLang === 'en', d = _gmd, N = d.gms.length, done = d.mode === 'auction' ? !_gdaN(d) : d.pick >= d.order.length;
   const who = d.gms.find(g => g.id === d.order[d.pick]), myTurn = !done && who?.id === d.meId, round = Math.floor(d.pick / N) + 1;
   const sum = id => Math.round(d.rosters[id].reduce((s, p) => s + p.avg, 0) * 10) / 10;
   const avail = _gmdAvail().filter(p => !d.q || _normNick(p.name).includes(_normNick(d.q)) || _normNick(p.team || '').includes(_normNick(d.q))).slice(0, 40);
-  const head = done ? `<div style="font-size:1.05rem;font-weight:800">✅ ${_g('Draft zakończony!', 'Draft complete!')}</div>`
+  const A = d.mode === 'auction' ? _gdaHtml() : null;
+  const head = A ? A.head : done ? `<div style="font-size:1.05rem;font-weight:800">✅ ${_g('Draft zakończony!', 'Draft complete!')}</div>`
     : `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap"><div><b>${_g('Runda', 'Round')} ${round}/${d.cfg.roster}</b> · ${_g('wybór', 'pick')} ${d.pick + 1}/${d.order.length}</div>
       <div style="font-weight:800;${myTurn ? 'color:var(--win)' : 'color:var(--muted)'}">${myTurn ? `👉 ${_g('Twój ruch!', 'Your pick!')} ⏱ <span id="gmd-timer">${d.left}s</span>` : `⏳ ${_g('Wybiera', 'On the clock')}: ${_h(who.name)}…`}</div></div>
       ${d.last ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.25rem">${_g('Ostatni wybór', 'Last pick')}: <b>${_h(d.gms.find(g => g.id === d.last.who).name)}</b> → ${_h(d.last.p.name)} (${d.last.p.avg} FP)</div>` : ''}`;
   const myRank = [...d.gms].sort((a, b) => sum(b.id) - sum(a.id)).findIndex(g => g.id === d.meId) + 1;
   el.innerHTML = `<div class="card" style="padding:.9rem 1rem;border:2px solid var(--accent)" data-notr>
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--accent)">🎮 DEMO · ${_g('DRAFT LIGI GM (SNAKE)', 'GM LEAGUE DRAFT (SNAKE)')}</div><button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="gmDemoExit()">✕ ${_g('Zakończ demo', 'Exit demo')}</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--accent)">🎮 DEMO · ${d.mode === 'auction' ? _g('LICYTACJA LIGI GM', 'GM LEAGUE AUCTION') : _g('DRAFT LIGI GM (SNAKE)', 'GM LEAGUE DRAFT (SNAKE)')}</div><button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="gmDemoExit()">✕ ${_g('Zakończ demo', 'Exit demo')}</button></div>
     <div style="background:var(--surface2);border-radius:10px;padding:.6rem .75rem;margin-bottom:.7rem">${head}</div>
     ${done ? `<div style="font-size:.85rem;margin-bottom:.7rem">${_g(`Twoja drużyna ma <b>${sum(d.meId)} FP</b> średnio na mecz — <b>${myRank}. miejsce</b> z ${N} po drafcie. Teraz zobacz, jak wyglądałby sezon na prawdziwych meczach ligi.`, `Your team averages <b>${sum(d.meId)} FP</b> per game — <b>#${myRank}</b> of ${N} after the draft. Now see how the season would look on real league games.`)}</div>
       <button class="btn btn-primary" onclick="gmDemoSeason()">🏀 ${_g('Zobacz sezon demo', 'See the demo season')}</button>` : ''}
     <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:.8rem;margin-top:.8rem" class="gmd-grid">
-      <div>${done ? '' : `<input placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" value="${_h(d.q)}" oninput="_gmd.q=this.value;_gmdDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin:0 0 .4rem">
+      <div>${A ? A.list : done ? '' : `<input placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" value="${_h(d.q)}" oninput="_gmd.q=this.value;_gmdDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin:0 0 .4rem">
         <div style="font-size:.66rem;color:var(--muted);display:grid;grid-template-columns:1fr 70px 52px 76px;gap:.3rem;padding:0 .2rem .2rem"><span>${_g('Zawodnik', 'Player')}</span><span>FP/${_g('mecz', 'game')}</span><span>${_g('mecze', 'games')}</span><span></span></div>
         <div style="max-height:420px;overflow:auto">${avail.map(p => `<div style="display:grid;grid-template-columns:1fr 70px 52px 76px;gap:.3rem;align-items:center;padding:.3rem .2rem;border-bottom:1px solid var(--border);font-size:.8rem">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${_h(p.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(p.team || '')}</span></span><b>${p.avg}</b><span>${p.gp}</span>
           <button class="btn ${myTurn ? 'btn-primary' : 'btn-ghost'}" ${myTurn ? '' : 'disabled'} style="font-size:.68rem;padding:.2rem .4rem" onclick="gmDemoPick('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wybierz', 'Pick')}</button></div>`).join('')}</div>`}</div>
       <div style="${done ? 'grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem' : ''}">${d.gms.map(g => `<div style="background:var(--surface2);border:1px solid ${g.id === d.meId ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:.45rem .6rem;margin-bottom:.45rem">
-        <div style="display:flex;justify-content:space-between;font-size:.8rem"><b>${g.id === d.meId ? '⭐ ' : ''}${_h(g.name)}</b><span style="color:var(--muted)">${sum(g.id)} FP</span></div>
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${d.rosters[g.id].map(p => _h(p.name)).join(' · ') || '—'}</div></div>`).join('')}</div></div></div>`;
+        <div style="display:flex;justify-content:space-between;font-size:.8rem"><b>${g.id === d.meId ? '⭐ ' : ''}${_h(g.name)}</b><span style="color:var(--muted)">${sum(g.id)} FP${d.mode === 'auction' ? ` · 💰 ${d.budget[g.id]}` : ''}</span></div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${d.rosters[g.id].map(p => _h(p.name) + (d.mode === 'auction' ? ` (${p.price})` : '')).join(' · ') || '—'}${d.mode === 'auction' ? ` <span style="opacity:.7">· ${d.rosters[g.id].length}/${d.cfg.roster}</span>` : ''}</div></div>`).join('')}</div></div></div>`;
 }
+// 💰 DEMO: licytacja (aukcja) — wystawianie po kolei, zegar 10 s, boty wyceniają po średniej FP
+function gmDemoChoose() {
+  const el = document.getElementById('gmd-wrap'); if(!el) return; el.dataset.choosing = '1';
+  el.innerHTML = `<div class="card" style="padding:1rem 1.1rem;border:2px solid var(--accent)" data-notr><div style="font-weight:800;margin-bottom:.6rem">🎮 ${_g('Wybierz rodzaj draftu', 'Choose the draft type')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem">
+      <button class="card" style="padding:.8rem;text-align:left;cursor:pointer;border:1px solid var(--border);font-family:inherit;color:var(--text)" onclick="gmDemoStart('snake')"><div style="font-size:1rem;font-weight:800">🐍 Snake</div><div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">${_g('Wybieracie po kolei, kolejność odwraca się co rundę. Szybko i prosto.', 'Pick in turns, the order reverses every round. Quick and simple.')}</div></button>
+      <button class="card" style="padding:.8rem;text-align:left;cursor:pointer;border:1px solid var(--border);font-family:inherit;color:var(--text)" onclick="gmDemoStart('auction')"><div style="font-size:1rem;font-weight:800">💰 ${_g('Licytacja', 'Auction')}</div><div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">${_g('Każdy ma budżet i licytuje zawodników. Gwiazda czy głęboki skład — Twój wybór.', 'Everyone has a budget and bids on players. A star or a deep roster — your call.')}</div></button></div>
+    <div style="text-align:right;margin-top:.6rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="gmDemoExit()">✕ ${_g('Anuluj', 'Cancel')}</button></div></div>`;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function _gdaN(d) { return Object.values(d.rosters).filter(L => L.length < d.cfg.roster).length; }
+function _gdaMax(d, id) { const left = d.cfg.roster - d.rosters[id].length; return left <= 0 ? 0 : d.budget[id] - (left - 1); } // zostaw po 1 monecie na każde wolne miejsce
+function _gdaNextNom(d) { const ids = d.gms.map(g => g.id); for(let k = 0; k < ids.length; k++) { d.nomIdx = (d.nomIdx + 1) % ids.length; if(d.rosters[ids[d.nomIdx]].length < d.cfg.roster) return ids[d.nomIdx]; } return null; }
+function _gdaStartLot(p, by) { const d = _gmd; d.lot = { p, price: 1, leader: by, left: 10 }; _gdaLoop(); _gmdDraw(); }
+function _gdaLoop() {
+  const d = _gmd; clearInterval(d.tick);
+  d.tick = setInterval(() => { if(!_gmd || !d.lot) return clearInterval(d.tick); d.lot.left--;
+    // boty: przebijają, gdy cena < wyceny (najwyżej jeden na sekundę)
+    if(d.lot.left > 0 && Math.random() < .55) { const cands = d.gms.filter(g => g.id !== d.meId && g.id !== d.lot.leader && _gdaMax(d, g.id) > d.lot.price && (d.val[g.id][_normNick(d.lot.p.name)] || 0) > d.lot.price);
+      if(cands.length) { const g = cands[Math.floor(Math.random() * cands.length)], step = Math.random() < .25 ? 3 : 1; d.lot.price = Math.min(_gdaMax(d, g.id), d.lot.price + step); d.lot.leader = g.id; d.lot.left = Math.max(d.lot.left, 6); } }
+    if(d.lot.left <= 0) { const { p, price, leader } = d.lot; d.rosters[leader].push({ ...p, price }); d.budget[leader] -= price; d.last = { who: leader, p: { ...p, price } }; d.lot = null; clearInterval(d.tick); _gdaAdvance(); return; }
+    _gmdDraw(); }, d.fast ? 60 : 1000);
+}
+function _gdaAdvance() {
+  const d = _gmd; d.pick = Object.values(d.rosters).reduce((s, L) => s + L.length, 0);
+  if(!_gdaN(d)) { _gmdDraw(); return; }
+  const who = _gdaNextNom(d); d.nominator = who;
+  if(who === d.meId) { _gmdDraw(); return; }
+  _gmdDraw(); setTimeout(() => { if(!_gmd || d.lot) return; const a = _gmdAvail(), top = a.slice(0, 8), p = top[Math.floor(Math.random() * top.length)]; _gdaStartLot(p, who); }, d.fast ? 40 : 1100);
+}
+function gmDemoNominate(name) { const d = _gmd; if(!d || d.lot || d.nominator !== d.meId) return; const p = _gmdAvail().find(x => x.name === name); if(p) _gdaStartLot(p, d.meId); }
+function gmDemoBid(step) { const d = _gmd; if(!d?.lot || d.lot.leader === d.meId) return; const max = _gdaMax(d, d.meId), price = d.lot.price + step; if(price > max) { showToast(_g(`Maks. oferta: ${max} (zostaw po 1 monecie na każde wolne miejsce)`, `Max bid: ${max} (keep 1 coin per open roster spot)`), 'info'); return; } d.lot.price = price; d.lot.leader = d.meId; d.lot.left = Math.max(d.lot.left, 6); _gmdDraw(); }
+function _gdaHtml() {
+  const d = _gmd, done = !_gdaN(d), me = d.meId, name = id => d.gms.find(g => g.id === id)?.name || '';
+  let head;
+  if(done) head = `<div style="font-size:1.05rem;font-weight:800">✅ ${_g('Licytacja zakończona!', 'Auction complete!')}</div>`;
+  else if(d.lot) { const lead = d.lot.leader === me, max = _gdaMax(d, me), full = d.rosters[me].length >= d.cfg.roster;
+    head = `<div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap"><div><div style="font-size:.72rem;color:var(--muted)">${_g('Na licytacji', 'On the block')}</div><div style="font-size:1.15rem;font-weight:900">${_h(d.lot.p.name)} <span style="font-size:.78rem;font-weight:400;color:var(--muted)">${_h(d.lot.p.team || '')} · ${d.lot.p.avg} FP/${_g('mecz', 'game')}</span></div></div>
+      <div style="text-align:right"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.9rem;line-height:1;color:${lead ? 'var(--win)' : 'var(--text)'}">💰 ${d.lot.price}</div><div style="font-size:.74rem">${lead ? '✅ ' + _g('Prowadzisz!', 'You lead!') : _g('Prowadzi', 'Leading') + ': ' + _h(name(d.lot.leader))} · ⏱ <b>${d.lot.left}s</b></div></div></div>
+      <div style="display:flex;gap:.4rem;margin-top:.55rem;flex-wrap:wrap;align-items:center">${full ? `<span style="font-size:.76rem;color:var(--muted)">${_g('Twój skład jest pełny', 'Your roster is full')}</span>` : [1, 5, 10].map(s => `<button class="btn ${lead ? 'btn-ghost' : 'btn-primary'}" ${lead || d.lot.price + s > max ? 'disabled' : ''} onclick="gmDemoBid(${s})">+${s} → ${d.lot.price + s}</button>`).join('')}
+        <span style="font-size:.72rem;color:var(--muted);margin-left:auto">${_g('Twój budżet', 'Your budget')}: <b>${d.budget[me]}</b> · ${_g('maks. oferta', 'max bid')}: <b>${max}</b></span></div>`; }
+  else head = d.nominator === me ? `<div style="font-weight:800;color:var(--win)">👉 ${_g('Twoja kolej — wystaw zawodnika na licytację', 'Your turn — put a player up for auction')}</div>` : `<div style="color:var(--muted)">⏳ ${_g('Wystawia', 'Nominating')}: ${_h(name(d.nominator))}…</div>`;
+  const avail = _gmdAvail().filter(p => !d.q || _normNick(p.name).includes(_normNick(d.q)) || _normNick(p.team || '').includes(_normNick(d.q))).slice(0, 40), canNom = !d.lot && d.nominator === me && !done;
+  return { head, list: done ? '' : `<input placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" value="${_h(d.q)}" oninput="_gmd.q=this.value;_gmdDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin:0 0 .4rem">
+      <div style="max-height:420px;overflow:auto">${avail.map(p => `<div style="display:grid;grid-template-columns:1fr 70px 52px 86px;gap:.3rem;align-items:center;padding:.3rem .2rem;border-bottom:1px solid var(--border);font-size:.8rem">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${_h(p.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(p.team || '')}</span></span><b>${p.avg}</b><span>${p.gp}</span>
+        <button class="btn ${canNom ? 'btn-primary' : 'btn-ghost'}" ${canNom ? '' : 'disabled'} style="font-size:.68rem;padding:.2rem .4rem" onclick="gmDemoNominate('${_h(p.name).replace(/'/g, "\\'")}')">${_g('Wystaw', 'Nominate')}</button></div>`).join('')}</div>` };
+}
+
 function gmDemoSeason() { // sezon demo: prawdziwe ekrany Ligi GM na danych z draftu demo
   const d = _gmd; if(!d) return; clearInterval(d.tick);
+  if(d.mode === 'auction') d.cfg.draftMode = 'auction';
   const sid = currentSeasonId || null, ws = schedule.filter(s => s.generated && (s.seasonId || null) === sid && s.weekStart).map(s => s.weekStart).sort()[0];
   const cfg = { ...d.cfg, status: 'season', maxGm: d.gms.length, dynasty: false }, total = d.order.length, cap = cfg.cap ?? cfg.budget ?? 200;
   const sal = (() => { try { return _gmRookieScale(total, cap, cfg.roster); } catch(e) { return i => Math.max(1, Math.round(cap / cfg.roster * (1.6 - i / total))); } })(), pickNo = {};
   d.order.forEach((id, i) => { (pickNo[id] = pickNo[id] || []).push(i); });
   const teamNames = { bot0: 'Kobe’s Mamba', bot1: 'Shaq Attack', bot2: 'Splash Bros', bot3: 'King’s Court', bot4: 'Dirk Diggler' };
   const st = { ok: true, demo: true, seasonId: sid, config: cfg, gms: d.gms.map(g => ({ id: g.id, name: g.name, teamName: g.me ? _g('Twoja drużyna', 'Your team') : (teamNames[g.id] || g.name), avatar: g.me ? discordUser?.avatar || null : null, at: new Date().toISOString() })),
-    keepers: {}, champion: null, weekSummaries: null, rosters: Object.fromEntries(Object.entries(d.rosters).map(([id, L]) => [id, L.map((p, k) => ({ name: p.name, team: p.team, price: sal(pickNo[id][k]) }))])), draftedAt: ws ? ws + 'T00:00:00Z' : null, rosterHist: null, market: { fa: [], bids: [], trades: [], log: [] } };
+    keepers: {}, champion: null, weekSummaries: null, rosters: Object.fromEntries(Object.entries(d.rosters).map(([id, L]) => [id, L.map((p, k) => ({ name: p.name, team: p.team, price: d.mode === 'auction' ? p.price : sal(pickNo[id][k]) }))])), draftedAt: ws ? ws + 'T00:00:00Z' : null, rosterHist: null, market: { fa: [], bids: [], trades: [], log: [] } };
   window._gmDemo = { meId: d.meId, state: st }; _gmState = st; showView('gm');
 }
 
 async function renderFantasyPlus() {
   const el = document.getElementById('fplus-wrap'); if(!el) return;
-  setTimeout(() => { if(document.getElementById('gmd-wrap') || !document.getElementById('fplus-wrap')) return; const box = document.createElement('div'); box.id = 'gmd-wrap'; box.style.marginBottom = '1rem';
+  (() => { const box = document.getElementById('gmd-wrap'); if(!box || _gmd || box.dataset.choosing) return; // karta demo — poza obszarem nadpisywanym przez zakładkę
     box.innerHTML = `<div class="card" style="padding:1rem 1.1rem;border:2px solid var(--accent);background:linear-gradient(135deg,rgba(245,197,24,.14),rgba(59,130,246,.08))" data-notr>
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem"><span style="background:#ef4444;color:#fff;font-size:.62rem;font-weight:800;padding:.1rem .4rem;border-radius:5px">NEW</span><b style="font-size:1.05rem">🎮 ${_g('Wypróbuj demo Ligi GM', 'Try the GM League demo')}</b></div>
       <div style="font-size:.84rem;line-height:1.55;color:var(--muted);margin-bottom:.7rem">${_g('Przejdź prawdziwy <b>draft</b> z 5 botami (zawodnicy naszej ligi, ich punkty fantasy), a potem zobacz <b>sezon od środka</b>: tabelę, pojedynki tygodnia, oceny i playoffy — liczone z prawdziwych meczów ligi. Nic się nie zapisuje, możesz grać ile chcesz.', 'Go through a real <b>draft</b> with 5 bots (our league players and their fantasy points), then see the <b>season from the inside</b>: standings, weekly matchups, ratings and playoffs — computed from real league games. Nothing is saved, play as often as you like.')}</div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-primary" onclick="gmDemoStart()">▶ ${_g('Uruchom demo', 'Start the demo')}</button><button class="btn btn-ghost" onclick="navigator.clipboard?.writeText(location.origin + '/gm-demo').then(()=>showToast('🔗 ' + _g('Skopiowano link do demo', 'Demo link copied'),'success'))">🔗 ${_g('Kopiuj link do demo', 'Copy demo link')}</button></div></div>`;
-    document.getElementById('fplus-wrap').prepend(box); if(window._gmdAuto) { window._gmdAuto = false; gmDemoStart(); } }, 0);
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-primary" onclick="gmDemoChoose()">▶ ${_g('Uruchom demo', 'Start the demo')}</button><button class="btn btn-ghost" onclick="navigator.clipboard?.writeText(location.origin + '/gm-demo').then(()=>showToast('🔗 ' + _g('Skopiowano link do demo', 'Demo link copied'),'success'))">🔗 ${_g('Kopiuj link do demo', 'Copy demo link')}</button></div></div>`;
+    if(window._gmdAuto) { window._gmdAuto = false; gmDemoChoose(); } })();
   const T = (pl, en) => _g(pl, en), pill = (t, c) => `<span style="display:inline-block;font-size:.66rem;font-weight:800;padding:.1rem .45rem;border-radius:6px;background:${c};color:#111">${t}</span>`;
   const screen = (title, body) => `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)"><div style="display:flex;align-items:center;gap:.35rem;padding:.4rem .6rem;background:var(--surface2);border-bottom:1px solid var(--border)"><span style="width:9px;height:9px;border-radius:50%;background:#ef4444"></span><span style="width:9px;height:9px;border-radius:50%;background:#f59e0b"></span><span style="width:9px;height:9px;border-radius:50%;background:#22c55e"></span><span style="font-size:.7rem;font-weight:700;color:var(--muted);margin-left:.4rem">${title}</span></div><div style="padding:.75rem">${body}</div></div>`;
   const h = t => `<div class="section-title" style="font-size:1.25rem;margin:1.3rem 0 .6rem">${t}</div>`;
