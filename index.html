@@ -9936,7 +9936,7 @@ async function openBackups() {
         <b style="flex:1">${_h(b.date)}</b>
         <span style="color:var(--muted);font-size:.72rem">${b.size ? (b.size / 1e6).toFixed(2) + ' MB' : ''}</span>
         <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem" onclick="downloadBackup('${_h(b.date)}')">⬇ Pobierz</button>
-        <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem;color:var(--loss)" onclick="restoreBackup('${_h(b.date)}')">↩ Przywróć</button>
+        <button class="btn btn-ghost" style="font-size:.7rem;padding:.2rem .5rem;color:var(--loss)" onclick="restoreBackup('${_h(b.date)}', ${b.ext ? 'true' : 'false'})">↩ Przywróć</button>
       </div>`).join('') || '<div style="padding:1rem;text-align:center;color:var(--muted)">Brak kopii</div>'}
     </div>`;
 }
@@ -9955,16 +9955,30 @@ async function downloadBackup(date) {
     document.body.appendChild(a); a.click(); a.remove();
   } catch(e) { showToast('❌ ' + e.message, 'error'); }
 }
-async function restoreBackup(date) {
-  if(!confirm(`Przywrócić dane ligi z kopii ${date}?\n\nWszystko, co zmieniło się od tamtej chwili, zostanie zastąpione.`)) return;
-  if(prompt('Na pewno? Wpisz PRZYWRÓĆ, aby potwierdzić.') !== 'PRZYWRÓĆ') return;
-  const res = await _api('/backup/restore', 'POST', { date }, { admin: true });
-  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
-  showToast('✅ Przywrócono — wczytuję dane…', 'success');
-  _fxClose('backup-modal');
-  await loadData(); renderDashboard(); renderSchedule();
-  setTimeout(() => _pushDerived(), 1500); // przelicz dane pochodne
+async function restoreBackup(date, ext) { // wybór, co przywrócić — domyślnie tylko mecze i dane ligi (karty, Kort i gry osobno)
+  const m = _fxModal('restore-modal', 520); m.classList.add('open');
+  const opt = (id, l, sub, on, dis) => `<label style="display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .55rem;border:1px solid var(--border);border-radius:9px;margin-bottom:.35rem;cursor:${dis ? 'not-allowed' : 'pointer'};opacity:${dis ? .45 : 1};font-size:.84rem;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" class="rs-part" value="${id}" ${on ? 'checked' : ''} ${dis ? 'disabled' : ''} style="width:auto;margin:.15rem 0 0"><span><b>${l}</b><br><span style="font-size:.72rem;color:var(--muted)">${sub}</span></span></label>`;
+  m.querySelector('.modal').innerHTML = _fxHead('restore-modal', `♻️ Przywróć kopię z ${_h(date)}`) + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">Zaznacz, co przywrócić. Zaznaczone dane zostaną zastąpione stanem z kopii, a niezaznaczone zostaną bez zmian. Przed przywróceniem zapisuje się kopia obecnego stanu.</div>
+    ${opt('league', '🏀 Mecze i dane ligi', 'wyniki, terminarz, sezony, drużyny, wolni agenci, transfery, typy, nagrody, eventy, akcje', true, false)}
+    ${opt('cards', '🃏 Kolekcja kart', 'karty i paczki kibiców, wymiany, karty limitowane, wyzwania, Moja piątka, Karnet', false, !ext)}
+    ${opt('kort', '🎮 Kort', 'ELO, historia meczów, wyzwania Kortu, statystyki', false, !ext)}
+    ${opt('games', '🏆 Liga GM, Fantasy, Liga kibiców, 2Kordle', 'składy GM, punkty fantasy, drużyny kibiców, wyniki 2Kordle, ankiety', false, !ext)}
+    ${opt('settings', '⚙️ Ustawienia', 'kanały powiadomień, zapisy i wpisowe, regulamin, odcinki podcastu, rekordy', false, !ext)}
+    ${ext ? '' : '<div style="font-size:.72rem;color:var(--muted);margin:.2rem 0 .5rem">Ta kopia powstała przed rozszerzeniem — zawiera tylko mecze i dane ligi.</div>'}
+    <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem"><button class="btn btn-ghost" onclick="_fxClose('restore-modal')">Anuluj</button><button class="btn btn-primary" style="background:var(--loss);border-color:var(--loss)" onclick="_restoreGo('${_h(date)}')">♻️ Przywróć zaznaczone</button></div></div>`;
 }
+async function _restoreGo(date) {
+  const parts = [...document.querySelectorAll('.rs-part:checked')].map(x => x.value); if(!parts.length) { showToast('Zaznacz, co przywrócić', 'info'); return; }
+  if(prompt(`Przywrócić (${parts.join(', ')}) z kopii ${date}? Wpisz PRZYWRÓĆ, aby potwierdzić.`) !== 'PRZYWRÓĆ') return;
+  const res = await _api('/backup/restore', 'POST', { date, parts }, { admin: true });
+  if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
+  showToast(res.missing?.length ? `✅ Przywrócono — brak w kopii: ${res.missing.join(', ')}` : '✅ Przywrócono — wczytuję dane…', 'success');
+  _fxClose('restore-modal'); _fxClose('backup-modal'); _cards = null;
+  await loadData(); renderDashboard(); renderSchedule();
+  setTimeout(() => _pushDerived(), 1500);
+}
+
 
 // ═══ 📝 DZIENNIK ZMIAN ═══════════════════════════════════════════
 async function openAudit() {
@@ -16030,14 +16044,14 @@ async function _trdDraw() {
   if(!_trd.to) { const b = window._trdBoard || (window._trdBoard = await _api('/cards/board', 'GET', null, {}).catch(() => ({}))); const L = (b.board || []).filter(x => x.id !== discordUser.id && (!_trd.q || _normNick(x.name).includes(_normNick(_trd.q)))).slice(0, 40);
     body = `<div style="font-weight:700;margin-bottom:.4rem">1. ${_g('Z kim chcesz się wymienić?', 'Who do you want to trade with?')}</div><input value="${_h(_trd.q)}" placeholder="${_g('Szukaj kolekcjonera…', 'Search collector…')}" oninput="_trd.q=this.value;_trdDraw();this.focus()" style="${_MODAL_INP};margin-bottom:.4rem">
       <div style="max-height:50vh;overflow:auto">${L.map(x => `<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--border)">${x.avatar ? `<img src="${_h(x.avatar)}" style="width:26px;height:26px;border-radius:50%">` : '👤'}<b style="flex:1">${_h(x.name)}</b><span style="font-size:.7rem;color:var(--muted)">${x.unique} ${_g('kart', 'cards')}</span><button class="btn btn-ghost" style="font-size:.7rem;padding:.15rem .5rem" onclick="_trdPick('${x.id}','${_h(x.name).replace(/'/g, "\\'")}')">${_g('Wybierz', 'Choose')}</button></div>`).join('')}</div>`; }
-  else { const their = (_trd.their || []).map(c => ({ ...c, missing: !(mine[c.k]?.n > 0) })).sort((a, b) => (b.missing - a.missing) || (b.n - a.n) || a.name.localeCompare(b.name));
+  else { const their = (_trd.their || []).filter(c => !String(c.k).startsWith('lim:') && c.tier !== 'limited').map(c => ({ ...c, missing: !(mine[c.k]?.n > 0) })).sort((a, b) => (b.missing - a.missing) || (b.n - a.n) || a.name.localeCompare(b.name));
     const giveNames = _trd.give.map(k => mine[k]?.name || k);
     body = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem"><div>${_g('Wymiana z', 'Trade with')} <b>${_h(_trd.toName)}</b></div><button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .45rem" onclick="_trd.to=null;_trdDraw()">${_g('zmień', 'change')}</button></div>
       <div style="font-weight:700;margin-bottom:.3rem">2. ${_g('Chcę od niego/niej', 'I want')} <span style="font-weight:400;color:var(--muted);font-size:.74rem">(${_trd.want.size}/5 · ${_g('🆕 = brakuje Ci', '🆕 = you’re missing it')})</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:.3rem;max-height:30vh;overflow:auto;margin-bottom:.7rem">${their === null ? '⏳' : their.map(c => { const on = _trd.want.has(c.k); return `<button onclick="_trd.want.has('${c.k}')?_trd.want.delete('${c.k}'):(_trd.want.size<5&&_trd.want.add('${c.k}'));_trdDraw()" style="font-family:inherit;font-size:.74rem;padding:.25rem .5rem;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#22c55e' : 'var(--border)'};background:${on ? 'rgba(34,197,94,.2)' : 'var(--surface2)'};color:var(--text)">${on ? '✓ ' : ''}${c.missing ? '🆕 ' : ''}${_h(c.name)}${c.tier === 'limited' ? ' 🌟' : ''}${c.n > 1 ? ` <span style="color:var(--muted)">×${c.n}</span>` : ''}</button>`; }).join('') || `<span style="color:var(--muted);font-size:.8rem">${_g('Brak kart', 'No cards')}</span>`}</div>
       <div style="font-weight:700;margin-bottom:.3rem">3. ${_g('Daję', 'I give')} <span style="font-weight:400;color:var(--muted);font-size:.74rem">(${_trd.give.length}/5)</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-bottom:.7rem">${_trd.give.map(k => { const one = (mine[k]?.n || 0) <= 1; return `<span style="font-size:.74rem;padding:.2rem .5rem;border-radius:999px;background:${one ? 'rgba(239,68,68,.15)' : 'rgba(245,197,24,.15)'};border:1px solid ${one ? 'rgba(239,68,68,.6)' : 'rgba(245,197,24,.5)'}" title="${one ? _g('Masz tylko jeden egzemplarz — po wymianie zniknie z kolekcji', 'You only have one copy — it will leave your collection') : ''}">${_h(mine[k]?.name || k)}${one ? ` <b style="color:#ef4444">⚠ ${_g('jedyna', 'last copy')}</b>` : ` <span style="color:var(--muted)">×${mine[k].n}</span>`}</span>`; }).join('')}
-        <button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem" onclick="openCardPicker({ title: '${_g('Karty, które dajesz', 'Cards you give')}', hint: '${_g('Najlepiej duplikaty — oddana karta znika z Twojej kolekcji.', 'Duplicates are best — a traded card leaves your collection.')}', max: 5, preselect: _trd.give, onDone: k => { _trd.give = k; _trdDraw(); } })">${_trd.give.length ? _g('zmień', 'change') : '➕ ' + _g('wybierz karty', 'choose cards')}</button></div>
+        <button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem" onclick="openCardPicker({ title: '${_g('Karty, które dajesz', 'Cards you give')}', hint: '${_g('Najlepiej duplikaty — oddana karta znika z Twojej kolekcji. Karty limitowane nie biorą udziału w wymianach.', 'Duplicates are best — a traded card leaves your collection. Limited cards can’t be traded.')}', max: 5, preselect: _trd.give, filter: c => c.tier !== 'limited' && !c.lim, onDone: k => { _trd.give = k; _trdDraw(); } })">${_trd.give.length ? _g('zmień', 'change') : '➕ ' + _g('wybierz karty', 'choose cards')}</button></div>
       <input id="trd-note" maxlength="140" placeholder="${_g('Wiadomość (opcjonalnie), np. „brakuje mi tej karty do kompletu”', 'Message (optional), e.g. “I need it for a set”')}" style="${_MODAL_INP};margin-bottom:.6rem">
       <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" ${_trd.want.size && _trd.give.length ? '' : 'disabled'} onclick="tradeSend()">📤 ${_g('Wyślij propozycję', 'Send offer')}</button></div>`; }
   m.querySelector('.modal').innerHTML = _fxHead('trade-modal', '🔁 ' + _g('Nowa wymiana', 'New trade')) + `<div data-notr>${body}</div>`;
