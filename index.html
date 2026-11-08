@@ -8090,6 +8090,8 @@ function openDeepLink() {
   const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q || _p).toLowerCase();
   if(_p && !location.hash && !_q) try { history.replaceState(history.state, '', '/' + location.search); } catch(e) {} // po otwarciu adres wraca na stronę główną (odświeżenie nie wraca do linku)
   if(!h) return;
+  if(['wymiany', 'trades', 'wymiana'].includes(h)) { setTimeout(() => { showView('cards'); setTimeout(() => document.getElementById('trades-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 1500); }, 300); return; }
+  if(['wrapped', 'moj-wrapped', 'mój-wrapped'].includes(h)) { setTimeout(() => { if(discordUser) { _wr.tab = null; openWrapped(); } else showToast('Zaloguj się przez Discord, żeby zobaczyć swój Wrapped', 'info'); }, 900); return; }
   if(['fantasy-plus', 'fantasyplus', 'fplus', 'fantasy+'].includes(h)) { setTimeout(() => showView('fplus'), 300); return; }
   if(['gm-demo', 'demo-gm', 'liga-gm-demo', 'gmdemo'].includes(h)) { window._gmdAuto = true; setTimeout(() => showView('fplus'), 300); return; }
   if(/^duel-[a-z0-9]{6}$/.test(h)) { _kortLiveCode = h.slice(5); _kortTab = 'live'; setTimeout(() => showView('kort'), 300); return; }
@@ -12346,9 +12348,75 @@ function _wrFan() {
   return { picks, hits, upsets, acc: picks ? Math.round(hits / picks * 100) : 0, tRank, tTotal: ov.length, fxPts: fx?.pts || 0, fxRank, fxTotal: fantasyData?.season?.length || 0, bestWeek,
     pred, awards: Object.keys(myAwardVotes || {}).length, likes: (myClipLikes || []).length };
 }
+// 🎁 WRAPPED+: karty, Kort, 2Kordle, grafika do udostępnienia, ogłoszenie
+async function _wrLoadExtra() {
+  if(!discordUser?.session || _wr.loading) return; _wr.loading = true;
+  const [cards, kort, kordle] = await Promise.all([_cards ? Promise.resolve(_cards) : _api('/cards/me', 'GET', null, { session: true }).catch(() => null), _api('/kort/me', 'GET', null, { session: true }).catch(() => null), _api('/kordle/board?month=all', 'GET', null, { session: true }).catch(() => null)]);
+  if(cards?.ok && !_cards) _cards = cards;
+  const C = cards?.ok ? (() => { const own = cards.cards || {}, ks = Object.keys(own).filter(k => (own[k]?.n || 0) > 0), poolK = new Set((cards.pool || []).map(p => p.k)), byTeam = {};
+      (cards.pool || []).forEach(p => (byTeam[p.team] = byTeam[p.team] || []).push(p.k)); const teams = Object.entries(byTeam).filter(([, l]) => l.length >= 3);
+      const lim = ks.filter(k => k.startsWith('lim:')).map(k => own[k]), gal = ks.filter(k => poolK.has(k) && (cards.pool.find(p => p.k === k)?.tier === 'galaxy')).map(k => own[k].name);
+      return { opened: cards.opened || 0, pool: ks.filter(k => poolK.has(k)).length, poolTot: poolK.size, teams: teams.filter(([, l]) => l.every(k => own[k]?.n > 0)).length, teamsTot: teams.length, lim: lim.length, limTop: lim.find(c => /REKORD|RECORD|MISTRZ|MASTER/i.test(c.label || '')) || lim[0] || null, gal, coach: ks.filter(k => k.startsWith('coach:')).length, dup: ks.reduce((s, k) => s + Math.max(0, own[k].n - 1), 0), premium: (cards.packIn || []).filter(x => x.kind === 'premium').reduce((s, x) => s + x.n, 0) }; })() : null;
+  const K = kort?.ok && kort.total?.g ? { g: kort.total.g, w: kort.total.w, wr: kort.total.wr, elo: kort.elo, div: kort.div, card: kort.cards?.[0] || null, mvp: (kort.cards || []).slice().sort((a, b) => b.mvp - a.mvp)[0] || null, badge: kort.badges?.[0] || null, modes: kort.modes || {} } : null;
+  const list = kordle?.board || kordle?.list || [], kr = list.findIndex(x => String(x.id) === String(discordUser.id)) + 1;
+  const Q = kordle?.ok && kordle.me?.played ? { ...kordle.me, rank: kr, of: list.length } : null;
+  _wr.x = { C, K, Q }; _wr.loading = false;
+  if(document.getElementById('wrapped-modal')?.classList.contains('open')) openWrapped();
+}
+function _wrExtraBody(tab, big, line) {
+  const x = _wr.x || {}, f = v => (Math.round(v * 10) / 10).toFixed(1);
+  if(tab === 'cards' && x.C) { const C = x.C; return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin-bottom:.7rem">${big(C.opened, 'PACZEK', C.premium ? `w tym 💎 ${C.premium}` : '')}${big(`${C.pool}/${C.poolTot}`, 'KART Z PULI', C.poolTot ? Math.round(C.pool / C.poolTot * 100) + '%' : '')}${big(`${C.teams}/${C.teamsTot}`, 'DRUŻYN', 'skompletowanych')}</div>
+    ${C.lim ? line('🌟', `<b>${C.lim}</b> ${_plPL(C.lim, 'karta limitowana', 'karty limitowane', 'kart limitowanych')}${C.limTop ? ` — m.in. <b>${_h(C.limTop.name)}</b> · ${_h(C.limTop.label || '')}` : ''}`) : ''}
+    ${C.gal.length ? line('🌌', `Karty Galaktyka: <b>${C.gal.slice(0, 4).map(_h).join(', ')}</b>${C.gal.length > 4 ? ` i ${C.gal.length - 4} więcej` : ''}`) : ''}
+    ${C.coach ? line('🧑‍🏫', `<b>${C.coach}</b> ${_plPL(C.coach, 'karta trenerska', 'karty trenerskie', 'kart trenerskich')}`) : ''}
+    ${C.dup ? line('♻️', `<b>${C.dup}</b> duplikatów do wymiany lub podarowania`) : ''}
+    ${C.teams ? line('📚', `Skompletowane drużyny: <b>${C.teams}</b>${C.teams === C.teamsTot ? ' — <b>cała liga! 🏆</b>' : ''}`) : line('🧩', `Do pierwszego kompletu drużyny brakuje niewiele — zajrzyj do kolekcji.`)}`; }
+  if(tab === 'kort' && x.K) { const K = x.K, M = { daily: '⚔️ mecz dnia', ranked: '🏆 ranking', boss: '👑 boss', draft: '🎴 draft', live: '🤝 z kolegą' };
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin-bottom:.7rem">${big(K.g, 'MECZÓW', `${K.w} wygranych`)}${big(K.wr + '%', 'SKUTECZNOŚĆ', '')}${big(K.elo, 'ELO', _kDiv ? _kDiv(K.div) : '')}</div>
+    ${K.card ? line('⭐', `Najlepsza karta: <b>${_h(K.card.k)}</b> — ${K.card.pts} pkt na mecz${K.card.mvp ? `, ${K.card.mvp}× MVP meczu` : ''}`) : ''}
+    ${K.mvp && K.mvp.mvp && K.mvp.k !== K.card?.k ? line('🏅', `Najczęściej MVP: <b>${_h(K.mvp.k)}</b> (${K.mvp.mvp}×)`) : ''}
+    ${K.badge ? line(_KB?.[K.badge.k] || '🏅', `Ulubiona odznaka: <b>${_h(_kbName ? _kbName(K.badge.k) : K.badge.k)}</b> — ${K.badge.wr}% wygranych z nią w talii`) : ''}
+    ${Object.keys(K.modes).length ? line('🎮', Object.entries(K.modes).map(([m, r]) => `${M[m] || m}: <b>${r.w}-${r.l}${r.d ? '-' + r.d : ''}</b>`).join(' · ')) : ''}`; }
+  if(tab === 'kordle' && x.Q) { const Q = x.Q;
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin-bottom:.7rem">${big(`${Q.won}/${Q.played}`, 'ODGADNIĘTE', Q.played ? Math.round(Q.won / Q.played * 100) + '%' : '')}${big(Q.best, 'NAJLEPSZA SERIA', 'dni z rzędu')}${big(Q.rank ? '#' + Q.rank : '—', 'W RANKINGU', Q.rank ? `z ${Q.of}` : '')}</div>
+    ${line('🔥', `Obecna seria: <b>${Q.streak}</b> ${_plPL(Q.streak, 'dzień', 'dni', 'dni')}`)}`; }
+  return '';
+}
+// 📸 grafika Wrapped: najlepsze liczby ze wszystkich zakładek
+async function wrappedShare() {
+  const me = _myPlayerName ? _myPlayerName() : null, P = me ? _wrPlayer(me) : null, F = _wrFan(), x = _wr.x || {}, tiles = [];
+  if(P) tiles.push([P.pts, 'PUNKTÓW', `${P.n} meczów · ${P.w}-${P.n - P.w}`], [(Math.round(P.ppg * 10) / 10).toFixed(1), 'PTS / MECZ', P.rank ? `#${P.rank} w lidze` : '']);
+  if(F?.picks) tiles.push([F.acc + '%', 'TRAFNOŚĆ TYPÓW', `${F.hits}/${F.picks}`]);
+  if(F?.fxRank) tiles.push([F.fxPts, 'PKT FANTASY', `#${F.fxRank}`]);
+  if(x.C?.opened) tiles.push([x.C.opened, 'PACZEK', `${x.C.pool}/${x.C.poolTot} kart`]); if(x.C?.teams) tiles.push([x.C.teams, 'KOMPLETÓW DRUŻYN', '📚']);
+  if(x.K) tiles.push([x.K.elo, 'ELO W KORCIE', `${x.K.wr}% wygranych`]); if(x.Q?.won) tiles.push([x.Q.won, 'WYGRANE 2KORDLE', `seria ${x.Q.best}`]);
+  const T = tiles.slice(0, 6); if(!T.length) { showToast('Za mało danych do grafiki — zagraj, typuj albo otwórz paczkę!', 'info'); return; }
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 1080, 1350); bg.addColorStop(0, '#1a1205'); bg.addColorStop(.55, '#120f22'); bg.addColorStop(1, '#0b0d12'); g.fillStyle = bg; g.fillRect(0, 0, 1080, 1350);
+  g.fillStyle = 'rgba(245,197,24,.12)'; g.beginPath(); g.arc(900, 160, 320, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#f5c518'; g.font = '900 54px "Barlow Condensed", Arial'; g.fillText('🎁 MÓJ WRAPPED', 70, 130);
+  g.fillStyle = '#fff'; g.font = '900 92px "Barlow Condensed", Arial'; g.fillText(String(discordUser?.name || me || 'Kibic').toUpperCase().slice(0, 18), 70, 240);
+  g.fillStyle = '#9ca3af'; g.font = '600 34px Arial'; g.fillText((_seasonName(currentSeasonId) || 'Sezon') + (P?.team ? ' · ' + P.team : ''), 70, 295);
+  const cols = 2, w = 450, h = 260, gap = 40;
+  T.forEach((t, i) => { const X = 70 + (i % cols) * (w + gap), Y = 360 + Math.floor(i / cols) * (h + gap);
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.strokeStyle = 'rgba(245,197,24,.35)'; g.lineWidth = 3; g.beginPath(); g.roundRect ? g.roundRect(X, Y, w, h, 28) : g.rect(X, Y, w, h); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.font = '900 110px "Barlow Condensed", Arial'; g.textAlign = 'center'; g.fillText(String(t[0]), X + w / 2, Y + 130);
+    g.fillStyle = '#f5c518'; g.font = '800 30px Arial'; g.fillText(t[1], X + w / 2, Y + 185); g.fillStyle = '#9ca3af'; g.font = '500 27px Arial'; g.fillText(t[2] || '', X + w / 2, Y + 225); g.textAlign = 'left'; });
+  g.fillStyle = '#6b7280'; g.font = '600 30px Arial'; g.fillText((location.host || 'chemikleagues.com') + '/#wrapped', 70, 1300);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png')), file = new File([blob], 'wrapped.png', { type: 'image/png' });
+  try { if(navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text: '🎁 Mój Wrapped sezonu — ' + (location.host || 'chemikleagues.com') + '/#wrapped' }); return; } } catch(e) { if(e?.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'wrapped.png'; document.body.appendChild(a); a.click(); a.remove(); showToast('📸 Grafika pobrana — wrzuć ją na Discorda albo X!', 'success');
+}
+async function announceWrapped() {
+  if(!confirm('Wysłać ogłoszenie „Wasz Wrapped sezonu jest gotowy” na kanał „Codzienne zaproszenie”?')) return;
+  const ok = await _teamRegDiscordSend({ route: 'dailyInvite', content: `🎁 **Wasz Wrapped sezonu jest gotowy!**\nMecze, typy, Fantasy, kolekcja kart, Kort i 2Kordle — wszystko w jednym podsumowaniu. Zobacz swój i pochwal się grafiką! 📸\n👉 ${location.origin}/#wrapped` });
+  showToast(ok ? '📣 Wysłano na Discord' : '⚠ Discord nie odpowiedział — sprawdź kanał w 📣 Kanałach powiadomień', ok ? 'success' : 'info');
+}
+
 function openWrapped() {
   const me = _myPlayerName ? _myPlayerName() : null;
   const P = me ? _wrPlayer(me) : null, F = _wrFan();
+  if(discordUser?.session && !_wr.x && !_wr.loading) _wrLoadExtra();
   if(!_wr.tab) _wr.tab = P ? 'player' : 'fan';
   const big = (v, l, sub) => `<div style="background:linear-gradient(160deg,rgba(245,197,24,.13),rgba(167,139,250,.10));border:1px solid var(--border);border-radius:12px;padding:.7rem .6rem;text-align:center">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.9rem;line-height:1">${v}</div><div style="font-size:.64rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-top:.2rem">${l}</div>${sub ? `<div style="font-size:.66rem;color:var(--muted)">${sub}</div>` : ''}</div>`;
@@ -12357,7 +12425,8 @@ function openWrapped() {
   const tabBtn = (id, l, ok) => ok ? `<button onclick="_wr.tab='${id}';openWrapped()" class="btn ${_wr.tab === id ? 'btn-primary' : 'btn-ghost'}" style="font-size:.74rem;padding:.25rem .7rem">${l}</button>` : '';
   const scope = (v, l) => `<button onclick="_wr.scope='${v}';openWrapped()" style="font-size:.68rem;padding:.12rem .5rem;border-radius:999px;cursor:pointer;font-family:inherit;border:1px solid ${_wr.scope === v ? 'var(--accent)' : 'var(--border)'};background:transparent;color:${_wr.scope === v ? 'var(--accent)' : 'var(--muted)'}">${l}</button>`;
   let body = '';
-  if(_wr.tab === 'player' && P) body = `
+  if(['cards', 'kort', 'kordle'].includes(_wr.tab)) body = _wrExtraBody(_wr.tab, big, line) || '<div style="text-align:center;color:var(--muted);padding:1rem">⏳</div>';
+  else if(_wr.tab === 'player' && P) body = `
     <div style="display:flex;gap:.25rem;margin-bottom:.7rem">${scope('season', 'Sezon')}${scope('edition', _editionOf(currentSeasonId) || 'Edycja')}${scope('career', 'Kariera')}</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin-bottom:.7rem">${big(P.n, 'MECZE', `${P.w}-${P.n - P.w}`)}${big(P.pts, 'PUNKTÓW', f1(P.ppg) + ' na mecz')}${big(P.rank ? '#' + P.rank : '—', 'W LIDZE (PTS)', P.rank ? `z ${P.ranked}` : '')}</div>
     ${line('🔥', `Najlepszy mecz: <b>${P.best.pts} PTS</b> · ${P.best.reb} REB · ${P.best.ast} AST vs <b>${_h(P.best.opp)}</b> (${_ssFmt(P.best.date)})`)}
@@ -12378,10 +12447,11 @@ function openWrapped() {
   else body = `<div style="text-align:center;color:var(--muted);padding:1.5rem">Zaloguj się przez Discord, żeby zobaczyć swój Wrapped.</div>`;
   const m = _fxModal('wrapped-modal', 560);
   m.querySelector('.modal').innerHTML = _fxHead('wrapped-modal', `🎁 Wrapped — ${_h(_seasonName(currentSeasonId) || 'sezon')}`) + `
-    <div style="display:flex;gap:.35rem;margin-bottom:.8rem">${tabBtn('player', '🏀 Jako gracz', !!P)}${tabBtn('fan', '👀 Jako kibic', !!F)}</div>
+    <div style="display:flex;gap:.35rem;margin-bottom:.8rem;flex-wrap:wrap">${tabBtn('player', '🏀 Jako gracz', !!P)}${tabBtn('fan', '👀 Jako kibic', !!F)}${tabBtn('cards', '🃏 Karty', !!_wr.x?.C)}${tabBtn('kort', '🎮 Kort', !!_wr.x?.K)}${tabBtn('kordle', '🧩 2Kordle', !!_wr.x?.Q)}</div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.4rem;margin-bottom:.6rem">${_h(_wr.tab === 'player' && P ? P.name : discordUser?.name || '')}${_wr.tab === 'player' && P ? ` <span style="font-size:.9rem;color:var(--muted)">· ${_h(P.team)}</span>` : ''}</div>
     ${body}
-    ${(P || F) ? `<div style="display:flex;gap:.4rem;justify-content:flex-end;margin-top:.8rem"><button class="btn btn-primary" onclick="wrappedCard()">🪪 Pobierz kartę do udostępnienia</button></div>` : ''}`;
+    ${(P || F || _wr.x) ? `<div style="display:flex;gap:.4rem;justify-content:flex-end;margin-top:.8rem;flex-wrap:wrap">${P || F ? `<button class="btn btn-ghost" onclick="wrappedCard()">🪪 Pobierz kartę</button>` : ''}<button class="btn btn-primary" onclick="wrappedShare()">📸 Udostępnij podsumowanie</button></div>` : ''}
+    ${discordUser?.session && !_wr.x ? `<div style="font-size:.7rem;color:var(--muted);text-align:center;margin-top:.5rem">⏳ Wczytuję karty, Kort i 2Kordle…</div>` : ''}`;
   m.classList.add('open');
 }
 async function wrappedCard() {
@@ -15558,7 +15628,7 @@ async function renderCardsView() {
     ${discordUser ? challengesHtml(me) : ''}
     ${discordUser && me ? `<div style="text-align:right;margin:-.4rem 0 .8rem"><button class="btn btn-ghost" style="font-size:.74rem" onclick="showcasePick()">🏆 ${_g('Ustaw gablotę na profilu', 'Set your profile showcase')}</button></div>` : ''}
     ${limitedSetsHtml(me)}
-    ${limitedSectionHtml(me)}
+    ${tradesSectionHtml(me)}${limitedSectionHtml(me)}
     ${discordUser ? `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.35rem">📚 ${_g('MOJA KOLEKCJA — ZESTAWY DRUŻYN', 'MY COLLECTION — TEAM SETS')}</div>
       ${(() => { const T = Object.entries(byTeam).filter(([, l]) => l.length >= 3), n = T.filter(([, l]) => l.every(c => own[c.k])).length, all = T.length;
         return all ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.5rem .7rem;margin-bottom:.7rem">
@@ -15567,7 +15637,7 @@ async function renderCardsView() {
           <div style="font-size:.7rem;color:var(--muted)">${_g('Komplet drużyny = 🎁 paczka · 5 drużyn = 💎 paczka premium · cała liga = 💎 + unikalna karta „🏆 Mistrz Kolekcjoner”', 'Complete a team = 🎁 pack · 5 teams = 💎 premium pack · the whole league = 💎 + a one-of-a-kind “🏆 Master Collector” card')}</div></div>` : ''; })()}
       ${Object.entries(byTeam).sort((a, b) => a[0].localeCompare(b[0])).map(([team, list]) => { const got = list.filter(c => own[c.k]).length, done = got === list.length;
         return `<div style="margin-bottom:.6rem"><div style="font-size:.8rem;margin-bottom:.25rem">${done ? '✅' : '🧩'} <b>${_h(team)}</b> <span style="color:var(--muted)">${got}/${list.length}</span>${me?.teamDone?.[team] ? ` <span style="font-size:.68rem;color:var(--win)">· 🎁 ${_g('nagroda odebrana', 'reward claimed')}</span>` : ''}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:.35rem">${list.map(c => { const o = own[c.k]; return `<div onclick="${o ? `openPlayerCardImg('${_h(c.name).replace(/'/g, "\\'")}')` : ''}" title="${_h(c.name)}" style="width:84px;height:110px;border-radius:10px;border:2px solid ${o ? _TIER_COL[c.tier] : 'var(--border)'};background:${o ? `linear-gradient(160deg, ${_TIER_COL[c.tier]}33, var(--surface2))` : 'var(--surface2)'};display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:.2rem;cursor:${o ? 'pointer' : 'default'};opacity:${o ? 1 : .35};position:relative">
+          <div style="display:flex;flex-wrap:wrap;gap:.35rem">${list.map(c => { const o = own[c.k]; return `<div onclick="${o ? `openPlayerCardImg('${_h(c.name).replace(/'/g, "\\'")}')` : `openCardHolders('${c.k.replace(/'/g, '')}','${_h(c.name).replace(/'/g, "\\'")}')`}" title="${o ? _h(c.name) : _g('Kto ma tę kartę? Zaproponuj wymianę', 'Who has this card? Offer a trade')}" style="width:84px;height:110px;border-radius:10px;border:2px solid ${o ? _TIER_COL[c.tier] : 'var(--border)'};background:${o ? `linear-gradient(160deg, ${_TIER_COL[c.tier]}33, var(--surface2))` : 'var(--surface2)'};display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:.2rem;cursor:pointer;opacity:${o ? 1 : .5};position:relative">${o ? '' : `<span style="position:absolute;bottom:4px;left:0;right:0;font-size:.58rem;color:var(--accent)">🔍 ${_g('kto ma?', 'who has?')}</span>`}
             <div style="font-size:.7rem;color:${o ? _TIER_COL[c.tier] : 'inherit'}">${o ? _TIER_LBL[c.tier][0].split(' ')[0] : '❔'}</div><div style="font-size:.68rem;font-weight:800;word-break:break-word">${o ? _h(c.name) + (c.rookie ? ' 🆕' : '') : '???'}</div>${o && o.n > 1 ? `<span style="position:absolute;top:3px;right:5px;font-size:.62rem;background:var(--accent);color:#000;border-radius:999px;padding:0 .3rem">×${o.n}</span><span onclick="event.stopPropagation();const s=document.getElementById('cg-card');if(s){s.value=this.dataset.n;s.scrollIntoView({behavior:'smooth',block:'center'});}" data-n="${_h(c.name)}" title="${_g('Podaruj duplikat', 'Gift a duplicate')}" style="position:absolute;bottom:3px;right:5px;font-size:.85rem;cursor:pointer">🎁</span>` : ''}</div>`; }).join('')}</div></div>`; }).join('') || `<div style="font-size:.82rem;color:var(--muted)">${_g('Pula kart pojawi się po pierwszych meczach sezonu.', 'The card pool appears after the first games of the season.')}</div>`}
       ${dups ? `<div style="font-size:.78rem;margin-top:.8rem;padding:.6rem .75rem;border:1px dashed var(--accent);border-radius:10px"><b>🎁 ${_g('Podaruj kartę', 'Gift a card')}</b> <span style="color:var(--muted)">— ${_g('podarować można duplikat (karta z ×2 i więcej); odbiorca musi mieć otwartą choć jedną paczkę', 'you can gift a duplicate (a card marked ×2 or more); the recipient must have opened at least one pack')}</span><div style="margin-top:.4rem">${_g('Karta', 'Card')}: <select id="cg-card" style="font-size:.76rem">${Object.entries(own).filter(([, c]) => c.n > 1).map(([k, c]) => `<option value="${_h(c.name)}" data-k="${_h(k)}">${c.lim ? '🌟 ' : ''}${_h(c.name)}${c.lim ? ' (' + _h(c.label || '') + ')' : ''} ×${c.n}</option>`).join('')}</select> → <select id="cg-to" style="font-size:.76rem">${(board.board || []).filter(b => b.id !== discordUser.id).map(b => `<option value="${b.id}">${_h(b.name)}</option>`).join('')}</select> <button class="btn btn-primary" style="font-size:.72rem" onclick="cardsGift()">🎁 ${_g('Podaruj', 'Gift')}</button></div></div>` : (discordUser && uniq ? `<div style="font-size:.74rem;color:var(--muted);margin-top:.6rem">🎁 ${_g('Karty można podarować innym kolekcjonerom, gdy masz duplikat (×2) — pojawi się wtedy tu opcja „Podaruj kartę”.', 'You can gift cards to other collectors once you have a duplicate (×2) — a “Gift a card” option will appear here.')}</div>` : '')}
     </div>` : ''}
@@ -15923,6 +15993,62 @@ function limitedSetsHtml(me) {
     <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">${_g('Gdy skompletujesz zestaw, jego karty przestają Ci wypadać z paczek. Duplikaty przed kompletem możesz oddać w wyzwaniach albo podarować.', 'Once you complete a set, its cards stop dropping for you. Duplicates before that can go to challenges or gifts.')}</div></div>`;
 }
 
+// 🔁 WYMIANY KART: sekcja w kolekcji, „kto ma tę kartę?”, kreator propozycji
+let _trd = null;
+function tradesSectionHtml(me) {
+  if(!discordUser) return ''; const T = me?.trades || [], my = discordUser.id, en = currentLang === 'en';
+  const inc = T.filter(t => t.to === my && t.status === 'open'), out = T.filter(t => t.from === my && t.status === 'open'), done = T.filter(t => t.status !== 'open').slice(-5).reverse();
+  const names = L => L.map(c => `<b>${_h(c.name)}</b>`).join(', '), ago = a => new Date(a).toLocaleDateString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'short' });
+  const ST = { accepted: ['✅', _g('przyjęta', 'accepted')], rejected: ['❌', _g('odrzucona', 'rejected')], canceled: ['↩', _g('anulowana', 'canceled')], expired: ['⌛', _g('wygasła', 'expired')] };
+  return `<div class="card" id="trades-sec" style="padding:.75rem 1rem;margin-bottom:1rem" data-notr>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🔁 ${_g('WYMIANY KART', 'CARD TRADES')}${inc.length ? ` <span style="background:#ef4444;color:#fff;border-radius:999px;padding:0 .4rem;font-size:.62rem">${inc.length}</span>` : ''}</div>
+      <button class="btn btn-primary" style="font-size:.72rem;padding:.25rem .6rem" onclick="openTradeComposer({})">➕ ${_g('Nowa wymiana', 'New trade')}</button></div>
+    ${inc.map(t => `<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:.5rem .65rem;margin-bottom:.4rem;font-size:.8rem">
+      📥 <b>${_h(t.fromName)}</b> ${_g('proponuje', 'offers')}: ${names(t.give)} ⇄ ${_g('za Twoje', 'for your')} ${t.want.map(c => `<b>${_h(c.name)}</b>${(me?.cards?.[c.k]?.n || 0) <= 1 ? ` <span style="color:#ef4444;font-size:.7rem">⚠ ${_g('jedyna', 'last copy')}</span>` : ''}`).join(', ')}${t.note ? `<div style="color:var(--muted);font-size:.74rem;margin-top:.2rem">💬 „${_h(t.note)}”</div>` : ''}
+      <div style="display:flex;gap:.35rem;margin-top:.4rem"><button class="btn btn-primary" style="font-size:.72rem;padding:.2rem .6rem" onclick="tradeRespond('${t.id}',true)">✅ ${_g('Akceptuj', 'Accept')}</button><button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .6rem" onclick="tradeRespond('${t.id}',false)">✕ ${_g('Odrzuć', 'Reject')}</button><span style="margin-left:auto;font-size:.68rem;color:var(--muted)">${ago(t.at)}</span></div></div>`).join('')}
+    ${out.map(t => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.45rem .65rem;margin-bottom:.4rem;font-size:.78rem;display:flex;gap:.5rem;align-items:center">
+      <span style="flex:1">📤 ${_g('Do', 'To')} <b>${_h(t.toName)}</b>: ${names(t.give)} ⇄ ${names(t.want)} <span style="color:var(--muted);font-size:.7rem">· ${_g('czeka na odpowiedź', 'waiting for a reply')}</span></span><button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .45rem" onclick="tradeCancel('${t.id}')">${_g('Anuluj', 'Cancel')}</button></div>`).join('')}
+    ${!inc.length && !out.length ? `<div style="font-size:.78rem;color:var(--muted)">${_g('Brakuje Ci karty do kompletu? Kliknij brakującą kartę (🔍) w zestawach drużyn albo zaproponuj wymianę dowolnemu kolekcjonerowi.', 'Missing a card for a set? Tap a missing card (🔍) in the team sets or offer a trade to any collector.')}</div>` : ''}
+    ${done.length ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">${done.map(t => `${ST[t.status]?.[0] || ''} ${_h(t.from === my ? t.toName : t.fromName)}: ${t.give.map(c => _h(c.name)).join(', ')} ⇄ ${t.want.map(c => _h(c.name)).join(', ')} (${ST[t.status]?.[1] || t.status})`).join('<br>')}</div>` : ''}</div>`;
+}
+async function _tradeAfter(r, msg) { if(!r?.ok) { showToast('❌ ' + _tr(r?.error || ''), 'error'); if(r?.cards) { _cards = { ..._cards, ...r }; renderCardsView(); } return false; } _cards = { ..._cards, ...r }; showToast(msg, 'success'); renderCardsView(); return true; }
+async function tradeRespond(id, accept) { const t = (_cards?.trades || []).find(x => x.id === id);
+  if(accept) { const last = (t?.want || []).filter(c => (_cards?.cards?.[c.k]?.n || 0) <= 1); if(last.length ? !_lastCopyOk(last.map(c => c.k)) : !confirm(_g('Przyjąć wymianę? Karty zostaną od razu zamienione.', 'Accept the trade? Cards are swapped immediately.'))) return; } const r = await _api('/cards/trade/respond', 'POST', { id, accept }, { session: true }); _tradeAfter(r, accept ? _g('🔁 Wymiana przyjęta — karty są w kolekcji!', '🔁 Trade accepted — the cards are in your collection!') : _g('Propozycja odrzucona', 'Offer rejected')); }
+async function tradeCancel(id) { const r = await _api('/cards/trade/cancel', 'POST', { id }, { session: true }); _tradeAfter(r, _g('Propozycja anulowana', 'Offer canceled')); }
+async function openCardHolders(k, name) { // 🔍 kto ma tę kartę
+  if(!_ensureSession()) return; const m = _fxModal('holders-modal', 480); m.classList.add('open'); m.querySelector('.modal').innerHTML = _fxHead('holders-modal', '🔍 ' + _h(name)) + '⏳';
+  const r = await _api('/cards/holders', 'POST', { key: k }, { session: true }); const L = r.holders || [];
+  m.querySelector('.modal').innerHTML = _fxHead('holders-modal', `🔍 ${_g('Kto ma kartę', 'Who has')} ${_h(name)}`) + `<div data-notr>${L.length ? L.map(h => `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)">${h.avatar ? `<img src="${_h(h.avatar)}" style="width:28px;height:28px;border-radius:50%">` : '👤'}<b style="flex:1">${_h(h.name)}</b>${h.n > 1 ? `<span style="font-size:.7rem;color:var(--win)">×${h.n} ${_g('(duplikat)', '(duplicate)')}</span>` : `<span style="font-size:.7rem;color:var(--muted)">×1</span>`}
+      <button class="btn btn-primary" style="font-size:.7rem;padding:.2rem .5rem" onclick="_fxClose('holders-modal');openTradeComposer({to:'${h.id}',toName:'${_h(h.name).replace(/'/g, "\\'")}',want:['${k.replace(/'/g, '')}']})">🔁 ${_g('Zaproponuj', 'Offer')}</button></div>`).join('') : `<div style="color:var(--muted);font-size:.84rem">${_g('Nikt jeszcze nie ma tej karty.', 'Nobody has this card yet.')}</div>`}</div>`;
+}
+async function openTradeComposer({ to, toName, want }) { if(!_ensureSession()) return; _trd = { to: to || null, toName: toName || '', want: new Set(want || []), give: [], their: null, q: '' }; if(_trd.to) await _trdLoad(); _trdDraw(); }
+async function _trdLoad() { const r = await _api('/cards/of', 'POST', { id: _trd.to }, { session: true }); _trd.their = r.ok ? r.cards : []; }
+async function _trdPick(id, name) { _trd.to = id; _trd.toName = name; _trd.want = new Set(); _trdDraw(); await _trdLoad(); _trdDraw(); }
+async function _trdDraw() {
+  const m = _fxModal('trade-modal', 720); m.classList.add('open'); const en = currentLang === 'en', mine = _cards?.cards || {};
+  let body;
+  if(!_trd.to) { const b = window._trdBoard || (window._trdBoard = await _api('/cards/board', 'GET', null, {}).catch(() => ({}))); const L = (b.board || []).filter(x => x.id !== discordUser.id && (!_trd.q || _normNick(x.name).includes(_normNick(_trd.q)))).slice(0, 40);
+    body = `<div style="font-weight:700;margin-bottom:.4rem">1. ${_g('Z kim chcesz się wymienić?', 'Who do you want to trade with?')}</div><input value="${_h(_trd.q)}" placeholder="${_g('Szukaj kolekcjonera…', 'Search collector…')}" oninput="_trd.q=this.value;_trdDraw();this.focus()" style="${_MODAL_INP};margin-bottom:.4rem">
+      <div style="max-height:50vh;overflow:auto">${L.map(x => `<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--border)">${x.avatar ? `<img src="${_h(x.avatar)}" style="width:26px;height:26px;border-radius:50%">` : '👤'}<b style="flex:1">${_h(x.name)}</b><span style="font-size:.7rem;color:var(--muted)">${x.unique} ${_g('kart', 'cards')}</span><button class="btn btn-ghost" style="font-size:.7rem;padding:.15rem .5rem" onclick="_trdPick('${x.id}','${_h(x.name).replace(/'/g, "\\'")}')">${_g('Wybierz', 'Choose')}</button></div>`).join('')}</div>`; }
+  else { const their = (_trd.their || []).map(c => ({ ...c, missing: !(mine[c.k]?.n > 0) })).sort((a, b) => (b.missing - a.missing) || (b.n - a.n) || a.name.localeCompare(b.name));
+    const giveNames = _trd.give.map(k => mine[k]?.name || k);
+    body = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem"><div>${_g('Wymiana z', 'Trade with')} <b>${_h(_trd.toName)}</b></div><button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .45rem" onclick="_trd.to=null;_trdDraw()">${_g('zmień', 'change')}</button></div>
+      <div style="font-weight:700;margin-bottom:.3rem">2. ${_g('Chcę od niego/niej', 'I want')} <span style="font-weight:400;color:var(--muted);font-size:.74rem">(${_trd.want.size}/5 · ${_g('🆕 = brakuje Ci', '🆕 = you’re missing it')})</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem;max-height:30vh;overflow:auto;margin-bottom:.7rem">${their === null ? '⏳' : their.map(c => { const on = _trd.want.has(c.k); return `<button onclick="_trd.want.has('${c.k}')?_trd.want.delete('${c.k}'):(_trd.want.size<5&&_trd.want.add('${c.k}'));_trdDraw()" style="font-family:inherit;font-size:.74rem;padding:.25rem .5rem;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#22c55e' : 'var(--border)'};background:${on ? 'rgba(34,197,94,.2)' : 'var(--surface2)'};color:var(--text)">${on ? '✓ ' : ''}${c.missing ? '🆕 ' : ''}${_h(c.name)}${c.tier === 'limited' ? ' 🌟' : ''}${c.n > 1 ? ` <span style="color:var(--muted)">×${c.n}</span>` : ''}</button>`; }).join('') || `<span style="color:var(--muted);font-size:.8rem">${_g('Brak kart', 'No cards')}</span>`}</div>
+      <div style="font-weight:700;margin-bottom:.3rem">3. ${_g('Daję', 'I give')} <span style="font-weight:400;color:var(--muted);font-size:.74rem">(${_trd.give.length}/5)</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-bottom:.7rem">${_trd.give.map(k => { const one = (mine[k]?.n || 0) <= 1; return `<span style="font-size:.74rem;padding:.2rem .5rem;border-radius:999px;background:${one ? 'rgba(239,68,68,.15)' : 'rgba(245,197,24,.15)'};border:1px solid ${one ? 'rgba(239,68,68,.6)' : 'rgba(245,197,24,.5)'}" title="${one ? _g('Masz tylko jeden egzemplarz — po wymianie zniknie z kolekcji', 'You only have one copy — it will leave your collection') : ''}">${_h(mine[k]?.name || k)}${one ? ` <b style="color:#ef4444">⚠ ${_g('jedyna', 'last copy')}</b>` : ` <span style="color:var(--muted)">×${mine[k].n}</span>`}</span>`; }).join('')}
+        <button class="btn btn-ghost" style="font-size:.72rem;padding:.2rem .55rem" onclick="openCardPicker({ title: '${_g('Karty, które dajesz', 'Cards you give')}', hint: '${_g('Najlepiej duplikaty — oddana karta znika z Twojej kolekcji.', 'Duplicates are best — a traded card leaves your collection.')}', max: 5, preselect: _trd.give, onDone: k => { _trd.give = k; _trdDraw(); } })">${_trd.give.length ? _g('zmień', 'change') : '➕ ' + _g('wybierz karty', 'choose cards')}</button></div>
+      <input id="trd-note" maxlength="140" placeholder="${_g('Wiadomość (opcjonalnie), np. „brakuje mi tej karty do kompletu”', 'Message (optional), e.g. “I need it for a set”')}" style="${_MODAL_INP};margin-bottom:.6rem">
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" ${_trd.want.size && _trd.give.length ? '' : 'disabled'} onclick="tradeSend()">📤 ${_g('Wyślij propozycję', 'Send offer')}</button></div>`; }
+  m.querySelector('.modal').innerHTML = _fxHead('trade-modal', '🔁 ' + _g('Nowa wymiana', 'New trade')) + `<div data-notr>${body}</div>`;
+}
+function _lastCopyOk(keys) { // ostrzeżenie: oddajesz jedyny egzemplarz karty
+  const mine = _cards?.cards || {}, last = keys.filter(k => (mine[k]?.n || 0) <= 1).map(k => mine[k]?.name || k);
+  return !last.length || confirm(_g(`⚠ Oddajesz jedyny egzemplarz: ${last.join(', ')}.\nStracisz ${last.length > 1 ? 'te karty' : 'tę kartę'} z kolekcji (i z kompletu drużyny). Na pewno?`, `⚠ You are giving away your last copy of: ${last.join(', ')}.\n${last.length > 1 ? 'These cards' : 'This card'} will leave your collection (and your team set). Are you sure?`));
+}
+async function tradeSend() {
+  if(!_lastCopyOk(_trd.give)) return; const r = await _api('/cards/trade/offer', 'POST', { to: _trd.to, give: _trd.give, want: [..._trd.want], note: document.getElementById('trd-note')?.value || '' }, { session: true }); if(await _tradeAfter(r, _g('📤 Propozycja wysłana — dostanie DM', '📤 Offer sent — they’ll get a DM'))) _fxClose('trade-modal'); }
+
 function limitedSectionHtml(me) {
   const L = me?.limited || []; if(!L.length) return '';
   const act = L.filter(c => c.active), past = L.filter(c => !c.active && me.cards?.['lim:' + c.id]);
@@ -16263,7 +16389,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
