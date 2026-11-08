@@ -7274,6 +7274,7 @@ function _ssCard(ctx, s, groupName) {
           ${sl && !_ssResult(ctx, s)?.done ? `<button onclick="openMultistream('${s.id}')" class="btn ${live || s.date === new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }) ? 'btn-primary' : 'btn-ghost'}" title="${_g('Obie transmisje obok siebie', 'Both streams side by side')}" style="font-size:.66rem;padding:.12rem .45rem">🖥️ Multistream</button>` : ''}
           ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Transmisja' : 'Dodaj transmisję'}</button>` : ''}
           <button onclick="openClips('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🎬 Akcje${nClips ? ' (' + nClips + ')' : ''}</button>
+          <button onclick="openScoutReport('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🔍 ${_g('Raport rywala', 'Scouting')}</button>
           <button onclick="openRivalry(this.dataset.a, this.dataset.b)" data-a="${_h(s.team1)}" data-b="${_h(s.team2)}" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">⚔️ H2H</button>
         </div>`;
       })() : ''}
@@ -10343,6 +10344,56 @@ function uploadClip(k) {
   x.send(f);
 }
 
+// 🔍 RAPORT RYWALA — forma, H2H, średnie drużyny, kluczowi gracze (z kartami), mocne/słabe strony, wskazówki
+function _scoutTeam(team, sid) {
+  const N = x => _normNick(x), ms = _withAllMatches(() => matches.filter(m => !m.walkover && (m.seasonId || null) === (sid || null) && [m.team1.name, m.team2.name].some(t => N(t) === N(team)))).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const games = ms.map(m => { const me = N(m.team1.name) === N(team) ? m.team1 : m.team2, op = me === m.team1 ? m.team2 : m.team1; return { m, me, op, won: (+me.score || 0) > (+op.score || 0), date: m.date }; });
+  const sum = (arr, f) => arr.reduce((s, x) => s + (+f(x) || 0), 0), tot = (g, k) => sum(g.me.players || [], p => p[k]);
+  const n = games.length || 1, T = { gp: games.length, w: games.filter(g => g.won).length, pf: sum(games, g => g.me.score) / n, pa: sum(games, g => g.op.score) / n,
+    fg: sum(games, g => tot(g, 'fgm')) / Math.max(1, sum(games, g => tot(g, 'fga'))), tp: sum(games, g => tot(g, 'tpm')) / Math.max(1, sum(games, g => tot(g, 'tpa'))),
+    reb: sum(games, g => tot(g, 'reb')) / n, ast: sum(games, g => tot(g, 'ast')) / n, to: sum(games, g => tot(g, 'to')) / n, stl: sum(games, g => tot(g, 'stl')) / n, tpa: sum(games, g => tot(g, 'tpa')) / n };
+  const by = {}; games.forEach(g => (g.me.players || []).forEach(p => { const k = N(p.name); const a = by[k] = by[k] || { name: p.name, gp: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tpm: 0, pos: p.pos || '' }; a.gp++; ['pts', 'reb', 'ast', 'stl', 'blk', 'tpm'].forEach(f => a[f] += +p[f] || 0); }));
+  const players = Object.values(by).map(a => ({ ...a, ppg: a.pts / a.gp, rpg: a.reb / a.gp, apg: a.ast / a.gp, share: a.pts / Math.max(1, sum(games, g => tot(g, 'pts'))) })).sort((a, b) => b.ppg - a.ppg);
+  return { games, T, players };
+}
+function openScoutReport(id) {
+  const s = _ssItem(id); if(!s) return; const sid = s.seasonId || currentSeasonId || null, en = currentLang === 'en';
+  const myTeam = discordUser ? (teamRegistrations || []).find(r => r.status === 'approved' && [s.team1, s.team2].includes(r.teamName) && (String(r.captain?.id) === String(discordUser.id) || (r.players || []).some(p => String(p.discordId || '') === String(discordUser.id))))?.teamName : null;
+  window._scout = { id, team: myTeam ? (myTeam === s.team1 ? s.team2 : s.team1) : s.team2, other: null }; window._scout.other = window._scout.team === s.team1 ? s.team2 : s.team1; _scoutDraw();
+}
+function _scoutDraw() {
+  const S = window._scout, s = _ssItem(S.id), sid = s.seasonId || currentSeasonId || null, en = currentLang === 'en', team = S.team, R = _scoutTeam(team, sid), O = _scoutTeam(S.other, sid), T = R.T;
+  const f1 = v => (Math.round(v * 10) / 10).toFixed(1), pct = v => Math.round(v * 100) + '%';
+  const h2h = R.games.filter(g => _normNick(g.op.name) === _normNick(S.other));
+  const form = R.games.slice(-5).map(g => `<span title="${_h(g.op.name)} ${g.me.score}:${g.op.score}" style="display:inline-flex;width:24px;height:24px;border-radius:6px;align-items:center;justify-content:center;font-weight:800;font-size:.72rem;background:${g.won ? 'var(--win)' : 'var(--loss)'};color:#fff">${g.won ? (en ? 'W' : 'W') : (en ? 'L' : 'P')}</span>`).join(' ');
+  const attrsOf = name => _pcData(name, 'season')?.sk?.attrs || {}, top = R.players.slice(0, 5);
+  // mocne / słabe strony: średnie percentyle atrybutów 6 najważniejszych graczy
+  const AT = [['shoot', _g('rzut z gry', 'shooting')], ['three', _g('rzut za 3', '3-point shooting')], ['inside', _g('gra pod koszem', 'inside scoring')], ['play', _g('rozegranie', 'playmaking')], ['def', _g('obrona', 'defense')], ['reb', _g('zbiórki', 'rebounding')], ['ball', _g('kontrola piłki', 'ball control')]];
+  const core = R.players.slice(0, 6), avgA = AT.map(([k, l]) => { const v = core.map(p => attrsOf(p.name)[k]?.p).filter(x => x != null); return { k, l, v: v.length ? v.reduce((a, b) => a + b, 0) / v.length : .5 }; }).sort((a, b) => b.v - a.v);
+  const strong = avgA.slice(0, 2).filter(x => x.v >= .55), weak = avgA.slice(-2).reverse().filter(x => x.v <= .45);
+  const tips = [];
+  if(top[0] && top[0].share >= .28) tips.push(_g(`🎯 Pilnujcie <b>${_h(top[0].name)}</b> — zdobywa <b>${pct(top[0].share)}</b> punktów drużyny (${f1(top[0].ppg)} na mecz).`, `🎯 Lock down <b>${_h(top[0].name)}</b> — <b>${pct(top[0].share)}</b> of the team’s points (${f1(top[0].ppg)} per game).`));
+  if(T.to >= 14) tips.push(_g(`🧤 Rywal traci dużo piłek (<b>${f1(T.to)}</b> na mecz) — presja na rozgrywającego się opłaci.`, `🧤 They turn it over a lot (<b>${f1(T.to)}</b> per game) — pressure the ball handler.`));
+  if(T.tpa >= 20 && T.tp >= .35) tips.push(_g(`🏹 Dużo i celnie rzucają za 3 (<b>${pct(T.tp)}</b>, ${f1(T.tpa)} prób) — wychodźcie do strzelców.`, `🏹 They shoot a lot of threes and make them (<b>${pct(T.tp)}</b>, ${f1(T.tpa)} attempts) — close out on shooters.`));
+  else if(T.tpa >= 15 && T.tp < .28) tips.push(_g(`🧱 Słabo rzucają za 3 (<b>${pct(T.tp)}</b>) — można zagęścić pole trzech sekund.`, `🧱 Poor from three (<b>${pct(T.tp)}</b>) — pack the paint.`));
+  if(O.T.gp && T.reb && O.T.reb > T.reb + 3) tips.push(_g(`💪 Na zbiórkach macie przewagę (${f1(O.T.reb)} vs ${f1(T.reb)}) — walczcie o drugą szansę.`, `💪 You out-rebound them (${f1(O.T.reb)} vs ${f1(T.reb)}) — crash the glass.`));
+  if(T.pa >= T.pf + 5) tips.push(_g(`🛡️ Tracą średnio <b>${f1(T.pa)}</b> pkt — szybkie tempo może Wam pomóc.`, `🛡️ They allow <b>${f1(T.pa)}</b> points per game — push the pace.`));
+  const stat = (v, l) => `<div style="background:var(--surface2);border-radius:10px;padding:.45rem;text-align:center"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.35rem">${v}</div><div style="font-size:.62rem;color:var(--muted);letter-spacing:.5px">${l}</div></div>`;
+  const grade = a => a ? `<b style="color:${_gmdGradeCol(a.g)}">${a.g}</b>` : '—';
+  const m = _fxModal('scout-modal', 760); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('scout-modal', `🔍 ${_g('Raport rywala', 'Scouting report')}: ${_h(team)}`) + `<div data-notr>
+    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.7rem">${teamLogo(team, 40, '.9rem')}<div style="flex:1"><b>${_h(team)}</b> <span style="color:var(--muted);font-size:.8rem">· ${T.w}-${T.gp - T.w} ${_g('w sezonie', 'this season')}</span><div style="margin-top:.25rem">${form || `<span style="font-size:.76rem;color:var(--muted)">${_g('Brak meczów w sezonie', 'No games this season')}</span>`}</div></div>
+      <button class="btn btn-ghost" style="font-size:.7rem" onclick="[_scout.team,_scout.other]=[_scout.other,_scout.team];_scoutDraw()">⇄ ${_g('Raport', 'Report')}: ${_h(S.other)}</button></div>
+    ${T.gp ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:.4rem;margin-bottom:.8rem">${stat(f1(T.pf), _g('PKT ZDOBYTE', 'PTS FOR'))}${stat(f1(T.pa), _g('PKT STRACONE', 'PTS AGAINST'))}${stat(pct(T.fg), 'FG%')}${stat(pct(T.tp), '3P%')}${stat(f1(T.reb), _g('ZBIÓRKI', 'REB'))}${stat(f1(T.ast), _g('ASYSTY', 'AST'))}${stat(f1(T.to), _g('STRATY', 'TOV'))}</div>` : ''}
+    ${h2h.length ? `<div style="font-size:.8rem;margin-bottom:.7rem">⚔️ ${_g('Bezpośrednie mecze', 'Head to head')} vs ${_h(S.other)}: ${h2h.map(g => `<b style="color:${g.won ? 'var(--win)' : 'var(--loss)'}">${g.me.score}:${g.op.score}</b>`).join(' · ')}</div>` : ''}
+    ${top.length ? `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.3rem">⭐ ${_g('KLUCZOWI GRACZE', 'KEY PLAYERS')}</div>
+      <div style="overflow-x:auto"><div style="min-width:560px"><div style="display:grid;grid-template-columns:1.4fr repeat(4,48px) repeat(5,36px);gap:.25rem;font-size:.64rem;color:var(--muted);text-align:center;padding-bottom:.2rem"><span style="text-align:left">${_g('Gracz', 'Player')}</span><span>PTS</span><span>${_g('ZB', 'REB')}</span><span>${_g('AS', 'AST')}</span><span>3PM</span>${['RZT', '3PT', 'POD', 'ROZ', 'OBR'].map((l, i) => `<span>${en ? ['SHT', '3PT', 'INS', 'PLY', 'DEF'][i] : l}</span>`).join('')}</div>
+      ${top.map(p => { const A = attrsOf(p.name); return `<div style="display:grid;grid-template-columns:1.4fr repeat(4,48px) repeat(5,36px);gap:.25rem;align-items:center;font-size:.8rem;text-align:center;padding:.28rem 0;border-top:1px solid var(--border)"><span style="text-align:left;cursor:pointer" onclick="openPlayerCardImg('${_h(p.name).replace(/'/g, "\\'")}')"><b style="text-decoration:underline dotted">${_h(p.name)}</b> <span style="color:var(--muted);font-size:.68rem">${_h(p.pos || '')} · ${p.gp} ${_g('m.', 'g.')}</span></span><b>${f1(p.ppg)}</b><span>${f1(p.rpg)}</span><span>${f1(p.apg)}</span><span>${f1(p.tpm / p.gp)}</span>${['shoot', 'three', 'inside', 'play', 'def'].map(k => `<span>${grade(A[k])}</span>`).join('')}</div>`; }).join('')}</div></div>` : ''}
+    ${strong.length || weak.length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.8rem;font-size:.8rem"><div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.35);border-radius:10px;padding:.5rem .6rem">💪 <b>${_g('Mocne strony', 'Strengths')}</b><br>${strong.map(x => _h(x.l)).join(', ') || '—'}</div><div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:.5rem .6rem">🎯 <b>${_g('Słabe strony', 'Weaknesses')}</b><br>${weak.map(x => _h(x.l)).join(', ') || '—'}</div></div>` : ''}
+    ${tips.length ? `<div style="margin-top:.8rem;font-size:.82rem;line-height:1.5"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.2rem">🧠 ${_g('WSKAZÓWKI', 'GAME PLAN')}</div>${tips.map(t => `<div style="padding:.2rem 0">${t}</div>`).join('')}</div>` : ''}
+    <div style="font-size:.66rem;color:var(--muted);margin-top:.7rem">${_g('Na podstawie meczów tego sezonu. Oceny atrybutów jak na kartach graczy.', 'Based on this season’s games. Attribute grades as on the player cards.')}</div></div>`;
+}
+
 function openClips(k) {
   const s = _ssItem(k);
   const list = _clipsFor(k).sort((a, b) => b.likes - a.likes);
@@ -13397,6 +13448,63 @@ function _shortFacts(week) {
   const table = Object.entries(tb).sort((x, y) => y[1].w - x[1].w || y[1].d - x[1].d).slice(0, 5).map(([t, x]) => ({ t, rec: `${x.w}-${x.l}` }));
   return { week, season: _seasonName(sid) || '', results, hero, brick, table, games: games.length };
 }
+// 🎬 TOP AKCJE TYGODNIA — 5 najczęściej polubionych akcji kolejki, nagranie 1080×1920 w przeglądarce
+const _tcLikes = c => Array.isArray(c.likes) ? c.likes.length : (+c.likes || 0);
+function _topClipsOf(week) { const sid = currentSeasonId || null, ids = new Set(schedule.filter(s => (s.seasonId || null) === sid && +s.week === +week).map(s => String(s.id)));
+  return (clipsList || []).filter(c => ids.has(String(c.scheduleId)) && /discord(app)?\.com\/channels\//.test(c.url || '')).sort((a, b) => _tcLikes(b) - _tcLikes(a) || String(a.at).localeCompare(String(b.at))).slice(0, 5); }
+function openTopClipsMaker() {
+  const sid = currentSeasonId || null, weeks = [...new Set(schedule.filter(s => (s.seasonId || null) === sid && s.week).map(s => +s.week))].sort((a, b) => b - a).filter(w => _topClipsOf(w).length);
+  const m = _fxModal('topclips-modal', 640); m.classList.add('open');
+  if(!weeks.length) { m.querySelector('.modal').innerHTML = _fxHead('topclips-modal', '🎬 Top akcje tygodnia') + '<div style="color:var(--muted);font-size:.85rem">Brak akcji z Discorda (wgranych plików albo linków do wiadomości) w kolejkach tego sezonu.</div>'; return; }
+  const w = window._tcWeek && weeks.includes(window._tcWeek) ? window._tcWeek : weeks[0], L = _topClipsOf(w), canRec = typeof MediaRecorder !== 'undefined' && !!HTMLCanvasElement.prototype.captureStream;
+  m.querySelector('.modal').innerHTML = _fxHead('topclips-modal', '🎬 Top akcje tygodnia') + `<div data-notr>
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.6rem"><select onchange="window._tcWeek=+this.value;openTopClipsMaker()" style="${_MODAL_INP};width:auto;margin:0">${weeks.map(x => `<option value="${x}" ${x === w ? 'selected' : ''}>Week ${x} (${_topClipsOf(x).length})</option>`).join('')}</select><span style="font-size:.76rem;color:var(--muted)">${_g('Kolejność: najwięcej ❤, nagranie od #' + L.length + ' do #1', 'Order: most ❤, recorded from #' + L.length + ' to #1')}</span></div>
+    ${L.map((c, i) => `<div style="display:flex;gap:.5rem;align-items:center;font-size:.82rem;padding:.3rem 0;border-bottom:1px solid var(--border)"><b style="width:26px;color:var(--accent)">#${i + 1}</b><span style="flex:1">${_h(c.title || 'Akcja')} <span style="color:var(--muted);font-size:.72rem">· ${_h(c.by?.name || '')}${c.team ? ' (' + _h(c.team) + ')' : ''}</span></span><span>❤ ${_tcLikes(c)}</span></div>`).join('')}
+    <div style="display:flex;gap:.8rem;align-items:flex-start;margin-top:.7rem;flex-wrap:wrap"><canvas id="tc-canvas" width="1080" height="1920" style="width:180px;height:320px;border-radius:10px;background:#000"></canvas>
+      <div style="flex:1;min-width:200px"><div style="font-size:.76rem;color:var(--muted);margin-bottom:.5rem">${_g('Każda akcja do 12 s, przed nią plansza z miejscem, opisem, autorem i ❤. Dźwięk z klipów. Nagranie trwa tyle, ile film (ok. 1 min) — nie zamykaj karty.', 'Each highlight up to 12 s, preceded by a card with rank, title, author and ❤. Audio from the clips. Recording takes as long as the video (~1 min) — keep this tab open.')}</div>
+        ${canRec ? `<button class="btn btn-primary" onclick="topClipsRecord(${w})">🔴 ${_g('Nagraj', 'Record')}</button>` : `<div style="color:var(--loss);font-size:.8rem">${_g('Ta przeglądarka nie nagrywa wideo — użyj Chrome lub Edge na komputerze.', 'This browser can’t record video — use Chrome or Edge on a computer.')}</div>`}
+        <div id="tc-status" style="font-size:.78rem;margin-top:.5rem"></div><div id="tc-actions" style="display:flex;gap:.4rem;margin-top:.5rem;flex-wrap:wrap"></div></div></div></div>`;
+}
+async function topClipsRecord(week) {
+  const L = _topClipsOf(week), c = document.getElementById('tc-canvas'), g = c.getContext('2d'), st = document.getElementById('tc-status'), W = 1080, H = 1920;
+  let actx = null; try { actx = new AudioContext(); await actx.resume(); } catch(e) {}
+  const dest = actx?.createMediaStreamDestination(), stream = c.captureStream(30); dest?.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  const types = ['video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'], type = types.find(x => MediaRecorder.isTypeSupported(x)) || '';
+  const rec = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), videoBitsPerSecond: 2_200_000 }), chunks = []; rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const stopped = new Promise(r => rec.onstop = r); rec.start(500);
+  const bg = () => { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#1a1205'); gr.addColorStop(1, '#0b0d12'); g.fillStyle = gr; g.fillRect(0, 0, W, H); };
+  const text = (t, x, y, font, col, al = 'center') => { g.font = font; g.fillStyle = col; g.textAlign = al; g.fillText(t, x, y); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const anim = async (ms, draw) => { const t0 = performance.now(); while(performance.now() - t0 < ms) { draw((performance.now() - t0) / ms); await new Promise(r => requestAnimationFrame(r)); } };
+  await anim(1800, p => { bg(); text('🎬 TOP ' + L.length, W / 2, 820, '900 150px "Barlow Condensed", Arial', '#f5c518'); text(_g('AKCJI TYGODNIA', 'PLAYS OF THE WEEK'), W / 2, 960, '900 96px "Barlow Condensed", Arial', '#fff'); text('WEEK ' + week + ' · ' + (_seasonName(currentSeasonId) || ''), W / 2, 1060, '600 46px Arial', '#9ca3af'); });
+  for(let i = L.length - 1; i >= 0; i--) {
+    const cl = L[i], rank = i + 1; st.textContent = `⏳ ${_g('Nagrywam', 'Recording')} #${rank} — ${cl.title || ''}`;
+    await anim(1700, p => { bg(); text('#' + rank, W / 2, 760, '900 300px "Barlow Condensed", Arial', '#f5c518'); text(String(cl.title || 'Akcja').slice(0, 30), W / 2, 960, '800 64px Arial', '#fff');
+      text(`${cl.by?.name || ''}${cl.team ? ' · ' + cl.team : ''}`, W / 2, 1050, '600 44px Arial', '#9ca3af'); text('❤ ' + _tcLikes(cl), W / 2, 1150, '800 56px Arial', '#ef4444'); });
+    const v = document.createElement('video'); v.crossOrigin = 'anonymous'; v.playsInline = true; v.preload = 'auto'; v.src = workerUrl.replace(/\/+$/, '') + '/clip-video?id=' + encodeURIComponent(cl.id);
+    try { await new Promise((ok, no) => { v.oncanplay = ok; v.onerror = () => no(new Error('load')); setTimeout(() => no(new Error('timeout')), 20000); });
+      if(actx) { const s = actx.createMediaElementSource(v); s.connect(dest); }
+      await v.play(); const t0 = performance.now();
+      while(!v.ended && performance.now() - t0 < 12000) { const vw = v.videoWidth || 16, vh = v.videoHeight || 9, sc = Math.max(W / vw, H / vh);
+        g.filter = 'blur(28px) brightness(.45)'; g.drawImage(v, (W - vw * sc) / 2, (H - vh * sc) / 2, vw * sc, vh * sc); g.filter = 'none';
+        const fs = Math.min(W / vw, H * .7 / vh), fw = vw * fs, fh = vh * fs; g.drawImage(v, (W - fw) / 2, (H - fh) / 2, fw, fh);
+        g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, H - 260, W, 260); text('#' + rank + '  ' + String(cl.title || '').slice(0, 26), 60, H - 160, '900 64px "Barlow Condensed", Arial', '#fff', 'left'); text(`${cl.by?.name || ''}${cl.team ? ' · ' + cl.team : ''}  ❤ ${_tcLikes(cl)}`, 60, H - 90, '600 40px Arial', '#f5c518', 'left');
+        await new Promise(r => requestAnimationFrame(r)); }
+      v.pause();
+    } catch(e) { await anim(1200, () => { bg(); text(_g('Akcja niedostępna', 'Highlight unavailable'), W / 2, H / 2, '800 60px Arial', '#9ca3af'); }); }
+  }
+  await anim(1800, () => { bg(); text('❤ ' + _g('Głosuj na akcje', 'Vote for highlights'), W / 2, 900, '900 90px "Barlow Condensed", Arial', '#fff'); text((location.host || 'chemikleagues.com'), W / 2, 1010, '700 54px Arial', '#f5c518'); });
+  rec.stop(); await stopped; const blob = new Blob(chunks, { type: type || 'video/webm' }), ext = /mp4/.test(type) ? 'mp4' : 'webm';
+  window._tcBlob = { blob, ext, week, n: L.length };
+  st.style.color = 'var(--win)'; st.textContent = `✅ ${_g('Gotowe', 'Done')} — ${(blob.size / 1048576).toFixed(1)} MB (${ext})`;
+  document.getElementById('tc-actions').innerHTML = `<button class="btn btn-primary" onclick="topClipsSend()">📤 ${_g('Wyślij na kanał Shorta', 'Send to the Short channel')}</button><button class="btn btn-ghost" onclick="(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(_tcBlob.blob);a.download='top-akcje-week-'+_tcBlob.week+'.'+_tcBlob.ext;a.click();})()">⬇ ${_g('Pobierz', 'Download')}</button>`;
+}
+async function topClipsSend() {
+  const b = window._tcBlob; if(!b || !confirm(`Wysłać Top akcje Week ${b.week} na kanał Discord?`)) return; const st = document.getElementById('tc-status'); st.style.color = 'var(--muted)'; st.textContent = '⏳ Wysyłam…';
+  try { const res = await fetch(workerUrl.replace(/\/+$/, '') + '/short/upload', { method: 'POST', headers: { 'X-Admin-Token': _adminToken(), 'Content-Type': b.ext === 'mp4' ? 'video/mp4' : 'video/webm', 'X-Meta': encodeURIComponent(JSON.stringify({ week: b.week, kind: 'clips', n: b.n })) }, body: b.blob });
+    const j = await res.json().catch(() => ({})); st.style.color = j.ok ? 'var(--win)' : 'var(--loss)'; st.textContent = j.ok ? '✅ Wysłano na Discord' : '❌ ' + (j.error || 'Błąd'); } catch(e) { st.style.color = 'var(--loss)'; st.textContent = '❌ ' + e.message; }
+}
+
 async function openShortMaker() {
   const sid = currentSeasonId || null;
   const weeks = [...new Set(schedule.filter(x => x.generated && (x.seasonId || null) === sid && x.week).map(x => +x.week))].sort((a, b) => a - b);
@@ -16403,7 +16511,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
