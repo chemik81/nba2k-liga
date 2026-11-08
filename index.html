@@ -872,6 +872,18 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 
 .sn-b.new{background:#ef4444;color:#fff;font-weight:800;font-size:.55rem}
 @media (max-width:760px){.gmd-grid{grid-template-columns:1fr!important}}
+
+/* 🃏 wybór kart: wyraźne zaznaczenie (zielona ramka + numer), przygaszenie przy pełnej talii, pasek wybranych */
+.cp-tile{position:relative;border-radius:12px;transition:transform .12s,opacity .12s,filter .12s}
+.cp-tile.on{transform:translateY(-3px)}
+.cp-tile.on>div:last-child{box-shadow:0 0 0 3px #22c55e,0 0 18px rgba(34,197,94,.55)!important}
+.cp-tile.dim{opacity:.4;filter:grayscale(.6)}
+.cp-num{position:absolute;top:-8px;left:-6px;z-index:3;width:28px;height:28px;border-radius:50%;background:#22c55e;color:#fff;font-weight:900;font-size:.85rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.5);border:2px solid #fff}
+.cp-bar{display:flex;align-items:center;gap:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.45rem .6rem;margin-bottom:.4rem}
+.cp-count{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.35rem;min-width:46px;color:var(--accent)}.cp-count.full{color:#22c55e}
+.cp-chips{display:flex;flex-wrap:wrap;gap:.3rem;flex:1}
+.cp-chip{display:inline-flex;align-items:center;gap:.25rem;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.5);border-radius:999px;padding:.08rem .2rem .08rem .45rem;font-size:.72rem}
+.cp-chip b{color:#22c55e}.cp-chip button{border:none;background:none;color:var(--muted);cursor:pointer;font-size:.7rem;padding:0 .2rem}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -15807,8 +15819,9 @@ function openCardPicker({ title, hint, max, exact, filter, preselect, onDone, ex
   const draw = () => {
     m.querySelector('.modal').innerHTML = _fxHead('cpick-modal', title) + `<div data-notr>
       ${hint ? `<div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">${hint}</div>` : ''}
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:.5rem;max-height:56vh;overflow-y:auto;padding:.25rem">${own.sort((a, b) => (TIER_ORDER[b[1].tier] ?? 0) - (TIER_ORDER[a[1].tier] ?? 0) || a[1].name.localeCompare(b[1].name)).map(([k, c]) => `
-        <button onclick="_cpToggle('${k.replace(/'/g, '')}')" style="padding:0;border:none;background:none;cursor:pointer;font-family:inherit;text-align:center">${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.tier === 'limited', label: c.label, count: c.n, sel: sel.has(k),
+      <div class="cp-bar"><span class="cp-count${sel.size === max ? ' full' : ''}">${sel.size}/${max}</span><div class="cp-chips">${[...sel].map((k, i) => { const c = (own.find(([kk]) => kk === k) || [])[1] || {}; return `<span class="cp-chip"><b>${i + 1}</b> ${_h(c.name || '')}<button onclick="_cpToggle('${k.replace(/'/g, '')}')" title="${_g('Usuń', 'Remove')}">✕</button></span>`; }).join('') || `<span style="font-size:.74rem;color:var(--muted)">${_g('Kliknij karty, aby je wybrać', 'Tap cards to select them')}</span>`}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:.6rem;max-height:52vh;overflow-y:auto;padding:.45rem .25rem .25rem">${own.sort((a, b) => (TIER_ORDER[b[1].tier] ?? 0) - (TIER_ORDER[a[1].tier] ?? 0) || a[1].name.localeCompare(b[1].name)).map(([k, c]) => `
+        <button onclick="_cpToggle('${k.replace(/'/g, '')}')" class="cp-tile${sel.has(k) ? ' on' : sel.size >= max ? ' dim' : ''}" style="padding:0;border:none;background:none;cursor:pointer;font-family:inherit;text-align:center">${sel.has(k) ? `<span class="cp-num">${[...sel].indexOf(k) + 1}</span>` : ''}${_miniCard({ name: c.name, team: c.team, tier: c.tier, lim: c.tier === 'limited', label: c.label, count: c.n, sel: false,
           rating: (_cardScope(k) && _pcData(c.name, _cardScope(k))?.rating) ?? (_cards?.pool || []).find(p => p.k === k)?.rating ?? _pcData(c.name, 'season')?.rating, body: extra ? extra(k, c) : '' })}</button>`).join('') || `<div style="color:var(--muted);font-size:.82rem">${_g('Brak pasujących kart.', 'No matching cards.')}</div>`}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;gap:.5rem"><span style="font-size:.8rem">${_g('Wybrano', 'Selected')}: <b>${sel.size}</b> / ${max}${footer ? ' · ' + footer([...sel]) : ''}</span>
         <button class="btn btn-primary" ${exact && sel.size !== max ? 'disabled' : ''} onclick="_cpDone()">✓ ${_g('Zatwierdź', 'Confirm')}</button></div></div>`;
