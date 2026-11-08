@@ -6431,6 +6431,12 @@ async function _api(path, method, body, opts = {}) {
     res = await fetch(workerUrl.replace(/\/+$/, '') + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
     data = await res.json().catch(() => ({}));
   } catch(e) { return { ok: false, error: 'Błąd sieci' }; }
+  // 👑 sesja admina wygasła — odnów przez Discord i powtórz zapytanie (raz)
+  if(res.status === 401 && opts.admin && !opts._retry && String(_adminToken()).startsWith('adm1.') && discordUser?.session) {
+    const ok = await _adminViaDiscord(true); if(ok) return _api(path, method, body, { ...opts, _retry: true });
+    localStorage.removeItem('nba2k_admin_token_hash'); localStorage.removeItem('nba2k_auth'); try { updateAuthUI(); } catch(e) {}
+    showToast('🔒 Sesja admina wygasła — zaloguj się ponownie przez Discord', 'error');
+  }
   if(res.status === 401 && data.code === 'session' && discordUser) {
     delete discordUser.session;
     localStorage.setItem('nba2k_discord_user', JSON.stringify(discordUser));
@@ -20596,15 +20602,21 @@ async function cancelSignup(eventId) {
   showToast('👋 Wypisano z eventu', 'info');
 }
 
-async function _adminViaDiscord() {
+async function _adminViaDiscord(silent) {
   const r = await _api('/admin-login', 'POST', {}, { session: true });
-  if(!r.ok || !r.token) return;
+  if(!r.ok || !r.token) return false;
   localStorage.setItem('nba2k_auth', 'ok');
   localStorage.setItem('nba2k_admin_token_hash', r.token);
   localStorage.setItem('nba2k_admin_via_discord', '1');
+  if(silent) return true;
   updateAuthUI(); renderDashboard();
   showToast('👑 Zalogowano jako admin (Discord)', 'success');
+  return true;
 }
+// 👑 odnowienie sesji admina z wyprzedzeniem (dzień przed wygaśnięciem) i zamiana starego, stałego tokenu na sesję z Discorda
+setTimeout(async () => { try { const t = _adminToken(); if(!t || !discordUser?.session) return;
+  if(!t.startsWith('adm1.')) { if(localStorage.getItem('nba2k_admin_token_hash')) await _adminViaDiscord(true); return; }
+  const p = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); if(p.exp * 1000 - Date.now() < 864e5) await _adminViaDiscord(true); } catch(e) {} }, 4000);
 function logoutDiscord() {
   if(localStorage.getItem('nba2k_admin_via_discord') === '1') { localStorage.removeItem('nba2k_admin_via_discord'); try { logout(); } catch(e) {} }
   if(localStorage.getItem('nba2k_events_via_discord') === '1') { localStorage.removeItem('nba2k_events_via_discord'); try { logoutEvents(); } catch(e) {} }
