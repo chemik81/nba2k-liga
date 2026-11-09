@@ -7281,6 +7281,7 @@ function _ssCard(ctx, s, groupName) {
           ${sl && !_ssResult(ctx, s)?.done ? `<button onclick="openMultistream('${s.id}')" class="btn ${live || s.date === new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }) ? 'btn-primary' : 'btn-ghost'}" title="${_g('Obie transmisje obok siebie', 'Both streams side by side')}" style="font-size:.66rem;padding:.12rem .45rem">🖥️ Multistream</button>` : ''}
           ${canStream && !_ssResult(ctx, s)?.done ? `<button onclick="openStreamModal('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">📺 ${sl ? 'Transmisja' : 'Dodaj transmisję'}</button>` : ''}
           <button onclick="openClips('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🎬 Akcje${nClips ? ' (' + nClips + ')' : ''}</button>
+          <button onclick="openMatchCenter('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem;border-color:var(--accent);color:var(--accent)">🏟️ ${_g('Centrum meczu', 'Match center')}</button>
           <button onclick="openScoutReport('${s.id}')" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">🔍 ${_g('Raport rywala', 'Scouting')}</button>
           <button onclick="openRivalry(this.dataset.a, this.dataset.b)" data-a="${_h(s.team1)}" data-b="${_h(s.team2)}" class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem">⚔️ H2H</button>
         </div>`;
@@ -8132,6 +8133,10 @@ function openDeepLink() {
   if(h.startsWith('druzyna/')) { const n = decodeURIComponent(h.slice(8)); setTimeout(() => { try { openTeamModal(n); } catch(e) {} }, 400); return; }
   if(h === '2kordle' || h === 'kordle') { showView('kordle'); return; }
   if(h === 'kibice' || h === 'liga-kibicow') { setTimeout(() => showView('fans'), 0); return; }
+  if(h.startsWith('mecz/') || h.startsWith('match/')) { const id = decodeURIComponent(h.split('/')[1] || ''); showView('schedule'); let n = 0; const t = setInterval(() => { if(_ssItem(id) || ++n > 40) { clearInterval(t); if(_ssItem(id)) openMatchCenter(id); } }, 250); return; }
+  if(['turniej', 'turniej-kortu', 'tournament'].includes(h)) { setTimeout(() => showView('kort'), 300); return; }
+  if(['galeria-slaw', 'galeria', 'hall-of-fame', 'hof'].includes(h)) { setTimeout(() => { showView('awards'); setTimeout(() => document.getElementById('hof-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 900); }, 300); return; }
+  if(['przepustka', 'season-pass', 'pass'].includes(h)) { setTimeout(() => { showView('fans'); setTimeout(() => document.getElementById('pass-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 2200); }, 300); return; }
   if(h === 'liga-gm' || h === 'gm') { setTimeout(() => { if(_gmVisible()) showView('gm'); }, 0); return; }
   if(h === 'kolejka-x') { setTimeout(() => openXQueue(), 600); return; }
   if(h === 'kolekcja' || h === 'karty') { setTimeout(() => showView('cards'), 0); return; }
@@ -10363,6 +10368,39 @@ function _scoutTeam(team, sid) {
   const players = Object.values(by).map(a => ({ ...a, ppg: a.pts / a.gp, rpg: a.reb / a.gp, apg: a.ast / a.gp, share: a.pts / Math.max(1, sum(games, g => tot(g, 'pts'))) })).sort((a, b) => b.ppg - a.ppg);
   return { games, T, players };
 }
+// 🏟️ CENTRUM MECZU — wszystko o meczu w jednym miejscu: przed (typy, transmisje, H2H, raport), po (wynik, mecze, MVP, opis AI, akcje)
+function openMatchCenter(id) {
+  const s = _ssItem(id); if(!s) return; const ctx = _ssCtx(), en = currentLang === 'en', res = _ssResult(ctx, s), N = x => _normNick(x);
+  const ids = [...(s.matchIds || []), ...(s.matchId != null ? [s.matchId] : [])].map(String), games = matches.filter(m => ids.includes(String(m.id))).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const when = s.date ? new Date(s.date + 'T' + (s.time || '20:00') + ':00') : null, upcoming = !res?.done && when && when > new Date();
+  const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + .4 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0);
+  const mvp = games.flatMap(m => [m.team1, m.team2].flatMap(t => (t.players || []).map(p => ({ ...p, team: t.name })))).reduce((acc, p) => { const k = N(p.name); const x = acc[k] = acc[k] || { name: p.name, team: p.team, gs: 0, pts: 0, reb: 0, ast: 0, n: 0 }; x.gs += gs(p); x.pts += +p.pts || 0; x.reb += +p.reb || 0; x.ast += +p.ast || 0; x.n++; return acc; }, {});
+  const best = Object.values(mvp).sort((a, b) => b.gs - a.gs)[0];
+  const h2h = _withAllMatches(() => matches.filter(m => !ids.includes(String(m.id)) && !m.walkover && [m.team1.name, m.team2.name].map(N).sort().join('|') === [s.team1, s.team2].map(N).sort().join('|'))).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const h1 = h2h.filter(m => (N(m.team1.name) === N(s.team1) ? +m.team1.score > +m.team2.score : +m.team2.score > +m.team1.score)).length;
+  const H = t => `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.9rem 0 .35rem">${t}</div>`;
+  const status = res?.done ? `<span style="color:var(--win)">✅ ${_g('Zakończony', 'Final')}</span>` : games.length ? `<span style="color:#ef4444">● ${_g('W trakcie', 'In progress')}</span>` : upcoming ? `⏳ <span id="mc-cd"></span>` : `<span style="color:var(--muted)">${_g('Czeka na wynik', 'Awaiting result')}</span>`;
+  const m = _fxModal('mc-modal', 760); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('mc-modal', `🏟️ ${_g('Centrum meczu', 'Match center')}`) + `<div data-notr>
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.6rem;text-align:center;background:var(--surface2);border-radius:14px;padding:.8rem">
+      <div>${teamLogo(s.team1, 54, '1.1rem')}<div style="font-weight:800;margin-top:.3rem">${_h(s.team1)}</div></div>
+      <div><div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.2rem;line-height:1">${res ? `${res.w1} : ${res.w2}` : 'VS'}</div><div style="font-size:.72rem;color:var(--muted)">Week ${s.week || '—'}${when ? ' · ' + when.toLocaleString(en ? 'en-GB' : 'pl-PL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</div><div style="font-size:.76rem;margin-top:.2rem">${status}</div></div>
+      <div>${teamLogo(s.team2, 54, '1.1rem')}<div style="font-weight:800;margin-top:.3rem">${_h(s.team2)}</div></div></div>
+    ${!res?.done ? `${H('🔮 ' + _g('TYPY KIBICÓW', 'FAN PICKS'))}<div>${(() => { try { return _ssVoteBar(ctx, s) || ''; } catch(e) { return ''; } })()}</div>` : ''}
+    ${(() => { try { const l = _streamLinks(s); return l ? H('📺 ' + _g('TRANSMISJE', 'STREAMS')) + `<div>${l}</div>` : ''; } catch(e) { return ''; } })()}
+    ${games.length ? H('🏀 ' + _g('MECZE', 'GAMES')) + games.map((g, i) => { const t1 = N(g.team1.name) === N(s.team1), a = t1 ? g.team1 : g.team2, b = t1 ? g.team2 : g.team1;
+      return `<div onclick="_fxClose('mc-modal');openMatch(${g.id})" style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .5rem;border:1px solid var(--border);border-radius:9px;margin-bottom:.3rem;cursor:pointer;font-size:.84rem"><span>${_g('Mecz', 'Game')} ${i + 1}</span><b>${a.score} : ${b.score}</b><span style="font-size:.72rem;color:var(--accent)">📊 ${_g('statystyki', 'box score')}</span></div>`; }).join('') : ''}
+    ${best && games.length ? H('⭐ MVP ' + _g('MECZU', 'OF THE MATCH')) + `<div style="display:flex;align-items:center;gap:.6rem;cursor:pointer" onclick="openPlayerCardImg('${_h(best.name).replace(/'/g, "\\'")}')"><b style="font-size:1rem">${_h(best.name)}</b><span style="font-size:.8rem;color:var(--muted)">${_h(best.team)} · ${best.pts} PTS · ${best.reb} REB · ${best.ast} AST${best.n > 1 ? ` (${best.n} ${_g('mecze', 'games')})` : ''}</span><span style="font-size:.7rem;color:var(--accent)">🃏</span></div>` : ''}
+    ${games.find(g => g.recap) ? H('📝 ' + _g('OPIS MECZU', 'RECAP')) + `<div style="font-size:.84rem;line-height:1.55">${_h(games.filter(g => g.recap).pop().recap)}</div>` : ''}
+    ${H('⚔️ ' + _g('WCZEŚNIEJSZE MECZE', 'PREVIOUS MEETINGS'))}${h2h.length ? `<div style="font-size:.82rem;margin-bottom:.25rem"><b>${_h(s.team1)}</b> ${h1}–${h2h.length - h1} <b>${_h(s.team2)}</b></div>${h2h.slice(0, 5).map(g => `<div style="font-size:.76rem;display:flex;justify-content:space-between;padding:.15rem 0;border-top:1px solid var(--border)"><span>${new Date(g.date).toLocaleDateString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'short', year: '2-digit' })}</span><span>${_h(g.team1.name)} <b>${g.team1.score}:${g.team2.score}</b> ${_h(g.team2.name)}</span></div>`).join('')}` : `<div style="font-size:.78rem;color:var(--muted)">${_g('Pierwsze spotkanie tych drużyn', 'First meeting of these teams')}</div>`}
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;justify-content:center;margin-top:1rem">
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="_fxClose('mc-modal');openScoutReport('${s.id}')">🔍 ${_g('Raport rywala', 'Scouting')}</button>
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="_fxClose('mc-modal');openClips('${s.id}')">🎬 ${_g('Akcje', 'Highlights')}${(clipsList || []).filter(c => String(c.scheduleId) === String(s.id)).length ? ' (' + (clipsList || []).filter(c => String(c.scheduleId) === String(s.id)).length + ')' : ''}</button>
+      ${games.length || upcoming ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="_fxClose('mc-modal');openMatchPoster('${s.id}')">🖼 ${_g('Plakat', 'Poster')}</button>` : ''}
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="navigator.clipboard?.writeText(location.origin + '/#mecz/${s.id}').then(()=>showToast('🔗 ' + _g('Skopiowano link do meczu', 'Match link copied'),'success'))">🔗 Link</button></div></div>`;
+  if(upcoming) { clearInterval(window._mcT); const tick = () => { const el = document.getElementById('mc-cd'); if(!el) return clearInterval(window._mcT); const d = when - Date.now(); if(d <= 0) { el.textContent = _g('Zaczyna się!', 'Starting!'); return; } const h = Math.floor(d / 3600e3), mi = Math.floor(d % 3600e3 / 60e3); el.textContent = (h >= 24 ? Math.floor(h / 24) + _g(' d ', 'd ') + (h % 24) + ' h' : h + ' h ' + mi + ' min'); }; tick(); window._mcT = setInterval(tick, 30000); }
+}
+
 function openScoutReport(id) {
   const s = _ssItem(id); if(!s) return; const sid = s.seasonId || currentSeasonId || null, en = currentLang === 'en';
   const myTeam = discordUser ? (teamRegistrations || []).find(r => r.status === 'approved' && [s.team1, s.team2].includes(r.teamName) && (String(r.captain?.id) === String(discordUser.id) || (r.players || []).some(p => String(p.discordId || '') === String(discordUser.id))))?.teamName : null;
@@ -14677,8 +14715,31 @@ async function rulesExtend(vid, sid, days) {
 // ═══ 🏅 LIGA KIBICÓW ═══
 let _fansCache = null;
 async function _fansLoad() { if(_fansCache && Date.now() - _fansCache.at < 5 * 60e3) return _fansCache; const r = await _api('/fans', 'GET', null, {}); if(r.ok && Array.isArray(r.fans) && Array.isArray(r.levels)) _fansCache = { ...r, at: Date.now() }; return _fansCache; }
+// 🎟️ PRZEPUSTKA SEZONOWA — drabinka 20 poziomów z XP Ligi kibiców
+let _pass = null;
+async function passMount() {
+  const slot = document.querySelector('#fans-view .pass-slot'); if(!slot || !discordUser?.session) return;
+  if(!_pass) { const r = await _api('/pass', 'GET', null, { session: true }); if(!r.ok || !Array.isArray(r.tiers)) return; _pass = r; }
+  const P = _pass, en = currentLang === 'en', next = P.tiers.find(t => P.xp < t.xp), prev = [...P.tiers].reverse().find(t => P.xp >= t.xp), lvl = prev?.tier || 0;
+  const pct = next ? Math.round((P.xp - (prev?.xp || 0)) / (next.xp - (prev?.xp || 0)) * 100) : 100, ico = r => r === 'final' ? '🏆' : r === 'premium' ? '💎' : r === 'pack' ? '🎁' : '·';
+  const ready = P.tiers.filter(t => t.reward && P.xp >= t.xp && !P.claimed.includes(t.tier)).length;
+  slot.innerHTML = `<div class="card" id="pass-sec" style="padding:.85rem 1rem;margin-bottom:1rem;border:2px solid var(--accent);background:linear-gradient(135deg,rgba(245,197,24,.12),rgba(59,130,246,.06))" data-notr>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap"><b style="font-size:1rem">🎟️ ${_g('Przepustka sezonowa', 'Season pass')}</b><span style="font-size:.8rem">${_g('Poziom', 'Level')} <b style="font-size:1.05rem;color:var(--accent)">${lvl}</b>/20 · <b>${P.xp}</b> XP${ready ? ` · <span style="color:var(--win);font-weight:800">${ready} ${_g('do odebrania', 'to claim')} 🎁</span>` : ''}</span></div>
+    <div style="height:8px;background:var(--surface);border-radius:4px;margin:.5rem 0 .2rem;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent)"></div></div>
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.55rem">${next ? _g(`Do poziomu ${next.tier}: ${next.xp - P.xp} XP`, `To level ${next.tier}: ${next.xp - P.xp} XP`) : _g('Przepustka ukończona! 🏆', 'Season pass complete! 🏆')} · ${_g('XP zdobywasz w typerze, Fantasy, Korcie, 2Kordle, kolekcji kart i za codzienną serię.', 'Earn XP in pick’em, Fantasy, Kort, 2Kordle, the card collection and your daily streak.')}</div>
+    <div style="display:flex;gap:.3rem;overflow-x:auto;padding-bottom:.3rem">${P.tiers.map(t => { const got = P.xp >= t.xp, cl = P.claimed.includes(t.tier), can = t.reward && got && !cl;
+      return `<div style="flex:0 0 58px;text-align:center;border-radius:9px;padding:.35rem .15rem;border:1px solid ${can ? 'var(--win)' : got ? 'rgba(245,197,24,.6)' : 'var(--border)'};background:${can ? 'rgba(34,197,94,.15)' : got ? 'rgba(245,197,24,.08)' : 'var(--surface2)'};opacity:${got ? 1 : .55}">
+        <div style="font-size:.6rem;color:var(--muted)">${t.tier}</div><div style="font-size:1.15rem;line-height:1.3">${cl ? '✅' : ico(t.reward)}</div><div style="font-size:.55rem;color:var(--muted)">${t.xp} XP</div>
+        ${can ? `<button class="btn btn-primary" style="font-size:.55rem;padding:.1rem .25rem;margin-top:.15rem" onclick="passClaim(${t.tier})">${_g('Odbierz', 'Claim')}</button>` : ''}</div>`; }).join('')}</div>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:.35rem">🎁 ${_g('paczka co 2 poziomy', 'pack every 2 levels')} · 💎 ${_g('premium na 5, 10, 15', 'premium at 5, 10, 15')} · 🏆 ${_g('poziom 20: premium + unikalna karta „Przepustka”', 'level 20: premium + a one-of-a-kind “Season Pass” card')}</div></div>`;
+}
+async function passClaim(tier) {
+  const r = await _api('/pass/claim', 'POST', { tier }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  if(Array.isArray(r.tiers)) _pass = r; _cards = null; showToast(r.got === 'final' ? _g('🏆 Przepustka ukończona! 💎 i unikalna karta są Twoje', '🏆 Pass complete! 💎 and a one-of-a-kind card are yours') : r.got === 'premium' ? _g('💎 Paczka premium odebrana!', '💎 Premium pack claimed!') : _g('🎁 Paczka odebrana!', '🎁 Pack claimed!'), 'success'); passMount();
+}
+
 async function renderFansView() {
-  setTimeout(() => { try { const v = document.getElementById('fans-view'); if(v && discordUser && !v.querySelector('.karnet-slot')) { v.insertAdjacentHTML('afterbegin', '<div class="karnet-slot"></div>'); karnetMount(); } } catch(e) {} }, 900);
+  setTimeout(() => { try { const v = document.getElementById('fans-view'); if(v && discordUser && !v.querySelector('.karnet-slot')) { v.insertAdjacentHTML('afterbegin', '<div class="karnet-slot"></div>'); karnetMount(); } if(v && discordUser && !v.querySelector('.pass-slot')) { v.insertAdjacentHTML('afterbegin', '<div class="pass-slot"></div>'); passMount(); } } catch(e) {} }, 900);
   const el = document.getElementById('fans-view'); if(!el) return;
   el.innerHTML = '<div class="section-title">🏅 Liga kibiców</div><div style="color:var(--muted)">⏳</div>';
   const d = await _fansLoad(); if(!d) { el.innerHTML = '<div class="section-title">🏅 Liga kibiców</div><div style="color:var(--loss)">Nie udało się wczytać rankingu</div>'; return; }
@@ -15572,14 +15633,31 @@ function _pcMini(name) { const r = _pcSkFor(name); if(!r) return ''; const a = r
 function _pcSkSortSel(id, onchange) { return `<select id="${id}" onchange="${onchange}" style="font-size:.72rem;padding:.15rem .3rem;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"><option value="">${_g('sortuj: ocena', 'sort: rating')}</option>${_PC_SK.map(([k, ic, pl, en]) => `<option value="${k}" ${window._gmSkSort === k ? 'selected' : ''}>${ic} ${currentLang === 'en' ? en : pl}</option>`).join('')}</select>`; }
 function _pcSkSort(list, key) { if(!key) return list; return [...list].sort((a, b) => (_pcSkFor(b.name)?.d.sk.attrs[key].p ?? -1) - (_pcSkFor(a.name)?.d.sk.attrs[key].p ?? -1)); }
 // ⚖️ porównanie dwóch kart
+function _cmpExtraHtml(a, b, sc) {
+  const N = x => _normNick(x), en = currentLang === 'en', sid = currentSeasonId || null;
+  const ms = _withAllMatches(() => matches.filter(m => !m.walkover && (sc === 'career' || (m.seasonId || null) === sid))).sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  const side = (m, n) => (m.team1.players || []).some(p => N(p.name) === N(n)) ? 'team1' : (m.team2.players || []).some(p => N(p.name) === N(n)) ? 'team2' : null;
+  const pl = (m, n) => [...(m.team1.players || []), ...(m.team2.players || [])].find(p => N(p.name) === N(n));
+  const vs = [], together = []; ms.forEach(m => { const sa = side(m, a), sb = side(m, b); if(!sa || !sb) return; (sa === sb ? together : vs).push({ m, sa, sb }); });
+  const wa = vs.filter(x => (+x.m[x.sa].score || 0) > (+x.m[x.sb].score || 0)).length, date = d => new Date(d).toLocaleDateString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'short' });
+  const form = n => ms.filter(m => side(m, n)).slice(0, 5).map(m => { const s = side(m, n), o = s === 'team1' ? 'team2' : 'team1', w = (+m[s].score || 0) > (+m[o].score || 0), p = pl(m, n);
+    return `<span title="${_h(m[o].name)} ${m[s].score}:${m[o].score}" style="display:inline-flex;flex-direction:column;align-items:center;min-width:34px;padding:.15rem .2rem;border-radius:6px;background:${w ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.12)'};font-size:.72rem"><b>${+p?.pts || 0}</b><span style="font-size:.58rem;color:${w ? 'var(--win)' : 'var(--loss)'}">${w ? 'W' : (en ? 'L' : 'P')}</span></span>`; }).join(' ') || '—';
+  const H = t => `<div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.8rem 0 .3rem">${t}</div>`;
+  return H('⚔️ ' + _g('BEZPOŚREDNIE MECZE', 'HEAD TO HEAD')) + (vs.length ? `<div style="font-size:.84rem;margin-bottom:.3rem"><b>${_h(a)}</b> ${wa}–${vs.length - wa} <b>${_h(b)}</b></div>${vs.slice(0, 6).map(x => { const pa = pl(x.m, a), pb = pl(x.m, b); return `<div style="display:flex;justify-content:space-between;gap:.4rem;font-size:.76rem;padding:.2rem 0;border-top:1px solid var(--border)"><span>${date(x.m.date)}</span><span>${_h(x.m[x.sa].name)} <b>${x.m[x.sa].score}:${x.m[x.sb].score}</b> ${_h(x.m[x.sb].name)}</span><span>${+pa?.pts || 0} ${_g('pkt', 'pts')} vs ${+pb?.pts || 0}</span></div>`; }).join('')}`
+      : `<div style="font-size:.78rem;color:var(--muted)">${_g('Jeszcze nie grali przeciwko sobie', 'They haven’t faced each other yet')}${sc === 'season' ? _g(' w tym sezonie', ' this season') : ''}.</div>`)
+    + (together.length ? `<div style="font-size:.76rem;color:var(--muted);margin-top:.35rem">🤝 ${_g('Razem w jednej drużynie', 'Teammates in')}: <b>${together.length}</b> ${_g(_plPL(together.length, 'mecz', 'mecze', 'meczów'), together.length === 1 ? 'game' : 'games')}</div>` : '')
+    + H('📈 ' + _g('FORMA — 5 OSTATNICH MECZÓW (PKT)', 'FORM — LAST 5 GAMES (PTS)')) + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem"><div>${form(a)}</div><div>${form(b)}</div></div>`
+    + `<div style="display:flex;gap:.4rem;justify-content:center;margin-top:.8rem"><button class="btn btn-ghost" style="font-size:.7rem" onclick="openPlayerCardImg('${_h(a).replace(/'/g, "\\'")}')">🃏 ${_h(a)}</button><button class="btn btn-ghost" style="font-size:.7rem" onclick="openPlayerCardImg('${_h(b).replace(/'/g, "\\'")}')">🃏 ${_h(b)}</button></div>`;
+}
 function openCardCompare(a, b) {
   const all = [...new Set(_withAllMatches(() => matches.flatMap(m => [m.team1, m.team2]).flatMap(t => (t.players || []).map(p => p.name))))].sort((x, y) => x.localeCompare(y));
   const m = _fxModal('pccmp-modal', 680); m.classList.add('open');
-  const A = a ? _pcSkFor(a) : null, B = b ? _pcSkFor(b) : null, f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
+  const sc = window._pccScope || 'season', pick = n => { if(!n) return null; const d = _pcData(n, sc); return d?.sk ? { d } : (sc === 'season' ? _pcSkFor(n) : null); }, A = pick(a), B = pick(b), f1 = v => (Math.round(v * 10) / 10).toString().replace('.', currentLang === 'en' ? '.' : ',');
   const row = (label, va, vb, na, nb) => { const wa = na != null && nb != null && na > nb, wb = na != null && nb != null && nb > na;
     return `<tr><td style="text-align:right;padding:.3rem .5rem;${wa ? 'color:var(--win);font-weight:800' : ''}">${va}</td><td style="text-align:center;color:var(--muted);font-size:.74rem;padding:.3rem">${label}</td><td style="text-align:left;padding:.3rem .5rem;${wb ? 'color:var(--win);font-weight:800' : ''}">${vb}</td></tr>`; };
   const sel = (id, v) => `<input id="${id}" list="pccmp-list" value="${_h(v || '')}" placeholder="${_g('Wybierz gracza…', 'Pick a player…')}" onchange="openCardCompare(document.getElementById('pccmp-a').value, document.getElementById('pccmp-b').value)" style="${_MODAL_INP};font-size:.82rem">`;
-  m.querySelector('.modal').innerHTML = _fxHead('pccmp-modal', '⚖️ ' + _g('Porównanie kart', 'Card comparison')) + `<div data-notr>
+  m.querySelector('.modal').innerHTML = _fxHead('pccmp-modal', '⚖️ ' + _g('Porównanie graczy', 'Player comparison')) + `<div data-notr>
+    <div style="display:flex;gap:.3rem;margin-bottom:.45rem">${[['season', _g('Sezon', 'Season')], ['career', _g('Kariera', 'Career')]].map(([k, l]) => `<button class="btn ${sc === k ? 'btn-primary' : 'btn-ghost'}" style="font-size:.68rem;padding:.15rem .5rem" onclick="window._pccScope='${k}';openCardCompare(${JSON.stringify(a || '').replace(/"/g, '&quot;')},${JSON.stringify(b || '').replace(/"/g, '&quot;')})">${l}</button>`).join('')}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">${sel('pccmp-a', a)}${sel('pccmp-b', b)}</div><datalist id="pccmp-list">${all.map(n => `<option value="${_h(n)}">`).join('')}</datalist>
     ${A && B ? `<table style="width:100%;border-collapse:collapse;font-size:.86rem">
       <tr><th style="text-align:right;padding:.3rem .5rem;white-space:normal;vertical-align:top">${_h(A.d.name)}<div style="font-size:.7rem;color:var(--muted);font-weight:500">${_h(A.d.team)} · 🧬 ${_h(currentLang === 'en' ? A.d.sk.arch.en : A.d.sk.arch.pl)}</div></th><th></th><th style="text-align:left;padding:.3rem .5rem;white-space:normal;vertical-align:top">${_h(B.d.name)}<div style="font-size:.7rem;color:var(--muted);font-weight:500">${_h(B.d.team)} · 🧬 ${_h(currentLang === 'en' ? B.d.sk.arch.en : B.d.sk.arch.pl)}</div></th></tr>
@@ -15588,7 +15666,7 @@ function openCardCompare(a, b) {
       ${[['PTS', 'ppg'], [_g('ZB', 'REB'), 'rpg'], [_g('AS', 'AST'), 'apg'], [_g('PRZ', 'STL'), 'spg'], [_g('BL', 'BLK'), 'bpg']].map(([l, k]) => row(l, f1(A.d[k]), f1(B.d[k]), A.d[k], B.d[k])).join('')}
       ${row('FG%', A.d.fg == null ? '—' : Math.round(A.d.fg * 100) + '%', B.d.fg == null ? '—' : Math.round(B.d.fg * 100) + '%', A.d.fg, B.d.fg)}
       ${row(_g('Odznaki', 'Badges'), A.d.sk.badges.length, B.d.sk.badges.length, A.d.sk.badges.length, B.d.sk.badges.length)}
-    </table>` : `<div style="font-size:.84rem;color:var(--muted)">${_g('Wybierz dwóch graczy, żeby porównać ich karty.', 'Pick two players to compare their cards.')}</div>`}
+    </table>${_cmpExtraHtml(A.d.name, B.d.name, sc)}` : `<div style="font-size:.84rem;color:var(--muted)">${_g('Wybierz dwóch graczy, żeby porównać ich karty.', 'Pick two players to compare their cards.')}</div>`}
   </div>`;
 }
 
@@ -16894,13 +16972,31 @@ function goJoin(tab) { setRegTab(tab); showView('join'); }
 
 // ═══ 🗳️ GŁOSOWANIE TYGODNIA — bieżące głosowanie + archiwum (zwycięzcy, karty MVP i obrońcy, link do meczu) ═══
 let _awArchId = null;
+// 🏛 GALERIA SŁAW — mistrzowie, laureaci Gali sezonu i najczęściej nagradzani w każdym sezonie
+function hallOfFameHtml() {
+  const en = currentLang === 'en', S = (seasons || []).slice().sort((a, b) => String(b.startDate || b.createdAt || b.id).localeCompare(String(a.startDate || a.createdAt || a.id)));
+  const blocks = S.map(se => {
+    const po = (playoffs || []).find(p => (p.seasonId || null) === se.id && p.champion), fr = po ? ((po.rounds || []).filter(r => !/3/.test(r.name || '')).pop()?.pairs?.[0]) : null, runner = fr && po ? (fr.team1 === po.champion ? fr.team2 : fr.team1) : null;
+    const gala = (awardsList || []).filter(a => a.type === 'season' && (a.seasonId || null) === se.id && a.status === 'closed' && a.winners);
+    const wk = {}; (awardsList || []).filter(a => (a.type || 'week') === 'week' && (a.seasonId || null) === se.id && a.status === 'closed' && a.winners).forEach(a => a.categories.forEach(c => { const w = a.winners[c.key]; if(!w || !/mvp|def/i.test(c.key)) return; const k = w.label + '|' + (w.team || ''); const x = wk[k] = wk[k] || { name: w.label, team: w.team, mvp: 0, def: 0 }; x[/mvp/i.test(c.key) ? 'mvp' : 'def']++; }));
+    const top = Object.values(wk).sort((a, b) => (b.mvp * 2 + b.def) - (a.mvp * 2 + a.def)).slice(0, 3);
+    if(!po && !gala.length && !top.length) return '';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:.7rem .85rem;margin-bottom:.6rem">
+      <div style="font-weight:800;margin-bottom:.45rem">${_h(se.name || se.id)}</div>
+      ${po ? `<div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.45rem">${teamLogo(po.champion, 40, '.9rem')}<div><div style="font-size:.68rem;color:#f5c518;font-weight:800;letter-spacing:1px">🏆 ${_g('MISTRZ', 'CHAMPION')}</div><b style="font-size:1rem">${_h(po.champion)}</b>${runner ? `<span style="font-size:.74rem;color:var(--muted)"> · ${_g('finał z', 'beat')} ${_h(runner)}</span>` : ''}</div></div>` : ''}
+      ${gala.map(a => `<div style="font-size:.7rem;color:var(--muted);font-weight:800;letter-spacing:1px;margin:.35rem 0 .2rem">🎖 ${_h(a.title || _g('GALA SEZONU', 'SEASON GALA'))}</div><div style="display:flex;flex-wrap:wrap;gap:.35rem">${a.categories.filter(c => a.winners[c.key]).map(c => `<span style="font-size:.76rem;background:rgba(245,197,24,.1);border:1px solid rgba(245,197,24,.4);border-radius:999px;padding:.15rem .55rem">${c.emoji || '🏅'} ${_h(c.title)}: <b>${_h(a.winners[c.key].label)}</b></span>`).join('')}</div>`).join('')}
+      ${top.length ? `<div style="font-size:.7rem;color:var(--muted);font-weight:800;letter-spacing:1px;margin:.45rem 0 .2rem">⭐ ${_g('NAJCZĘŚCIEJ NAGRADZANI', 'MOST WEEKLY AWARDS')}</div><div style="font-size:.8rem">${top.map(x => `<span style="margin-right:.8rem"><b>${_h(x.name)}</b> <span style="color:var(--muted)">${x.mvp ? `${x.mvp}× MVP` : ''}${x.mvp && x.def ? ' · ' : ''}${x.def ? `${x.def}× ${_g('Obrońca', 'Defender')}` : ''}</span></span>`).join('')}</div>` : ''}</div>`; }).filter(Boolean);
+  return `<div class="card" id="hof-sec" style="padding:.85rem 1rem;margin-bottom:1rem;border:1px solid rgba(245,197,24,.5)" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:#f5c518;margin-bottom:.55rem">🏛 ${_g('GALERIA SŁAW', 'HALL OF FAME')}</div>
+    ${blocks.join('') || `<div style="font-size:.82rem;color:var(--muted)">${_g('Pierwsi mistrzowie i laureaci Gali sezonu pojawią się tu po zakończeniu sezonu.', 'The first champions and Season Gala winners will appear here after the season ends.')}</div>`}</div>`;
+}
+
 async function renderAwardsView() {
   const host = document.getElementById('awards-view-wrap'); if(!host) return;
   const sid = currentSeasonId || null, open = (awardsList || []).filter(a => a.status === 'open' && (!sid || !a.seasonId || a.seasonId === sid));
   const closed = (awardsList || []).filter(a => a.status === 'closed' && a.winners && (!sid || !a.seasonId || a.seasonId === sid)).sort((a, b) => (+b.week || 0) - (+a.week || 0) || String(b.closedAt).localeCompare(String(a.closedAt)));
   const dashHtml = document.getElementById('awards-dashboard-wrap')?.innerHTML || '';
   const a = closed.find(x => x.id === _awArchId) || closed[0];
-  host.innerHTML = `${open.length && dashHtml ? `<div style="margin-bottom:1.2rem">${dashHtml}</div>` : `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;color:var(--muted);font-size:.86rem">${_g('Teraz nie ma otwartego głosowania. Nowe rusza po każdej kolejce.', 'No voting open right now — a new one starts after every round.')}</div>`}
+  host.innerHTML = `${hallOfFameHtml()}${open.length && dashHtml ? `<div style="margin-bottom:1.2rem">${dashHtml}</div>` : `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;color:var(--muted);font-size:.86rem">${_g('Teraz nie ma otwartego głosowania. Nowe rusza po każdej kolejce.', 'No voting open right now — a new one starts after every round.')}</div>`}
     ${closed.length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem"><div class="section-title" style="font-size:1.25rem;margin:0">🏅 ${_g('Zwycięzcy', 'Winners')}</div>
       <select onchange="_awArchId=this.value;renderAwardsView()" style="font-size:.82rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${closed.map(x => `<option value="${x.id}" ${x.id === a.id ? 'selected' : ''}>${_h(_awTitle(x.title))}</option>`).join('')}</select></div>
       <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.7rem">${a.categories.filter(c => a.winners[c.key]).map(c => { const w = a.winners[c.key], card = ['mvp', 'def'].includes(c.key);
@@ -17386,15 +17482,60 @@ function _kortOpponent(myDeck) { // temat dnia + talia o podobnej sile (dobór d
   return { ...th, team: th.id === 'team' ? th.name : null, deck: deck.slice(0, 8), avg: Math.round(davg()), day };
 }
 let _kortInfo = null;
+// 🏆 TURNIEJ KORTU — panel w Korcie: zapisy, drabinka, mój mecz na żywo; admin tworzy turniej
+let _ktour = null;
+async function _kortTourHtml() {
+  const r = await _api('/kort/tour', 'GET', null, { admin: _isLoggedInSync() }).catch(() => null); if(!r?.ok) return ''; _ktour = r;
+  const t = r.cur, last = r.last, me = discordUser?.id, en = currentLang === 'en', admin = _isLoggedInSync();
+  const nm = id => _h(t?.players.find(p => p.id === id)?.name || '—'), when = iso => new Date(iso).toLocaleString(en ? 'en-GB' : 'pl-PL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if(!t) { const recent = last && Date.now() - Date.parse(last.doneAt) < 4 * 864e5;
+    return (recent ? `<div class="card" style="padding:.6rem .9rem;margin-bottom:.8rem;border:1px solid rgba(245,197,24,.5);font-size:.84rem" data-notr>🏆 <b>${_h(last.name)}</b> — ${_g('mistrz', 'champion')}: <b>${_h(last.players.find(p => p.id === last.champion)?.name || '')}</b></div>` : '')
+      + (admin ? `<div style="margin-bottom:.8rem"><button class="btn btn-ghost" style="font-size:.74rem" onclick="kortTourCreateOpen()">🏆 ${_g('Nowy turniej Kortu', 'New Kort tournament')}</button></div>` : ''); }
+  const mine = t.players.some(p => p.id === me), box = inner => `<div class="card" id="ktour-sec" style="padding:.85rem 1rem;margin-bottom:.9rem;border:2px solid var(--accent);background:linear-gradient(135deg,rgba(245,197,24,.12),rgba(239,68,68,.05))" data-notr>${inner}</div>`;
+  if(t.status === 'signup') return box(`<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap"><div><b style="font-size:1rem">🏆 ${_h(t.name)}</b><div style="font-size:.8rem;color:var(--muted)">🗓 ${when(t.startAt)} · ${t.players.length}/${t.size} ${_g('zapisanych', 'signed up')} · ${_g('mecze na żywo, 20 min na rundę', 'live matches, 20 min per round')}</div></div>
+    ${!discordUser ? `<button class="btn btn-primary" onclick="loginWithDiscord()">${_g('Zaloguj się, by się zapisać', 'Log in to sign up')}</button>` : mine ? `<button class="btn btn-ghost" onclick="kortTourAct('leave')">✕ ${_g('Wypisz się', 'Leave')}</button>` : t.players.length >= t.size ? `<span style="font-size:.8rem;color:var(--muted)">${_g('Brak miejsc', 'Full')}</span>` : `<button class="btn btn-primary" onclick="kortTourAct('join')">✍️ ${_g('Zapisz się', 'Sign up')}</button>`}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem">${t.players.map(p => `<span style="font-size:.74rem;background:var(--surface2);border:1px solid ${p.id === me ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:.12rem .5rem">${_h(p.name)}</span>`).join('') || `<span style="font-size:.76rem;color:var(--muted)">${_g('Bądź pierwszy!', 'Be the first!')}</span>`}</div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.45rem">🏆 ${_g('Zwycięzca: 💎 paczka premium + karta „Mistrz turnieju Kortu” · finalista: 🎁 paczka. Graj swoją talią Kortu.', 'Winner: 💎 premium pack + “Kort Champion” card · runner-up: 🎁 pack. You play with your Kort deck.')}</div>
+    ${admin ? `<div style="text-align:right;margin-top:.3rem"><a href="#" style="font-size:.7rem;color:var(--loss)" onclick="if(confirm('Odwołać turniej?')) _api('/kort/tour/cancel','POST',{},{admin:true}).then(()=>renderKort());return false">${_g('odwołaj', 'cancel')}</a></div>` : ''}`);
+  const R = t.rounds || [], cur = R[R.length - 1] || [], left = Math.max(0, Math.round((r.roundMs - (Date.now() - (t.roundAt || 0))) / 60000));
+  const my = cur.find(m => !m.w && (m.a === me || m.b === me)), out = mine && !cur.some(m => m.a === me || m.b === me);
+  const rname = n => n === 2 ? _g('Finał', 'Final') : n === 4 ? _g('Półfinały', 'Semifinals') : n === 8 ? _g('Ćwierćfinały', 'Quarterfinals') : `1/${n / 2}`;
+  return box(`<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap"><b style="font-size:1rem">🏆 ${_h(t.name)} · <span style="color:#ef4444">● LIVE</span></b><span style="font-size:.78rem;color:var(--muted)">${rname(cur.length * 2)} · ${_g('zostało', 'left')} ~${left} min</span></div>
+    ${my ? `<div style="margin:.55rem 0;padding:.55rem .7rem;border-radius:10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.5);display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap"><span>⚔️ ${_g('Twój mecz', 'Your match')}: <b>${nm(my.a)}</b> vs <b>${nm(my.b)}</b></span><button class="btn btn-primary" onclick="kortTourPlay()">▶ ${_g('Graj mecz turniejowy', 'Play your tournament match')}</button></div>` : out ? `<div style="font-size:.8rem;color:var(--muted);margin:.4rem 0">${_g('Odpadłeś z turnieju — kibicuj dalej!', 'You’re out — keep watching!')}</div>` : ''}
+    <div style="display:flex;gap:.6rem;overflow-x:auto;margin-top:.4rem">${R.map((rd, ri) => `<div style="min-width:170px"><div style="font-size:.66rem;color:var(--muted);font-weight:800;letter-spacing:1px;margin-bottom:.25rem">${rname(rd.length * 2).toUpperCase()}</div>${rd.map(m => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.3rem .45rem;margin-bottom:.3rem;font-size:.74rem">
+      ${[m.a, m.b].map(id => `<div style="display:flex;justify-content:space-between;${m.w && m.w === id ? 'font-weight:800;color:var(--win)' : m.w ? 'opacity:.5' : ''}"><span>${id ? nm(id) : '—'}</span>${m.w === id ? '✓' : ''}</div>`).join('')}${m.score ? `<div style="font-size:.62rem;color:var(--muted)">${m.score}${m.wo ? ' · walkower' : ''}</div>` : m.wo ? `<div style="font-size:.62rem;color:var(--muted)">walkower</div>` : ''}</div>`).join('')}</div>`).join('')}</div>`);
+}
+async function kortTourAct(a) { if(!_ensureSession()) return; const r = await _api('/kort/tour/' + a, 'POST', {}, { session: true }); if(!r.ok) showToast('❌ ' + _tr(r.error || ''), 'error'); else showToast(a === 'join' ? _g('✍️ Zapisano! Przypomnimy na Discordzie godzinę przed startem.', '✍️ Signed up! We’ll remind you on Discord an hour before.') : _g('Wypisano', 'Left the tournament'), 'success'); renderKort(); }
+async function kortTourPlay() {
+  const r = await _api('/kort/tour/play', 'POST', { deck: _kortMyDeck() }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  _kortTab = 'live';
+  if(r.role === 'host') { _kortLiveCode = r.code; showToast(_g('⏳ Czekasz na przeciwnika — dostał wiadomość na Discordzie', '⏳ Waiting for your opponent — they got a Discord DM'), 'info'); renderKort(); return; }
+  if(r.role === 'join') { renderKort(); await kortLiveJoin(r.code); return; }
+  const x = await _api('/kort/live/' + r.code, 'GET', null, { session: true }); if(x.ok) { renderKort(); kortLiveStart(x); }
+}
+function kortTourCreateOpen() {
+  const m = _fxModal('ktour-modal', 460); m.classList.add('open'); const d = new Date(Date.now() + 2 * 864e5); d.setHours(20, 0, 0, 0); const loc = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  m.querySelector('.modal').innerHTML = _fxHead('ktour-modal', '🏆 Nowy turniej Kortu') + `<div data-notr>
+    <label style="${_MODAL_LBL}">Nazwa</label><input id="kt-name" value="Puchar Kortu" maxlength="60" style="${_MODAL_INP};margin-bottom:.5rem">
+    <label style="${_MODAL_LBL}">Start (dzień i godzina)</label><input id="kt-start" type="datetime-local" value="${loc}" style="${_MODAL_INP};margin-bottom:.5rem">
+    <label style="${_MODAL_LBL}">Liczba miejsc</label><select id="kt-size" style="${_MODAL_INP};margin-bottom:.6rem"><option>4</option><option selected>8</option><option>16</option><option>32</option></select>
+    <div style="font-size:.74rem;color:var(--muted);margin-bottom:.7rem">Zapisy ruszają od razu (ogłoszenie na kanale Kortu), przypomnienie idzie godzinę przed startem. O godzinie startu serwer układa drabinkę według ELO; każda runda trwa 20 minut, a nieobecni przegrywają walkowerem.</div>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('ktour-modal')">Anuluj</button><button class="btn btn-primary" onclick="kortTourCreate()">🏆 Utwórz i ogłoś</button></div></div>`;
+}
+async function kortTourCreate() {
+  const r = await _api('/kort/tour/create', 'POST', { name: document.getElementById('kt-name').value, startAt: new Date(document.getElementById('kt-start').value).toISOString(), size: +document.getElementById('kt-size').value }, { admin: true });
+  if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; } _fxClose('ktour-modal'); showToast('🏆 Turniej utworzony — zapisy ogłoszone na Discordzie', 'success'); renderKort();
+}
+
 async function renderKort() {
   const el = document.getElementById('kort-wrap'); if(!el) return;
   if(discordUser?.session && !_cards) { try { const r = await _api('/cards/me', 'GET', null, { session: true }); if(r.ok) _cards = r; } catch(e) {} }
   if(!window._leagueLoaded && !(typeof matches !== 'undefined' && matches.length)) { el.innerHTML = `<div class="card" style="padding:1rem;color:var(--muted)">⏳ ${_g('Wczytuję dane ligi…', 'Loading league data…')}</div>`; return; } // po wczytaniu danych Kort narysuje się ponownie
-  const qh = await _kortQuestsHtml();
+  const qh = (await _kortTourHtml()) + await _kortQuestsHtml();
   if(_kortTab === 'ranked') { el.innerHTML = qh + _kortTabsHtml() + _kortTopHtml() + await _kortRankedHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'boss') { el.innerHTML = qh + _kortTabsHtml() + _kortTopHtml() + await _kortBossHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'stats') { _kortLiveStop(); el.innerHTML = _kortTabsHtml() + await _kortStatsHtml(); return; }
-  if(_kortTab === 'live') { el.innerHTML = _kortTabsHtml() + await _kortLiveHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
+  if(_kortTab === 'live') { el.innerHTML = (await _kortTourHtml()) + _kortTabsHtml() + await _kortLiveHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   if(_kortTab === 'draft') { el.innerHTML = _kortTabsHtml() + await _kortDraftHtml() + '<div id="kort-board" style="margin-top:1rem"></div>'; return; }
   _kortLiveStop();
   const deck = _kortMyDeck(), opp = _kortOpponent(deck);
@@ -23089,7 +23230,8 @@ openTeamModal._openPlayer=function(pn,tn){
   document.getElementById('player-modal').classList.add('open');
 };
 
-function openComparatorModal() {
+function openComparatorModal() { return openCardCompare(); }
+function _openComparatorModalOld() {
   const agg=getAggregatedStats();
   const players=[...new Set(agg.map(p=>p.name))].sort();
   document.getElementById('comparator-modal-content').innerHTML=
