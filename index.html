@@ -888,6 +888,10 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 #admin-fab{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:900;width:46px;height:46px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1.2rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 #admin-fab.has{background:var(--accent);color:#111;border-color:var(--accent)}
 #admin-fab span{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;border-radius:999px;font-size:.62rem;font-weight:800;padding:.05rem .35rem}
+
+.fx-file{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap;max-width:100%}
+.fx-file-btn{font-size:.76rem;padding:.3rem .7rem}
+.fx-file-name{font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -28608,6 +28612,19 @@ async function _dsLaunch() {
   setTimeout(() => { window._navReady = true; try { history.replaceState({ v: curView() }, '', location.pathname + location.search + location.hash); } catch(e) {} }, 3200);
 })();
 
+
+// 📎 pola wyboru pliku: własny przycisk w języku ligi zamiast tekstu przeglądarki („Wybierz plik” / „Choose file”)
+(function fileInputsLocalize() {
+  const fix = inp => { if(inp.dataset.fx || inp.closest('label') || getComputedStyle(inp).display === 'none' || inp.style.display === 'none' || inp.hidden) return; inp.dataset.fx = '1';
+    const w = document.createElement('span'); w.className = 'fx-file'; inp.parentNode.insertBefore(w, inp); w.appendChild(inp); inp.style.display = 'none';
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-ghost fx-file-btn'; b.textContent = '📎 ' + _g('Wybierz plik', 'Choose file'); b.onclick = () => inp.click();
+    const n = document.createElement('span'); n.className = 'fx-file-name'; n.textContent = _g('Nie wybrano pliku', 'No file chosen');
+    inp.addEventListener('change', () => { const f = inp.files || []; n.textContent = f.length ? (f.length > 1 ? `${f.length} ${_g('pliki', 'files')}` : f[0].name) : _g('Nie wybrano pliku', 'No file chosen'); });
+    w.appendChild(b); w.appendChild(n); };
+  const run = root => (root.querySelectorAll ? root.querySelectorAll('input[type=file]') : []).forEach(fix);
+  const start = () => { run(document); new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(nd => { if(nd.nodeType === 1) { if(nd.matches?.('input[type=file]')) fix(nd); run(nd); } }))).observe(document.body, { childList: true, subtree: true }); };
+  if(document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
 </script>
 
 
