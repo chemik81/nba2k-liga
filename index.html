@@ -884,6 +884,10 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 .cp-chips{display:flex;flex-wrap:wrap;gap:.3rem;flex:1}
 .cp-chip{display:inline-flex;align-items:center;gap:.25rem;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.5);border-radius:999px;padding:.08rem .2rem .08rem .45rem;font-size:.72rem}
 .cp-chip b{color:#22c55e}.cp-chip button{border:none;background:none;color:var(--muted);cursor:pointer;font-size:.7rem;padding:0 .2rem}
+
+#admin-fab{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:900;width:46px;height:46px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1.2rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+#admin-fab.has{background:var(--accent);color:#111;border-color:var(--accent)}
+#admin-fab span{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;border-radius:999px;font-size:.62rem;font-weight:800;padding:.05rem .35rem}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -8134,6 +8138,7 @@ function openDeepLink() {
   if(h === '2kordle' || h === 'kordle') { showView('kordle'); return; }
   if(h === 'kibice' || h === 'liga-kibicow') { setTimeout(() => showView('fans'), 0); return; }
   if(h.startsWith('mecz/') || h.startsWith('match/')) { const id = decodeURIComponent(h.split('/')[1] || ''); showView('schedule'); let n = 0; const t = setInterval(() => { if(_ssItem(id) || ++n > 40) { clearInterval(t); if(_ssItem(id)) openMatchCenter(id); } }, 250); return; }
+  if(['do-zrobienia', 'admin-todo', 'todo'].includes(h)) { setTimeout(() => openAdminQuick(), 1500); return; }
   if(['turniej', 'turniej-kortu', 'tournament'].includes(h)) { setTimeout(() => showView('kort'), 300); return; }
   if(['galeria-slaw', 'galeria', 'hall-of-fame', 'hof'].includes(h)) { setTimeout(() => { showView('awards'); setTimeout(() => document.getElementById('hof-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 900); }, 300); return; }
   if(['przepustka', 'season-pass', 'pass'].includes(h)) { setTimeout(() => { showView('fans'); setTimeout(() => document.getElementById('pass-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 2200); }, 300); return; }
@@ -10369,6 +10374,91 @@ function _scoutTeam(team, sid) {
   return { games, T, players };
 }
 // 🏟️ CENTRUM MECZU — wszystko o meczu w jednym miejscu: przed (typy, transmisje, H2H, raport), po (wynik, mecze, MVP, opis AI, akcje)
+// ⚡ SZYBKI PANEL ADMINA — wszystko, co czeka na decyzję, z akcjami w jednym miejscu (wygodny na telefonie)
+function _adminTodo() {
+  const sid = currentSeasonId || null, regs = (teamRegistrations || []).filter(r => !r.seasonId || !sid || r.seasonId === sid);
+  return { results: (pendingResults || []), teams: regs.filter(r => r.status === 'pending'), pays: regs.filter(r => r.payment?.status === 'sent'), roster: regs.filter(r => (r.rosterRequests || []).some(q => q.status === 'pending')) };
+}
+function _adminTodoCount() { const t = _adminTodo(); return t.results.length + t.teams.length + t.pays.length + t.roster.length; }
+function adminFabUpdate() {
+  let b = document.getElementById('admin-fab'); if(!_isLoggedInSync()) { b?.remove(); return; }
+  if(!b) { b = document.createElement('button'); b.id = 'admin-fab'; b.onclick = openAdminQuick; document.body.appendChild(b); }
+  const n = _adminTodoCount(); b.innerHTML = `⚡${n ? `<span>${n}</span>` : ''}`; b.title = _g('Do zrobienia', 'To do'); b.classList.toggle('has', n > 0);
+}
+function openAdminQuick() {
+  if(!_isLoggedInSync()) return; const t = _adminTodo(), en = currentLang === 'en', m = _fxModal('aq-modal', 620); m.classList.add('open');
+  const sec = (ico, title, n, body, more) => `<div style="margin-bottom:.9rem"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem"><b style="font-size:.86rem">${ico} ${title} ${n ? `<span style="background:#ef4444;color:#fff;border-radius:999px;padding:0 .45rem;font-size:.7rem">${n}</span>` : ''}</b>${more || ''}</div>${n ? body : `<div style="font-size:.76rem;color:var(--muted)">✅ ${_g('Nic do zrobienia', 'All clear')}</div>`}</div>`;
+  const row = (txt, btns) => `<div style="display:flex;align-items:center;gap:.4rem;padding:.4rem .5rem;border:1px solid var(--border);border-radius:9px;margin-bottom:.3rem;font-size:.8rem;flex-wrap:wrap"><span style="flex:1;min-width:150px">${txt}</span>${btns}</div>`;
+  const B = (lbl, on, cls = 'btn-ghost') => `<button class="btn ${cls}" style="font-size:.7rem;padding:.25rem .55rem" onclick="${on}">${lbl}</button>`;
+  m.querySelector('.modal').innerHTML = _fxHead('aq-modal', '⚡ ' + _g('Do zrobienia', 'To do')) + `<div data-notr>
+    ${sec('🏀', _g('Wyniki do zatwierdzenia', 'Results to approve'), t.results.length, t.results.slice(0, 6).map(p => row(`${_h(p.team1?.name || p.t1 || '?')} <b>${p.team1?.score ?? ''}:${p.team2?.score ?? ''}</b> ${_h(p.team2?.name || p.t2 || '?')}`, B(_g('Sprawdź', 'Review'), "_fxClose('aq-modal');openPendingResults()", 'btn-primary'))).join(''), t.results.length ? B(_g('wszystkie', 'all'), "_fxClose('aq-modal');openPendingResults()") : '')}
+    ${sec('🧢', _g('Zgłoszenia drużyn', 'Team registrations'), t.teams.length, t.teams.map(r => row(`<b>${_h(r.teamName)}</b> <span style="color:var(--muted)">· ${(r.players || []).length} ${_g('graczy', 'players')}${r.payment?.status === 'paid' ? ' · 💶 ✓' : ''}</span>`, B('✅', `teamRegSetStatus('${r.id}','approved').then(()=>openAdminQuick())`, 'btn-primary') + B('✕', `teamRegSetStatus('${r.id}','rejected').then(()=>openAdminQuick())`))).join(''))}
+    ${sec('💶', _g('Płatności do sprawdzenia', 'Payments to check'), t.pays.length, t.pays.map(r => row(`<b>${_h(r.teamName)}</b>`, B('📷 ' + _g('zrzut', 'proof'), "_fxClose('aq-modal');openPayments()") + B('✅ ' + _g('opłacone', 'paid'), `payConfirm('${r.id}',true).then(()=>openAdminQuick())`, 'btn-primary'))).join(''))}
+    ${sec('✏️', _g('Zmiany składu', 'Roster changes'), t.roster.length, t.roster.map(r => row(`<b>${_h(r.teamName)}</b> <span style="color:var(--muted)">· ${(r.rosterRequests || []).filter(q => q.status === 'pending').length} ${_g('prośba', 'request')}</span>`, B(_g('Otwórz', 'Open'), "_fxClose('aq-modal');goToTeamRegistrations();setRegTab('teams')", 'btn-primary'))).join(''))}
+    <div style="font-size:.86rem;font-weight:700;margin-bottom:.3rem">🚦 ${_g('Gotowość drużyn', 'Team readiness')}</div>${_readinessAdminHtml()}</div>`;
+}
+// ✅ LISTA STARTOWA KAPITANA
+function _teamSteps(r) {
+  const sid = currentSeasonId || null, needFee = EU_MODE || !!(window._signupInfo?.fee), pl = r.players || [], my = String(discordUser?.id || '');
+  const linked = pl.filter(p => p.discordId || (playersList || []).some(x => x.gamertag && _normNick(x.gamertag) === _normNick(p.gamertag))).length;
+  const sch = (schedule || []).filter(s => (s.seasonId || null) === sid && [s.team1, s.team2].includes(r.teamName) && s.date);
+  return [
+    { k: 'reg', ok: true, t: _g('Zgłoszenie wysłane', 'Registration sent') },
+    { k: 'appr', ok: r.status === 'approved', t: _g('Drużyna zatwierdzona przez admina', 'Team approved by an admin'), hint: _g('czeka na admina', 'waiting for an admin') },
+    ...(needFee ? [{ k: 'pay', ok: r.payment?.status === 'paid', t: _g('Wpisowe opłacone', 'Entry fee paid'), hint: r.payment?.status === 'sent' ? _g('potwierdzenie wysłane — admin sprawdza', 'proof sent — admin is checking') : '', act: `openTeamPayment('${r.id}')`, actL: '💶' }] : []),
+    { k: 'roster', ok: pl.length >= 5, t: _g(`Skład: co najmniej 5 graczy (${pl.length})`, `Roster: at least 5 players (${pl.length})`), act: EU_MODE && !registrationsClosed ? `openEuTeamEdit('${r.id}')` : `openRosterChange('${r.id}')`, actL: '✏️' },
+    { k: 'link', ok: linked >= Math.min(5, pl.length || 5), t: _g(`Gracze połączyli konta (${linked}/${pl.length})`, `Players linked their accounts (${linked}/${pl.length})`), hint: _g('każdy gracz: zaloguj się przez Discord → Mój panel → połącz nick', 'each player: log in with Discord → My panel → link your gamertag'), act: `navigator.clipboard?.writeText(location.origin + '/#panel').then(()=>showToast('🔗 ' + _g('Skopiowano link dla graczy', 'Link for players copied'),'success'))`, actL: '🔗' },
+    { k: 'logo', ok: !!r.logo, t: _g('Logo drużyny', 'Team logo'), act: `changeTeamLogo('${r.id}')`, actL: '🖼' },
+    { k: 'game', ok: sch.length > 0, t: _g('Pierwszy mecz w terminarzu', 'First game scheduled'), act: `showView('schedule')`, actL: '🗓' }];
+}
+function captainChecklistHtml() {
+  if(!discordUser) return ''; const sid = currentSeasonId || null, my = String(discordUser.id);
+  const r = (teamRegistrations || []).find(x => String(x.captain?.id) === my && x.status !== 'rejected' && (!x.seasonId || !sid || x.seasonId === sid)); if(!r) return '';
+  const S = _teamSteps(r), done = S.filter(x => x.ok).length; if(done === S.length) return '';
+  return `<div class="card" id="cap-check" style="padding:.8rem 1rem;margin-bottom:1rem;border:1px solid var(--accent)" data-notr>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><b>✅ ${_g('Lista startowa', 'Starting checklist')} — ${_h(r.teamName)}</b><b style="color:var(--accent)">${done}/${S.length}</b></div>
+    <div style="height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-bottom:.5rem"><div style="height:100%;width:${Math.round(done / S.length * 100)}%;background:var(--accent)"></div></div>
+    ${S.map(x => `<div style="display:flex;align-items:center;gap:.5rem;padding:.25rem 0;font-size:.82rem;${x.ok ? 'opacity:.6' : ''}"><span>${x.ok ? '✅' : '⬜'}</span><span style="flex:1">${x.t}${!x.ok && x.hint ? `<div style="font-size:.7rem;color:var(--muted)">${x.hint}</div>` : ''}</span>${!x.ok && x.act ? `<button class="btn btn-ghost" style="font-size:.7rem;padding:.15rem .5rem" onclick="${x.act}">${x.actL}</button>` : ''}</div>`).join('')}</div>`;
+}
+function _readinessAdminHtml() {
+  const sid = currentSeasonId || null, regs = (teamRegistrations || []).filter(r => r.status !== 'rejected' && (!r.seasonId || !sid || r.seasonId === sid));
+  if(!regs.length) return `<div style="font-size:.76rem;color:var(--muted)">${_g('Brak drużyn w sezonie', 'No teams this season')}</div>`;
+  return regs.map(r => { const S = _teamSteps(r), d = S.filter(x => x.ok).length, miss = S.filter(x => !x.ok).map(x => x.t.replace(/\s*\(.*\)$/, ''));
+    return `<div style="display:flex;gap:.5rem;align-items:center;padding:.3rem 0;border-top:1px solid var(--border);font-size:.78rem"><b style="min-width:120px">${_h(r.teamName)}</b><span style="color:${d === S.length ? 'var(--win)' : 'var(--accent)'};font-weight:800">${d}/${S.length}</span><span style="color:var(--muted);font-size:.7rem;flex:1">${miss.join(' · ') || '✅'}</span></div>`; }).join('');
+}
+// 📰 WĄTKI SEZONU — ciekawe historie z danych ligi (serie, rewanże, hity, forma graczy)
+setTimeout(() => { try { const _rd = renderDashboard; renderDashboard = function(...a) { const r = _rd.apply(this, a); try { renderStories(); } catch(e) { console.warn('stories', e); } return r; }; } catch(e) {} }, 0);
+function seasonStorylines() {
+  const sid = currentSeasonId || null, ctx = _ssCtx(), en = currentLang === 'en', out = [], N = x => _normNick(x);
+  const items = (schedule || []).filter(s => s.generated && (s.seasonId || null) === sid).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.week || 0) - (b.week || 0));
+  const seq = {}; items.forEach(s => { const r = _ssResult(ctx, s); if(!r?.done || !r.winnerSide) return; const w = s[r.winnerSide], l = s[r.winnerSide === 'team1' ? 'team2' : 'team1']; (seq[w] = seq[w] || []).push('W'); (seq[l] = seq[l] || []).push('L'); });
+  const streak = (arr, c) => { let n = 0; for(let i = arr.length - 1; i >= 0 && arr[i] === c; i--) n++; return n; };
+  Object.entries(seq).forEach(([t, a]) => { const w = streak(a, 'W'), l = streak(a, 'L'), losses = a.filter(x => x === 'L').length;
+    if(a.length >= 4 && !losses) out.push({ p: 95, ico: '🛡️', t: _g(`<b>${_h(t)}</b> wciąż bez porażki (${a.length}-0) — kto ich zatrzyma?`, `<b>${_h(t)}</b> still unbeaten (${a.length}-0) — who can stop them?`) });
+    else if(w >= 3) out.push({ p: 80 + w, ico: '🔥', t: _g(`<b>${_h(t)}</b>: ${w} wygranych z rzędu`, `<b>${_h(t)}</b>: ${w} wins in a row`) });
+    if(l >= 3) out.push({ p: 60 + l, ico: '😬', t: _g(`<b>${_h(t)}</b> szuka przełamania — ${l} ${_plPL(l, 'porażka', 'porażki', 'porażek')} z rzędu`, `<b>${_h(t)}</b> looking to snap a ${l}-game skid`) }); });
+  const ms = _withAllMatches(() => matches.filter(m => !m.walkover && (m.seasonId || null) === sid)).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const pg = {}; ms.forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => (pg[N(p.name)] = pg[N(p.name)] || { name: p.name, team: t.name, g: [] }).g.push(+p.pts || 0))));
+  Object.values(pg).forEach(x => { const last = x.g.slice(-3); if(last.length === 3 && last.every(v => v >= 20)) out.push({ p: 75 + Math.min(10, Math.round((last[0] + last[1] + last[2]) / 15)), ico: '🎯', t: _g(`<b>${_h(x.name)}</b> (${_h(x.team)}) w gazie: 3 mecze z rzędu po 20+ pkt (${last.join(', ')})`, `<b>${_h(x.name)}</b> (${_h(x.team)}) is on fire: 20+ in 3 straight games (${last.join(', ')})`) }); });
+  const allPts = _withAllMatches(() => matches.filter(m => !m.walkover)).flatMap(m => [...(m.team1.players || []), ...(m.team2.players || [])].map(p => ({ n: p.name, v: +p.pts || 0 }))), rec = allPts.reduce((a, b) => b.v > a.v ? b : a, { v: 0 });
+  const seasonBest = Object.values(pg).map(x => ({ name: x.name, v: Math.max(...x.g) })).sort((a, b) => b.v - a.v)[0];
+  if(rec.v && seasonBest && seasonBest.v >= rec.v - 5 && N(seasonBest.name) !== N(rec.n)) out.push({ p: 70, ico: '📈', t: _g(`<b>${_h(seasonBest.name)}</b> blisko rekordu ligi: ${seasonBest.v} pkt (rekord: ${rec.v}, ${_h(rec.n)})`, `<b>${_h(seasonBest.name)}</b> is close to the league record: ${seasonBest.v} pts (record: ${rec.v}, ${_h(rec.n)})`) });
+  const today = new Date().toISOString().slice(0, 10), table = Object.entries(seq).map(([t, a]) => ({ t, w: a.filter(x => x === 'W').length, g: a.length })).sort((a, b) => (b.w / (b.g || 1)) - (a.w / (a.g || 1)) || b.w - a.w), top2 = table.slice(0, 2).map(x => x.t);
+  items.filter(s => s.date >= today && !_ssResult(ctx, s)?.done).slice(0, 12).forEach(s => {
+    if(top2.length === 2 && top2.includes(s.team1) && top2.includes(s.team2)) out.push({ p: 90, ico: '⚔️', t: _g(`Hit kolejki: <b>${_h(s.team1)}</b> vs <b>${_h(s.team2)}</b> — starcie dwóch najlepszych drużyn`, `Game of the week: <b>${_h(s.team1)}</b> vs <b>${_h(s.team2)}</b> — the top two collide`), act: `openMatchCenter('${s.id}')` });
+    const prev = ms.filter(m => [m.team1.name, m.team2.name].map(N).sort().join('|') === [s.team1, s.team2].map(N).sort().join('|')).pop();
+    if(prev && Math.abs((+prev.team1.score || 0) - (+prev.team2.score || 0)) <= 3) out.push({ p: 72, ico: '🔁', t: _g(`Rewanż: <b>${_h(s.team1)}</b> vs <b>${_h(s.team2)}</b> — ostatnio ${prev.team1.score}:${prev.team2.score}`, `Rematch: <b>${_h(s.team1)}</b> vs <b>${_h(s.team2)}</b> — last time ${prev.team1.score}:${prev.team2.score}`), act: `openMatchCenter('${s.id}')` }); });
+  const seen = new Set(); return out.sort((a, b) => b.p - a.p).filter(x => { const k = x.t.replace(/<[^>]+>/g, '').slice(0, 30); if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
+}
+function renderStories() {
+  let el = document.getElementById('dash-stories'); const ex = document.getElementById('dashboard-extras'); if(!ex) return;
+  if(!el) { el = document.createElement('div'); el.id = 'dash-stories'; ex.parentNode.insertBefore(el, ex); }
+  const L = seasonStorylines(), cap = captainChecklistHtml();
+  el.innerHTML = cap + (L.length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📰 ${_g('WĄTKI SEZONU', 'SEASON STORYLINES')}</div>
+    ${L.map(x => `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border);font-size:.86rem;${x.act ? 'cursor:pointer' : ''}" ${x.act ? `onclick="${x.act}"` : ''}><span style="font-size:1.1rem">${x.ico}</span><span style="flex:1">${x.t}</span>${x.act ? '<span style="color:var(--accent);font-size:.75rem">›</span>' : ''}</div>`).join('')}</div>` : '');
+  adminFabUpdate();
+}
+
 function openMatchCenter(id) {
   const s = _ssItem(id); if(!s) return; const ctx = _ssCtx(), en = currentLang === 'en', res = _ssResult(ctx, s), N = x => _normNick(x);
   const ids = [...(s.matchIds || []), ...(s.matchId != null ? [s.matchId] : [])].map(String), games = matches.filter(m => ids.includes(String(m.id))).sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -16675,7 +16765,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
