@@ -16591,7 +16591,11 @@ function _totwData(w) {
   // Piątka po pozycjach (jak grafika bota): na każdą pozycję najlepszy występ wśród grających głównie tam; brak → grający tam choć raz → najlepszy z pozostałych
   const list = Object.values(by).map(a => ({ ...a, avg: a.gs / a.gp, mainPos: Object.entries(a.posN).sort((x, y) => y[1] - x[1])[0]?.[0] || '' })).sort((a, b) => b.avg - a.avg), used = new Set();
   const pub = (window._totwPub || {})[(currentSeasonId || '') + ':' + w]; // opublikowana Piątka (karty limitowane, podcast) ma pierwszeństwo
-  if(pub?.length) return pub.slice(0, 5).map((p, i) => { const x = list.find(y => _normNick(y.name) === _normNick(p.name)); return { ...(x || { name: p.name, team: p.team, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, avg: 0, posN: {} }), name: x?.name || p.name, team: x?.team || p.team, pos: ['PG', 'SG', 'SF', 'PF', 'C'][i], slot: ['PG', 'SG', 'SF', 'PF', 'C'][i], published: true }; });
+  if(pub?.length) { const SL = ['PG', 'SG', 'SF', 'PF', 'C'], P = pub.slice(0, 5).map(p => ({ p, x: list.find(y => _normNick(y.name) === _normNick(p.name)) }));
+    const mainPos = x => Object.entries(x?.posN || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '', used = new Set(), bySlot = {};
+    P.filter(e => SL.includes(e.p.slot)).forEach(e => { bySlot[e.p.slot] = e; used.add(e); }); // pozycja zapisana na karcie
+    SL.filter(sl => !bySlot[sl]).forEach(sl => { const free = P.filter(e => !used.has(e)); const e = free.find(f => mainPos(f.x) === sl) || free.find(f => f.x?.posN?.[sl]) || free.sort((a, b) => (b.x?.avg || 0) - (a.x?.avg || 0))[0]; if(e) { bySlot[sl] = e; used.add(e); } }); // starsze karty: jak przy wyborze Piątki
+    return SL.filter(sl => bySlot[sl]).map(sl => { const { p, x } = bySlot[sl]; return { ...(x || { name: p.name, team: p.team, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, avg: 0, posN: {} }), name: x?.name || p.name, team: x?.team || p.team, pos: sl, slot: sl, published: true }; }); }
   return ['PG', 'SG', 'SF', 'PF', 'C'].map(slot => { const free = list.filter(x => !used.has(x.name)); const x = free.find(y => y.mainPos === slot) || free.find(y => y.posN[slot]) || free[0]; if(!x) return null; used.add(x.name); return { ...x, pos: slot, slot }; }).filter(Boolean);
 }
 async function renderTotw() {
