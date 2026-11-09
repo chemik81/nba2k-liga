@@ -15798,7 +15798,26 @@ async function cardsOpen(premium) {
   window._cardsCanOpen = !!r.canOpen; try { updateMyPanelBadge(); } catch(e) {} setTimeout(() => streakLoad().catch(() => {}), 1500);
   setTimeout(() => renderCardsView(), 3500);
 }
-async function cardsRecycle() { const r = await _api('/cards/recycle', 'POST', {}, { session: true }); showToast(r.ok ? _g('♻️ Masz dodatkową paczkę!', '♻️ You got a bonus pack!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
+let _rcy = null; // wybór 5 duplikatów do wymiany na paczkę
+function cardsRecycle() {
+  const own = _cards?.cards || {}, dup = Object.entries(own).filter(([, c]) => c.n > 1).sort((a, b) => b[1].n - a[1].n || a[1].name.localeCompare(b[1].name)); let need = 5; _rcy = {};
+  dup.forEach(([k, c]) => { const t = Math.min(c.n - 1, need); if(t > 0) { _rcy[k] = t; need -= t; } }); // propozycja jak dotąd: z kart, których masz najwięcej
+  _rcyDraw();
+}
+function _rcyStep(k, d) { const c = _cards?.cards?.[k]; if(!c) return; const tot = Object.values(_rcy).reduce((s, n) => s + n, 0), cur = _rcy[k] || 0, nx = cur + d; if(nx < 0 || nx > c.n - 1 || (d > 0 && tot >= 5)) return; _rcy[k] = nx; _rcyDraw(); }
+function _rcyDraw() {
+  const own = _cards?.cards || {}, dup = Object.entries(own).filter(([, c]) => c.n > 1).sort((a, b) => (_rcy[b[0]] || 0) - (_rcy[a[0]] || 0) || b[1].n - a[1].n || a[1].name.localeCompare(b[1].name)), tot = Object.values(_rcy).reduce((s, n) => s + n, 0);
+  const m = _fxModal('recycle-modal', 560); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('recycle-modal', '♻️ ' + _g('Wymień 5 duplikatów na paczkę', 'Trade 5 duplicates for a pack')) + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">${_g('Wybierz, które duplikaty oddajesz — z każdej karty zostaje Ci co najmniej 1 egzemplarz.', 'Choose which duplicates to give — you always keep at least 1 copy of each card.')}</div>
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem"><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;color:${tot === 5 ? 'var(--win)' : 'var(--accent)'}">${tot}/5</b><span style="font-size:.76rem;color:var(--muted)">${_g('wybranych', 'selected')}</span>
+      <button class="btn btn-ghost" style="font-size:.68rem;padding:.15rem .45rem;margin-left:auto" onclick="_rcy={};_rcyDraw()">${_g('wyczyść', 'clear')}</button></div>
+    <div style="max-height:50vh;overflow:auto">${dup.map(([k, c]) => { const n = _rcy[k] || 0; return `<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem .2rem;border-bottom:1px solid var(--border);${n ? 'background:rgba(34,197,94,.08)' : ''}">
+      <span style="flex:1;font-size:.82rem;cursor:pointer" onclick="openPlayerCardImg('${_h(c.name).replace(/'/g, "\\'")}')"><b>${_h(c.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(c.team || '')}${c.tier === 'limited' ? ' · 🌟' : ''} · ${_g('masz', 'you have')} ×${c.n}</span></span>
+      <button class="btn btn-ghost" style="font-size:.8rem;padding:.05rem .5rem" ${n ? '' : 'disabled'} onclick="_rcyStep('${k.replace(/'/g, '')}',-1)">−</button><b style="width:18px;text-align:center">${n}</b><button class="btn btn-ghost" style="font-size:.8rem;padding:.05rem .5rem" ${n < c.n - 1 && tot < 5 ? '' : 'disabled'} onclick="_rcyStep('${k.replace(/'/g, '')}',1)">+</button></div>`; }).join('') || `<div style="color:var(--muted);font-size:.84rem">${_g('Nie masz duplikatów.', 'You have no duplicates.')}</div>`}</div>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.7rem"><button class="btn btn-ghost" onclick="_fxClose('recycle-modal')">${_g('Anuluj', 'Cancel')}</button><button class="btn btn-primary" ${tot === 5 ? '' : 'disabled'} onclick="_rcyGo()">♻️ ${_g('Wymień na paczkę', 'Trade for a pack')}</button></div></div>`;
+}
+async function _rcyGo() { const r = await _api('/cards/recycle', 'POST', { pick: _rcy }, { session: true }); if(r.ok) { _cards = { ..._cards, ...r }; _fxClose('recycle-modal'); } showToast(r.ok ? _g('🎁 Masz dodatkową paczkę!', '🎁 You got a bonus pack!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
 async function cardsGift() { const card = document.getElementById('cg-card').value, to = document.getElementById('cg-to').value; if(!confirm(_g(`Podarować kartę ${card}?`, `Gift the ${card} card?`))) return;
   const key = Object.entries(_cards?.cards || {}).find(([k, c]) => c.name === card && c.n > 1 && k.startsWith('lim:') && document.getElementById('cg-card').selectedOptions[0]?.dataset.k === k)?.[0];
   const r = await _api('/cards/gift', 'POST', { card, to, key: document.getElementById('cg-card').selectedOptions[0]?.dataset.k || key }, { session: true }); showToast(r.ok ? _g('🎁 Wysłano!', '🎁 Sent!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
