@@ -10536,9 +10536,9 @@ async function openLinkedAccounts() {
 }
 function _linksCand(to) { // konta połączone w drugiej lidze, których nick jest niepołączony w składzie tej ligi
   const L = window._links, from = to === 'EU' ? 'PL' : 'EU', S = L[from], T = L[to]; if(!S?.ok || !T?.ok) return [];
-  const want = new Set(T.teams.flatMap(t => t.players.filter(p => !p.linked).map(p => _normNick(p.gamertag))));
+  const cf = x => _normNick(x).replace(/[i1]/g, 'l').replace(/0/g, 'o'), want = new Set(T.teams.flatMap(t => t.players.filter(p => !p.linked).map(p => cf(p.gamertag)))); // I/l/1 i O/0 — ten sam znak
   const src = [...S.teams.flatMap(t => t.players.filter(p => p.linked && p.uid && !p.pending).map(p => ({ uid: p.uid, name: p.discord, gamertag: p.gamertag }))), ...S.loose.map(x => ({ uid: x.uid, name: x.discord, gamertag: x.gamertag }))];
-  const seen = new Set(); return src.filter(x => want.has(_normNick(x.gamertag)) && !seen.has(x.uid) && seen.add(x.uid));
+  const seen = new Set(); return src.filter(x => want.has(cf(x.gamertag)) && !seen.has(x.uid) && seen.add(x.uid));
 }
 async function linksImport(to) {
   const C = _linksCand(to); if(!C.length) return; if(!confirm(`Połączyć w lidze ${to} ${C.length} kont(a) z ligi ${to === 'EU' ? 'PL' : 'EU'}?\n${C.map(c => c.gamertag + ' → @' + (c.name || c.uid)).join('\n')}`)) return;
