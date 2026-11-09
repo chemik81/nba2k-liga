@@ -2840,6 +2840,7 @@ async function loadData() {
     playersList = record.players || [];
     streamsData = record.streams || {};
     clipsList = record.clips || [];
+    window._interviews = record.interviews || {};
     window._totwPub = record.totwPub || {}; // opublikowane Piątki tygodnia (jak w podcaście i kartach limitowanych)
     penalties = record.penalties || [];
     rosterLockDate = record.rosterLockDate || null;
@@ -8138,6 +8139,9 @@ function openDeepLink() {
   if(h === '2kordle' || h === 'kordle') { showView('kordle'); return; }
   if(h === 'kibice' || h === 'liga-kibicow') { setTimeout(() => showView('fans'), 0); return; }
   if(h.startsWith('mecz/') || h.startsWith('match/')) { const id = decodeURIComponent(h.split('/')[1] || ''); showView('schedule'); let n = 0; const t = setInterval(() => { if(_ssItem(id) || ++n > 40) { clearInterval(t); if(_ssItem(id)) openMatchCenter(id); } }, 250); return; }
+  if(h.startsWith('wywiad/') || h.startsWith('interview/')) { const id = decodeURIComponent(h.split('/')[1] || ''); setTimeout(() => openInterview(id), 1200); return; }
+  if(['media-day', 'poznaj-druzyny', 'meet-the-teams'].includes(h)) { setTimeout(() => openMediaGallery(), 1500); return; }
+  if(['polaczone-konta', 'linked-accounts'].includes(h)) { setTimeout(() => openLinkedAccounts(), 1500); return; }
   if(['do-zrobienia', 'admin-todo', 'todo'].includes(h)) { setTimeout(() => openAdminQuick(), 1500); return; }
   if(['turniej', 'turniej-kortu', 'tournament'].includes(h)) { setTimeout(() => showView('kort'), 300); return; }
   if(['galeria-slaw', 'galeria', 'hall-of-fame', 'hof'].includes(h)) { setTimeout(() => { showView('awards'); setTimeout(() => document.getElementById('hof-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 900); }, 300); return; }
@@ -10409,6 +10413,7 @@ function _teamSteps(r) {
     { k: 'roster', ok: pl.length >= 5, t: _g(`Skład: co najmniej 5 graczy (${pl.length})`, `Roster: at least 5 players (${pl.length})`), act: EU_MODE && !registrationsClosed ? `openEuTeamEdit('${r.id}')` : `openRosterChange('${r.id}')`, actL: '✏️' },
     { k: 'link', ok: linked >= Math.min(5, pl.length || 5), t: _g(`Gracze połączyli konta (${linked}/${pl.length})`, `Players linked their accounts (${linked}/${pl.length})`), hint: _g('każdy gracz: zaloguj się przez Discord → Mój panel → połącz nick', 'each player: log in with Discord → My panel → link your gamertag'), act: `navigator.clipboard?.writeText(location.origin + '/#panel').then(()=>showToast('🔗 ' + _g('Skopiowano link dla graczy', 'Link for players copied'),'success'))`, actL: '🔗' },
     { k: 'logo', ok: !!r.logo, t: _g('Logo drużyny', 'Team logo'), act: `changeTeamLogo('${r.id}')`, actL: '🖼' },
+    { k: 'media', ok: !!r.media?.at, t: _g('Media day: prezentacja drużyny', 'Media day: team intro'), act: `openMediaDay('${r.id}')`, actL: '🎬' },
     { k: 'game', ok: sch.length > 0, t: _g('Pierwszy mecz w terminarzu', 'First game scheduled'), act: `showView('schedule')`, actL: '🗓' }];
 }
 function captainChecklistHtml() {
@@ -10454,9 +10459,95 @@ function renderStories() {
   let el = document.getElementById('dash-stories'); const ex = document.getElementById('dashboard-extras'); if(!ex) return;
   if(!el) { el = document.createElement('div'); el.id = 'dash-stories'; ex.parentNode.insertBefore(el, ex); }
   const L = seasonStorylines(), cap = captainChecklistHtml();
-  el.innerHTML = cap + (L.length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📰 ${_g('WĄTKI SEZONU', 'SEASON STORYLINES')}</div>
-    ${L.map(x => `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border);font-size:.86rem;${x.act ? 'cursor:pointer' : ''}" ${x.act ? `onclick="${x.act}"` : ''}><span style="font-size:1.1rem">${x.ico}</span><span style="flex:1">${x.t}</span>${x.act ? '<span style="color:var(--accent);font-size:.75rem">›</span>' : ''}</div>`).join('')}</div>` : '');
+  el.innerHTML = cap + (L.length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem" data-notr><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><span style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted)">📰 ${_g('WĄTKI SEZONU', 'SEASON STORYLINES')}</span><a href="#" style="font-size:.72rem;color:var(--accent)" onclick="openMediaGallery();return false">🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</a></div>
+    ${L.map(x => `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border);font-size:.86rem;${x.act ? 'cursor:pointer' : ''}" ${x.act ? `onclick="${x.act}"` : ''}><span style="font-size:1.1rem">${x.ico}</span><span style="flex:1">${x.t}</span>${x.act ? '<span style="color:var(--accent);font-size:.75rem">›</span>' : ''}</div>`).join('')}</div>` : (_mdTeams().length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap" data-notr><div><b>🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</b><div style="font-size:.76rem;color:var(--muted)">${_g('Prezentacje drużyn przed sezonem', 'Team intros before the season')} · ${_mdTeams().filter(r => r.media?.at).length}/${_mdTeams().length}</div></div><button class="btn btn-primary" style="font-size:.74rem" onclick="openMediaGallery()">${_g('Zobacz', 'View')}</button></div>` : ''));
   adminFabUpdate();
+}
+
+// 🎬 MEDIA DAY — prezentacja drużyny, galeria „Poznaj drużyny”, grafika, publikacja
+const _MD_STYLES = [['run', '🏃 Szybki atak', '🏃 Run and gun'], ['def', '🛡️ Obrona', '🛡️ Defense first'], ['three', '🏹 Rzuty za 3', '🏹 Three-point shooting'], ['inside', '💪 Gra pod koszem', '💪 Inside game'], ['team', '🤝 Gra zespołowa', '🤝 Team basketball']];
+function openMediaDay(regId) {
+  const r = (teamRegistrations || []).find(x => x.id === regId); if(!r) return; const md = r.media || {}, en = currentLang === 'en', m = _fxModal('md-modal', 560); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('md-modal', `🎬 Media day — ${_h(r.teamName)}`) + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">${_g('Przedstaw drużynę przed sezonem — prezentacja trafi do galerii „Poznaj drużyny”, na Discorda i X.', 'Introduce your team before the season — it goes to the “Meet the teams” gallery, Discord and X.')}</div>
+    <label style="${_MODAL_LBL}">🎯 ${_g('Cel na sezon', 'Goal for the season')}</label><input id="md-goal" maxlength="140" value="${_h(md.goal || '')}" placeholder="${_g('np. awans do playoffów', 'e.g. make the playoffs')}" style="${_MODAL_INP};margin-bottom:.5rem">
+    <label style="${_MODAL_LBL}">👀 ${_g('Gracz do obserwowania', 'Player to watch')}</label><select id="md-watch" style="${_MODAL_INP};margin-bottom:.5rem"><option value="">—</option>${(r.players || []).map(p => `<option ${md.watch === p.gamertag ? 'selected' : ''}>${_h(p.gamertag)}</option>`).join('')}</select>
+    <label style="${_MODAL_LBL}">🏀 ${_g('Styl gry', 'Style of play')}</label><select id="md-style" style="${_MODAL_INP};margin-bottom:.5rem"><option value="">—</option>${_MD_STYLES.map(([k, pl, e]) => `<option value="${k}" ${md.style === k ? 'selected' : ''}>${en ? e : pl}</option>`).join('')}</select>
+    <label style="${_MODAL_LBL}">💬 ${_g('Słowo od kapitana', 'A word from the captain')}</label><textarea id="md-quote" maxlength="220" rows="3" placeholder="${_g('np. Jesteśmy głodni wygrywania. Do zobaczenia na parkiecie!', 'e.g. We’re hungry to win. See you on the court!')}" style="${_MODAL_INP};margin-bottom:.7rem">${_h(md.quote || '')}</textarea>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('md-modal')">${_g('Anuluj', 'Cancel')}</button><button class="btn btn-primary" onclick="mediaDaySave('${regId}')">💾 ${_g('Zapisz', 'Save')}</button></div></div>`;
+}
+async function mediaDaySave(regId) {
+  const v = id => document.getElementById(id).value; const r = await _api('/team-registration/media', 'POST', { regId, goal: v('md-goal'), watch: v('md-watch'), style: v('md-style'), quote: v('md-quote') }, { session: !!discordUser, admin: _isLoggedInSync() });
+  if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; } const i = teamRegistrations.findIndex(x => x.id === regId); if(i >= 0) teamRegistrations[i] = r.registration;
+  _fxClose('md-modal'); showToast('🎬 ' + _g('Prezentacja zapisana!', 'Team intro saved!'), 'success'); try { renderStories(); } catch(e) {}
+}
+function _mdTeams() { const sid = currentSeasonId || null; return (teamRegistrations || []).filter(r => r.status !== 'rejected' && (!r.seasonId || !sid || r.seasonId === sid)); }
+function openMediaGallery() {
+  const T = _mdTeams(), en = currentLang === 'en', my = String(discordUser?.id || ''), st = k => (_MD_STYLES.find(x => x[0] === k) || [])[en ? 2 : 1] || '', m = _fxModal('mdg-modal', 820); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('mdg-modal', `🎬 ${_g('Poznaj drużyny', 'Meet the teams')}`) + `<div data-notr><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.6rem">${T.map(r => { const md = r.media || {}, mine = String(r.captain?.id) === my || _isLoggedInSync();
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:.7rem">
+      <div style="display:flex;gap:.55rem;align-items:center;margin-bottom:.45rem">${teamLogo(r.teamName, 44, '1rem')}<div><b>${_h(r.teamName)}</b><div style="font-size:.7rem;color:var(--muted)">${(r.players || []).length} ${_g('graczy', 'players')} · ${_g('kapitan', 'captain')} ${_h(r.captain?.name || '')}</div></div></div>
+      ${md.at ? `${md.goal ? `<div style="font-size:.8rem">🎯 ${_h(md.goal)}</div>` : ''}${md.watch ? `<div style="font-size:.8rem">👀 ${_g('Do obserwowania', 'Watch')}: <b>${_h(md.watch)}</b></div>` : ''}${md.style ? `<div style="font-size:.8rem">${st(md.style)}</div>` : ''}${md.quote ? `<div style="font-size:.8rem;font-style:italic;color:var(--muted);margin-top:.3rem">„${_h(md.quote)}”</div>` : ''}`
+        : `<div style="font-size:.76rem;color:var(--muted)">${_g('Drużyna jeszcze się nie przedstawiła.', 'This team hasn’t introduced itself yet.')}</div>`}
+      <div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.5rem">${mine ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.15rem .45rem" onclick="_fxClose('mdg-modal');openMediaDay('${r.id}')">✏️ ${md.at ? _g('Edytuj', 'Edit') : _g('Wypełnij', 'Fill in')}</button>` : ''}${md.at ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.15rem .45rem" onclick="mediaDayImage('${r.id}')">🖼 ${_g('Grafika', 'Graphic')}</button>` : ''}${md.at && _isLoggedInSync() ? `<button class="btn btn-ghost" style="font-size:.66rem;padding:.15rem .45rem" onclick="mediaDayPost('${r.id}')">📣 Discord</button>` : ''}</div></div>`; }).join('') || `<div style="color:var(--muted)">${_g('Brak drużyn.', 'No teams yet.')}</div>`}</div></div>`;
+}
+async function mediaDayImage(regId) {
+  const r = (teamRegistrations || []).find(x => x.id === regId); if(!r) return; const md = r.media || {}, en = currentLang === 'en', c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 1080, 1350); bg.addColorStop(0, '#1a1205'); bg.addColorStop(1, '#0b0d12'); g.fillStyle = bg; g.fillRect(0, 0, 1080, 1350);
+  const txt = (t, x, y, f, col, al = 'left') => { g.font = f; g.fillStyle = col; g.textAlign = al; g.fillText(t, x, y); };
+  const wrap = (t, x, y, maxW, lh, f, col) => { g.font = f; g.fillStyle = col; g.textAlign = 'left'; let line = '', yy = y; for(const w of String(t).split(' ')) { const tt = line ? line + ' ' + w : w; if(g.measureText(tt).width > maxW && line) { g.fillText(line, x, yy); line = w; yy += lh; } else line = tt; } if(line) g.fillText(line, x, yy); return yy; };
+  txt('🎬 MEDIA DAY', 80, 130, '900 56px "Barlow Condensed", Arial', '#f5c518'); txt((EU_MODE ? 'EU CHEMIK LEAGUE' : 'NBA 2K PRO-AM EKSTRAKLASA'), 80, 185, '700 32px Arial', '#9ca3af');
+  try { if(r.logo) { const im = new Image(); im.crossOrigin = 'anonymous'; await new Promise((ok, no) => { im.onload = ok; im.onerror = no; im.src = r.logo; setTimeout(no, 5000); }); g.drawImage(im, 80, 240, 260, 260); } else throw 0; } catch(e) { g.fillStyle = '#f5c518'; g.beginPath(); g.arc(210, 370, 130, 0, Math.PI * 2); g.fill(); txt(r.teamName.split(/\s+/).map(w => w[0]).join('').slice(0, 3).toUpperCase(), 210, 400, '900 90px Arial', '#111', 'center'); }
+  wrap(r.teamName.toUpperCase(), 380, 330, 640, 86, '900 84px "Barlow Condensed", Arial', '#fff'); txt(`${(r.players || []).length} ${en ? 'PLAYERS' : 'GRACZY'} · ${en ? 'CAPTAIN' : 'KAPITAN'} ${String(r.captain?.name || '').toUpperCase()}`, 380, 470, '700 30px Arial', '#9ca3af');
+  let y = 600; const block = (ico, lab, val) => { if(!val) return; txt(ico + ' ' + lab, 80, y, '800 34px Arial', '#f5c518'); y = wrap(val, 80, y + 52, 920, 50, '600 42px Arial', '#fff') + 80; };
+  block('🎯', en ? 'GOAL FOR THE SEASON' : 'CEL NA SEZON', md.goal); block('👀', en ? 'PLAYER TO WATCH' : 'GRACZ DO OBSERWOWANIA', md.watch); block('🏀', en ? 'STYLE' : 'STYL GRY', (_MD_STYLES.find(x => x[0] === md.style) || [])[en ? 2 : 1]);
+  if(md.quote) { txt('💬 ' + (en ? 'FROM THE CAPTAIN' : 'SŁOWO OD KAPITANA'), 80, y, '800 34px Arial', '#f5c518'); wrap('„' + md.quote + '”', 80, y + 52, 920, 50, 'italic 600 40px Arial', '#e5e7eb'); }
+  txt(location.host || 'chemikleagues.com', 80, 1300, '700 30px Arial', '#6b7280');
+  let blob; try { blob = await new Promise(rs => c.toBlob(rs, 'image/png')); } catch(e) { showToast('❌ ' + _g('Nie udało się utworzyć grafiki', 'Could not create the graphic'), 'error'); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `media-day-${_normNick(r.teamName)}.png`; a.click();
+}
+async function mediaDayPost(regId) {
+  const r = (teamRegistrations || []).find(x => x.id === regId); if(!r?.media) return; if(!confirm(`Opublikować prezentację ${r.teamName} na Discordzie (kanał drużyn)?`)) return; const md = r.media, en = EU_MODE;
+  const ok = await _teamRegDiscordSend({ route: 'teamApproved', embeds: [{ title: `🎬 Media day: ${r.teamName}`, color: 0xf5c518, description: [md.goal && `🎯 **${en ? 'Goal' : 'Cel'}:** ${md.goal}`, md.watch && `👀 **${en ? 'Player to watch' : 'Do obserwowania'}:** ${md.watch}`, md.style && `🏀 **${en ? 'Style' : 'Styl'}:** ${(_MD_STYLES.find(x => x[0] === md.style) || [])[en ? 2 : 1]}`, md.quote && `💬 *„${md.quote}”* — ${r.captain?.name || ''}`, `\n👥 ${(r.players || []).map(p => p.gamertag).join(' · ')}`].filter(Boolean).join('\n'),
+    footer: { text: en ? 'EU Chemik League · Media day' : 'NBA 2K Pro-Am Ekstraklasa · Media day' }, timestamp: new Date().toISOString() }] }, r.logo);
+  showToast(ok ? '📣 Opublikowano' : '⚠ Discord nie odpowiedział', ok ? 'success' : 'info');
+}
+// 🎙️ WYWIAD POMECZOWY — formularz dla MVP i podgląd odpowiedzi
+async function openInterview(id) {
+  const r = await _api('/interview?m=' + encodeURIComponent(id), 'GET', null, discordUser?.session ? { session: true } : {}); const m = _fxModal('iv-modal', 560); m.classList.add('open');
+  if(!r.ok) { m.querySelector('.modal').innerHTML = _fxHead('iv-modal', '🎙️') + `<div style="color:var(--muted)">${_h(_tr(r.error || ''))}</div>`; return; }
+  m.querySelector('.modal').innerHTML = _fxHead('iv-modal', `🎙️ ${_g('Wywiad pomeczowy', 'Post-game interview')}`) + `<div data-notr>
+    <div style="font-size:.86rem;margin-bottom:.6rem"><b>${_h(r.name)}</b> (${_h(r.team)}) · ${_h(r.team)} <b>${_h(r.score)}</b> ${_h(r.opp)}<div style="font-size:.74rem;color:var(--muted)">MVP: ${_h(r.line || '')}</div></div>
+    ${r.q.map((q, i) => `<label style="${_MODAL_LBL}">${_h(q)}</label>${r.canAnswer ? `<textarea id="iv-a${i}" maxlength="280" rows="2" style="${_MODAL_INP};margin-bottom:.5rem"></textarea>` : `<div style="font-size:.86rem;font-style:italic;margin-bottom:.6rem">${r.answers?.[i] ? '„' + _h(r.answers[i]) + '”' : '—'}</div>`}`).join('')}
+    ${r.canAnswer ? `<div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="interviewSend('${id}')">🎙️ ${_g('Wyślij wywiad', 'Send the interview')}</button></div>` : !r.answers ? `<div style="font-size:.78rem;color:var(--muted)">${_g('MVP jeszcze nie udzielił wywiadu.', 'The MVP hasn’t answered yet.')}</div>` : ''}</div>`;
+}
+async function interviewSend(id) { const answers = [0, 1, 2].map(i => document.getElementById('iv-a' + i)?.value || ''); const r = await _api('/interview', 'POST', { m: id, answers }, { session: true });
+  if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; } (window._interviews = window._interviews || {})[id] = { answers: r.answers }; showToast('🎙️ ' + _g('Dzięki! Wywiad trafi na stronę i Discorda.', 'Thanks! The interview goes on the website and Discord.'), 'success'); openInterview(id); }
+
+// 🔗 POŁĄCZONE KONTA — PL i EU w jednym widoku
+const _LINK_SRC = { PL: { url: 'https://kw5-elite-proxy.igor-bernakiewicz.workers.dev', site: 'https://chemikleagues.com' }, EU: { url: EU_WORKER, site: 'https://eu.chemikleagues.com' } };
+async function _linksFetch(lg) {
+  const mine = (EU_MODE ? 'EU' : 'PL') === lg; if(mine) return _api('/admin/links', 'GET', null, { admin: true });
+  try { const r = await fetch(_LINK_SRC[lg].url.replace(/\/+$/, '') + '/admin/links', { headers: { 'X-Admin-Token': _adminToken() } }); return await r.json(); } catch(e) { return { error: e.message }; }
+}
+async function openLinkedAccounts() {
+  if(!_isLoggedInSync()) return; const m = _fxModal('links-modal', 980); m.classList.add('open'); m.querySelector('.modal').innerHTML = _fxHead('links-modal', '🔗 Połączone konta') + '⏳';
+  const [pl, eu] = await Promise.all([_linksFetch('PL'), _linksFetch('EU')]); window._links = { PL: pl, EU: eu, q: '' }; _linksDraw();
+}
+function _linksDraw() {
+  const L = window._links, q = _normNick(L.q || ''), m = document.getElementById('links-modal');
+  const col = lg => { const d = L[lg]; if(!d?.ok) return `<div style="font-size:.82rem;color:var(--muted)">${lg === 'EU' ? '🇪🇺' : '🇵🇱'} <b>Liga ${lg}</b><br>Nie udało się pobrać danych${d?.error === 'Unauthorized' ? ' (ten serwer nie przyjął sesji admina)' : ''}.<br><a href="${_LINK_SRC[lg].site}/#polaczone-konta" target="_blank" style="color:var(--accent)">Otwórz listę na stronie ligi ${lg} ›</a></div>`;
+    const hit = s => !q || _normNick(s || '').includes(q), pct = d.stats.players ? Math.round(d.stats.linked / d.stats.players * 100) : 0;
+    return `<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.4rem"><b>${lg === 'EU' ? '🇪🇺' : '🇵🇱'} Liga ${lg}</b><span style="font-size:.78rem">połączone: <b>${d.stats.linked}/${d.stats.players}</b> (${pct}%)</span></div>
+      <div style="height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-bottom:.6rem"><div style="height:100%;width:${pct}%;background:var(--win)"></div></div>
+      ${d.teams.map(t => { const P = t.players.filter(p => hit(p.gamertag) || hit(p.discord) || hit(t.team)); if(!P.length) return ''; const n = t.players.filter(p => p.linked).length;
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.45rem .6rem;margin-bottom:.4rem"><div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:.25rem"><b>${_h(t.team)}${t.status === 'pending' ? ' <span style="color:var(--muted);font-weight:400">(oczekuje)</span>' : ''}</b><span style="color:${n === t.players.length ? 'var(--win)' : 'var(--accent)'}">${n}/${t.players.length}</span></div>
+          ${P.map(p => `<div style="display:flex;gap:.4rem;font-size:.76rem;padding:.08rem 0"><span>${p.linked ? (p.pending ? '⏳' : '✅') : '⬜'}</span><span style="flex:1">${_h(p.gamertag)}</span><span style="color:var(--muted)">${p.linked ? '@' + _h(p.discord || p.uid) : 'niepołączony'}</span></div>`).join('')}</div>`; }).join('')}
+      ${d.loose.filter(x => hit(x.gamertag) || hit(x.discord)).length ? `<div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin:.5rem 0 .25rem">KONTA POZA SKŁADAMI</div>${d.loose.filter(x => hit(x.gamertag) || hit(x.discord)).map(x => `<div style="display:flex;gap:.4rem;font-size:.76rem;padding:.08rem 0"><span>🔗</span><span style="flex:1">${_h(x.gamertag)}</span><span style="color:var(--muted)">@${_h(x.discord || x.uid)}${x.team ? ' · ' + _h(x.team) : ''}</span></div>`).join('')}` : ''}</div>`; };
+  m.querySelector('.modal').innerHTML = _fxHead('links-modal', '🔗 Połączone konta') + `<div data-notr>
+    <input value="${_h(L.q || '')}" placeholder="Szukaj nicku, konta Discord albo drużyny…" oninput="window._links.q=this.value;_linksDraw();const i=document.querySelector('#links-modal input');i.focus();i.setSelectionRange(i.value.length,i.value.length)" style="${_MODAL_INP};margin-bottom:.6rem">
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.6rem">✅ połączone · ⏳ czeka na potwierdzenie kapitana · ⬜ gracz ze składu bez połączonego konta</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;max-height:65vh;overflow:auto">${col('PL')}${col('EU')}</div></div>`;
 }
 
 function openMatchCenter(id) {
@@ -10481,6 +10572,7 @@ function openMatchCenter(id) {
     ${games.length ? H('🏀 ' + _g('MECZE', 'GAMES')) + games.map((g, i) => { const t1 = N(g.team1.name) === N(s.team1), a = t1 ? g.team1 : g.team2, b = t1 ? g.team2 : g.team1;
       return `<div onclick="_fxClose('mc-modal');openMatch(${g.id})" style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .5rem;border:1px solid var(--border);border-radius:9px;margin-bottom:.3rem;cursor:pointer;font-size:.84rem"><span>${_g('Mecz', 'Game')} ${i + 1}</span><b>${a.score} : ${b.score}</b><span style="font-size:.72rem;color:var(--accent)">📊 ${_g('statystyki', 'box score')}</span></div>`; }).join('') : ''}
     ${best && games.length ? H('⭐ MVP ' + _g('MECZU', 'OF THE MATCH')) + `<div style="display:flex;align-items:center;gap:.6rem;cursor:pointer" onclick="openPlayerCardImg('${_h(best.name).replace(/'/g, "\\'")}')"><b style="font-size:1rem">${_h(best.name)}</b><span style="font-size:.8rem;color:var(--muted)">${_h(best.team)} · ${best.pts} PTS · ${best.reb} REB · ${best.ast} AST${best.n > 1 ? ` (${best.n} ${_g('mecze', 'games')})` : ''}</span><span style="font-size:.7rem;color:var(--accent)">🃏</span></div>` : ''}
+    ${games.map(g => window._interviews?.[String(g.id)] ? { g, iv: window._interviews[String(g.id)] } : null).filter(Boolean).map(({ g, iv }) => H('🎙️ ' + _g('WYWIAD Z MVP', 'MVP INTERVIEW')) + `<div style="font-size:.84rem;cursor:pointer" onclick="openInterview('${g.id}')"><b>${_h(iv.name || '')}</b>: „${_h((iv.answers || []).find(Boolean) || '')}” <span style="color:var(--accent);font-size:.74rem">${_g('cały wywiad ›', 'full interview ›')}</span></div>`).join('')}
     ${games.find(g => g.recap) ? H('📝 ' + _g('OPIS MECZU', 'RECAP')) + `<div style="font-size:.84rem;line-height:1.55">${_h(games.filter(g => g.recap).pop().recap)}</div>` : ''}
     ${H('⚔️ ' + _g('WCZEŚNIEJSZE MECZE', 'PREVIOUS MEETINGS'))}${h2h.length ? `<div style="font-size:.82rem;margin-bottom:.25rem"><b>${_h(s.team1)}</b> ${h1}–${h2h.length - h1} <b>${_h(s.team2)}</b></div>${h2h.slice(0, 5).map(g => `<div style="font-size:.76rem;display:flex;justify-content:space-between;padding:.15rem 0;border-top:1px solid var(--border)"><span>${new Date(g.date).toLocaleDateString(en ? 'en-GB' : 'pl-PL', { day: 'numeric', month: 'short', year: '2-digit' })}</span><span>${_h(g.team1.name)} <b>${g.team1.score}:${g.team2.score}</b> ${_h(g.team2.name)}</span></div>`).join('')}` : `<div style="font-size:.78rem;color:var(--muted)">${_g('Pierwsze spotkanie tych drużyn', 'First meeting of these teams')}</div>`}
     <div style="display:flex;gap:.4rem;flex-wrap:wrap;justify-content:center;margin-top:1rem">
@@ -16765,7 +16857,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['🔗', _g('Połączone konta (PL i EU)', 'Linked accounts (PL & EU)'), 'openLinkedAccounts()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
