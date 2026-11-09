@@ -16156,25 +16156,56 @@ function openCardPicker({ title, hint, max, exact, filter, preselect, onDone, ex
 const TIER_ORDER = { bronze: 0, silver: 1, gold: 2, diamond: 3, galaxy: 4, limited: 5 };
 
 // ═══ 🧩 WYZWANIA ═══
-function challengesHtml(me) {
-  const L = me?.challenges || []; if(!L.length) return '';
-  const rw = r => r.kind === 'premium' ? `💎 ${_g('paczka premium', 'premium pack')}` : `🎁 ${r.n} ${_g(_plPL(r.n, 'paczka', 'paczki', 'paczek'), r.n === 1 ? 'pack' : 'packs')}`;
-  return `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🧩 ${_g('WYZWANIA TYGODNIA', 'WEEKLY CHALLENGES')}</div>
-    <div style="font-size:.74rem;color:var(--muted);margin-bottom:.5rem">${_g('Oddaj karty spełniające warunek i odbierz nagrodę. Najlepiej oddawaj duplikaty. Nowe wyzwania co poniedziałek.', 'Hand in cards that meet the condition and get a reward — duplicates are best. New challenges every Monday.')}</div>
-    ${L.map(c => `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--border)">
-      <span style="font-size:1.3rem;width:30px;text-align:center">${c.icon}</span>
-      <div style="flex:1"><div style="font-weight:700;font-size:.86rem">${_h(currentLang === 'en' ? c.en : c.pl)}</div><div style="font-size:.74rem;color:var(--muted)">${_g('Nagroda', 'Reward')}: ${rw(c.reward)}</div></div>
-      ${c.done ? `<span style="color:var(--win);font-size:.78rem;font-weight:700">✅ ${_g('Ukończone', 'Done')}</span>` : `<button class="btn btn-primary" style="font-size:.72rem" onclick="challengePick('${c.id}')">${_g('Wybierz karty', 'Pick cards')}</button>`}</div>`).join('')}</div>`;
+// ⚒️ / 🎯 stałe wymiany duplikatów
+let _cr = null;
+const _poolBy = () => { const m = {}; (_cards?.pool || []).forEach(p => m[p.k] = p); return m; };
+function craftOpen(mode) { if(!_ensureSession()) return; _cr = { mode, need: mode === 'pick' ? 12 : 10, sel: {}, target: null, q: '' }; _crDraw(); }
+function _crStep(k, d) { const c = _cards?.cards?.[k]; if(!c) return; const tot = Object.values(_cr.sel).reduce((s, n) => s + n, 0), nx = (_cr.sel[k] || 0) + d; if(nx < 0 || nx > c.n - 1 || (d > 0 && tot >= _cr.need)) return; _cr.sel[k] = nx; _crDraw(); }
+function _crDraw() {
+  const P = _poolBy(), own = _cards?.cards || {}, en = currentLang === 'en', up = _cr.mode === 'upgrade';
+  const dup = Object.entries(own).filter(([k, c]) => c.n > 1 && !k.startsWith('lim:') && !k.startsWith('coach:') && (!up || ['bronze', 'silver'].includes(P[k]?.tier || c.tier))).sort((a, b) => b[1].n - a[1].n);
+  const tot = Object.values(_cr.sel).reduce((s, n) => s + n, 0), miss = (_cards?.pool || []).filter(p => !(own[p.k]?.n > 0) && (!_cr.q || _normNick(p.name).includes(_normNick(_cr.q)) || _normNick(p.team).includes(_normNick(_cr.q)))).sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const m = _fxModal('craft-modal', 600); m.classList.add('open');
+  m.querySelector('.modal').innerHTML = _fxHead('craft-modal', up ? '⚒️ ' + _g('Ulepszenie', 'Upgrade') : '🎯 ' + _g('Wybrana karta', 'Pick a card')) + `<div data-notr>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">${up ? _g('Oddaj 10 duplikatów brązowych lub srebrnych i dostań losową kartę złotą lub lepszą (najczęściej taką, której nie masz). Do 3 razy w tygodniu.', 'Hand in 10 bronze or silver duplicates for a random gold-or-better card (usually one you’re missing). Up to 3 times a week.') : _g('Oddaj 12 duplikatów i wybierz dowolną brakującą kartę gracza. Do 2 razy w tygodniu.', 'Hand in 12 duplicates and pick any player card you’re missing. Up to 2 times a week.')} ${_g('Z każdej karty zostaje Ci co najmniej 1 egzemplarz.', 'You always keep at least 1 copy of each card.')}</div>
+    ${up ? '' : `<label style="${_MODAL_LBL}">1. ${_g('Którą kartę chcesz?', 'Which card do you want?')}</label><input value="${_h(_cr.q)}" placeholder="${_g('Szukaj gracza lub drużyny…', 'Search player or team…')}" oninput="_cr.q=this.value;_crDraw();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="${_MODAL_INP};margin-bottom:.35rem">
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem;max-height:22vh;overflow:auto;margin-bottom:.7rem">${miss.slice(0, 60).map(p => `<button onclick="_cr.target='${p.k}';_crDraw()" style="font-family:inherit;font-size:.74rem;padding:.25rem .55rem;border-radius:999px;cursor:pointer;border:1px solid ${_cr.target === p.k ? '#22c55e' : 'var(--border)'};background:${_cr.target === p.k ? 'rgba(34,197,94,.2)' : 'var(--surface2)'};color:var(--text)">${_cr.target === p.k ? '✓ ' : ''}${_h(p.name)} <span style="color:var(--muted)">${_h(p.team || '')} · ${p.rating || ''}</span></button>`).join('') || `<span style="font-size:.78rem;color:var(--muted)">${_g('Masz wszystkie karty z puli! 🏆', 'You have every card in the pool! 🏆')}</span>`}</div>
+      <label style="${_MODAL_LBL}">2. ${_g('Duplikaty do oddania', 'Duplicates to hand in')}</label>`}
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.4rem"><b style="font-family:'Barlow Condensed',sans-serif;font-size:1.35rem;color:${tot === _cr.need ? 'var(--win)' : 'var(--accent)'}">${tot}/${_cr.need}</b><button class="btn btn-ghost" style="font-size:.66rem;padding:.12rem .45rem;margin-left:auto" onclick="_cr.sel={};_crDraw()">${_g('wyczyść', 'clear')}</button></div>
+    <div style="max-height:34vh;overflow:auto">${dup.map(([k, c]) => { const n = _cr.sel[k] || 0; return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem .2rem;border-bottom:1px solid var(--border);${n ? 'background:rgba(34,197,94,.08)' : ''}"><span style="flex:1;font-size:.8rem"><b>${_h(c.name)}</b> <span style="color:var(--muted);font-size:.7rem">${_h(c.team || '')} · ×${c.n}</span></span>
+      <button class="btn btn-ghost" style="padding:.05rem .5rem" ${n ? '' : 'disabled'} onclick="_crStep('${k}',-1)">−</button><b style="width:18px;text-align:center">${n}</b><button class="btn btn-ghost" style="padding:.05rem .5rem" ${n < c.n - 1 && tot < _cr.need ? '' : 'disabled'} onclick="_crStep('${k}',1)">+</button></div>`; }).join('') || `<div style="font-size:.82rem;color:var(--muted)">${up ? _g('Nie masz duplikatów brązowych ani srebrnych.', 'No bronze or silver duplicates.') : _g('Nie masz duplikatów.', 'No duplicates.')}</div>`}</div>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.7rem"><button class="btn btn-ghost" onclick="_fxClose('craft-modal')">${_g('Anuluj', 'Cancel')}</button><button class="btn btn-primary" ${tot === _cr.need && (up || _cr.target) ? '' : 'disabled'} onclick="_crGo()">${up ? '⚒️ ' + _g('Ulepsz', 'Upgrade') : '🎯 ' + _g('Odbierz kartę', 'Get the card')}</button></div></div>`;
 }
+async function _crGo() { const r = await _api('/cards/craft', 'POST', { mode: _cr.mode, give: _cr.sel, target: _cr.target }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
+  _cards = { ..._cards, ...r }; _fxClose('craft-modal'); showToast(`${_cr.mode === 'pick' ? '🎯' : '⚒️'} ${_g('Nowa karta', 'New card')}: ${r.got.name} (${r.got.tier})`, 'success'); _teamEventsToast?.(r.teamEvents); renderCardsView(); setTimeout(() => openPlayerCardImg(r.got.name), 600); }
+
+function challengesHtml(me) {
+  const L = me?.challenges || []; if(!L.length && !discordUser) return '';
+  const wkend = (() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' })).getDay(); return d === 5 || d === 6 || d === 0; })();
+  const rw = r => r.kind === 'premium' ? `💎 ${_g('paczka premium', 'premium pack')}` : r.kind === 'coach' ? `🧑‍🏫 ${_g('karta trenerska do Kortu', 'Kort coach card')}` : r.kind === 'coach+pack' ? `🧑‍🏫 ${_g('karta trenerska', 'coach card')} + 🎁 ${_g('paczka', 'pack')}` : r.kind === 'xp' ? `⭐ +${r.n} XP` : `🎁 ${r.n} ${_g(_plPL(r.n, 'paczka', 'paczki', 'paczek'), r.n === 1 ? 'pack' : 'packs')}`;
+  return `<div class="card" style="padding:.7rem 1rem;margin-bottom:1rem"><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">🏅 ${_g('WYZWANIA TYGODNIA', 'WEEKLY CHALLENGES')}</div>
+    <div style="font-size:.74rem;color:var(--muted);margin-bottom:.5rem">${_g('Oddaj karty spełniające warunek i odbierz nagrodę. Najlepiej oddawaj duplikaty. Nowe wyzwania co poniedziałek, a w weekend dodatkowe.', 'Hand in cards that meet the condition and get a reward — duplicates are best. New challenges every Monday, plus a weekend one.')}</div>
+    ${L.map(c => { const lock = c.weekend && !wkend; return `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--border);${lock ? 'opacity:.55' : ''}">
+      <span style="font-size:1.3rem;width:30px;text-align:center">${c.icon}</span>
+      <div style="flex:1"><div style="font-weight:700;font-size:.86rem">${_h(currentLang === 'en' ? c.en : c.pl)}${c.hard ? ` <span style="font-size:.62rem;background:#f5c518;color:#111;border-radius:5px;padding:0 .3rem">${_g('TRUDNE', 'HARD')}</span>` : ''}</div><div style="font-size:.74rem;color:var(--muted)">${_g('Nagroda', 'Reward')}: ${rw(c.reward)}</div></div>
+      ${c.done ? `<span style="color:var(--win);font-size:.78rem;font-weight:700">✅ ${_g('Ukończone', 'Done')}</span>` : lock ? `<span style="font-size:.72rem;color:var(--muted)">${_g('od piątku', 'from Friday')}</span>` : `<button class="btn btn-primary" style="font-size:.72rem" onclick="challengePick('${c.id}')">${_g('Wybierz karty', 'Pick cards')}</button>`}</div>`; }).join('')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-top:.6rem;padding-top:.6rem;border-top:1px dashed var(--border)">
+      <button class="btn btn-ghost" style="font-size:.74rem;padding:.45rem;text-align:left;line-height:1.3" onclick="craftOpen('upgrade')">⚒️ <b>${_g('Ulepszenie', 'Upgrade')}</b><br><span style="font-size:.66rem;color:var(--muted);text-transform:none;letter-spacing:0">${_g('10 duplikatów brąz/srebro → złota+', '10 bronze/silver dupes → gold+')}</span></button>
+      <button class="btn btn-ghost" style="font-size:.74rem;padding:.45rem;text-align:left;line-height:1.3" onclick="craftOpen('pick')">🎯 <b>${_g('Wybrana karta', 'Pick a card')}</b><br><span style="font-size:.66rem;color:var(--muted);text-transform:none;letter-spacing:0">${_g('12 duplikatów → brakująca karta', '12 dupes → a card you’re missing')}</span></button></div></div>`;
+}
+
 function challengePick(id) {
   const c = _cards?.challenges?.find(x => x.id === id); if(!c) return;
-  const r = c.rule || {}, filt = r.minTier ? x => (TIER_ORDER[x.tier] ?? 0) >= TIER_ORDER[r.minTier] : r.team ? x => String(x.team).toLowerCase() === String(r.team).toLowerCase() : null;
+  const r = c.rule || {}, PB = Object.fromEntries((_cards?.pool || []).map(p => [_normNick(p.name), p])), pi = x => PB[_normNick(x.name)] || {};
+  const filt = r.minTier ? x => (TIER_ORDER[x.tier] ?? 0) >= TIER_ORDER[r.minTier] : r.team ? x => String(x.team).toLowerCase() === String(r.team).toLowerCase()
+    : r.teamsEach ? x => Object.keys(r.teamsEach).map(t => t.toLowerCase()).includes(String(x.team).toLowerCase()) : r.names ? x => r.names.map(_normNick).includes(_normNick(x.name))
+    : r.rookie ? x => !!pi(x).rookie : r.positions ? x => !!pi(x).pos : null;
   openCardPicker({ title: c.icon + ' ' + _h(currentLang === 'en' ? c.en : c.pl), max: c.need, exact: true, filter: filt,
     hint: _g('Wybrane karty zostaną oddane (z duplikatów zabierany jest jeden egzemplarz).', 'The selected cards will be handed in (one copy is taken from duplicates).'),
     onDone: async keys => { if(!confirm(_g('Oddać wybrane karty i odebrać nagrodę?', 'Hand in the selected cards and claim the reward?'))) return;
       const res = await _api('/cards/challenge', 'POST', { id, cards: keys }, { session: true });
       if(!res.ok) { showToast('❌ ' + _tr(res.error), 'error'); return; }
-      showToast(res.reward.kind === 'premium' ? _g('💎 Masz paczkę premium!', '💎 You got a premium pack!') : _g(`🎁 +${res.reward.n} paczki!`, `🎁 +${res.reward.n} packs!`), 'success'); renderCardsView(); } });
+      showToast(res.reward.kind === 'premium' ? _g('💎 Masz paczkę premium!', '💎 You got a premium pack!') : res.reward.kind === 'xp' ? `⭐ +${res.reward.n} XP` : res.reward.kind === 'coach' ? _g('🧑‍🏫 Nowa karta trenerska do Kortu!', '🧑‍🏫 New Kort coach card!') : res.reward.kind === 'coach+pack' ? _g('🧑‍🏫 Karta trenerska + 🎁 paczka!', '🧑‍🏫 Coach card + 🎁 pack!') : _g(`🎁 +${res.reward.n} paczka!`, `🎁 +${res.reward.n} pack!`), 'success'); renderCardsView(); } });
 }
 
 // ═══ 🏀 MOJA PIĄTKA ═══
