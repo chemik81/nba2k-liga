@@ -14719,7 +14719,7 @@ async function _fansLoad() { if(_fansCache && Date.now() - _fansCache.at < 5 * 6
 let _pass = null;
 async function passMount() {
   const slot = document.querySelector('#fans-view .pass-slot'); if(!slot || !discordUser?.session) return;
-  if(!_pass) { const r = await _api('/pass', 'GET', null, { session: true }); if(!r.ok || !Array.isArray(r.tiers)) return; _pass = r; }
+  if(!_pass) { const r = await _api('/pass', 'GET', null, { session: true }); if(r.off) { slot.innerHTML = ''; return; } if(!r.ok || !Array.isArray(r.tiers)) return; _pass = r; }
   const P = _pass, en = currentLang === 'en', next = P.tiers.find(t => P.xp < t.xp), prev = [...P.tiers].reverse().find(t => P.xp >= t.xp), lvl = prev?.tier || 0;
   const pct = next ? Math.round((P.xp - (prev?.xp || 0)) / (next.xp - (prev?.xp || 0)) * 100) : 100, ico = r => r === 'final' ? '🏆' : r === 'premium' ? '💎' : r === 'pack' ? '🎁' : '·';
   const ready = P.tiers.filter(t => t.reward && P.xp >= t.xp && !P.claimed.includes(t.tier)).length;
@@ -14732,6 +14732,12 @@ async function passMount() {
         <div style="font-size:.6rem;color:var(--muted)">${t.tier}</div><div style="font-size:1.15rem;line-height:1.3">${cl ? '✅' : ico(t.reward)}</div><div style="font-size:.55rem;color:var(--muted)">${t.xp} XP</div>
         ${can ? `<button class="btn btn-primary" style="font-size:.55rem;padding:.1rem .25rem;margin-top:.15rem" onclick="passClaim(${t.tier})">${_g('Odbierz', 'Claim')}</button>` : ''}</div>`; }).join('')}</div>
     <div style="font-size:.66rem;color:var(--muted);margin-top:.35rem">🎁 ${_g('paczka co 2 poziomy', 'pack every 2 levels')} · 💎 ${_g('premium na 5, 10, 15', 'premium at 5, 10, 15')} · 🏆 ${_g('poziom 20: premium + unikalna karta „Przepustka”', 'level 20: premium + a one-of-a-kind “Season Pass” card')}</div></div>`;
+}
+async function passAdminToggle() {
+  const cur = await _api('/pass/admin', 'POST', {}, { admin: true }); if(!cur.ok) { showToast('❌ ' + (cur.error || 'Błąd'), 'error'); return; }
+  if(!confirm(cur.off ? 'Przepustka jest WYŁĄCZONA. Włączyć ją kibicom?' : 'Przepustka jest WŁĄCZONA. Wyłączyć? Sekcja zniknie kibicom i nie będzie można odbierać nagród (odebrane zostają).')) return;
+  const r = await _api('/pass/admin', 'POST', { off: !cur.off }, { admin: true }); _pass = null;
+  showToast(r.ok ? (r.off ? '🎟️ Przepustka wyłączona' : '🎟️ Przepustka włączona') : '❌ ' + (r.error || 'Błąd'), r.ok ? 'success' : 'error');
 }
 async function passClaim(tier) {
   const r = await _api('/pass/claim', 'POST', { tier }, { session: true }); if(!r.ok) { showToast('❌ ' + _tr(r.error || ''), 'error'); return; }
@@ -16615,7 +16621,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
