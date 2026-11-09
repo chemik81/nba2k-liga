@@ -2836,6 +2836,7 @@ async function loadData() {
     playersList = record.players || [];
     streamsData = record.streams || {};
     clipsList = record.clips || [];
+    window._totwPub = record.totwPub || {}; // opublikowane Piątki tygodnia (jak w podcaście i kartach limitowanych)
     penalties = record.penalties || [];
     rosterLockDate = record.rosterLockDate || null;
     discordRoleCfg = { guildId: record.discordGuildId || '', member: record.discordMemberRoleId || '', captain: record.discordCaptainRoleId || '' };
@@ -16589,6 +16590,8 @@ function _totwData(w) {
     const ps = String(p.pos || '').toUpperCase().split(/[\/,\s]+/)[0]; if(ps) a.posN[ps] = (a.posN[ps] || 0) + 1; })));
   // Piątka po pozycjach (jak grafika bota): na każdą pozycję najlepszy występ wśród grających głównie tam; brak → grający tam choć raz → najlepszy z pozostałych
   const list = Object.values(by).map(a => ({ ...a, avg: a.gs / a.gp, mainPos: Object.entries(a.posN).sort((x, y) => y[1] - x[1])[0]?.[0] || '' })).sort((a, b) => b.avg - a.avg), used = new Set();
+  const pub = (window._totwPub || {})[(currentSeasonId || '') + ':' + w]; // opublikowana Piątka (karty limitowane, podcast) ma pierwszeństwo
+  if(pub?.length) return pub.slice(0, 5).map((p, i) => { const x = list.find(y => _normNick(y.name) === _normNick(p.name)); return { ...(x || { name: p.name, team: p.team, gp: 0, gs: 0, pts: 0, reb: 0, ast: 0, avg: 0, posN: {} }), name: x?.name || p.name, team: x?.team || p.team, pos: ['PG', 'SG', 'SF', 'PF', 'C'][i], slot: ['PG', 'SG', 'SF', 'PF', 'C'][i], published: true }; });
   return ['PG', 'SG', 'SF', 'PF', 'C'].map(slot => { const free = list.filter(x => !used.has(x.name)); const x = free.find(y => y.mainPos === slot) || free.find(y => y.posN[slot]) || free[0]; if(!x) return null; used.add(x.name); return { ...x, pos: slot, slot }; }).filter(Boolean);
 }
 async function renderTotw() {
