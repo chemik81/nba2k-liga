@@ -2577,11 +2577,11 @@ async function _loadEventsStore() {
   } catch(e) { console.warn('events store', e); }
 }
 async function _saveEvents(force) {
-  const json = JSON.stringify(events || []);
+  const json = JSON.stringify((events || []).filter(e => !e._peer)); // 🌍 wspólne drafty z PL nie trafiają do bazy EU
   if(!force && json === _eventsSavedJson) return true;
   try {
     const real = list => (list || []).filter(e => !String(e.id).startsWith('test_ev_')).map(e => e.id);
-    const before = real(_eventsSavedJson ? JSON.parse(_eventsSavedJson) : []), now = new Set(real(events));
+    const before = real(_eventsSavedJson ? JSON.parse(_eventsSavedJson) : []).filter(id => !(events || []).some(e => e.id === id && e._peer)), now = new Set(real((events || []).filter(e => !e._peer)));
     const lost = before.filter(id => !now.has(id));
     if(lost.length >= 2 && !window._evAllowShrink && !confirm(`Uwaga: zapis usunąłby ${lost.length} eventów naraz. To zamierzone? (Anuluj = nic nie zapisuj)`)) return false;
   } catch(e) {}
@@ -2948,9 +2948,19 @@ function applyAliasesToMatch(match) {
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
+
+// 🔗 ADRESY ZAKŁADEK — pasek adresu pokazuje bieżącą zakładkę (PL po polsku, EU po angielsku; oba warianty rozpoznawane)
+const _VIEW_SLUG = { events: ['eventy', 'events'], matches: ['mecze', 'games'], stats: ['statystyki', 'stats'], 'add-match': ['dodaj-mecz', 'add-game'], mypanel: ['panel', 'panel'], kort: ['kort', 'kort'], rules: ['regulamin', 'rules'],
+  join: ['zapisy', 'join'], standings: ['tabela', 'standings'], awards: ['nagrody', 'awards'], totw: ['piatka-tygodnia', 'team-of-the-week'], fplus: ['fantasy-plus', 'fantasy-plus'], cards: ['kolekcja', 'cards'], gm: ['liga-gm', 'gm-league'],
+  fans: ['kibice', 'fans'], kordle: ['2kordle', '2kordle'], podcast: ['podcast', 'podcast'], multistream: ['multistream', 'multistream'], teams: ['druzyny', 'teams'], fantasy: ['fantasy', 'fantasy'], schedule: ['terminarz', 'schedule'] };
+const _urlOn = () => /^https?:$/.test(location.protocol);
+function _viewUrl(v) { const s = _VIEW_SLUG[v]; return '/' + (s ? s[EU_MODE ? 1 : 0] : '') + location.search; }
+function _viewOfSlug(h) { h = String(h || '').toLowerCase(); for(const [v, s] of Object.entries(_VIEW_SLUG)) if(s.includes(h)) return v; return null; }
+function _modalUrl(path) { if(_urlOn()) setTimeout(() => { try { history.replaceState(history.state, '', path); } catch(e) {} }, 0); }
+
 function showView(id) {
   try { _sideSync(id); } catch(e) {}
-  try { if(window._navReady && !window._navFromPop) { const cur = (document.querySelector('.view.active')?.id || '').replace(/^view-/, ''); if(cur && cur !== id) history.pushState({ v: id }, '', location.pathname + location.search); } } catch(e) {}
+  try { if(window._navReady && !window._navFromPop) { const cur = (document.querySelector('.view.active')?.id || '').replace(/^view-/, ''); if(cur && cur !== id) history.pushState({ v: id }, '', _urlOn() ? _viewUrl(id) : location.pathname + location.search); } } catch(e) {}
   // link z adresu (np. #multistream, #kolekcja) obsłużony — przy przejściu na inny widok czyścimy adres, żeby odświeżenie nie wracało do linku
   try { const h = location.hash.replace('#', ''); if(h && !h.startsWith('bin=') && !h.startsWith('{') && window._routeHandled && h !== id) history.replaceState(history.state, '', location.pathname + location.search); } catch(e) {}
   try { _gmNavSync(); } catch(e) {}
@@ -7567,7 +7577,7 @@ function _ssMatchEmbed(s, title) {
     title: title || `📅 Termin meczu — Week ${s.week}`,
     description: `**${s.team1}** vs **${s.team2}**${(s.bestOf || 1) > 1 ? ' (Bo' + s.bestOf + ')' : ''}\n${full} · ${s.time || ''}` +
       `${grp ? '\n' + grp : ''}${s.round ? ' · Kolejka ' + s.round : ''}`,
-    url: location.origin + location.pathname + '#terminarz-week-' + s.week,
+    url: location.origin + '/terminarz-week-' + s.week,
     color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
   };
 }
@@ -8106,8 +8116,10 @@ function openDeepLink() {
   const _q = new URLSearchParams(location.search).get('v') || '';
   const _p = location.protocol === 'file:' ? '' : location.pathname.replace(/^\/+|\/+$/g, '').replace(/(^|\/)index\.html$/, ''); // ładne adresy: /rules, /register
   const h = decodeURIComponent((location.hash || '').replace(/^#/, '') || _q || _p).toLowerCase();
-  if(_p && !location.hash && !_q) try { history.replaceState(history.state, '', '/' + location.search); } catch(e) {} // po otwarciu adres wraca na stronę główną (odświeżenie nie wraca do linku)
+  const _vv = _viewOfSlug(h); // 🔗 adres zakładki (np. /eventy, /terminarz) — zostaje w pasku adresu
+  if(_p && !location.hash && !_q && !_vv) try { history.replaceState(history.state, '', '/' + location.search); } catch(e) {} // inne linki: po otwarciu adres wraca na stronę główną
   if(!h) return;
+  if(_vv) { setTimeout(() => showView(_vv), 300); return; }
   if(['wymiany', 'trades', 'wymiana'].includes(h)) { setTimeout(() => { showView('cards'); setTimeout(() => document.getElementById('trades-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 1500); }, 300); return; }
   if(['wrapped', 'moj-wrapped', 'mój-wrapped'].includes(h)) { setTimeout(() => { if(discordUser) { _wr.tab = null; openWrapped(); } else showToast('Zaloguj się przez Discord, żeby zobaczyć swój Wrapped', 'info'); }, 900); return; }
   if(['fantasy-plus', 'fantasyplus', 'fplus', 'fantasy+'].includes(h)) { setTimeout(() => showView('fplus'), 300); return; }
@@ -8171,7 +8183,7 @@ function openDeepLink() {
 }
 
 function copyDeepLink(hash) {
-  const url = location.origin + location.pathname + '#' + hash;
+  const url = location.origin + '/' + hash;
   const done = () => showToast('🔗 Skopiowano link: ' + url, 'success');
   if(navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done, () => prompt('Skopiuj link:', url));
   else prompt('Skopiuj link:', url);
@@ -8729,7 +8741,7 @@ function ssCalendarSingle(k) {
   const endD = new Date(Date.UTC(+s.date.slice(0, 4), +s.date.slice(5, 7) - 1, +s.date.slice(8, 10), hh, mm + 45 * (s.bestOf || 1) + 15));
   const end = endD.toISOString().slice(0, 10).replace(/-/g, '') + 'T' + endD.toISOString().slice(11, 16).replace(':', '') + '00';
   const title = `🏀 ${s.team1} vs ${s.team2}${(s.bestOf || 1) > 1 ? ' (Bo' + s.bestOf + ')' : ''}`;
-  const link = location.origin + location.pathname + '#terminarz-week-' + s.week;
+  const link = location.origin + '/terminarz-week-' + s.week;
   const g = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(title) +
     '&dates=' + start + '/' + end + '&ctz=Europe/Warsaw&details=' + encodeURIComponent('Week ' + s.week + ' · 2K Pro-Am Ekstraklasa\n' + link);
   const m = _fxModal('cal1-modal', 420);
@@ -8806,7 +8818,7 @@ async function openWeekSummary() {
       { name: '🎯 Typer tygodnia', value: typ ? `${typ.name} — ${typ.pts}/${typ.picks}` : '—', inline: true },
       { name: `📅 Week ${week + 1}`, value: _trunc(nextLines.join('\n') || 'Koniec sezonu zasadniczego 🏁', 1020) }
     ],
-    url: location.origin + location.pathname + '#terminarz-week-' + (next.length ? week + 1 : week),
+    url: location.origin + '/terminarz-week-' + (next.length ? week + 1 : week),
     color: 0xf5c518, footer: { text: 'NBA 2K Pro-Am Ekstraklasa' }, timestamp: new Date().toISOString()
   };
   window._summaryEmbed = embed;
@@ -9510,7 +9522,7 @@ function _bracketReady(po) { const r0 = _poMain(po)[0]; return !!r0 && r0.pairs.
 
 async function bracketAnnounce(kind) {
   const { po, bd } = window._bracketAnn || {}; if(!po) return;
-  const link = location.origin + location.pathname + '#dashboard';
+  const link = location.origin + '/dashboard';
   let payload;
   if(kind === 'start') {
     if(!confirm('Ogłosić na Discordzie start typowania drabinki play-off?')) return;
@@ -10415,7 +10427,7 @@ function _teamSteps(r) {
     { k: 'appr', ok: r.status === 'approved', t: _g('Drużyna zatwierdzona przez admina', 'Team approved by an admin'), hint: _g('czeka na admina', 'waiting for an admin') },
     ...(needFee ? [{ k: 'pay', ok: r.payment?.status === 'paid', t: _g('Wpisowe opłacone', 'Entry fee paid'), hint: r.payment?.status === 'sent' ? _g('potwierdzenie wysłane — admin sprawdza', 'proof sent — admin is checking') : '', act: `openTeamPayment('${r.id}')`, actL: '💶' }] : []),
     { k: 'roster', ok: pl.length >= 5, t: _g(`Skład: co najmniej 5 graczy (${pl.length})`, `Roster: at least 5 players (${pl.length})`), act: EU_MODE && !registrationsClosed ? `openEuTeamEdit('${r.id}')` : `openRosterChange('${r.id}')`, actL: '✏️' },
-    { k: 'link', ok: linked >= Math.min(5, pl.length || 5), t: _g(`Gracze połączyli konta (${linked}/${pl.length})`, `Players linked their accounts (${linked}/${pl.length})`), hint: _g('każdy gracz: zaloguj się przez Discord → Mój panel → połącz nick', 'each player: log in with Discord → My panel → link your gamertag'), act: `navigator.clipboard?.writeText(location.origin + '/#panel').then(()=>showToast('🔗 ' + _g('Skopiowano link dla graczy', 'Link for players copied'),'success'))`, actL: '🔗' },
+    { k: 'link', ok: linked >= Math.min(5, pl.length || 5), t: _g(`Gracze połączyli konta (${linked}/${pl.length})`, `Players linked their accounts (${linked}/${pl.length})`), hint: _g('każdy gracz: zaloguj się przez Discord → Mój panel → połącz nick', 'each player: log in with Discord → My panel → link your gamertag'), act: `navigator.clipboard?.writeText(location.origin + '/panel').then(()=>showToast('🔗 ' + _g('Skopiowano link dla graczy', 'Link for players copied'),'success'))`, actL: '🔗' },
     { k: 'logo', ok: !!r.logo, t: _g('Logo drużyny', 'Team logo'), act: `changeTeamLogo('${r.id}')`, actL: '🖼' },
     { k: 'media', ok: !!r.media?.at, t: _g('Media day: prezentacja drużyny', 'Media day: team intro'), act: `openMediaDay('${r.id}')`, actL: '🎬' },
     { k: 'game', ok: sch.length > 0, t: _g('Pierwszy mecz w terminarzu', 'First game scheduled'), act: `showView('schedule')`, actL: '🗓' }];
@@ -10573,7 +10585,7 @@ function _linksDraw() {
 }
 
 function openMatchCenter(id) {
-  const s = _ssItem(id); if(!s) return; const ctx = _ssCtx(), en = currentLang === 'en', res = _ssResult(ctx, s), N = x => _normNick(x);
+  const s = _ssItem(id); if(!s) return; _modalUrl('/mecz/' + encodeURIComponent(id)); const ctx = _ssCtx(), en = currentLang === 'en', res = _ssResult(ctx, s), N = x => _normNick(x);
   const ids = [...(s.matchIds || []), ...(s.matchId != null ? [s.matchId] : [])].map(String), games = matches.filter(m => ids.includes(String(m.id))).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const when = s.date ? new Date(s.date + 'T' + (s.time || '20:00') + ':00') : null, upcoming = !res?.done && when && when > new Date();
   const gs = p => (+p.pts || 0) + .4 * (+p.fgm || 0) - .7 * (+p.fga || 0) + .4 * (+p.reb || 0) + .7 * (+p.ast || 0) + (+p.stl || 0) + (+p.blk || 0) - (+p.to || 0);
@@ -10601,7 +10613,7 @@ function openMatchCenter(id) {
       <button class="btn btn-ghost" style="font-size:.74rem" onclick="_fxClose('mc-modal');openScoutReport('${s.id}')">🔍 ${_g('Raport rywala', 'Scouting')}</button>
       <button class="btn btn-ghost" style="font-size:.74rem" onclick="_fxClose('mc-modal');openClips('${s.id}')">🎬 ${_g('Akcje', 'Highlights')}${(clipsList || []).filter(c => String(c.scheduleId) === String(s.id)).length ? ' (' + (clipsList || []).filter(c => String(c.scheduleId) === String(s.id)).length + ')' : ''}</button>
       ${games.length || upcoming ? `<button class="btn btn-ghost" style="font-size:.74rem" onclick="_fxClose('mc-modal');openMatchPoster('${s.id}')">🖼 ${_g('Plakat', 'Poster')}</button>` : ''}
-      <button class="btn btn-ghost" style="font-size:.74rem" onclick="navigator.clipboard?.writeText(location.origin + '/#mecz/${s.id}').then(()=>showToast('🔗 ' + _g('Skopiowano link do meczu', 'Match link copied'),'success'))">🔗 Link</button></div></div>`;
+      <button class="btn btn-ghost" style="font-size:.74rem" onclick="navigator.clipboard?.writeText(location.origin + '/mecz/${s.id}').then(()=>showToast('🔗 ' + _g('Skopiowano link do meczu', 'Match link copied'),'success'))">🔗 Link</button></div></div>`;
   if(upcoming) { clearInterval(window._mcT); const tick = () => { const el = document.getElementById('mc-cd'); if(!el) return clearInterval(window._mcT); const d = when - Date.now(); if(d <= 0) { el.textContent = _g('Zaczyna się!', 'Starting!'); return; } const h = Math.floor(d / 3600e3), mi = Math.floor(d % 3600e3 / 60e3); el.textContent = (h >= 24 ? Math.floor(h / 24) + _g(' d ', 'd ') + (h % 24) + ' h' : h + ' h ' + mi + ' min'); }; tick(); window._mcT = setInterval(tick, 30000); }
 }
 
@@ -11923,7 +11935,7 @@ function openMoreSheet() {
       { ico: '📺', text: 'Kanał transmisji', act: `document.getElementById('more-sheet').classList.remove('open');openTeamStreamModal('${capReg.id}')` },
       { ico: '🐦', text: currentLang === 'en' ? 'Team X profile' : 'Profil X drużyny', act: `document.getElementById('more-sheet').classList.remove('open');openTeamXModal('${capReg.id}')` },
       { ico: '🖼', text: 'Logo drużyny', act: `document.getElementById('more-sheet').classList.remove('open');changeTeamLogo('${capReg.id}')` },
-      { ico: '📋', text: 'Kopiuj zaproszenie', act: `navigator.clipboard?.writeText('Połącz konto z drużyną ${tn} na stronie ligi: zaloguj się przez Discord → Mój panel → wybierz drużynę i swój nick → Zapisz. ' + location.origin + location.pathname + '#panel').then(()=>showToast('📋 Skopiowano zaproszenie','success'));document.getElementById('more-sheet').classList.remove('open')` }
+      { ico: '📋', text: 'Kopiuj zaproszenie', act: `navigator.clipboard?.writeText('Połącz konto z drużyną ${tn} na stronie ligi: zaloguj się przez Discord → Mój panel → wybierz drużynę i swój nick → Zapisz. ' + location.origin + '/panel').then(()=>showToast('📋 Skopiowano zaproszenie','success'));document.getElementById('more-sheet').classList.remove('open')` }
     );
   }
   if(_gmVisible()) items.push({ ico: '🏆', text: currentLang === 'en' ? 'GM League' : 'Liga GM', act: `document.getElementById('more-sheet').classList.remove('open');showView('gm')` });
@@ -13590,7 +13602,7 @@ async function podToDiscord() {
 
 // ═══ 🎧 PODCAST — publiczna zakładka z odcinkami ═══
 // 🔗 link do odcinka podcastu: chemikleagues.com/#podcast/<id> (otwiera stronę na tym odcinku)
-function podCopyLink(id) { const u = location.origin + location.pathname.replace(/\/[^/]*$/, '/') + '#podcast/' + encodeURIComponent(id); (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => showToast(_g('🔗 Skopiowano link do odcinka', '🔗 Episode link copied'), 'success')).catch(() => prompt(_g('Link do odcinka:', 'Episode link:'), u)); }
+function podCopyLink(id) { const u = location.origin + '/podcast/' + encodeURIComponent(id); (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => showToast(_g('🔗 Skopiowano link do odcinka', '🔗 Episode link copied'), 'success')).catch(() => prompt(_g('Link do odcinka:', 'Episode link:'), u)); }
 function _podFocus() { const id = window._podFocusId; if(!id) return; window._podFocusId = null; const el = document.getElementById('pod-ep-' + id); if(!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.outline = '2px solid var(--accent)'; el.style.outlineOffset = '2px'; setTimeout(() => { el.style.outline = ''; }, 4000); }
 async function renderPodcastView() {
@@ -16132,7 +16144,7 @@ async function cardsGift() { const card = document.getElementById('cg-card').val
   const r = await _api('/cards/gift', 'POST', { card, to, key: document.getElementById('cg-card').selectedOptions[0]?.dataset.k || key }, { session: true }); showToast(r.ok ? _g('🎁 Wysłano!', '🎁 Sent!') : '❌ ' + _tr(r.error), r.ok ? 'success' : 'error'); renderCardsView(); }
 
 // ═══ 🔗 LINK DO EVENTU (#event/<id>) ═══
-function eventLink(id) { return location.origin + location.pathname + '#event/' + encodeURIComponent(id); }
+function eventLink(id) { return location.origin + '/event/' + encodeURIComponent(id); }
 async function copyEventLink(id) {
   const url = eventLink(id);
   try { await navigator.clipboard.writeText(url); showToast(_g('🔗 Skopiowano link do draftu — wklej go na Discordzie', '🔗 Draft link copied — paste it on Discord'), 'success'); } catch(e) { prompt(_g('Skopiuj link:', 'Copy the link:'), url); }
@@ -18974,7 +18986,8 @@ function renderEvents() {
           </button>` : ''}
         </div>
       </div>
-      ${_isEventsAdminSync() ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+      ${ev.shared || ev._peer ? `<div style="margin-top:.5rem;font-size:.74rem;color:var(--accent);font-weight:700">🌍 ${_g('Wspólny draft PL + EU — jedna lista zapisów', 'Shared draft PL + EU — one sign-up list')}</div>` : ''}
+       ${_isEventsAdminSync() && !ev._peer ? `<div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
         <button onclick="event.stopPropagation();openEditEventModal('${ev.id}')"
           style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;font-family:inherit">✏️ Edytuj</button>
         <button onclick="event.stopPropagation();backfillSignupOvr('${ev.id}')" title="Oblicz i zapisz OVR graczy z momentu zapisu"
@@ -19009,6 +19022,7 @@ function openCreateEventModal(editId) {
     <select id="ev-type" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.6rem;font-family:inherit">
       ${Object.entries(EVENT_TYPES).map(([k,v]) => `<option value="${k}"${(ev?.type||'draft')===k?' selected':''}>${v.label}</option>`).join('')}
     </select>
+      ${!EU_MODE ? `<label style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.86rem"><input type="checkbox" id="ev-shared" ${ev?.shared ? 'checked' : ''} style="width:auto"> 🌍 Wspólny draft dla PL i EU <span style="font-size:.72rem;color:var(--muted)">(widoczny też na eu.chemikleagues.com, jedna lista zapisów)</span></label>` : ''}
 
     <label style="margin-top:.75rem">Data i godzina eventu</label>
     <div style="display:grid;grid-template-columns:1fr auto;gap:.5rem">
@@ -19048,9 +19062,10 @@ async function saveEvent(editId) {
 
   if(editId) {
     const idx = events.findIndex(e => e.id === editId);
-    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, time, maxPlayers: max, description: desc };
+    const shared = !EU_MODE && type === 'draft' && !!document.getElementById('ev-shared')?.checked;
+    if(idx !== -1) events[idx] = { ...events[idx], title, type, date, time, maxPlayers: max, description: desc, shared };
   } else {
-    events.push({ id: 'ev_' + Date.now(), title, type, date, time, maxPlayers: max,
+    events.push({ id: 'ev_' + Date.now(), title, type, date, time, maxPlayers: max, shared: !EU_MODE && type === 'draft' && !!document.getElementById('ev-shared')?.checked,
       description: desc, status: 'open', players: [], teams: [],
       createdAt: new Date().toISOString() });
   }
@@ -19269,7 +19284,7 @@ async function randomizeTeams(id) {
 
 function openEventDetail(id, tab) {
   const ev = events.find(e => e.id === id);
-  if(!ev) return;
+  if(!ev) return; _modalUrl('/event/' + encodeURIComponent(id));
   window._currentEventId = id;
   renderEventDetailTab(id, tab || 'info');
   document.getElementById('event-detail-modal').classList.add('open');
@@ -19285,7 +19300,7 @@ function _renderEventDetailTabInner(id, tab, sortCol, sortDir) {
   if(!ev) return;
   const type = EVENT_TYPES[ev.type] || { label: ev.type };
   const status = EVENT_STATUS[ev.status] || { label: ev.status, color: 'var(--muted)' };
-  const isAdmin = _isEventsAdminSync();
+  const isAdmin = _isEventsAdminSync() && !ev._peer; // 🌍 wspólnym draftem zarządza liga PL
   const evMatches = ev.matches || [];
 
   const tabs = [
@@ -19326,7 +19341,7 @@ function _renderEventDetailTabInner(id, tab, sortCol, sortDir) {
         : (_ovrOn ? `<span style="font-size:.7rem;color:var(--muted);margin-left:.35rem">brak danych</span>` : '');
       return `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
         ${p.avatar ? `<img src="${p.avatar}" style="width:28px;height:28px;border-radius:50%;flex-shrink:0">` : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0">👤</div>'}
-        <span style="font-weight:600;font-size:.9rem">${p.name}</span>
+        <span style="font-weight:600;font-size:.9rem">${p.name}${(ev.shared || ev._peer) && p.league ? (p.league === 'EU' ? ' 🇪🇺' : ' 🇵🇱') : ''}</span>
         ${p.speaksEnglish ? '<span title="Speaks English" style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:2px"><svg width="20" height="13" viewBox="0 0 60 30" style="border-radius:2px;border:1px solid rgba(0,0,0,.2);flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><clipPath id="uf"><path d="M0 0v30h60V0z"/></clipPath><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#uf)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></svg></span>' : ''}
         ${p.discordTag && p.discordTag !== p.name ? `<span style="color:var(--muted);font-size:.75rem">(${p.discordTag})</span>` : ''}
         ${posBadges}${psnLabel}${ovrBadge}${miniStats}
@@ -19363,7 +19378,7 @@ function _renderEventDetailTabInner(id, tab, sortCol, sortDir) {
 
       ${(ev.waitlist||[]).length ? `<div style="margin-top:1rem;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:.6rem .8rem">
         <div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:#f59e0b;margin-bottom:.35rem">⏳ LISTA REZERWOWA (${ev.waitlist.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:.35rem">${ev.waitlist.map((p, i) => `<span style="font-size:.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem">${i + 1}. ${_h(p.name)}${p.primaryPos ? ` <b style="color:var(--accent);font-size:.68rem">${p.primaryPos}</b>` : ''}</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.35rem">${ev.waitlist.map((p, i) => `<span style="font-size:.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem">${i + 1}. ${_h(p.name)}${(ev.shared || ev._peer) && p.league ? (p.league === "EU" ? " 🇪🇺" : " 🇵🇱") : ""}${p.primaryPos ? ` <b style="color:var(--accent);font-size:.68rem">${p.primaryPos}</b>` : ''}</span>`).join('')}</div>
         <div style="font-size:.66rem;color:var(--muted);margin-top:.35rem">Gdy ktoś się wypisze, pierwsza osoba z rezerwy wchodzi automatycznie i dostaje wiadomość na Discordzie.</div>
       </div>` : ''}
       ${['open','closed','draft'].includes(ev.status) ? `
@@ -20601,7 +20616,7 @@ async function backfillSignupOvr(eventId) {
 // ═══ 📝 ZAPISY NA EVENT (przez Workera, z listą rezerwową) ═══
 function _eventsMetaHeader() {
   try {
-    const list = (events || []).filter(e => ['open', 'closed', 'draft'].includes(e.status)).slice(-15)
+    const list = (events || []).filter(e => !e._peer && ['open', 'closed', 'draft'].includes(e.status)).slice(-15)
       .map(e => ({ id: e.id, t: String(e.title || '').slice(0, 60), s: e.status, m: +e.maxPlayers || 0, p: (e.players || []).map(p => p.id), w: (e.waitlist || []).map(p => p.id) }));
     return encodeURIComponent(JSON.stringify(list));
   } catch(e) { return ''; }
@@ -28600,7 +28615,7 @@ async function _dsLaunch() {
     const open = el.classList.contains('open') || (el.id === 'gma-overlay' && el.style.display !== 'none' && el.isConnected && getComputedStyle(el).display !== 'none');
     const i = stack.indexOf(el);
     if(open && i < 0) { stack.push(el); if(window._navReady) history.pushState({ v: curView(), modal: el.id || 'modal' }, '', location.pathname + location.search + location.hash); }
-    else if(!open && i >= 0) { stack.splice(i, 1); if(!popClosing && history.state?.modal) { window._navIgnore++; history.back(); } } // zamknięte przyciskiem ✕ — zdejmij wpis z historii
+    else if(!open && i >= 0) { stack.splice(i, 1); if(!popClosing && history.state?.modal) { window._navIgnore++; history.back(); } else if(_urlOn() && /^\/(mecz|match|event|draft)\//.test(location.pathname)) try { history.replaceState(history.state, '', _viewUrl(curView())); } catch(e) {} } // zamknięte przyciskiem ✕ — zdejmij wpis z historii
   })).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
   window.addEventListener('popstate', e => {
     if(window._navIgnore > 0) { window._navIgnore--; return; }
@@ -28609,7 +28624,7 @@ async function _dsLaunch() {
     const v = e.state?.v || 'dashboard';
     window._navFromPop = true; try { showView(v); } finally { window._navFromPop = false; }
   });
-  setTimeout(() => { window._navReady = true; try { history.replaceState({ v: curView() }, '', location.pathname + location.search + location.hash); } catch(e) {} }, 3200);
+  setTimeout(() => { window._navReady = true; try { history.replaceState({ v: curView() }, '', _urlOn() && !stack.length && !location.hash ? _viewUrl(curView()) : location.pathname + location.search + location.hash); } catch(e) {} }, 3200);
 })();
 
 
