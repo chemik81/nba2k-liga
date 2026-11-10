@@ -9268,7 +9268,7 @@ function renderRecordsBanner() {
 async function announceRecord(i, fromAll) {
   const e = (fromAll ? window._allRecordEvents : window._recentRecords)?.[i];
   if(!e || !confirm(`Ogłosić na Discordzie rekord: ${e.label} — ${e.holder} (${e.value})?`)) return;
-  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'record', data: { label: e.label, holder: e.holder, value: e.value + ' ' + e.unit, prevHolder: e.prevHolder, prevValue: e.prevValue, opp: e.opp, names: [e.holder, e.team, e.prevHolder, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
+  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'record', data: { label: e.label, holder: e.holder, value: e.value + ' ' + e.unit, prevHolder: e.prevHolder, prevValue: e.prevValue, opp: e.opp, names: [e.holder, e.team, e.prevHolder, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 15000))]);
   const ok = await _scheduleDiscordSendR('leagueRecord', { embeds: [{
     title: `${e.emoji} Nowy rekord ligi!`,
     description: `**${e.label}**\n${e.holder}${e.team && e.team !== e.holder ? ' (' + e.team + ')' : ''} — **${e.value} ${e.unit}** vs ${e.opp}\nPoprzedni rekord: ${e.prevHolder} (${e.prevValue})${fl?.line ? `\n\n🎙️ *${fl.line}*` : ''}`,
@@ -9728,7 +9728,7 @@ function renderAchievementsDashboard() {
 async function announceAchievement(i) {
   const e = window._recentAch?.[i];
   if(!e || !confirm(`Ogłosić na Discordzie: ${e.player} — ${e.name}?`)) return;
-  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'achievement', data: { label: e.name, holder: e.player, team: e.team, opp: e.opp, value: e.value, names: [e.player, e.team, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 9000))]);
+  const fl = await Promise.race([_api('/fun-line', 'POST', { kind: 'achievement', data: { label: e.name, holder: e.player, team: e.team, opp: e.opp, value: e.value, names: [e.player, e.team, e.opp] } }, { admin: true }), new Promise(r => setTimeout(() => r({}), 15000))]);
   const ok = await _scheduleDiscordSendR('achievement', { embeds: [{
     title: `${e.icon} Osiągnięcie: ${e.name}`,
     description: `**${e.player}** (${e.team})${e.career ? '' : ' vs ' + e.opp}${e.value ? '\n' + e.value : ''}${fl?.line ? `\n\n🎙️ *${fl.line}*` : ''}`,
@@ -18650,7 +18650,7 @@ async function teamRegAnnounce(reg, status, reason = '') {
   if(status === 'approved') {
     const fl = await Promise.race([
       _api('/fun-line', 'POST', { kind: 'team', data: { teamName: reg.teamName, seasonName, players: (reg.players || []).map(p => ({ gamertag: p.gamertag, level: (_expLabels[p.experience] || '').replace(/^\S+\s/, '') })) } }, { admin: true }),
-      new Promise(r => setTimeout(() => r({}), 9000))
+      new Promise(r => setTimeout(() => r({}), 15000))
     ]);
     funLine = fl?.line || '';
   }
