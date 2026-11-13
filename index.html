@@ -1261,6 +1261,8 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
   </div>
 
   <div id="view-kort" class="view"><div class="section-title">🏀 <span>Kort — gra karciana</span></div><div id="kort-wrap"></div></div>
+<div id="view-privacy" class="view"><div id="privacy-view"></div></div>
+<div id="view-howto" class="view"><div id="howto-view"></div></div>
 <div id="view-rules" class="view"><div class="section-title">📜 <span>Regulamin</span></div><div id="rules-wrap"></div></div>
 <div id="view-join" class="view"><div class="section-title">🤝 <span>Dołącz do ligi</span></div><div id="join-wrap"></div></div>
 <div id="view-standings" class="view"><div class="section-title">📋 <span>Tabela</span></div><div class="card" style="padding:0;overflow:hidden"><div class="stats-table-wrap"><table style="min-width:500px"><thead><tr><th style="text-align:left; padding-left:1.5rem">#</th><th style="text-align:left">Drużyna</th><th>M</th><th>W</th><th>L</th><th>PTS</th><th>WIN%</th><th>PPG</th><th>OPP PPG</th><th>STR</th><th>Ostatnie 5</th></tr></thead><tbody id="standings-body-2"></tbody></table></div></div></div>
@@ -2845,6 +2847,7 @@ async function loadData() {
     streamsData = record.streams || {};
     clipsList = record.clips || [];
     window._interviews = record.interviews || {};
+    window._launch = record.launch || window._launch || {};
     window._totwPub = record.totwPub || {}; // opublikowane Piątki tygodnia (jak w podcaście i kartach limitowanych)
     penalties = record.penalties || [];
     rosterLockDate = record.rosterLockDate || null;
@@ -2952,7 +2955,7 @@ function applyAliasesToMatch(match) {
 // 🔗 ADRESY ZAKŁADEK — pasek adresu pokazuje bieżącą zakładkę (PL po polsku, EU po angielsku; oba warianty rozpoznawane)
 const _VIEW_SLUG = { events: ['eventy', 'events'], matches: ['mecze', 'games'], stats: ['statystyki', 'stats'], 'add-match': ['dodaj-mecz', 'add-game'], mypanel: ['panel', 'panel'], kort: ['kort', 'kort'], rules: ['regulamin', 'rules'],
   join: ['zapisy', 'join'], standings: ['tabela', 'standings'], awards: ['nagrody', 'awards'], totw: ['piatka-tygodnia', 'team-of-the-week'], fplus: ['fantasy-plus', 'fantasy-plus'], cards: ['kolekcja', 'cards'], gm: ['liga-gm', 'gm-league'],
-  fans: ['kibice', 'fans'], kordle: ['2kordle', '2kordle'], podcast: ['podcast', 'podcast'], multistream: ['multistream', 'multistream'], teams: ['druzyny', 'teams'], fantasy: ['fantasy', 'fantasy'], schedule: ['terminarz', 'schedule'] };
+  fans: ['kibice', 'fans'], kordle: ['2kordle', '2kordle'], podcast: ['podcast', 'podcast'], multistream: ['multistream', 'multistream'], teams: ['druzyny', 'teams'], fantasy: ['fantasy', 'fantasy'], schedule: ['terminarz', 'schedule'], privacy: ['prywatnosc', 'privacy'], howto: ['jak-to-dziala', 'how-it-works'] };
 const _urlOn = () => /^https?:$/.test(location.protocol);
 function _viewUrl(v) { const s = _VIEW_SLUG[v]; return '/' + (s ? s[EU_MODE ? 1 : 0] : '') + location.search; }
 function _viewOfSlug(h) { h = String(h || '').toLowerCase(); for(const [v, s] of Object.entries(_VIEW_SLUG)) if(s.includes(h)) return v; return null; }
@@ -8159,6 +8162,7 @@ function openDeepLink() {
   if(['media-day', 'poznaj-druzyny', 'meet-the-teams'].includes(h)) { setTimeout(() => openMediaGallery(), 1500); return; }
   if(['polaczone-konta', 'linked-accounts'].includes(h)) { setTimeout(() => openLinkedAccounts(), 1500); return; }
   if(['pay', 'platnosc', 'wpisowe', 'entry-fee'].includes(h)) { openMyPayment(); return; }
+  if(['start-ligi', 'launch'].includes(h)) { setTimeout(() => openLaunch(), 1500); return; }
   if(['do-zrobienia', 'admin-todo', 'todo'].includes(h)) { setTimeout(() => openAdminQuick(), 1500); return; }
   if(['turniej', 'turniej-kortu', 'tournament'].includes(h)) { setTimeout(() => showView('kort'), 300); return; }
   if(['galeria-slaw', 'galeria', 'hall-of-fame', 'hof'].includes(h)) { setTimeout(() => { showView('awards'); setTimeout(() => document.getElementById('hof-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 900); }, 300); return; }
@@ -10450,6 +10454,7 @@ function _readinessAdminHtml() {
     return `<div style="display:flex;gap:.5rem;align-items:center;padding:.3rem 0;border-top:1px solid var(--border);font-size:.78rem"><b style="min-width:120px">${_h(r.teamName)}</b><span style="color:${d === S.length ? 'var(--win)' : 'var(--accent)'};font-weight:800">${d}/${S.length}</span><span style="color:var(--muted);font-size:.7rem;flex:1">${miss.join(' · ') || '✅'}</span></div>`; }).join('');
 }
 // 📰 WĄTKI SEZONU — ciekawe historie z danych ligi (serie, rewanże, hity, forma graczy)
+setTimeout(() => { try { const _sv = showView; showView = function(id, ...a) { const r = _sv.call(this, id, ...a); try { if(id === 'privacy') renderPrivacy(); if(id === 'howto') renderHowto(); _siteFooter(); } catch(e) {} return r; }; _siteFooter(); } catch(e) {} }, 0);
 setTimeout(() => { try { const _rd = renderDashboard; renderDashboard = function(...a) { const r = _rd.apply(this, a); try { renderStories(); } catch(e) { console.warn('stories', e); } return r; }; } catch(e) {} }, 0);
 function seasonStorylines() {
   const sid = currentSeasonId || null, ctx = _ssCtx(), en = currentLang === 'en', out = [], N = x => _normNick(x);
@@ -10477,7 +10482,7 @@ function renderStories() {
   let el = document.getElementById('dash-stories'); const ex = document.getElementById('dashboard-extras'); if(!ex) return;
   if(!el) { el = document.createElement('div'); el.id = 'dash-stories'; ex.parentNode.insertBefore(el, ex); }
   const L = seasonStorylines(), cap = captainChecklistHtml();
-  el.innerHTML = cap + (L.length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem" data-notr><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><span style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted)">📰 ${_g('WĄTKI SEZONU', 'SEASON STORYLINES')}</span><a href="#" style="font-size:.72rem;color:var(--accent)" onclick="openMediaGallery();return false">🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</a></div>
+  el.innerHTML = launchHtml() + cap + (L.length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem" data-notr><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><span style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted)">📰 ${_g('WĄTKI SEZONU', 'SEASON STORYLINES')}</span><a href="#" style="font-size:.72rem;color:var(--accent)" onclick="openMediaGallery();return false">🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</a></div>
     ${L.map(x => `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border);font-size:.86rem;${x.act ? 'cursor:pointer' : ''}" ${x.act ? `onclick="${x.act}"` : ''}><span style="font-size:1.1rem">${x.ico}</span><span style="flex:1">${x.t}</span>${x.act ? '<span style="color:var(--accent);font-size:.75rem">›</span>' : ''}</div>`).join('')}</div>` : (_mdTeams().length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap" data-notr><div><b>🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</b><div style="font-size:.76rem;color:var(--muted)">${_g('Prezentacje drużyn przed sezonem', 'Team intros before the season')} · ${_mdTeams().filter(r => r.media?.at).length}/${_mdTeams().length}</div></div><button class="btn btn-primary" style="font-size:.74rem" onclick="openMediaGallery()">${_g('Zobacz', 'View')}</button></div>` : ''));
   adminFabUpdate();
 }
@@ -11067,6 +11072,163 @@ function captainBoxHtml() {
     <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.8rem">${_teamEditBtn(r)}<button class="btn btn-ghost" style="font-size:.78rem" onclick="changeTeamLogo('${r.id}')">🖼 ${r.logo ? _g('Zmień logo', 'Change logo') : _g('Dodaj logo', 'Add logo')}</button><button class="btn btn-ghost" style="font-size:.78rem" onclick="openMediaDay('${r.id}')">🎬 Media day</button></div></div>`;
 }
 
+// 🚀 START LIGI — odliczanie, typy i przedsezonowy ranking na dashboardzie + panel admina
+function _launchTarget(c) { if(!c?.on) return null; const t = c.mode === 'signups' ? c.signupsEnd : c.mode === 'custom' ? c.customAt : c.seasonStart; return t ? Date.parse(t) : null; }
+function _launchLabel(c) { return c.mode === 'signups' ? _g('Zapisy kończą się za', 'Registrations close in') : c.mode === 'custom' ? (c.customLabel || _g('Zostało', 'Time left')) : _g('Start sezonu za', 'Season starts in'); }
+function _cdParts(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return [Math.floor(s / 86400), Math.floor(s % 86400 / 3600), Math.floor(s % 3600 / 60), s % 60]; }
+function launchHtml() {
+  const L = window._launch || {}, c = L.countdown, t = _launchTarget(c); let out = '';
+  if(t && t > Date.now()) { const [d, h, m, s] = _cdParts(t - Date.now()), box = (v, l, id) => `<div style="min-width:64px;background:rgba(0,0,0,.25);border-radius:10px;padding:.45rem .5rem;text-align:center"><div id="${id}" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;line-height:1">${String(v).padStart(2, '0')}</div><div style="font-size:.6rem;letter-spacing:1px;opacity:.8">${l}</div></div>`;
+    out += `<div class="card" id="launch-cd" data-t="${t}" style="padding:1rem 1.1rem;margin-bottom:1rem;background:linear-gradient(135deg,rgba(245,197,24,.22),rgba(245,197,24,.04));border:1px solid var(--accent)" data-notr>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div><div style="font-size:.72rem;font-weight:800;letter-spacing:1.5px;color:var(--accent)">⏳ ${_h(_launchLabel(c)).toUpperCase()}</div>
+        <div style="font-size:.82rem;color:var(--muted);margin-top:.15rem">${new Date(t).toLocaleString(currentLang === 'en' ? 'en-GB' : 'pl-PL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</div></div>
+        <div style="display:flex;gap:.4rem">${box(d, _g('DNI', 'DAYS'), 'cd-d')}${box(h, _g('GODZ', 'HRS'), 'cd-h')}${box(m, 'MIN', 'cd-m')}${box(s, 'SEK'.replace('SEK', _g('SEK', 'SEC')), 'cd-s')}</div></div>
+      ${c.mode === 'signups' && !registrationsClosed ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.7rem"><button class="btn btn-primary" style="font-size:.76rem" onclick="goToTeamRegistrations()">🧢 ${_g('Zapisz drużynę', 'Register your team')}</button><button class="btn btn-ghost" style="font-size:.76rem" onclick="showView('howto')">📖 ${_g('Jak to działa', 'How it works')}</button></div>` : ''}</div>`;
+    clearInterval(window._cdT); window._cdT = setInterval(() => { const el = document.getElementById('launch-cd'); if(!el) return clearInterval(window._cdT); const left = +el.dataset.t - Date.now(); if(left <= 0) { clearInterval(window._cdT); try { renderStories(); } catch(e) {} return; } const [d2, h2, m2, s2] = _cdParts(left); [['cd-d', d2], ['cd-h', h2], ['cd-m', m2], ['cd-s', s2]].forEach(([id, v]) => { const x = document.getElementById(id); if(x) x.textContent = String(v).padStart(2, '0'); }); }, 1000); }
+  if(L.picks?.on) { try { const ctx = { demo: false, seasonId: currentSeasonId || null }, pc = _predCardHtml(ctx); if(pc) out += `<div id="launch-picks">${pc}</div>`; } catch(e) {} }
+  if(L.pre?.on && L.pre.items?.length && !_seasonMatchesOf(currentSeasonId || null).length) { const med = ['🥇', '🥈', '🥉'];
+    out += `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📊 ${_g('PRZEDSEZONOWY POWER RANKING', 'PRE-SEASON POWER RANKING')}</div>
+      ${L.pre.items.map((x, i) => `<div style="display:flex;gap:.6rem;align-items:flex-start;padding:.4rem 0;border-top:1px solid var(--border)"><b style="min-width:30px;font-family:'Barlow Condensed',sans-serif;font-size:1.15rem">${med[i] || '#' + (i + 1)}</b>${teamLogo(x.team, 30, '.8rem')}<div style="flex:1"><b>${_h(x.team)}</b>${x.comment ? `<div style="font-size:.8rem;color:var(--muted)">${_h(x.comment)}</div>` : ''}</div></div>`).join('')}</div>`; }
+  return out;
+}
+// panel admina „🚀 Start ligi”
+let _ln = null;
+function _dtLocal(iso) { if(!iso) return ''; const d = new Date(iso), z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; }
+function openLaunch() {
+  if(!_isLoggedInSync()) return; const L = window._launch || {}, c = L.countdown || {}, sid = currentSeasonId || null, pd = (typeof predictionsData !== 'undefined' && predictionsData[sid]) || {};
+  _ln = { c: { on: !!c.on, mode: c.mode || 'season', signupsEnd: c.signupsEnd || null, seasonStart: c.seasonStart || null, customAt: c.customAt || null, customLabel: c.customLabel || '', announce: c.announce !== false }, picksOn: !!L.picks?.on, lockAt: pd.lockAt || null, preOn: L.pre?.on !== false, items: (L.pre?.items || []).map(x => ({ ...x })), published: !!L.pre?.at };
+  _lnDraw();
+}
+function _lnDraw() {
+  const m = _fxModal('ln-modal', 760); m.classList.add('open'); const c = _ln.c, H = t => `<div style="font-size:.74rem;font-weight:800;letter-spacing:1px;color:var(--accent);margin:1rem 0 .45rem">${t}</div>`, tog = (on, fn, lbl) => `<label style="display:flex;gap:.45rem;align-items:center;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem"><input type="checkbox" style="width:auto" ${on ? 'checked' : ''} onchange="${fn}"> ${lbl}</label>`;
+  const modeBtn = (k, l) => `<button class="btn ${c.mode === k ? 'btn-primary' : 'btn-ghost'}" style="font-size:.72rem" onclick="_ln.c.mode='${k}';_lnDraw()">${l}</button>`;
+  const dtIn = (k, l) => `<div><label style="${_MODAL_LBL}">${l}${c.mode === ({ signupsEnd: 'signups', seasonStart: 'season', customAt: 'custom' })[k] ? ' ⏳' : ''}</label><input type="datetime-local" value="${_dtLocal(c[k])}" onchange="_ln.c.${k}=this.value?new Date(this.value).toISOString():null;_lnDraw()" style="${_MODAL_INP};margin-bottom:.4rem"></div>`;
+  m.querySelector('.modal').innerHTML = _fxHead('ln-modal', '🚀 ' + _g('Start ligi', 'League launch')) + `<div data-notr>
+    ${H('⏳ ' + _g('ODLICZANIE NA DASHBOARDZIE', 'DASHBOARD COUNTDOWN'))}
+    ${tog(c.on, '_ln.c.on=this.checked;_lnDraw()', _g('Pokaż odliczanie', 'Show the countdown'))}
+    <div style="display:flex;gap:.3rem;flex-wrap:wrap;margin:.5rem 0">${modeBtn('signups', '🧢 ' + _g('do końca zapisów', 'until registrations close'))}${modeBtn('season', '🏀 ' + _g('do startu ligi', 'until the season starts'))}${modeBtn('custom', '✏️ ' + _g('własne', 'custom'))}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 .7rem">${dtIn('signupsEnd', _g('Koniec zapisów', 'Registrations close'))}${dtIn('seasonStart', _g('Start sezonu', 'Season start'))}${c.mode === 'custom' ? dtIn('customAt', _g('Data (własne)', 'Date (custom)')) + `<div><label style="${_MODAL_LBL}">${_g('Napis', 'Label')}</label><input value="${_h(c.customLabel)}" maxlength="60" placeholder="${_g('np. Draft drużyn za', 'e.g. Team draft in')}" oninput="_ln.c.customLabel=this.value" style="${_MODAL_INP}"></div>` : ''}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin:.2rem 0 .5rem">${_g('Odliczanie pokazuje datę wybranego trybu. Pozostałe daty możesz wpisać od razu i później tylko przełączyć tryb.', 'The countdown uses the date of the selected mode. You can fill in all dates now and just switch the mode later.')}</div>
+    ${tog(c.announce, '_ln.c.announce=this.checked', _g('Ogłoś na Discordzie, gdy odliczanie dobiegnie końca (kanał terminarza)', 'Announce on Discord when the countdown ends (schedule channel)'))}
+    ${H('🔮 ' + _g('TYPY PRZEDSEZONOWE', 'PRE-SEASON PICKS'))}
+    ${tog(_ln.picksOn, '_ln.picksOn=this.checked', _g('Pokaż typy na dashboardzie (mistrz, MVP, debiutant roku, ostatnie miejsce, najlepszy strzelec)', 'Show picks on the dashboard (champion, MVP, rookie of the year, last place, top scorer)'))}
+    <label style="${_MODAL_LBL};margin-top:.4rem">${_g('Typy zamykają się', 'Picks lock at')}</label><div style="display:flex;gap:.4rem;flex-wrap:wrap"><input type="datetime-local" id="ln-lock" value="${_dtLocal(_ln.lockAt)}" style="${_MODAL_INP};max-width:240px"><button class="btn btn-ghost" style="font-size:.7rem" onclick="document.getElementById('ln-lock').value=_dtLocal(_ln.c.seasonStart)">= ${_g('start sezonu', 'season start')}</button></div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">${_g('Puste = typy zamykają się z pierwszą kolejką.', 'Empty = picks lock with the first week.')}</div>
+    ${H('📊 ' + _g('PRZEDSEZONOWY POWER RANKING', 'PRE-SEASON POWER RANKING'))}
+    ${tog(_ln.preOn, '_ln.preOn=this.checked', _g('Pokaż ranking na dashboardzie (do pierwszego meczu)', 'Show the ranking on the dashboard (until the first game)'))}
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0"><button class="btn btn-ghost" style="font-size:.74rem" onclick="lnRankAi()">🤖 ${_ln.items.length ? _g('Wygeneruj ponownie z AI', 'Regenerate with AI') : _g('Wygeneruj propozycję z AI', 'Generate a draft with AI')}</button>${_ln.published ? `<span style="font-size:.72rem;color:var(--win);align-self:center">✅ ${_g('opublikowany', 'published')}</span>` : ''}</div>
+    <div id="ln-items">${_ln.items.map((x, i) => `<div style="display:flex;gap:.4rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border)"><b style="min-width:26px;padding-top:.3rem">#${i + 1}</b>
+      <div style="display:flex;flex-direction:column;gap:.15rem"><button class="btn btn-ghost" style="font-size:.6rem;padding:0 .35rem" ${i ? '' : 'disabled'} onclick="lnMove(${i},-1)">▲</button><button class="btn btn-ghost" style="font-size:.6rem;padding:0 .35rem" ${i < _ln.items.length - 1 ? '' : 'disabled'} onclick="lnMove(${i},1)">▼</button></div>
+      <div style="flex:1"><b style="font-size:.86rem">${_h(x.team)}</b><textarea rows="2" maxlength="240" oninput="_ln.items[${i}].comment=this.value" style="${_MODAL_INP};font-size:.78rem;margin-top:.2rem">${_h(x.comment || '')}</textarea></div></div>`).join('') || `<div style="font-size:.78rem;color:var(--muted)">${_g('Brak rankingu — wygeneruj propozycję z AI, potem możesz zmienić kolejność i komentarze.', 'No ranking yet — generate a draft with AI, then reorder and edit the comments.')}</div>`}</div>
+    ${_ln.items.length ? `<label style="display:flex;gap:.45rem;align-items:center;margin-top:.6rem;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.82rem"><input type="checkbox" id="ln-dc" style="width:auto" checked> ${_g('Opublikuj też na Discordzie (kanał Power Rankingu)', 'Also post it on Discord (Power Ranking channel)')}</label>` : ''}
+    <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem;flex-wrap:wrap"><button class="btn btn-ghost" onclick="_fxClose('ln-modal')">${_g('Zamknij', 'Close')}</button>${_ln.items.length ? `<button class="btn btn-ghost" onclick="lnPublish()">📣 ${_g('Opublikuj ranking', 'Publish ranking')}</button>` : ''}<button class="btn btn-primary" onclick="lnSave()">💾 ${_g('Zapisz ustawienia', 'Save settings')}</button></div></div>`;
+}
+function lnMove(i, d) { const a = _ln.items, j = i + d; if(j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; _lnDraw(); }
+async function lnRankAi() { if(_ln.items.length && !confirm(_g('Zastąpić obecny ranking nową propozycją AI?', 'Replace the current ranking with a new AI draft?'))) return; showToast('🤖 ' + _g('AI układa ranking…', 'AI is building the ranking…'), 'info');
+  const r = await _api('/launch/ranking-ai', 'POST', {}, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; } _ln.items = r.items; _lnDraw(); if(!r.ai) showToast('⚠ ' + _g('AI nie odpowiedziało — wpisz komentarze ręcznie', 'AI did not answer — write the comments yourself'), 'info'); }
+async function lnSave(quiet) {
+  const r = await _api('/launch', 'POST', { countdown: _ln.c, picks: { on: _ln.picksOn }, pre: { on: _ln.preOn, items: _ln.items } }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return false; }
+  const lv = document.getElementById('ln-lock')?.value, lock = lv ? new Date(lv).toISOString() : null, sid = currentSeasonId || null;
+  if(sid && lock !== (_ln.lockAt || null)) { const p = await _api('/prediction/settings', 'POST', { seasonId: sid, lockAt: lock }, { admin: true }); if(p.ok && typeof predictionsData !== 'undefined') { predictionsData[sid] = p.predictions; _ln.lockAt = lock; } }
+  window._launch = { countdown: r.launch.countdown, picks: r.launch.picks, pre: r.launch.pre?.at ? { items: r.launch.pre.items, at: r.launch.pre.at, on: r.launch.pre.on !== false } : (window._launch?.pre || null) };
+  if(window._launch.pre) window._launch.pre.on = _ln.preOn; try { renderStories(); } catch(e) {} if(!quiet) showToast('✅ ' + _g('Zapisano', 'Saved'), 'success'); return true;
+}
+async function lnPublish() { if(!_ln.items.length) return; const dc = !!document.getElementById('ln-dc')?.checked; if(!confirm(_g(`Opublikować ranking (${_ln.items.length} drużyn)${dc ? ' i wysłać na Discorda' : ''}?`, `Publish the ranking (${_ln.items.length} teams)${dc ? ' and post it on Discord' : ''}?`))) return;
+  if(!(await lnSave(true))) return; const r = await _api('/launch/ranking-publish', 'POST', { items: _ln.items, discord: dc }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; }
+  window._launch = { ...(window._launch || {}), pre: { items: r.launch.pre.items, at: r.launch.pre.at, on: true } }; _ln.published = true; _lnDraw(); try { renderStories(); } catch(e) {} showToast('📣 ' + _g('Ranking opublikowany', 'Ranking published') + (r.posted ? ' + Discord' : ''), 'success'); }
+// 🔒 PRIVACY i 📖 HOW IT WORKS — strony informacyjne (PL/EN), stopka z linkami, „Delete my data”
+function _pg(title, body) { return `<div class="section-title">${title}</div><div class="card" data-notr style="padding:1.2rem 1.4rem;max-width:860px;line-height:1.65;font-size:.92rem">${body}</div>`; }
+function _pgH(t) { return `<h3 style="font-family:'Barlow Condensed',sans-serif;font-size:1.25rem;letter-spacing:.5px;margin:1.2rem 0 .4rem;color:var(--accent)">${t}</h3>`; }
+function renderPrivacy() {
+  const el = document.getElementById('privacy-view'); if(!el) return; const en = currentLang === 'en', league = EU_MODE ? 'EU Chemik League' : 'NBA 2K Pro-Am Ekstraklasa', site = EU_MODE ? 'eu.chemikleagues.com' : 'chemikleagues.com';
+  el.innerHTML = _pg('🔒 ' + _g('Prywatność', 'Privacy'), en ? `
+    <p><b>${league}</b> is a community NBA 2K Pro-Am league run by volunteers. This page explains what data the website <b>${site}</b> keeps, why, and how you can remove it.</p>
+    ${_pgH('What we store')}
+    <ul style="padding-left:1.2rem">
+      <li><b>Discord account</b> (ID, username, avatar) — when you log in with Discord. Used to recognise you, your team and your permissions.</li>
+      <li><b>Gamertag, platform, team and X (Twitter) handle</b> — when you register a team, join as a free agent or link your account.</li>
+      <li><b>Game statistics</b> — box scores from league games (points, rebounds, etc.), shown publicly as league results and records.</li>
+      <li><b>Payment proof screenshots</b> — when a captain uploads proof of the entry fee. Visible only to league admins and <b>deleted automatically 30 days</b> after the payment is confirmed.</li>
+      <li><b>Fan activity</b> — votes, picks, card collection, Kort games, fantasy teams, notification settings.</li>
+    </ul>
+    ${_pgH('Why')}
+    <p>Only to run the league: teams, schedule, results, statistics, awards, announcements on our Discord server and social media, and the fan features of the website. We do not sell data and we do not use advertising trackers.</p>
+    ${_pgH('Services we use')}
+    <p>The website runs on <b>Cloudflare</b> (hosting and storage). Announcements are posted to <b>Discord</b> and sometimes <b>X</b>. Game screenshots and some texts are processed by <b>Google Gemini</b> (reading box scores, writing short descriptions). Login uses <b>Discord OAuth</b> — we never see your Discord password.</p>
+    ${_pgH('Your browser')}
+    <p>The site keeps your login session and settings (language, theme) in your browser's local storage. No advertising cookies.</p>
+    ${_pgH('Your rights')}
+    <p>You can delete your account data at any time: <b>My panel → 🗑 Delete my data</b>. This removes your linked profile, fan activity, cards and settings. League history (results and statistics of played games) stays as part of the league record; if you want your gamertag removed from it, or if you are a team captain and want your team registration removed, contact a league admin on Discord.</p>
+    <div style="margin-top:1rem"><button class="btn btn-ghost" onclick="showView('mypanel')">👤 My panel</button> <button class="btn btn-ghost" onclick="showView('howto')">📖 How it works</button></div>`
+  : `
+    <p><b>${league}</b> to społecznościowa liga NBA 2K Pro-Am prowadzona przez wolontariuszy. Ta strona wyjaśnia, jakie dane przechowuje <b>${site}</b>, po co i jak możesz je usunąć.</p>
+    ${_pgH('Co przechowujemy')}
+    <ul style="padding-left:1.2rem">
+      <li><b>Konto Discord</b> (ID, nazwa, avatar) — gdy logujesz się przez Discord. Służy do rozpoznania Ciebie, Twojej drużyny i uprawnień.</li>
+      <li><b>Nick w grze, platforma, drużyna i konto X</b> — przy zapisie drużyny, zgłoszeniu jako wolny agent albo połączeniu konta.</li>
+      <li><b>Statystyki meczów</b> — tabele statystyk z meczów ligi (punkty, zbiórki itd.), publiczne jako wyniki i rekordy ligi.</li>
+      <li><b>Zrzuty potwierdzeń płatności</b> — gdy kapitan wgrywa potwierdzenie wpisowego. Widzą je tylko admini, a <b>usuwamy je automatycznie 30 dni</b> po potwierdzeniu wpłaty.</li>
+      <li><b>Aktywność kibica</b> — głosy, typy, kolekcja kart, gry w Kort, Fantasy, ustawienia powiadomień.</li>
+    </ul>
+    ${_pgH('Po co')}
+    <p>Wyłącznie do prowadzenia ligi: drużyny, terminarz, wyniki, statystyki, nagrody, ogłoszenia na Discordzie i w mediach społecznościowych oraz funkcje dla kibiców. Nie sprzedajemy danych i nie używamy reklamowych narzędzi śledzących.</p>
+    ${_pgH('Z jakich usług korzystamy')}
+    <p>Strona działa na <b>Cloudflare</b> (hosting i przechowywanie danych). Ogłoszenia trafiają na <b>Discorda</b> i czasem na <b>X</b>. Zrzuty wyników i niektóre teksty przetwarza <b>Google Gemini</b> (odczyt statystyk, krótkie opisy). Logowanie odbywa się przez <b>Discord OAuth</b> — nie znamy Twojego hasła do Discorda.</p>
+    ${_pgH('Twoja przeglądarka')}
+    <p>Strona zapisuje sesję logowania i ustawienia (język, motyw) w pamięci przeglądarki. Bez reklamowych plików cookie.</p>
+    ${_pgH('Twoje prawa')}
+    <p>Dane konta możesz usunąć w każdej chwili: <b>Mój panel → 🗑 Usuń moje dane</b>. Usuwa to połączony profil, aktywność kibica, karty i ustawienia. Historia ligi (wyniki i statystyki rozegranych meczów) zostaje jako część archiwum ligi; jeśli chcesz usunąć z niej swój nick albo jesteś kapitanem i chcesz usunąć zgłoszenie drużyny, napisz do admina ligi na Discordzie.</p>
+    <div style="margin-top:1rem"><button class="btn btn-ghost" onclick="showView('mypanel')">👤 Mój panel</button> <button class="btn btn-ghost" onclick="showView('howto')">📖 Jak to działa</button></div>`);
+}
+function renderHowto() {
+  const el = document.getElementById('howto-view'); if(!el) return; const en = currentLang === 'en', fee = _signup().fee || '25€';
+  const step = (n, t, d, btn) => `<div style="display:flex;gap:.8rem;padding:.65rem 0;border-top:1px solid var(--border)"><div style="min-width:30px;height:30px;border-radius:50%;background:var(--accent);color:#111;display:flex;align-items:center;justify-content:center;font-weight:900">${n}</div><div style="flex:1"><b>${t}</b><div style="font-size:.86rem;color:var(--muted)">${d}</div>${btn ? `<div style="margin-top:.35rem">${btn}</div>` : ''}</div></div>`;
+  const B = (l, on) => `<button class="btn btn-ghost" style="font-size:.72rem" onclick="${on}">${l}</button>`;
+  el.innerHTML = _pg('📖 ' + _g('Jak to działa', 'How it works'), en ? `
+    <p>Everything you need to play in ${EU_MODE ? 'EU Chemik League' : 'the league'} — in a few minutes. 🏀</p>
+    ${_pgH('🧢 For captains')}
+    ${step(1, 'Register your team', 'Team name, roster (at least 5 players with gamertags and platforms), level and optional logo.', B('🧢 Register', 'goToTeamRegistrations()'))}
+    ${step(2, `Pay the entry fee (${fee})`, 'Use the payment details in the payment window (My panel → PAY ENTRY FEE), then upload a screenshot of the payment there. An admin confirms it and your team moves to <b>Confirmed teams</b>.', B('👤 My panel', "showView('mypanel')"))}
+    ${step(3, 'Get your players linked', 'Every player logs in with Discord and links their gamertag in My panel — you confirm it. Linked players get stats, player cards and the player role on Discord.', '')}
+    ${step(4, 'Introduce your team (Media day)', 'Goal for the season, player to watch, style of play and a word from the captain — shown in “Meet the teams” and on our socials.', B('🎬 Meet the teams', 'openMediaGallery()'))}
+    ${step(5, 'Schedule your games', 'In the Schedule, propose a few dates and times for each game — the other captain picks one. Both teams get reminders before tip-off.', B('📅 Schedule', "showView('schedule')"))}
+    ${step(6, 'Report the result', 'After the game, upload the box score screenshot. The site reads the stats automatically; the other captain confirms.', '')}
+    ${_pgH('🏀 For players')}
+    <p>Log in with Discord → <b>My panel</b> → link your gamertag. Set the days you can play, follow your team's games and stats, and check your player card. Were you the MVP? The bot will DM you for a short post-game interview. 🎙️</p>
+    ${_pgH('👀 For fans')}
+    <p>Daily card packs and team sets, the Kort card game, fantasy, pre-season picks, weekly awards voting and live streams — all on the website, no team needed.</p>
+    ${_pgH('❓ FAQ')}
+    <p><b>Disconnect or lag?</b> Follow the rules (Rules tab) and tell the admins on Discord right away.<br><b>Need to reschedule?</b> Agree with the other captain and propose new times in the Schedule.<br><b>Roster change?</b> My panel → Edit team (while registrations are open) or Roster change.<br><b>Something wrong?</b> Ask in our Discord — admins are there to help.</p>
+    <div style="margin-top:1rem">${B('📜 Rules', "showView('rules')")} ${B('🔒 Privacy', "showView('privacy')")}</div>`
+  : `
+    <p>Wszystko, co trzeba wiedzieć, żeby grać w lidze — w kilka minut. 🏀</p>
+    ${_pgH('🧢 Dla kapitanów')}
+    ${step(1, 'Zapisz drużynę', 'Nazwa, skład (co najmniej 5 graczy z nickami i platformami), poziom i opcjonalnie logo.', B('🧢 Zapisz', 'goToTeamRegistrations()'))}
+    ${_signup().fee || _signup().skrillEmail || _signup().revolutUrl ? step(2, `Opłać wpisowe (${fee})`, 'Dane do płatności są w oknie płatności (Mój panel → ZAPŁAĆ WPISOWE); tam też wgrywasz zrzut potwierdzenia. Admin je zatwierdza.', B('👤 Mój panel', "showView('mypanel')")) : ''}
+    ${step(3, 'Połącz konta graczy', 'Każdy gracz loguje się przez Discord i łączy swój nick w Moim panelu — Ty to potwierdzasz. Połączeni gracze mają statystyki, karty i rolę gracza na Discordzie.', '')}
+    ${step(4, 'Przedstaw drużynę (Media day)', 'Cel na sezon, gracz do obserwowania, styl gry i słowo od kapitana — w galerii „Poznaj drużyny” i w naszych mediach.', B('🎬 Poznaj drużyny', 'openMediaGallery()'))}
+    ${step(5, 'Umawiaj mecze', 'W Terminarzu zaproponuj kilka terminów każdego meczu — drugi kapitan wybiera jeden. Obie drużyny dostają przypomnienia.', B('📅 Terminarz', "showView('schedule')"))}
+    ${step(6, 'Zgłoś wynik', 'Po meczu wgraj zrzut statystyk. Strona sama je odczyta, a drugi kapitan potwierdza.', '')}
+    ${_pgH('🏀 Dla graczy')}
+    <p>Zaloguj się przez Discord → <b>Mój panel</b> → połącz nick. Ustaw dni, w które możesz grać, śledź mecze i statystyki, sprawdzaj swoją kartę. Byłeś MVP? Bot napisze do Ciebie z krótkim wywiadem. 🎙️</p>
+    ${_pgH('👀 Dla kibiców')}
+    <p>Codzienne paczki kart i komplety drużyn, gra Kort, Fantasy, typy przedsezonowe, głosowania na nagrody tygodnia i transmisje — wszystko na stronie, bez drużyny.</p>
+    ${_pgH('❓ Najczęstsze pytania')}
+    <p><b>Rozłączenie albo lag?</b> Postępuj zgodnie z regulaminem i od razu napisz do adminów na Discordzie.<br><b>Trzeba przełożyć mecz?</b> Ustal z drugim kapitanem i zaproponuj nowe terminy w Terminarzu.<br><b>Zmiana składu?</b> Mój panel → Edytuj drużynę (gdy zapisy są otwarte) albo Zmiana składu.<br><b>Coś nie działa?</b> Napisz na naszym Discordzie — admini pomogą.</p>
+    <div style="margin-top:1rem">${B('📜 Regulamin', "showView('rules')")} ${B('🔒 Prywatność', "showView('privacy')")}</div>`);
+}
+async function deleteMyData() {
+  const v = prompt(_g('To usunie Twój profil, aktywność kibica, karty i ustawienia z tej ligi. Historia rozegranych meczów zostaje.\n\nWpisz DELETE, aby potwierdzić:', 'This removes your profile, fan activity, cards and settings from this league. History of played games stays.\n\nType DELETE to confirm:'));
+  if(v !== 'DELETE') { if(v !== null) showToast(_g('Nie usunięto — wpisz DELETE wielkimi literami', 'Not deleted — type DELETE in capital letters'), 'info'); return; }
+  const r = await _api('/me/delete', 'POST', { confirm: 'DELETE' }, { session: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; }
+  alert(_g(`✅ Twoje dane zostały usunięte.${r.captainOf?.length ? `\n\nJesteś kapitanem: ${r.captainOf.join(', ')} — zgłoszenie drużyny zostaje. Aby je usunąć, napisz do admina.` : ''}`, `✅ Your data has been deleted.${r.captainOf?.length ? `\n\nYou are the captain of: ${r.captainOf.join(', ')} — the team registration stays. Contact an admin to remove it.` : ''}`));
+  try { localStorage.removeItem('nba2k_discord_user'); } catch(e) {} location.href = '/';
+}
+function _siteFooter() { if(document.getElementById('site-footer')) return; const v = document.querySelector('.view'); if(!v?.parentNode) return; const f = document.createElement('div'); f.id = 'site-footer';
+  f.style.cssText = 'text-align:center;font-size:.76rem;color:var(--muted);padding:1.6rem .5rem 2.2rem;opacity:.85';
+  f.innerHTML = `<a href="#" onclick="showView('howto');return false" style="color:inherit">📖 ${_g('Jak to działa', 'How it works')}</a> · <a href="#" onclick="showView('rules');return false" style="color:inherit">📜 ${_g('Regulamin', 'Rules')}</a> · <a href="#" onclick="showView('privacy');return false" style="color:inherit">🔒 ${_g('Prywatność', 'Privacy')}</a>`;
+  v.parentNode.appendChild(f); }
+
 function renderMyPanelView() {
   setTimeout(() => { try { karnetMount(); } catch(e) {} }, 50);
   const target = document.getElementById('mypanel-view');
@@ -11111,6 +11273,7 @@ function renderMyPanelView() {
     class="${arr[i] ? 'on' : ''}" style="flex:1;min-width:38px;padding:.35rem 0;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-family:inherit;font-weight:800;font-size:.76rem;background:${arr[i] ? 'var(--accent)' : 'var(--bg)'};color:${arr[i] ? 'rgba(0,0,0,.88)' : 'var(--text)'}">${d}</button>`).join('');
   target.innerHTML = `<div class="section-title">👤 ${_g('Mój panel', 'My panel')}</div>
     <div style="max-width:980px">${captainBoxHtml()}`;
+  setTimeout(() => { const t = document.getElementById('mypanel-view'); if(t && !document.getElementById('del-my-data')) t.insertAdjacentHTML('beforeend', `<div id="del-my-data" style="max-width:980px;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.78rem;color:var(--muted)"><span>🔒 <a href="#" style="color:inherit" onclick="showView('privacy');return false">${_g('Prywatność — jakie dane przechowujemy', 'Privacy — what data we keep')}</a></span><button class="btn btn-ghost" style="font-size:.7rem;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="deleteMyData()">🗑 ${_g('Usuń moje dane', 'Delete my data')}</button></div>`); }, 0);
   target.innerHTML += `
     <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1rem">
       ${_avatarHtml(discordUser.avatar, 44)}
@@ -12593,8 +12756,8 @@ function _predCardHtml(ctx) {
   const locked = pd.locked || (lockAt && Date.now() >= +lockAt);
   const isAdmin = _isLoggedInSync();
   const mine = myPredictions[sid] || {};
-  const teams = teamRegistrations.filter(r => r.status === 'approved' && (!r.seasonId || r.seasonId === sid)).map(r => r.teamName).sort((x, y) => x.localeCompare(y, 'pl'));
-  const players = [...new Set(teamRegistrations.filter(r => r.status === 'approved' && (!r.seasonId || r.seasonId === sid)).flatMap(r => (r.players || []).map(p => p.gamertag)))].sort((x, y) => x.localeCompare(y, 'pl'));
+  const teams = teamRegistrations.filter(r => (r.status === 'approved' || r.payment?.status === 'paid') && (!r.seasonId || r.seasonId === sid)).map(r => r.teamName).sort((x, y) => x.localeCompare(y, 'pl'));
+  const players = [...new Set(teamRegistrations.filter(r => (r.status === 'approved' || r.payment?.status === 'paid') && (!r.seasonId || r.seasonId === sid)).flatMap(r => (r.players || []).map(p => p.gamertag)))].sort((x, y) => x.localeCompare(y, 'pl'));
   const share = (k, v) => { const c = pd.counts?.[k] || {}, tot = Object.values(c).reduce((s, x) => s + x, 0); return tot && c[v] ? Math.round(c[v] / tot * 100) : 0; };
   const topOf = k => Object.entries(pd.counts?.[k] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const res = pd.results;
@@ -16924,7 +17087,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['📣', _g('Przypomnienie o wpisowym', 'Entry fee reminder'), 'openPayRemind()'], ['🔗', _g('Połączone konta (PL i EU)', 'Linked accounts (PL & EU)'), 'openLinkedAccounts()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['📣', _g('Przypomnienie o wpisowym', 'Entry fee reminder'), 'openPayRemind()'], ['🚀', _g('Start ligi: odliczanie, typy, ranking', 'League launch: countdown, picks, ranking'), 'openLaunch()'], ['🔗', _g('Połączone konta (PL i EU)', 'Linked accounts (PL & EU)'), 'openLinkedAccounts()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
