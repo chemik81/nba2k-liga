@@ -5018,7 +5018,7 @@ function renderStandings() {
     const parts = _standingsGroups.map(g => ({ name: g.name, list: sorted.filter(([n]) => g.teams.includes(n)) }));
     const rest = sorted.filter(([n]) => !inGroup.has(n));
     if(rest.length) parts.push({ name: 'Poza grupami', list: rest });
-    tbody.innerHTML = parts.map(pt => `<tr><td colspan="10" style="padding:.55rem 1.5rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;letter-spacing:1px;color:var(--accent);background:var(--surface2)">${pt.name}</td></tr>` + pt.list.map(_row).join('')).join('');
+    tbody.innerHTML = parts.map(pt => `<tr><td colspan="11" style="padding:.55rem 1.5rem;font-family:'Barlow Condensed',sans-serif;font-weight:900;letter-spacing:1px;color:var(--accent);background:var(--surface2)">${pt.name}${_zoneLegend(pt.name)}</td></tr>` + pt.list.map((x, i, arr) => _zoneMark(_row(x, i, arr), _zoneOf(pt.name, i, pt.list.length))).join('')).join('');
   } else {
     tbody.innerHTML = sorted.map(_row).join('');
   }
@@ -9041,7 +9041,7 @@ function renderPowerRanking() {
         <button onclick="sendPowerRanking()" class="btn btn-ghost" style="font-size:.72rem;padding:.25rem .6rem">📣 Wyślij</button></div>` : ''}
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem">
-      ${pr.entries.map(e => `<div style="display:grid;grid-template-columns:34px 42px 30px 1fr;align-items:center;gap:.6rem;padding:.5rem .9rem;border-bottom:1px solid var(--border)">
+      ${_prGroups(pr).map(([gname, list]) => (gname ? `<div style="padding:.45rem .9rem;background:var(--surface2);font-family:'Barlow Condensed',sans-serif;font-weight:900;letter-spacing:1px;color:var(--accent)">${_h(gname)}</div>` : '') + list.map(e => `<div style="display:grid;grid-template-columns:34px 42px 30px 1fr;align-items:center;gap:.6rem;padding:.5rem .9rem;border-bottom:1px solid var(--border)">
         <b style="font-family:'Barlow Condensed',sans-serif;font-size:1.35rem;color:${e.rank <= 3 ? 'var(--accent)' : 'var(--text)'}">${e.rank}</b>
         <div style="text-align:center;font-size:.8rem">${arrow(e)}</div>
         ${teamLogo(e.team, 28, '.65rem')}
@@ -9049,7 +9049,7 @@ function renderPowerRanking() {
           <div style="font-weight:800;font-size:.9rem">${_h(e.team)} <span style="font-weight:600;font-size:.72rem;color:var(--muted)">${e.w}-${e.l}${e.form ? ' · ' + e.form : ''}</span></div>
           <div style="font-size:.76rem;color:var(--muted);font-style:italic">${_h(e.line || '')}</div>
         </div>
-      </div>`).join('')}
+      </div>`).join('')).join('')}
     </div>`;
 }
 
@@ -11251,7 +11251,7 @@ function _teamStrength(r) { const lv = TEAM_LEVELS.indexOf(r.level), pre = (wind
 function _dvTeams() { const sid = currentSeasonId || null; return (teamRegistrations || []).filter(r => r.status !== 'rejected' && (!sid || !r.seasonId || r.seasonId === sid)); }
 const _dvPaid = r => r.status === 'approved' || r.payment?.status === 'paid';
 async function openDivisions() {
-  if(!_isLoggedInSync()) return; const r = await _api('/divisions', 'POST', { load: true }, { admin: true }).catch(() => ({})), d = r.divisions;
+  if(!_isLoggedInSync()) return; const r = await _api('/divisions', 'POST', { load: true }, { admin: true }).catch(() => ({})), d = r.divisions; window._dvSaved = d || null;
   const en = EU_MODE, names = d?.groups?.map(g => g.name) || [1, 2].map(i => en ? `Division ${i}` : `Dywizja ${i}`), at = {};
   (d?.groups || []).forEach((g, gi) => g.teams.forEach(t => { at[t] = gi; }));
   _dv = { names, at, onlyPaid: true, published: !!d?.published, discord: true, sid: d?.seasonId || currentSeasonId || null }; _dvDraw();
@@ -11285,16 +11285,17 @@ function _dvDraw() {
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">${_dv.published ? `<span style="font-size:.74rem;color:var(--win)">✅ ${_g('opublikowane', 'published')}</span><button class="btn btn-ghost" style="font-size:.7rem" onclick="dvPublish(false)">${_g('Ukryj', 'Unpublish')}</button>` : ''}
         <button class="btn btn-ghost" style="font-size:.72rem" onclick="dvImage()">🖼 ${_g('Grafika (Discord/X)', 'Graphic (Discord/X)')}</button><button class="btn btn-ghost" style="font-size:.72rem" onclick="dvToFixture()">📅 ${_g('Do generatora terminarza', 'Open in schedule generator')}</button></div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center"><label style="display:flex;gap:.3rem;align-items:center;font-size:.74rem;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" style="width:auto" ${_dv.discord ? 'checked' : ''} onchange="_dv.discord=this.checked"> ${_g('ogłoś na Discordzie', 'announce on Discord')}</label>
-        <button class="btn btn-ghost" onclick="dvSave()">💾 ${_g('Zapisz szkic', 'Save draft')}</button><button class="btn btn-primary" onclick="dvPublish(true)">📣 ${_g('Opublikuj podział', 'Publish divisions')}</button></div></div></div>`;
+        <button class="btn btn-ghost" onclick="dvSave()">💾 ${_g('Zapisz szkic', 'Save draft')}</button><button class="btn btn-primary" onclick="dvPublish(true)">📣 ${_g('Opublikuj podział', 'Publish divisions')}</button></div></div>
+    ${window._dvSaved?.groups?.length ? _dvCfgHtml(window._dvSaved) : `<div style="font-size:.72rem;color:var(--muted);margin-top:.8rem">⚙️ ${_g('Role, kanały Discord i strefy tabeli ustawisz po zapisaniu szkicu.', 'Discord roles, channels and table zones are available after saving the draft.')}</div>`}</div>`;
 }
 function _dvCount(n) { const en = EU_MODE; while(_dv.names.length < n) _dv.names.push(en ? `Division ${_dv.names.length + 1}` : `Dywizja ${_dv.names.length + 1}`); _dv.names = _dv.names.slice(0, n); Object.keys(_dv.at).forEach(t => { if(_dv.at[t] >= n) _dv.at[t] = null; }); _dvDraw(); }
 function _dvGroups() { return _dv.names.map((name, gi) => ({ name, teams: _dvTeams().filter(r => _dv.at[r.teamName] === gi).sort((a, b) => _teamStrength(a) - _teamStrength(b)).map(r => r.teamName) })); }
-async function dvSave(quiet) { const r = await _api('/divisions', 'POST', { seasonId: _dv.sid, groups: _dvGroups() }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return null; } if(!quiet) showToast('💾 ' + _g('Szkic zapisany', 'Draft saved'), 'success'); return r.divisions; }
+async function dvSave(quiet) { const r = await _api('/divisions', 'POST', { seasonId: _dv.sid, groups: _dvGroups() }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return null; } window._dvSaved = r.divisions; if(!quiet) { showToast('💾 ' + _g('Szkic zapisany', 'Draft saved'), 'success'); _dvDraw(); } return r.divisions; }
 async function dvPublish(on) {
   const G = _dvGroups(); if(on && G.some(g => !g.teams.length)) { showToast('⚠ ' + _g('Każda dywizja musi mieć drużyny', 'Every division needs teams'), 'error'); return; }
   if(on && !confirm(_g(`Opublikować podział (${G.map(g => `${g.name}: ${g.teams.length}`).join(', ')})${_dv.discord ? ' i ogłosić na Discordzie' : ''}?\n\nPo publikacji typy przedsezonowe dostaną „mistrza dywizji” dla każdej dywizji.`, `Publish the divisions (${G.map(g => `${g.name}: ${g.teams.length}`).join(', ')})${_dv.discord ? ' and announce on Discord' : ''}?\n\nAfter publishing, pre-season picks get a "division champion" for each division.`))) return;
   if(!(await dvSave(true))) return; const r = await _api('/divisions', 'POST', { publish: !!on, discord: on && _dv.discord }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; }
-  _dv.published = !!r.divisions.published; window._launch = { ...(window._launch || {}), divisions: r.divisions.published ? { seasonId: r.divisions.seasonId, groups: r.divisions.groups, at: r.divisions.publishedAt } : null };
+  _dv.published = !!r.divisions.published; window._dvSaved = r.divisions; window._launch = { ...(window._launch || {}), divisions: r.divisions.published ? { seasonId: r.divisions.seasonId, groups: r.divisions.groups, at: r.divisions.publishedAt, zones: r.divisions.zones || {} } : null };
   _dvDraw(); try { renderStories(); } catch(e) {} showToast(on ? '📣 ' + _g('Podział opublikowany', 'Divisions published') + (r.posted ? ' + Discord' : '') : _g('Podział ukryty', 'Divisions unpublished'), 'success');
 }
 async function dvToFixture() { const d = await dvSave(true); if(!d) return; window._dvDraft = d; _fxClose('dv-modal'); openFixtureGenerator(); window._dvDraft = null; }
@@ -11323,6 +11324,41 @@ function divisionsHtml() { // dashboard: opublikowane dywizje
 function _predDefs(sid) { sid = sid || currentSeasonId || null; const D = window._launch?.divisions;
   if(D?.groups?.length >= 2 && (!D.seasonId || D.seasonId === sid)) return [...D.groups.map(g => ({ k: 'champion_' + g.id, icon: '🏆', label: _g('Mistrz: ', 'Champion: ') + g.name, type: 'team', pts: 5, teams: [...g.teams].sort((a, b) => a.localeCompare(b, 'pl')) })), ...PRED_DEF.filter(d => ['mvp', 'roy', 'scorer'].includes(d.k))];
   return PRED_DEF; }
+
+// 🧩 DYWIZJE: Discord (role, kanały) i strefy tabeli (playoffy, awans, spadek)
+function _dvCfgHtml(d) {
+  const G = d?.groups || [], R = d?.roles || {}, C = d?.channels || {}, Z = d?.zones || {}; if(!G.length) return '';
+  const inp = (id, v, ph, w) => `<input id="${id}" value="${_h(v || '')}" placeholder="${ph}" style="${_MODAL_INP};font-size:.74rem;padding:.25rem .4rem;${w ? 'width:' + w : ''}">`;
+  const RT = [['results', _g('Wyniki', 'Results')], ['scheduleMain', _g('Terminarz i przypomnienia', 'Schedule & reminders')], ['live', _g('Na żywo', 'Live')], ['versus', _g('Zapowiedzi VERSUS', 'VERSUS previews')]];
+  return `<details style="margin-top:1rem;border:1px solid var(--border);border-radius:10px;padding:.5rem .7rem" ${window._dvCfgOpen ? 'open' : ''} ontoggle="window._dvCfgOpen=this.open"><summary style="cursor:pointer;font-weight:800;font-size:.84rem">⚙️ ${_g('Discord i strefy tabeli', 'Discord & table zones')}</summary>
+    <div style="font-size:.72rem;color:var(--muted);margin:.4rem 0 .6rem">${_g('Role: gracze i kapitanowie dostają rolę swojej dywizji (przy publikacji i przy łączeniu kont). Kanały: wiadomości o meczach drużyn z jednej dywizji trafiają na jej kanał (puste = kanał ogólny). Strefy: oznaczenia w tabeli.', 'Roles: players and captains get their division role (on publishing and when linking accounts). Channels: messages about games inside one division go to its channel (empty = general channel). Zones: markers in the standings.')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem">${G.map(g => `<div style="background:var(--surface2);border-radius:9px;padding:.55rem">
+      <b style="font-size:.84rem">${_h(g.name)}</b>
+      <label style="${_MODAL_LBL};margin-top:.35rem">🎭 ${_g('ID roli Discord', 'Discord role ID')}</label>${inp('dvr-' + g.id, R[g.id], _g('puste = utworzę automatycznie', 'empty = create automatically'))}
+      ${RT.map(([k, l]) => `<label style="${_MODAL_LBL};margin-top:.3rem">💬 ${l}</label>${inp(`dvc-${g.id}-${k}`, C[g.id]?.[k], _g('ID kanału (opcjonalnie)', 'channel ID (optional)'))}`).join('')}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem;margin-top:.45rem">${[['po', '🟡 ' + _g('playoffy', 'playoffs')], ['up', '▲ ' + _g('awans', 'promotion')], ['down', '▼ ' + _g('spadek', 'relegation')]].map(([k, l]) => `<div><label style="${_MODAL_LBL};font-size:.62rem">${l}</label><input id="dvz-${g.id}-${k}" type="number" min="0" max="16" value="${+Z[g.id]?.[k] || 0}" style="${_MODAL_INP};font-size:.74rem;padding:.25rem .4rem"></div>`).join('')}</div></div>`).join('')}</div>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end;margin-top:.7rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="dvCfgSave(false)">💾 ${_g('Zapisz ustawienia', 'Save settings')}</button><button class="btn btn-primary" style="font-size:.72rem" onclick="dvCfgSave(true)">🎭 ${_g('Zapisz i nadaj role teraz', 'Save & assign roles now')}</button></div></details>`;
+}
+async function dvCfgSave(sync) {
+  const G = window._dvSaved?.groups || [], cfg = { roles: {}, channels: {}, zones: {} }, v = id => document.getElementById(id)?.value.trim() || '';
+  G.forEach(g => { cfg.roles[g.id] = v('dvr-' + g.id); cfg.channels[g.id] = Object.fromEntries(['results', 'scheduleMain', 'live', 'versus'].map(k => [k, v(`dvc-${g.id}-${k}`)])); cfg.zones[g.id] = Object.fromEntries(['po', 'up', 'down'].map(k => [k, +v(`dvz-${g.id}-${k}`) || 0])); });
+  if(sync && !confirm(_g('Nadać role dywizji wszystkim graczom i kapitanom? Brakujące role zostaną utworzone na serwerze Discord.', 'Assign division roles to all players and captains? Missing roles will be created on the Discord server.'))) return;
+  showToast(sync ? '🎭 ' + _g('Nadawanie ról…', 'Assigning roles…') : '💾', 'info');
+  const r = await _api('/divisions', 'POST', { cfg, syncRoles: !!sync, createMissing: !!sync }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; }
+  window._dvSaved = r.divisions; if(window._launch?.divisions) window._launch.divisions.zones = r.divisions.zones || {};
+  showToast(sync ? `🎭 ${_g('Role', 'Roles')}: +${r.assigned || 0} / −${r.removed || 0}${r.failed ? ` · ⚠ ${r.failed} ${_g('błędów (gracz poza serwerem?)', 'failed (player not on the server?)')}` : ''}` : '✅ ' + _g('Zapisano', 'Saved'), r.failed ? 'info' : 'success'); _dvDraw();
+}
+function _zoneOf(groupName, idx, n) { // strefa w tabeli: ▲ awans / 🟡 playoffy / ▼ spadek
+  const D = window._launch?.divisions; if(!D?.groups) return null; const g = D.groups.find(x => x.name === groupName); const z = g && D.zones?.[g.id]; if(!z) return null;
+  if(z.up && idx < z.up) return { c: '#22c55e', t: _g('Awans', 'Promotion') }; if(z.po && idx < z.po) return { c: '#f5c518', t: _g('Playoffy', 'Playoffs') }; if(z.down && idx >= n - z.down) return { c: '#ef4444', t: _g('Spadek', 'Relegation') }; return null;
+}
+function _zoneMark(rowHtml, z) { if(!z) return rowHtml; const i = rowHtml.indexOf('<td'), j = i >= 0 ? rowHtml.indexOf('>', i) : -1; if(j < 0) return rowHtml;
+  return rowHtml.slice(0, j + 1) + `<span title="${_h(z.t)}" style="display:inline-block;width:4px;height:1.15em;border-radius:2px;background:${z.c};margin-right:7px;vertical-align:middle"></span>` + rowHtml.slice(j + 1); }
+function _zoneLegend(groupName) { const D = window._launch?.divisions, g = D?.groups?.find(x => x.name === groupName), z = g && D.zones?.[g.id]; if(!z || !(z.up || z.po || z.down)) return '';
+  const it = (c, t) => `<span style="display:inline-flex;align-items:center;gap:.3rem;margin-right:.9rem"><span style="width:10px;height:10px;border-radius:2px;background:${c}"></span>${t}</span>`;
+  return `<span style="float:right;font-family:inherit;font-weight:600;font-size:.7rem;letter-spacing:0;color:var(--muted)">${z.up ? it('#22c55e', _g('awans', 'promotion') + ` (${z.up})`) : ''}${z.po ? it('#f5c518', _g('playoffy', 'playoffs') + ` (${z.po})`) : ''}${z.down ? it('#ef4444', _g('spadek', 'relegation') + ` (${z.down})`) : ''}</span>`; }
+function _prGroups(pr) { const gs = [...new Set((pr.entries || []).map(e => e.group || ''))]; return gs.length > 1 || gs[0] ? gs.map(g => [g, pr.entries.filter(e => (e.group || '') === g)]) : [['', pr.entries]]; }
+function _dvCur() { const D = window._launch?.divisions; return D?.groups?.length >= 2 && (!D.seasonId || !currentSeasonId || D.seasonId === currentSeasonId) ? D.groups : null; }
 
 function renderMyPanelView() {
   setTimeout(() => { try { karnetMount(); } catch(e) {} }, 50);
@@ -11793,9 +11829,12 @@ function _galaCandidates() {
   const cand = (list, sub) => list.slice(0, 4).map(x => ({ id: x.name + '|' + x.team, label: x.name, team: x.team, sub: sub(x) }));
   const cats = [];
   const mvp = [...pool].sort((a, b) => b.eff - a.eff);
-  if(mvp.length >= 2) cats.push({ key: 'mvp', emoji: '👑', title: 'MVP sezonu', candidates: cand(mvp, line) });
-  const dpoy = [...pool].sort((a, b) => (b.stl + b.blk) / b.gp - (a.stl + a.blk) / a.gp);
-  if(dpoy.length >= 2) cats.push({ key: 'dpoy', emoji: '🛡️', title: 'Obrońca sezonu', candidates: cand(dpoy, x => `${x.team} · ${(x.stl / x.gp).toFixed(1)} STL · ${(x.blk / x.gp).toFixed(1)} BLK`) });
+  const dpoy = [...pool].sort((a, b) => (b.stl + b.blk) / b.gp - (a.stl + a.blk) / a.gp), dLine = x => `${x.team} · ${(x.stl / x.gp).toFixed(1)} STL · ${(x.blk / x.gp).toFixed(1)} BLK`, DV = _dvCur(); // 🧩 osobno w każdej dywizji
+  if(DV) DV.forEach(g => { const M = mvp.filter(x => g.teams.includes(x.team)), Dp = dpoy.filter(x => g.teams.includes(x.team));
+    if(M.length >= 2) cats.push({ key: 'mvp_' + g.id, emoji: '👑', title: _g('MVP sezonu · ', 'Season MVP · ') + g.name, candidates: cand(M, line) });
+    if(Dp.length >= 2) cats.push({ key: 'dpoy_' + g.id, emoji: '🛡️', title: _g('Obrońca sezonu · ', 'Defender of the season · ') + g.name, candidates: cand(Dp, dLine) }); });
+  else { if(mvp.length >= 2) cats.push({ key: 'mvp', emoji: '👑', title: 'MVP sezonu', candidates: cand(mvp, line) });
+    if(dpoy.length >= 2) cats.push({ key: 'dpoy', emoji: '🛡️', title: 'Obrońca sezonu', candidates: cand(dpoy, dLine) }); }
   // Odkrycie: pierwszy mecz w lidze w tej edycji
   const firstEd = {};
   _withAllMatches(() => [...matches].sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(m => [m.team1, m.team2].forEach(t => (t.players || []).forEach(p => { if(p.name && !firstEd[p.name]) firstEd[p.name] = _editionOf(m.seasonId); }))));
@@ -17566,7 +17605,7 @@ async function renderAwardsView() {
   host.innerHTML = `${hallOfFameHtml()}${open.length && dashHtml ? `<div style="margin-bottom:1.2rem">${dashHtml}</div>` : `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem;color:var(--muted);font-size:.86rem">${_g('Teraz nie ma otwartego głosowania. Nowe rusza po każdej kolejce.', 'No voting open right now — a new one starts after every round.')}</div>`}
     ${closed.length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem"><div class="section-title" style="font-size:1.25rem;margin:0">🏅 ${_g('Zwycięzcy', 'Winners')}</div>
       <select onchange="_awArchId=this.value;renderAwardsView()" style="font-size:.82rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">${closed.map(x => `<option value="${x.id}" ${x.id === a.id ? 'selected' : ''}>${_h(_awTitle(x.title))}</option>`).join('')}</select></div>
-      <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.7rem">${a.categories.filter(c => a.winners[c.key]).map(c => { const w = a.winners[c.key], card = ['mvp', 'def'].includes(c.key);
+      <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.7rem">${a.categories.filter(c => a.winners[c.key]).map(c => { const w = a.winners[c.key], card = /^(mvp|def|potm)/.test(c.key);
         const link = c.key === 'game' && /^m/.test(String(w.id)) ? `<button class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem" onclick="openMatch('${String(w.id).slice(1)}')">🏀 ${_g('Zobacz mecz', 'View game')}</button>`
           : c.key === 'clip' ? (() => { const cl = (clipsList || []).find(x => 'c' + x.id === String(w.id)); return cl?.url ? `<a class="btn btn-ghost" style="font-size:.72rem;margin-top:.4rem;text-decoration:none" href="${_h(cl.url)}" target="_blank" rel="noopener">🎬 ${_g('Zobacz akcję', 'Watch')}</a>` : ''; })() : '';
         return `<div class="card" style="padding:.7rem .8rem"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--accent)">${c.emoji || '🏅'} ${_h(_awCat(c)).toUpperCase()}</div>
@@ -17574,9 +17613,9 @@ async function renderAwardsView() {
           ${card ? `<div id="awc-${c.key}" style="margin-top:.5rem;aspect-ratio:4/5;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted)">⏳</div>` : ''}${link}</div>`; }).join('')}</div>` : ''}`;
   if(!a) return;
   const scope = a.week ? `week:${a.seasonId || sid || ''}:${a.week}` : null;
-  for(const k of ['mvp', 'def']) { const w = a.winners[k], box = document.getElementById('awc-' + k); if(!w || !box) continue;
-    try { const url = k === 'mvp' ? await _pcLimitedImage(w.label, `MVP · ${String(a.title || '').toUpperCase()}`, scope, 'gold', 0, null) : await (async () => { const d = (scope && _pcData(w.label, scope)) || _pcData(w.label, 'season'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })();
-      box.innerHTML = url ? (k === 'mvp' ? _holoHtml(url, w.label, 1) : `<img src="${url}" alt="${_h(w.label)}" style="width:100%;border-radius:12px;display:block">`) : _h(w.label); if(k === 'mvp') _holoBind(box); } catch(e) { box.textContent = w.label; } }
+  for(const k of Object.keys(a.winners || {}).filter(k => /^(mvp|def|potm)/.test(k))) { const w = a.winners[k], box = document.getElementById('awc-' + k); if(!w || !box) continue;
+    try { const url = /^(mvp|potm)/.test(k) ? await _pcLimitedImage(w.label, /^potm/.test(k) ? String((a.categories || []).find(c => c.key === k)?.title || '').toUpperCase() : `MVP · ${String(a.title || '').toUpperCase()}`, scope, 'gold', 0, null) : await (async () => { const d = (scope && _pcData(w.label, scope)) || _pcData(w.label, 'season'); return d ? _pcImage(d, currentLang === 'en' ? 'en' : 'pl', true) : null; })();
+      box.innerHTML = url ? (/^(mvp|potm)/.test(k) ? _holoHtml(url, w.label, 1) : `<img src="${url}" alt="${_h(w.label)}" style="width:100%;border-radius:12px;display:block">`) : _h(w.label); if(k === 'mvp') _holoBind(box); } catch(e) { box.textContent = w.label; } }
 }
 
 // ═══ 📣 DASHBOARD: OGŁOSZENIA (nagrody, MVP z kartą, Piątka tygodnia, linki, zapisy, drafty) ═══
