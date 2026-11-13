@@ -1,4 +1,4 @@
-/*@v:739204317b*/
+/*@v:8c0d81398d*/
 function openCreateEventModal(editId) {
   const ev = editId ? events.find(e => e.id === editId) : null;
   document.getElementById('event-modal-content').innerHTML = `

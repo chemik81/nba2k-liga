@@ -1,4 +1,4 @@
-/*@v:739204317b*/
+/*@v:8c0d81398d*/
 // ═══ 🪪 KARTA ZAWODNIKA ══════════════════════════════════════════
 async function _shareCardCanvas(name) {
   const ed = _currentEdition();
@@ -151,23 +151,25 @@ function openRosterEditor(regId) {
 }
 function _renderRosterEditor() {
   const ed = window._rosterEd, r = teamRegistrations.find(x => x.id === ed.regId);
-  const box = _fxModal('roster-ed-modal', 640).querySelector('.modal');
+  const box = _fxModal('roster-ed-modal', 720).querySelector('.modal');
   const sel = 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem;font-family:inherit;font-size:.78rem';
   box.innerHTML = _fxHead('roster-ed-modal', `✏️ Edycja składu — ${_h(r.teamName)}`) + `
     <div style="font-size:.76rem;color:var(--muted);margin-bottom:.7rem">Edycja admina zapisuje się od razu (bez prośby i bez wpisów w Transferach). Zmiana nicku przepina połączone konto gracza na nowy nick. Każda zmiana trafia do 📝 Dziennika zmian.</div>
     <div style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.7rem">
-      ${ed.rows.map((p, i) => `<div style="display:grid;grid-template-columns:1fr 80px 150px 32px;gap:.35rem;align-items:center">
-        <input value="${_h(p.gamertag)}" maxlength="32" oninput="_rosterEd.rows[${i}].gamertag=this.value" style="${_MODAL_INP};padding:.35rem .55rem;${p.orig && p.orig !== p.gamertag ? 'border-color:var(--accent)' : ''}" placeholder="nick">
-        <select onchange="_rosterEd.rows[${i}].platform=this.value" style="${sel}"><option value="psn" ${p.platform !== 'xbox' ? 'selected' : ''}>PSN</option><option value="xbox" ${p.platform === 'xbox' ? 'selected' : ''}>Xbox</option></select>
-        <select onchange="_rosterEd.rows[${i}].experience=this.value" style="${sel}"><option value="">— poziom —</option>${Object.entries(_expLabels).map(([k, v]) => `<option value="${k}" ${p.experience === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        <button class="btn btn-ghost" title="Usuń z składu" style="padding:.2rem" onclick="_rosterEd.rows.splice(${i},1);_renderRosterEditor()">🗑</button>
+      ${ed.rows.map((p, i) => `<div class="rost-row${ed.bad?.includes(i) ? ' bad' : ''}">
+        <input class="gt" id="rost-gt-${i}" value="${_h(p.gamertag)}" maxlength="32" oninput="_rosterEd.rows[${i}].gamertag=this.value;this.closest('.rost-row').classList.remove('bad')" style="${_MODAL_INP};padding:.45rem .6rem;font-size:.9rem;${p.orig && p.orig !== p.gamertag ? 'border-color:var(--accent)' : ''}" placeholder="${_g('Gracz', 'Player')} ${i + 1} — nick">
+        <select class="pf" onchange="_rosterEd.rows[${i}].platform=this.value" style="${sel}"><option value="psn" ${p.platform !== 'xbox' ? 'selected' : ''}>PSN</option><option value="xbox" ${p.platform === 'xbox' ? 'selected' : ''}>Xbox</option></select>
+        <select class="lv" onchange="_rosterEd.rows[${i}].experience=this.value" style="${sel}"><option value="">— poziom —</option>${Object.entries(_expLabels).map(([k, v]) => `<option value="${k}" ${p.experience === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="btn btn-ghost rm" title="Usuń z składu" style="padding:.2rem" onclick="_rosterEd.rows.splice(${i},1);_rosterEd.bad=null;_renderRosterEditor()">🗑</button>
       </div>${p.orig && p.orig !== p.gamertag.trim() && p.gamertag.trim() ? `<div style="font-size:.66rem;color:var(--accent);margin:-.15rem 0 .1rem">✏️ ${_h(p.orig)} → ${_h(p.gamertag.trim())}</div>` : ''}`).join('')}
     </div>
-    <button class="btn btn-ghost" style="font-size:.76rem;margin-bottom:1rem" onclick="_rosterEd.rows.push({orig:'',gamertag:'',platform:'psn',experience:''});_renderRosterEditor()">➕ Dodaj gracza</button>
+    <button class="btn btn-ghost" style="font-size:.76rem;margin-bottom:1rem" onclick="_rosterEd.rows.push({orig:'',gamertag:'',platform:'psn',experience:''});_rosterEd.bad=null;_renderRosterEditor();setTimeout(()=>document.getElementById('rost-gt-'+(_rosterEd.rows.length-1))?.focus(),30)">➕ Dodaj gracza</button>
     <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('roster-ed-modal')">Anuluj</button><button class="btn btn-primary" onclick="saveRosterEditor()">💾 Zapisz skład</button></div>`;
 }
 async function saveRosterEditor() {
   const ed = window._rosterEd;
+  const empty = ed.rows.map((p, i) => String(p.gamertag || '').trim() ? -1 : i).filter(i => i >= 0);
+  if(empty.length) { ed.bad = empty; _renderRosterEditor(); showToast(_g(`Wpisz nick gracza ${empty.map(i => i + 1).join(', ')} albo usuń pusty wiersz (🗑)`, `Enter a gamertag for player ${empty.map(i => i + 1).join(', ')} or remove the empty row (🗑)`), 'error'); document.getElementById('rost-gt-' + empty[0])?.focus(); return; }
   const rows = ed.rows.map(p => ({ ...p, gamertag: p.gamertag.trim() })).filter(p => p.gamertag);
   if(!rows.length) { showToast('Skład nie może być pusty', 'info'); return; }
   const low = rows.map(p => p.gamertag.toLowerCase());

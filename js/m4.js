@@ -1,4 +1,4 @@
-/*@v:739204317b*/
+/*@v:8c0d81398d*/
 // ═══ ZMIANA KAPITANA (admin) ═══════════════════════════════════
 function _knownDiscordUsers() {
   const map = new Map();
