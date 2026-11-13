@@ -11042,6 +11042,31 @@ function renderTeamsView() {
     <div style="font-size:.7rem;color:var(--muted);margin-top:.6rem">Średnie na mecz · kliknij drużynę albo zawodnika, żeby zobaczyć pełne statystyki.</div>`;
 }
 
+
+// 🧢 KAPITAN: drużyna zalogowanego kapitana w bieżącym sezonie (także niezatwierdzona) + sekcja w Moim panelu
+function _myCaptainReg() { if(!discordUser) return null; const sid = currentSeasonId || null, my = String(discordUser.id);
+  return (teamRegistrations || []).find(r => String(r.captain?.id) === my && r.status !== 'rejected' && (!sid || !r.seasonId || r.seasonId === sid)) || null; }
+function _needFee() { const s = _signup(); return EU_MODE || !!s.fee || !!s.skrillEmail || !!s.revolutUrl; }
+function _teamEditBtn(r, small) { const st = small ? 'font-size:.7rem;padding:.25rem .5rem' : 'font-size:.78rem';
+  return !registrationsClosed && EU_MODE ? `<button class="btn btn-ghost" style="${st}" onclick="openEuTeamEdit('${r.id}')">✏️ ${_g('Edytuj drużynę', 'Edit team')}</button>`
+    : `<button class="btn btn-ghost" style="${st}" onclick="openRosterChange('${r.id}')">✏️ ${_g('Zmiana składu', 'Roster change')}</button>`; }
+function captainBoxHtml() {
+  const r = _myCaptainReg(); if(!r) return ''; const s = _signup(), ps = r.payment?.status || 'unpaid', fee = s.fee || '25€', paid = ps === 'paid', needFee = _needFee();
+  const late = s.payDeadline && s.payDeadline < new Date().toISOString().slice(0, 10), dl = s.payDeadline ? payRemindDeadlineTxt(s.payDeadline, currentLang === 'en') : '';
+  const stLbl = r.status === 'approved' ? `<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.05rem .4rem;font-size:.62rem;font-weight:700">${_g('ZATWIERDZONA', 'APPROVED')}</span>` : `<span style="background:var(--accent);color:#111;border-radius:4px;padding:.05rem .4rem;font-size:.62rem;font-weight:700">${_g('OCZEKUJE', 'PENDING')}</span>`;
+  const payBlock = !needFee || paid ? (needFee ? `<div style="margin-top:.6rem;font-size:.86rem;color:var(--win)">✅ ${_g('Wpisowe opłacone — dzięki!', 'Entry fee paid — thank you!')}</div>` : '')
+    : ps === 'sent' ? `<div style="margin-top:.7rem;background:rgba(245,197,24,.1);border:1px solid var(--accent);border-radius:10px;padding:.6rem .8rem;font-size:.86rem">🧾 ${_g('Potwierdzenie płatności wysłane — admin je sprawdza.', 'Payment proof sent — we\u2019re checking it.')} <a href="#" style="color:var(--accent)" onclick="openTeamPayment('${r.id}');return false">${_g('Zobacz', 'View')} ›</a></div>`
+    : `<button onclick="openTeamPayment('${r.id}')" style="margin-top:.8rem;width:100%;border:none;border-radius:12px;padding:1rem 1.2rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:1.45rem;letter-spacing:1px;color:#111;background:linear-gradient(135deg,#f5c518,#ffdd55);box-shadow:0 6px 22px rgba(245,197,24,.35)">💶 ${_g('ZAPŁAĆ WPISOWE', 'PAY ENTRY FEE')} — ${_h(fee)}</button>
+       ${dl ? `<div style="text-align:center;margin-top:.4rem;font-size:.82rem;color:${late ? '#ef4444' : 'var(--muted)'}">⏰ ${_g('Termin płatności', 'Payment deadline')}: <b>${_h(dl)}</b>${late ? ' — ' + _g('minął!', 'passed!') : ''}</div>` : ''}
+       <div style="text-align:center;margin-top:.25rem;font-size:.74rem;color:var(--muted)">${_g('Po zapłacie wgraj potwierdzenie w tym samym oknie.', 'After paying, upload your payment proof in the same window.')}</div>`;
+  return `<div class="card" id="captain-box" style="padding:1rem 1.1rem;margin-bottom:1rem;border:1px solid ${needFee && !paid && ps !== 'sent' ? 'var(--accent)' : 'var(--border)'}" data-notr>
+    <div style="display:flex;align-items:center;gap:.7rem">${r.logo ? `<img src="${r.logo}" style="width:48px;height:48px;border-radius:10px;object-fit:cover">` : `<div style="width:48px;height:48px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:1.4rem">🏀</div>`}
+      <div style="flex:1;min-width:0"><div style="font-size:.7rem;font-weight:800;letter-spacing:1px;color:var(--muted)">🧢 ${_g('TWOJA DRUŻYNA', 'YOUR TEAM')}</div><div style="font-weight:900;font-size:1.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(r.teamName)}</div>
+        <div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.15rem">${stLbl} ${needFee ? (_payBadge(r) || _payBadge({ payment: { status: 'unpaid' } })) : ''} <span style="font-size:.72rem;color:var(--muted)">${(r.players || []).length} ${_g('graczy', 'players')}</span></div></div></div>
+    ${payBlock}
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.8rem">${_teamEditBtn(r)}<button class="btn btn-ghost" style="font-size:.78rem" onclick="changeTeamLogo('${r.id}')">🖼 ${r.logo ? _g('Zmień logo', 'Change logo') : _g('Dodaj logo', 'Add logo')}</button><button class="btn btn-ghost" style="font-size:.78rem" onclick="openMediaDay('${r.id}')">🎬 Media day</button></div></div>`;
+}
+
 function renderMyPanelView() {
   setTimeout(() => { try { karnetMount(); } catch(e) {} }, 50);
   const target = document.getElementById('mypanel-view');
@@ -11084,8 +11109,8 @@ function renderMyPanelView() {
   const wkDays = w => (myProfile?.weeks?.[w]) || null;
   const dayRow = (arr, key) => DOW.map((d, i) => `<button type="button" data-k="${key}" data-i="${i}" onclick="this.classList.toggle('on');this.style.background=this.classList.contains('on')?'var(--accent)':'var(--bg)';this.style.color=this.classList.contains('on')?'rgba(0,0,0,.88)':'var(--text)'"
     class="${arr[i] ? 'on' : ''}" style="flex:1;min-width:38px;padding:.35rem 0;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-family:inherit;font-weight:800;font-size:.76rem;background:${arr[i] ? 'var(--accent)' : 'var(--bg)'};color:${arr[i] ? 'rgba(0,0,0,.88)' : 'var(--text)'}">${d}</button>`).join('');
-  target.innerHTML = `<div class="section-title">👤 Mój panel</div>
-    <div style="max-width:980px">`;
+  target.innerHTML = `<div class="section-title">👤 ${_g('Mój panel', 'My panel')}</div>
+    <div style="max-width:980px">${captainBoxHtml()}`;
   target.innerHTML += `
     <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1rem">
       ${_avatarHtml(discordUser.avatar, 44)}
@@ -11285,7 +11310,7 @@ function _euRosterHtml(r) {
   return `<div style="margin-top:.5rem;border-top:1px solid var(--border);padding-top:.4rem;display:flex;flex-direction:column;gap:.15rem">
     ${(r.players || []).map(p => `<div style="display:flex;justify-content:space-between;gap:.4rem;font-size:.76rem"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_platIcon(p.platform)} ${_h(p.gamertag)}</span>${p.x ? `<a href="https://x.com/${_h(p.x)}" target="_blank" rel="noopener" style="color:var(--muted);font-size:.7rem">𝕏</a>` : ''}</div>`).join('')}
     ${r.captain?.name ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">👑 Captain: ${_h(r.captain.name)}</div>` : ''}
-    ${discordUser && String(r.captain?.id) === String(discordUser.id) && !registrationsClosed ? `<button class="btn btn-ghost" style="font-size:.7rem;margin-top:.35rem;padding:.25rem .5rem" onclick="openEuTeamEdit('${r.id}')">✏️ Edit team</button>` : ''}</div>`;
+    ${discordUser && String(r.captain?.id) === String(discordUser.id) ? `<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.35rem">${r.payment?.status !== 'paid' && r.payment?.status !== 'sent' && _needFee() ? `<button class="btn btn-primary" style="font-size:.7rem;padding:.25rem .5rem" onclick="openTeamPayment('${r.id}')">💶 ${_g('Zapłać wpisowe', 'Pay entry fee')}</button>` : ''}${_teamEditBtn(r, true)}</div>` : ''}</div>`;
 }
 let _euEd = null;
 function openEuTeamEdit(id) {
@@ -17647,11 +17672,18 @@ function renderEuDash() {
         <div style="display:flex;flex-direction:column;gap:.4rem"><a class="btn btn-ghost" style="text-decoration:none;text-align:center" href="${_discordInvite()}" target="_blank" rel="noopener">💬 Discord</a><a class="btn btn-ghost" style="text-decoration:none;text-align:center" href="${document.getElementById('x-link')?.href || 'https://x.com'}" target="_blank" rel="noopener">𝕏 X</a></div></div>
     </div>`;
   const tm = document.getElementById('eu-teams');
-  if(tm) tm.innerHTML = `<div class="section-title" style="font-size:1.3rem">🧢 Registered teams <span style="color:var(--muted);font-size:1rem">(${regs.length})</span></div>
-    <div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.6rem;margin-bottom:1.5rem;align-items:start">${regs.map(r => `<div class="card" style="padding:.6rem .75rem"><div style="display:flex;gap:.6rem;align-items:center">
+  const _card = r => `<div class="card" style="padding:.6rem .75rem"><div style="display:flex;gap:.6rem;align-items:center">
       ${r.logo ? `<img src="${r.logo}" style="width:42px;height:42px;border-radius:8px;object-fit:cover">` : `<div style="width:42px;height:42px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center">🏀</div>`}
       <div style="min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(r.teamName)}</div><div style="font-size:.72rem;color:var(--muted)">${(r.players || []).length} players${r.xHandle ? ` · <a href="https://x.com/${_h(r.xHandle)}" target="_blank" rel="noopener" style="color:var(--accent)">@${_h(r.xHandle)}</a>` : ''}</div>
-        <div style="margin-top:.2rem;display:flex;gap:.25rem;flex-wrap:wrap">${r.status === 'approved' ? '<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">APPROVED</span>' : '<span style="background:var(--accent);color:#111;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">PENDING</span>'} ${_levelBadge(r)} ${_payBadge(r)}</div></div></div>${_euRosterHtml(r)}</div>`).join('') || `<div class="card" style="padding:.9rem;color:var(--muted)">No teams yet — be the first! 🏀</div>`}</div>`;
+        <div style="margin-top:.2rem;display:flex;gap:.25rem;flex-wrap:wrap">${r.status === 'approved' ? '<span style="background:#16a34a;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">APPROVED</span>' : '<span style="background:var(--accent);color:#111;border-radius:4px;padding:.05rem .35rem;font-size:.6rem;font-weight:700">PENDING</span>'} ${_levelBadge(r)} ${_payBadge(r) || (_needFee() ? _payBadge({ payment: { status: 'unpaid' } }) : '')}</div></div></div>${_euRosterHtml(r)}</div>`;
+  const okT = regs.filter(r => r.status === 'approved' || r.payment?.status === 'paid'), waitT = regs.filter(r => !okT.includes(r));
+  const grid = L => `<div data-notr style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.6rem;margin-bottom:1.5rem;align-items:start">${L.map(_card).join('')}</div>`;
+  if(tm) tm.innerHTML = `<div class="section-title" style="font-size:1.3rem">✅ Confirmed teams <span style="color:var(--muted);font-size:1rem">(${okT.length})</span></div>
+    <div style="font-size:.8rem;color:var(--muted);margin:-.4rem 0 .6rem">Entry fee paid — spot in the league secured.</div>
+    ${okT.length ? grid(okT) : `<div class="card" style="padding:.9rem;color:var(--muted);margin-bottom:1.5rem">No confirmed teams yet — pay your entry fee to be the first! 💶</div>`}
+    ${waitT.length || !regs.length ? `<div class="section-title" style="font-size:1.3rem">⏳ Awaiting payment <span style="color:var(--muted);font-size:1rem">(${waitT.length})</span></div>
+    <div style="font-size:.8rem;color:var(--muted);margin:-.4rem 0 .6rem">Registered — the entry fee is not confirmed yet.${waitT.some(r => r.payment?.status === 'sent') ? ' 🧾 Proof sent = being checked by an admin.' : ''}</div>
+    ${waitT.length ? grid(waitT) : `<div class="card" style="padding:.9rem;color:var(--muted);margin-bottom:1.5rem">No teams yet — be the first! 🏀</div>`}` : ''}`;
   _euPlaceholders();
 }
 function _euPlaceholders() {
