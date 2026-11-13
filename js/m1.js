@@ -1,24 +1,2 @@
-/*@v:8c0d81398d*/
-function setLang(lang) {
-  setTimeout(() => { try { _syncExpLabels(); } catch(e) {} }, 0);
-  if(lang !== 'en') lang = 'pl';
-  currentLang = lang;
-  localStorage.setItem('nba2k_lang', lang);
-  // Update switcher buttons
-  ['pl','en','nl'].forEach(l => {
-    const btn = document.getElementById('lang-' + l);
-    if(!btn) return;
-    const active = l === lang;
-    btn.style.background = active ? 'var(--accent)' : 'transparent';
-    btn.style.color = active ? '#000' : 'var(--muted)';
-    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-  });
-  // Update all data-i18n elements
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const val = t(key);
-    if(val) el.textContent = val;
-  });
-  // Reload page to apply language to all elements
-  location.reload();
-}
+/*@v:2b4e1f48d9*/
+function setLang(e){setTimeout(()=>{try{_syncExpLabels()}catch(t){}},0),"en"!==e&&(e="pl"),currentLang=e,localStorage.setItem("nba2k_lang",e),["pl","en","nl"].forEach(t=>{const n=document.getElementById("lang-"+t);if(!n)return;const a=t===e;n.style.background=a?"var(--accent)":"transparent",n.style.color=a?"#000":"var(--muted)",n.style.borderColor=a?"var(--accent)":"var(--border)"}),document.querySelectorAll("[data-i18n]").forEach(e=>{const n=e.getAttribute("data-i18n"),a=t(n);a&&(e.textContent=a)}),location.reload()}
