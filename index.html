@@ -7817,10 +7817,11 @@ function openFixtureGenerator() {
   const demo = !!_demo;
   const seasonId = demo ? 'demo' : (_ssSeasonId || currentSeasonId || seasons[0]?.id || null);
   const teams = demo ? [..._demo.teams] : _ssApprovedTeams(seasonId);
+  const _dvD = !demo && window._dvDraft; // 🧩 zapisany podział na dywizje
   _ssGen = {
-    demo, seasonId, teams,
-    format: teams.length >= 10 ? 'groups' : 'single',
-    groupCount: 2, groups: null, drawing: false,
+    demo, seasonId, teams: _dvD?.groups?.length ? [...new Set(_dvD.groups.flatMap(g => g.teams))] : teams,
+    format: _dvD?.groups?.length ? 'groups' : teams.length >= 10 ? 'groups' : 'single',
+    groupCount: _dvD?.groups?.length || 2, groups: _dvD?.groups?.length ? _dvD.groups.map((g, i) => ({ id: 'g' + (i + 1), name: g.name, teams: [...g.teams] })) : null, drawing: false,
     bestOf: (demo ? _demo.fixture?.bestOf : null) || 2,
     roundsPerWeek: (demo ? _demo.fixture?.roundsPerWeek : null) || 1,
     startDate: _ssNextMonday(), time: '20:00', announce: true
@@ -8163,6 +8164,7 @@ function openDeepLink() {
   if(['polaczone-konta', 'linked-accounts'].includes(h)) { setTimeout(() => openLinkedAccounts(), 1500); return; }
   if(['pay', 'platnosc', 'wpisowe', 'entry-fee'].includes(h)) { openMyPayment(); return; }
   if(['start-ligi', 'launch'].includes(h)) { setTimeout(() => openLaunch(), 1500); return; }
+  if(['dywizje', 'divisions'].includes(h)) { setTimeout(() => openDivisions(), 1500); return; }
   if(['do-zrobienia', 'admin-todo', 'todo'].includes(h)) { setTimeout(() => openAdminQuick(), 1500); return; }
   if(['turniej', 'turniej-kortu', 'tournament'].includes(h)) { setTimeout(() => showView('kort'), 300); return; }
   if(['galeria-slaw', 'galeria', 'hall-of-fame', 'hof'].includes(h)) { setTimeout(() => { showView('awards'); setTimeout(() => document.getElementById('hof-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 900); }, 300); return; }
@@ -10418,6 +10420,7 @@ function openAdminQuick() {
   m.querySelector('.modal').innerHTML = _fxHead('aq-modal', '⚡ ' + _g('Do zrobienia', 'To do')) + `<div data-notr>
     ${sec('🏀', _g('Wyniki do zatwierdzenia', 'Results to approve'), t.results.length, t.results.slice(0, 6).map(p => row(`${_h(p.team1?.name || p.t1 || '?')} <b>${p.team1?.score ?? ''}:${p.team2?.score ?? ''}</b> ${_h(p.team2?.name || p.t2 || '?')}`, B(_g('Sprawdź', 'Review'), "_fxClose('aq-modal');openPendingResults()", 'btn-primary'))).join(''), t.results.length ? B(_g('wszystkie', 'all'), "_fxClose('aq-modal');openPendingResults()") : '')}
     ${sec('🧢', _g('Zgłoszenia drużyn', 'Team registrations'), t.teams.length, t.teams.map(r => row(`<b>${_h(r.teamName)}</b> <span style="color:var(--muted)">· ${(r.players || []).length} ${_g('graczy', 'players')}${r.payment?.status === 'paid' ? ' · 💶 ✓' : ''}</span>`, B('✅', `teamRegSetStatus('${r.id}','approved').then(()=>openAdminQuick())`, 'btn-primary') + B('✕', `teamRegSetStatus('${r.id}','rejected').then(()=>openAdminQuick())`))).join(''))}
+    ${(() => { const dl = _signup().payDeadline, over = dl && dl < new Date().toISOString().slice(0, 10) ? _prTeams().filter(r => r.payment?.status !== 'sent') : []; return over.length ? `<div style="background:rgba(239,68,68,.1);border:1px solid #ef4444;border-radius:10px;padding:.55rem .7rem;margin-bottom:.9rem;font-size:.82rem">⛔ <b>${_g('Po terminie płatności', 'Past the payment deadline')} (${_h(payRemindDeadlineTxt(dl, currentLang === 'en'))})</b> — ${_g('nie zapłaciły', 'not paid')}: ${over.map(r => `<b>${_h(r.teamName)}</b>`).join(', ')}<div style="margin-top:.4rem;display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:.7rem" onclick="_fxClose('aq-modal');openPayments()">💳 ${_g('Płatności', 'Payments')}</button><button class="btn btn-ghost" style="font-size:.7rem" onclick="_fxClose('aq-modal');openDivisions()">🧩 ${_g('Dywizje', 'Divisions')}</button></div></div>` : ''; })()}
     ${_prTeams().filter(r => r.payment?.status !== 'sent').length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.9rem;font-size:.82rem"><span>💶 ${_g('Nieopłacone drużyny', 'Unpaid teams')}: <b>${_prTeams().filter(r => r.payment?.status !== 'sent').length}</b></span><button class="btn btn-ghost" style="font-size:.7rem" onclick="_fxClose('aq-modal');openPayRemind()">📣 ${_g('Przypomnij', 'Remind')}</button></div>` : ''}
     ${sec('💶', _g('Płatności do sprawdzenia', 'Payments to check'), t.pays.length, t.pays.map(r => row(`<b>${_h(r.teamName)}</b>`, B('📷 ' + _g('zrzut', 'proof'), "_fxClose('aq-modal');openPayments()") + B('✅ ' + _g('opłacone', 'paid'), `payConfirm('${r.id}',true).then(()=>openAdminQuick())`, 'btn-primary'))).join(''))}
     ${sec('✏️', _g('Zmiany składu', 'Roster changes'), t.roster.length, t.roster.map(r => row(`<b>${_h(r.teamName)}</b> <span style="color:var(--muted)">· ${(r.rosterRequests || []).filter(q => q.status === 'pending').length} ${_g('prośba', 'request')}</span>`, B(_g('Otwórz', 'Open'), "_fxClose('aq-modal');goToTeamRegistrations();setRegTab('teams')", 'btn-primary'))).join(''))}
@@ -11094,8 +11097,8 @@ function launchCountdownHtml() {
   }
   return out;
 }
-function launchHtml() { // typy i przedsezonowy ranking (w bloku wątków sezonu)
-  const L = window._launch || {}; let out = '';
+function launchHtml() { // dywizje, typy i przedsezonowy ranking (w bloku wątków sezonu)
+  const L = window._launch || {}; let out = divisionsHtml();
   if(L.picks?.on) { try { const ctx = { demo: false, seasonId: currentSeasonId || null }, pc = _predCardHtml(ctx); if(pc) out += `<div id="launch-picks">${pc}</div>`; } catch(e) {} }
   if(L.pre?.on && L.pre.items?.length && !_seasonMatchesOf(currentSeasonId || null).length) { const med = ['🥇', '🥈', '🥉'];
     out += `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📊 ${_g('PRZEDSEZONOWY POWER RANKING', 'PRE-SEASON POWER RANKING')}</div>
@@ -11107,7 +11110,7 @@ let _ln = null;
 function _dtLocal(iso) { if(!iso) return ''; const d = new Date(iso), z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; }
 function openLaunch() {
   if(!_isLoggedInSync()) return; const L = window._launch || {}, c = L.countdown || {}, sid = currentSeasonId || null, pd = (typeof predictionsData !== 'undefined' && predictionsData[sid]) || {};
-  _ln = { c: { on: !!c.on, mode: c.mode || 'season', signupsEnd: c.signupsEnd || null, seasonStart: c.seasonStart || null, customAt: c.customAt || null, customLabel: c.customLabel || '', announce: c.announce !== false }, picksOn: !!L.picks?.on, lockAt: pd.lockAt || null, preOn: L.pre?.on !== false, items: (L.pre?.items || []).map(x => ({ ...x })), published: !!L.pre?.at };
+  _ln = { c: { on: !!c.on, mode: c.mode || 'season', signupsEnd: c.signupsEnd || null, seasonStart: c.seasonStart || null, customAt: c.customAt || null, customLabel: c.customLabel || '', announce: c.announce !== false, autoClose: !!c.autoClose }, picksOn: !!L.picks?.on, lockAt: pd.lockAt || null, preOn: L.pre?.on !== false, items: (L.pre?.items || []).map(x => ({ ...x })), published: !!L.pre?.at };
   _lnDraw();
 }
 function _lnDraw() {
@@ -11121,6 +11124,8 @@ function _lnDraw() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 .7rem">${dtIn('signupsEnd', _g('Koniec zapisów', 'Registrations close'))}${dtIn('seasonStart', _g('Start sezonu', 'Season start'))}${c.mode === 'custom' ? dtIn('customAt', _g('Data (własne)', 'Date (custom)')) + `<div><label style="${_MODAL_LBL}">${_g('Napis', 'Label')}</label><input value="${_h(c.customLabel)}" maxlength="60" placeholder="${_g('np. Draft drużyn za', 'e.g. Team draft in')}" oninput="_ln.c.customLabel=this.value" style="${_MODAL_INP}"></div>` : ''}</div>
     <div style="font-size:.72rem;color:var(--muted);margin:.2rem 0 .5rem">${_g('Odliczanie pokazuje datę wybranego trybu. Pozostałe daty możesz wpisać od razu i później tylko przełączyć tryb.', 'The countdown uses the date of the selected mode. You can fill in all dates now and just switch the mode later.')}</div>
     ${tog(c.announce, '_ln.c.announce=this.checked', _g('Ogłoś na Discordzie, gdy odliczanie dobiegnie końca (kanał terminarza)', 'Announce on Discord when the countdown ends (schedule channel)'))}
+    <div style="margin-top:.35rem">${tog(c.autoClose, '_ln.c.autoClose=this.checked', '🔒 ' + _g('Zamknij zapisy drużyn automatycznie o godzinie „Koniec zapisów”', 'Close team registrations automatically at “Registrations close”'))}</div>
+    <div style="margin-top:.35rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="_fxClose('ln-modal');openDivisions()">🧩 ${_g('Podział na dywizje', 'Divisions')} ›</button></div>
     ${H('🔮 ' + _g('TYPY PRZEDSEZONOWE', 'PRE-SEASON PICKS'))}
     ${tog(_ln.picksOn, '_ln.picksOn=this.checked', _g('Pokaż typy na dashboardzie (mistrz, MVP, debiutant roku, ostatnie miejsce, najlepszy strzelec)', 'Show picks on the dashboard (champion, MVP, rookie of the year, last place, top scorer)'))}
     <label style="${_MODAL_LBL};margin-top:.4rem">${_g('Typy zamykają się', 'Picks lock at')}</label><div style="display:flex;gap:.4rem;flex-wrap:wrap"><input type="datetime-local" id="ln-lock" value="${_dtLocal(_ln.lockAt)}" style="${_MODAL_INP};max-width:240px"><button class="btn btn-ghost" style="font-size:.7rem" onclick="document.getElementById('ln-lock').value=_dtLocal(_ln.c.seasonStart)">= ${_g('start sezonu', 'season start')}</button></div>
@@ -11239,6 +11244,85 @@ function _siteFooter() { if(document.getElementById('site-footer')) return; cons
   f.style.cssText = 'text-align:center;font-size:.76rem;color:var(--muted);padding:1.6rem .5rem 2.2rem;opacity:.85';
   f.innerHTML = `<a href="#" onclick="showView('howto');return false" style="color:inherit">📖 ${_g('Jak to działa', 'How it works')}</a> · <a href="#" onclick="showView('rules');return false" style="color:inherit">📜 ${_g('Regulamin', 'Rules')}</a> · <a href="#" onclick="showView('privacy');return false" style="color:inherit">🔒 ${_g('Prywatność', 'Privacy')}</a>`;
   v.parentNode.appendChild(f); }
+
+// 🧩 DYWIZJE — podział drużyn (auto: najsilniejsze do D1 / wyrównany „wąż”), ręczne poprawki, generator terminarza, publikacja i grafika
+let _dv = null;
+function _teamStrength(r) { const lv = TEAM_LEVELS.indexOf(r.level), pre = (window._launch?.pre?.items || []).findIndex(x => x.team === r.teamName); return (lv < 0 ? TEAM_LEVELS.length : lv) * 100 + (pre < 0 ? 50 : pre); } // mniej = silniejsza
+function _dvTeams() { const sid = currentSeasonId || null; return (teamRegistrations || []).filter(r => r.status !== 'rejected' && (!sid || !r.seasonId || r.seasonId === sid)); }
+const _dvPaid = r => r.status === 'approved' || r.payment?.status === 'paid';
+async function openDivisions() {
+  if(!_isLoggedInSync()) return; const r = await _api('/divisions', 'POST', { load: true }, { admin: true }).catch(() => ({})), d = r.divisions;
+  const en = EU_MODE, names = d?.groups?.map(g => g.name) || [1, 2].map(i => en ? `Division ${i}` : `Dywizja ${i}`), at = {};
+  (d?.groups || []).forEach((g, gi) => g.teams.forEach(t => { at[t] = gi; }));
+  _dv = { names, at, onlyPaid: true, published: !!d?.published, discord: true, sid: d?.seasonId || currentSeasonId || null }; _dvDraw();
+}
+function _dvAuto(mode) {
+  const T = _dvTeams().filter(r => !_dv.onlyPaid || _dvPaid(r)).sort((a, b) => _teamStrength(a) - _teamStrength(b)), k = _dv.names.length; _dv.at = {};
+  if(mode === 'top') { const per = Math.ceil(T.length / k); T.forEach((r, i) => { _dv.at[r.teamName] = Math.min(k - 1, Math.floor(i / per)); }); }
+  else T.forEach((r, i) => { const row = Math.floor(i / k), pos = i % k; _dv.at[r.teamName] = row % 2 ? k - 1 - pos : pos; });
+  _dvDraw();
+}
+function _dvDraw() {
+  const m = _fxModal('dv-modal', 1000); m.classList.add('open'); const T = _dvTeams(), k = _dv.names.length, en = EU_MODE;
+  const byS = (a, b) => _teamStrength(a) - _teamStrength(b), cols = [...Array(k).keys()].map(gi => T.filter(r => _dv.at[r.teamName] === gi).sort(byS)), free = T.filter(r => _dv.at[r.teamName] == null).sort(byS);
+  const chip = r => `<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem .45rem;border:1px solid ${_dvPaid(r) ? 'var(--border)' : 'rgba(239,68,68,.5)'};border-radius:8px;margin-bottom:.3rem;background:var(--surface2);font-size:.78rem">
+      ${teamLogo(r.teamName, 24, '.6rem')}<div style="flex:1;min-width:0"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_h(r.teamName)}</div><div style="font-size:.64rem;color:var(--muted)">${_h(r.level || '—')}${_dvPaid(r) ? '' : ' · <span style="color:#ef4444">' + _g('nieopłacona', 'unpaid') + '</span>'}</div></div>
+      <select onchange="_dv.at['${_h(r.teamName).replace(/'/g, "\\'")}']=this.value===''?null:+this.value;_dvDraw()" style="font-size:.7rem;padding:.1rem;max-width:92px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px"><option value="">—</option>${_dv.names.map((n, i) => `<option value="${i}" ${_dv.at[r.teamName] === i ? 'selected' : ''}>${_h(n)}</option>`).join('')}</select></div>`;
+  const col = (title, L, gi) => `<div style="flex:1;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.5rem">
+      ${gi == null ? `<div style="font-weight:800;font-size:.82rem;margin-bottom:.4rem">${title} (${L.length})</div>` : `<input value="${_h(title)}" maxlength="40" oninput="_dv.names[${gi}]=this.value" style="${_MODAL_INP};font-weight:800;font-size:.85rem;margin-bottom:.4rem"><div style="font-size:.66rem;color:var(--muted);margin:-.2rem 0 .35rem">${L.length} ${_g('drużyn', 'teams')}</div>`}
+      ${L.map(chip).join('') || `<div style="font-size:.72rem;color:var(--muted);padding:.4rem">—</div>`}</div>`;
+  m.querySelector('.modal').innerHTML = _fxHead('dv-modal', '🧩 ' + _g('Podział na dywizje', 'Divisions')) + `<div data-notr>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">
+      <span style="font-size:.78rem">${_g('Liczba dywizji', 'Divisions')}:</span>${[2, 3, 4].map(n => `<button class="btn ${k === n ? 'btn-primary' : 'btn-ghost'}" style="font-size:.7rem;padding:.15rem .5rem" onclick="_dvCount(${n})">${n}</button>`).join('')}
+      <span style="width:1px;height:20px;background:var(--border);margin:0 .3rem"></span>
+      <button class="btn btn-ghost" style="font-size:.72rem" onclick="_dvAuto('top')">🏆 ${_g('Auto: najsilniejsze do D1', 'Auto: strongest in D1')}</button><button class="btn btn-ghost" style="font-size:.72rem" onclick="_dvAuto('snake')">⚖️ ${_g('Auto: wyrównane', 'Auto: balanced')}</button>
+      <label style="display:flex;gap:.3rem;align-items:center;font-size:.74rem;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" style="width:auto" ${_dv.onlyPaid ? 'checked' : ''} onchange="_dv.onlyPaid=this.checked"> ${_g('auto: tylko opłacone', 'auto: paid teams only')}</label></div>
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.6rem">${_g('Siła drużyny: poziom ze zgłoszenia (Tryhard D1 → New Teams), a przy równym poziomie — przedsezonowy Power Ranking. Drużynę przenosisz listą przy jej nazwie.', 'Team strength: level from registration (Tryhard D1 → New Teams), ties broken by the pre-season Power Ranking. Move a team with the list next to its name.')}</div>
+    <div style="display:flex;gap:.6rem;overflow-x:auto;padding-bottom:.3rem">${[...Array(k).keys()].map(gi => col(_dv.names[gi], cols[gi], gi)).join('')}${col('⏳ ' + _g('Bez dywizji', 'Unassigned'), free, null)}</div>
+    ${free.some(_dvPaid) ? `<div style="font-size:.74rem;color:var(--accent);margin-top:.4rem">⚠ ${_g('Opłacone drużyny bez dywizji', 'Paid teams without a division')}: ${free.filter(_dvPaid).map(r => _h(r.teamName)).join(', ')}</div>` : ''}
+    ${cols.some(L => L.some(r => !_dvPaid(r))) ? `<div style="font-size:.74rem;color:#ef4444;margin-top:.25rem">⚠ ${_g('W dywizjach są nieopłacone drużyny', 'Unpaid teams are in divisions')}</div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:1rem;padding-top:.7rem;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">${_dv.published ? `<span style="font-size:.74rem;color:var(--win)">✅ ${_g('opublikowane', 'published')}</span><button class="btn btn-ghost" style="font-size:.7rem" onclick="dvPublish(false)">${_g('Ukryj', 'Unpublish')}</button>` : ''}
+        <button class="btn btn-ghost" style="font-size:.72rem" onclick="dvImage()">🖼 ${_g('Grafika (Discord/X)', 'Graphic (Discord/X)')}</button><button class="btn btn-ghost" style="font-size:.72rem" onclick="dvToFixture()">📅 ${_g('Do generatora terminarza', 'Open in schedule generator')}</button></div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center"><label style="display:flex;gap:.3rem;align-items:center;font-size:.74rem;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" style="width:auto" ${_dv.discord ? 'checked' : ''} onchange="_dv.discord=this.checked"> ${_g('ogłoś na Discordzie', 'announce on Discord')}</label>
+        <button class="btn btn-ghost" onclick="dvSave()">💾 ${_g('Zapisz szkic', 'Save draft')}</button><button class="btn btn-primary" onclick="dvPublish(true)">📣 ${_g('Opublikuj podział', 'Publish divisions')}</button></div></div></div>`;
+}
+function _dvCount(n) { const en = EU_MODE; while(_dv.names.length < n) _dv.names.push(en ? `Division ${_dv.names.length + 1}` : `Dywizja ${_dv.names.length + 1}`); _dv.names = _dv.names.slice(0, n); Object.keys(_dv.at).forEach(t => { if(_dv.at[t] >= n) _dv.at[t] = null; }); _dvDraw(); }
+function _dvGroups() { return _dv.names.map((name, gi) => ({ name, teams: _dvTeams().filter(r => _dv.at[r.teamName] === gi).sort((a, b) => _teamStrength(a) - _teamStrength(b)).map(r => r.teamName) })); }
+async function dvSave(quiet) { const r = await _api('/divisions', 'POST', { seasonId: _dv.sid, groups: _dvGroups() }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return null; } if(!quiet) showToast('💾 ' + _g('Szkic zapisany', 'Draft saved'), 'success'); return r.divisions; }
+async function dvPublish(on) {
+  const G = _dvGroups(); if(on && G.some(g => !g.teams.length)) { showToast('⚠ ' + _g('Każda dywizja musi mieć drużyny', 'Every division needs teams'), 'error'); return; }
+  if(on && !confirm(_g(`Opublikować podział (${G.map(g => `${g.name}: ${g.teams.length}`).join(', ')})${_dv.discord ? ' i ogłosić na Discordzie' : ''}?\n\nPo publikacji typy przedsezonowe dostaną „mistrza dywizji” dla każdej dywizji.`, `Publish the divisions (${G.map(g => `${g.name}: ${g.teams.length}`).join(', ')})${_dv.discord ? ' and announce on Discord' : ''}?\n\nAfter publishing, pre-season picks get a "division champion" for each division.`))) return;
+  if(!(await dvSave(true))) return; const r = await _api('/divisions', 'POST', { publish: !!on, discord: on && _dv.discord }, { admin: true }); if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; }
+  _dv.published = !!r.divisions.published; window._launch = { ...(window._launch || {}), divisions: r.divisions.published ? { seasonId: r.divisions.seasonId, groups: r.divisions.groups, at: r.divisions.publishedAt } : null };
+  _dvDraw(); try { renderStories(); } catch(e) {} showToast(on ? '📣 ' + _g('Podział opublikowany', 'Divisions published') + (r.posted ? ' + Discord' : '') : _g('Podział ukryty', 'Divisions unpublished'), 'success');
+}
+async function dvToFixture() { const d = await dvSave(true); if(!d) return; window._dvDraft = d; _fxClose('dv-modal'); openFixtureGenerator(); window._dvDraft = null; }
+async function dvImage() {
+  const G = _dvGroups().filter(g => g.teams.length), en = EU_MODE; if(!G.length) return; const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const x = c.getContext('2d');
+  const bg = x.createLinearGradient(0, 0, 1080, 1350); bg.addColorStop(0, '#1a1205'); bg.addColorStop(1, '#0b0d12'); x.fillStyle = bg; x.fillRect(0, 0, 1080, 1350);
+  const T = (t, X, Y, f, col, al = 'left') => { x.font = f; x.fillStyle = col; x.textAlign = al; x.fillText(t, X, Y); };
+  T(en ? 'EU CHEMIK LEAGUE' : 'NBA 2K PRO-AM EKSTRAKLASA', 540, 110, '700 34px Arial', '#9ca3af', 'center'); T(en ? 'THE DIVISIONS' : 'DYWIZJE SEZONU', 540, 190, '900 84px "Barlow Condensed", Arial', '#f5c518', 'center');
+  const W = (1080 - 80 - (G.length - 1) * 30) / G.length, maxN = Math.max(...G.map(g => g.teams.length)), rowH = Math.min(78, (1350 - 360) / Math.max(1, maxN));
+  const logos = {}; await Promise.all(G.flatMap(g => g.teams).map(t => new Promise(ok => { const reg = (teamRegistrations || []).find(r => r.teamName === t); if(!reg?.logo) return ok(); const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { logos[t] = im; ok(); }; im.onerror = () => ok(); im.src = reg.logo; setTimeout(ok, 4000); })));
+  G.forEach((g, gi) => { const X0 = 40 + gi * (W + 30); x.fillStyle = 'rgba(255,255,255,.05)'; x.fillRect(X0, 250, W, 1350 - 310); x.fillStyle = '#f5c518'; x.fillRect(X0, 250, W, 8);
+    T(g.name.toUpperCase(), X0 + W / 2, 320, '900 46px "Barlow Condensed", Arial', '#fff', 'center');
+    g.teams.forEach((t, i) => { const Y = 370 + i * rowH, s = Math.min(54, rowH - 14);
+      if(logos[t]) { try { x.drawImage(logos[t], X0 + 24, Y, s, s); } catch(e) {} } else { x.fillStyle = '#f5c518'; x.beginPath(); x.arc(X0 + 24 + s / 2, Y + s / 2, s / 2, 0, Math.PI * 2); x.fill(); T(t.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase(), X0 + 24 + s / 2, Y + s / 2 + 8, '900 22px Arial', '#111', 'center'); }
+      x.font = `800 ${Math.min(34, Math.max(22, rowH * .42))}px Arial`; let n = t; while(x.measureText(n).width > W - s - 60 && n.length > 3) n = n.slice(0, -2); if(n !== t) n += '…'; T(n, X0 + 24 + s + 18, Y + s / 2 + 11, x.font, '#fff'); }); });
+  T(location.host || (en ? 'eu.chemikleagues.com' : 'chemikleagues.com'), 540, 1325, '700 28px Arial', '#6b7280', 'center');
+  let blob; try { blob = await new Promise(r => c.toBlob(r, 'image/png')); } catch(e) { showToast('❌ ' + _g('Nie udało się utworzyć grafiki', 'Could not create the graphic'), 'error'); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'divisions.png'; a.click();
+}
+function divisionsHtml() { // dashboard: opublikowane dywizje
+  const D = window._launch?.divisions; if(!D?.groups?.length || (D.seasonId && currentSeasonId && D.seasonId !== currentSeasonId)) return '';
+  return `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.5rem">🧩 ${_g('DYWIZJE SEZONU', 'THE DIVISIONS')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.7rem">${D.groups.map(g => `<div><div style="font-weight:900;font-family:'Barlow Condensed',sans-serif;font-size:1.15rem;color:var(--accent);margin-bottom:.3rem">${_h(g.name)}</div>${g.teams.map(t => `<div style="display:flex;align-items:center;gap:.45rem;padding:.2rem 0;font-size:.86rem">${teamLogo(t, 24, '.6rem')}${_h(t)}</div>`).join('')}</div>`).join('')}</div></div>`;
+}
+// 🔮 typy: „mistrz dywizji” dla każdej opublikowanej dywizji
+function _predDefs(sid) { sid = sid || currentSeasonId || null; const D = window._launch?.divisions;
+  if(D?.groups?.length >= 2 && (!D.seasonId || D.seasonId === sid)) return [...D.groups.map(g => ({ k: 'champion_' + g.id, icon: '🏆', label: _g('Mistrz: ', 'Champion: ') + g.name, type: 'team', pts: 5, teams: [...g.teams].sort((a, b) => a.localeCompare(b, 'pl')) })), ...PRED_DEF.filter(d => ['mvp', 'roy', 'scorer'].includes(d.k))];
+  return PRED_DEF; }
 
 function renderMyPanelView() {
   setTimeout(() => { try { karnetMount(); } catch(e) {} }, 50);
@@ -12759,7 +12843,7 @@ const PRED_DEF = [
   { k: 'scorer', icon: '🎯', label: 'Król strzelców', type: 'player', pts: 2 },
   { k: 'last', icon: '📉', label: 'Ostatnie miejsce', type: 'team', pts: 2 }
 ];
-function _predPoints(pick, results) { return PRED_DEF.reduce((s, d) => s + (results?.[d.k] && pick?.[d.k] && String(pick[d.k]).toLowerCase() === String(results[d.k]).toLowerCase() ? d.pts : 0), 0); }
+function _predPoints(pick, results) { return _predDefs().reduce((s, d) => s + (results?.[d.k] && pick?.[d.k] && String(pick[d.k]).toLowerCase() === String(results[d.k]).toLowerCase() ? d.pts : 0), 0); }
 function _predCardHtml(ctx) {
   if(ctx.demo || !ctx.seasonId) return '';
   const sid = ctx.seasonId, pd = predictionsData[sid] || { locked: false, counts: {}, total: 0 };
@@ -12779,7 +12863,7 @@ function _predCardHtml(ctx) {
   let body = '';
   if(!locked) {
     body = discordUser ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.5rem;padding:.6rem .75rem">
-        ${PRED_DEF.map(d => `<div><div style="font-size:.7rem;font-weight:700;margin-bottom:.2rem">${d.icon} ${d.label} <span style="color:var(--accent)">+${d.pts}</span></div>${sel(d, mine[d.k], d.type === 'team' ? teams : players)}
+        ${_predDefs().map(d => `<div><div style="font-size:.7rem;font-weight:700;margin-bottom:.2rem">${d.icon} ${d.label} <span style="color:var(--accent)">+${d.pts}</span></div>${sel(d, mine[d.k], d.type === 'team' ? (d.teams || teams) : players)}
           ${mine[d.k] && share(d.k, mine[d.k]) ? `<div style="font-size:.64rem;color:var(--muted);margin-top:.15rem">${share(d.k, mine[d.k])}% kibiców typuje to samo</div>` : ''}</div>`).join('')}
       </div>
       <div style="padding:0 .75rem .65rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"><button class="btn btn-primary" style="font-size:.74rem" onclick="predSave('${sid}')">💾 Zapisz typy</button>
@@ -12789,7 +12873,7 @@ function _predCardHtml(ctx) {
     // po zamknięciu: najczęstsze typy + (po rozliczeniu) ranking
     const ranking = res && pd.picks ? pd.picks.map(p => ({ ...p, pts: _predPoints(p, res) })).sort((a, b) => b.pts - a.pts || String(a.name).localeCompare(String(b.name))) : null;
     body = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.5rem;padding:.6rem .75rem">
-      ${PRED_DEF.map(d => `<div style="background:var(--surface2);border-radius:8px;padding:.45rem .55rem">
+      ${_predDefs().map(d => `<div style="background:var(--surface2);border-radius:8px;padding:.45rem .55rem">
         <div style="font-size:.7rem;font-weight:700;margin-bottom:.2rem">${d.icon} ${d.label}${res?.[d.k] ? ` → <b style="color:var(--win)">${_h(res[d.k])}</b>` : ''}</div>
         ${topOf(d.k).map(([v, n]) => `<div style="font-size:.72rem;display:flex;justify-content:space-between;gap:.4rem"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${res?.[d.k] === v ? 'color:var(--win);font-weight:800' : ''}">${_h(v)}</span><span style="color:var(--muted)">${share(d.k, v)}%</span></div>`).join('') || '<div style="font-size:.7rem;color:var(--muted)">brak typów</div>'}
         ${mine[d.k] ? `<div style="font-size:.64rem;color:var(--muted);margin-top:.2rem">Twój typ: <b style="color:var(--text)">${_h(mine[d.k])}</b>${res?.[d.k] ? (String(mine[d.k]).toLowerCase() === String(res[d.k]).toLowerCase() ? ' ✅' : ' ❌') : ''}</div>` : ''}
@@ -12801,7 +12885,7 @@ function _predCardHtml(ctx) {
   const admin = isAdmin ? `<details style="padding:.4rem .75rem .6rem;font-size:.74rem"><summary style="cursor:pointer;color:var(--accent)">⚙ Admin: termin i rozliczenie</summary>
       <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.45rem 0">Zamknięcie typów: <input type="datetime-local" id="pred-lock" value="${lockAt ? new Date(+lockAt - lockAt.getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ''}" style="${_MODAL_INP};width:auto;font-size:.76rem;padding:.25rem .4rem">
         <button class="btn btn-ghost" style="font-size:.7rem" onclick="predAdmin('${sid}','lock')">Zapisz termin</button><span style="color:var(--muted)">(domyślnie start Week 1 — dla trwającego sezonu ustaw późniejszy)</span></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.4rem">${PRED_DEF.map(d => `<div><div style="font-size:.66rem">${d.icon} ${d.label}</div><select id="pres-${d.k}" style="${_MODAL_INP};font-size:.74rem;padding:.25rem .4rem"><option value="">—</option>${(d.type === 'team' ? teams : players).map(o => `<option ${res?.[d.k] === o ? 'selected' : ''}>${_h(o)}</option>`).join('')}</select></div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.4rem">${_predDefs().map(d => `<div><div style="font-size:.66rem">${d.icon} ${d.label}</div><select id="pres-${d.k}" style="${_MODAL_INP};font-size:.74rem;padding:.25rem .4rem"><option value="">—</option>${(d.type === 'team' ? teams : players).map(o => `<option ${res?.[d.k] === o ? 'selected' : ''}>${_h(o)}</option>`).join('')}</select></div>`).join('')}</div>
       <div style="margin-top:.45rem;display:flex;gap:.4rem"><button class="btn btn-primary" style="font-size:.7rem" onclick="predAdmin('${sid}','results')">🏁 Rozlicz typy</button>${res ? `<button class="btn btn-ghost" style="font-size:.7rem" onclick="predAdmin('${sid}','clear')">Cofnij rozliczenie</button>` : ''}</div>
     </details>` : '';
   if(!discordUser && locked && !res && !pd.total) return '';
@@ -12810,7 +12894,7 @@ function _predCardHtml(ctx) {
 async function predSave(sid) {
   if(!_ensureSession()) return;
   const body = { seasonId: sid };
-  PRED_DEF.forEach(d => { body[d.k] = document.getElementById('pred-' + d.k)?.value || ''; });
+  _predDefs().forEach(d => { body[d.k] = document.getElementById('pred-' + d.k)?.value || ''; });
   const res = await _api('/prediction', 'POST', body, { session: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
   myPredictions[sid] = res.pick; predictionsData[sid] = res.predictions;
@@ -12820,7 +12904,7 @@ async function predSave(sid) {
 async function predAdmin(sid, what) {
   const body = { seasonId: sid };
   if(what === 'lock') { const v = document.getElementById('pred-lock')?.value; body.lockAt = v ? new Date(v).toISOString() : null; }
-  if(what === 'results') { body.results = {}; PRED_DEF.forEach(d => { body.results[d.k] = document.getElementById('pres-' + d.k)?.value || ''; }); if(!confirm('Rozliczyć typy przedsezonowe tymi wynikami?')) return; }
+  if(what === 'results') { body.results = {}; _predDefs().forEach(d => { body.results[d.k] = document.getElementById('pres-' + d.k)?.value || ''; }); if(!confirm('Rozliczyć typy przedsezonowe tymi wynikami?')) return; }
   if(what === 'clear') body.results = null;
   const res = await _api('/prediction/settings', 'POST', body, { admin: true });
   if(!res.ok) { showToast('❌ ' + res.error, 'error'); return; }
@@ -17098,7 +17182,7 @@ function _adminGroups() {
       ['🔁', _g('Okno transferowe', 'Transfer window'), 'openTrades()'], ['🔗', _g('Powiązania PSN', 'PSN links'), 'openPsnMapModal()']] },
     { id: 'tresci', icon: '🎙', title: _g('Treści i media', 'Content & media'), items: [
       ['🎙', _g('Studio podcastu', 'Podcast studio'), 'openPodcastStudio()'], ['🖼', _g('Podsumowanie kolejki', 'Round summary'), 'openWeekGraphics()'], ['🎬', 'Short', 'openShortMaker()'],
-      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['📣', _g('Przypomnienie o wpisowym', 'Entry fee reminder'), 'openPayRemind()'], ['🚀', _g('Start ligi: odliczanie, typy, ranking', 'League launch: countdown, picks, ranking'), 'openLaunch()'], ['🔗', _g('Połączone konta (PL i EU)', 'Linked accounts (PL & EU)'), 'openLinkedAccounts()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
+      ['🐦', _g('Kolejka X', 'X queue'), 'openXQueue()'], ['🌟', _g('Karty limitowane', 'Limited cards'), 'openLimitedAdmin()'], ['🎁', _g('Daj paczki', 'Give packs'), 'openGrantPacks()'], ['🧩', _g('Wyzwania — historia', 'Challenges — history'), 'openChallengeLog()'], ['📦', _g('Historia paczek', 'Pack history'), 'openPackAdmin()'], ['🃏', _g('Kort — balans', 'Kort — balance'), 'openKortBalance()'], ['🔁', _g('Kort — przelicz ELO', 'Kort — recalc ELO'), 'openEloRecalc()'], ['🎁', _g('Ogłoś Wrapped', 'Announce Wrapped'), 'announceWrapped()'], ['🎬', _g('Top akcje tygodnia', 'Top plays of the week'), 'openTopClipsMaker()'], ['🎟️', _g('Przepustka sezonowa: włącz / wyłącz', 'Season pass: on / off'), 'passAdminToggle()'], ['⚡', _g('Do zrobienia (szybki panel)', 'To do (quick panel)'), 'openAdminQuick()'], ['📣', _g('Przypomnienie o wpisowym', 'Entry fee reminder'), 'openPayRemind()'], ['🚀', _g('Start ligi: odliczanie, typy, ranking', 'League launch: countdown, picks, ranking'), 'openLaunch()'], ['🧩', _g('Podział na dywizje', 'Divisions'), 'openDivisions()'], ['🔗', _g('Połączone konta (PL i EU)', 'Linked accounts (PL & EU)'), 'openLinkedAccounts()'], ['📊', _g('Ekonomia paczek', 'Pack economy'), 'openPackEconomy()'], ['🎧', 'DJ', 'openDjSettings()']] },
     { id: 'discord', icon: '🤖', title: 'Discord', items: [
       ['📣', _g('Kanały powiadomień', 'Notification channels'), 'openRoutesModal()'], ['🎭', _g('Role Discord', 'Discord roles'), 'openRolesSettings()'], ['🤖', _g('Komendy bota', 'Bot commands'), 'openBotCommands()'],
       ['🎖', _g('Kanał osiągnięć', 'Achievements channel'), "openWebhookModal('achievements')"], ['🔗', _g('Zaproszenie na Discord', 'Discord invite'), 'openDiscordInvite()', window._discordInviteUrl ? 0 : 1]] },
@@ -17686,7 +17770,7 @@ function _prAgo(iso) { if(!iso) return ''; const d = Math.floor((Date.now() - Da
 async function openPayRemind() {
   if(!_isLoggedInSync()) return; const en = EU_MODE, s = _signup();
   const r = await _api('/team-payment/remind', 'POST', { load: true }, { admin: true }).catch(() => ({}));
-  const T = _prTeams(); _pr = { sel: new Set(T.filter(x => x.payment?.status !== 'sent').map(x => x.id)), deadline: r.deadline || s.payDeadline || '', tpl: r.template || payRemindDefault(en), saveDeadline: true, lastAt: r.lastAt || null, previewId: null, results: null };
+  const T = _prTeams(); _pr = { sel: new Set(T.filter(x => x.payment?.status !== 'sent').map(x => x.id)), deadline: r.deadline || s.payDeadline || '', tpl: r.template || payRemindDefault(en), saveDeadline: true, lastAt: r.lastAt || null, previewId: null, results: null, auto: !!r.auto, autoSent: r.autoSent || {} };
   _prDraw();
 }
 function _prVars(reg) { const s = _signup(), en = EU_MODE; return { team: reg?.teamName || 'Team', captain: reg?.captain?.name || 'Captain', fee: s.fee || '25€', deadline: payRemindDeadlineTxt(_pr.deadline, en), payment: payRemindDetails(s, reg?.teamName || 'Team', en), link: String((EU_MODE ? EU_SITE : MAIN_SITE) || location.origin).replace(/\/+$/, '') + '/pay' }; }
@@ -17712,6 +17796,9 @@ function _prDraw() {
         <label style="${_MODAL_LBL};margin-top:.7rem">⏰ ${_g('Termin płatności', 'Payment deadline')}</label>
         <input type="date" value="${_h(_pr.deadline)}" min="${new Date().toISOString().slice(0, 10)}" onchange="_pr.deadline=this.value;_prDraw()" style="${_MODAL_INP}">
         <label style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem;font-size:.74rem;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" style="width:auto" ${_pr.saveDeadline ? 'checked' : ''} onchange="_pr.saveDeadline=this.checked"> ${_g('pokaż ten termin też w oknie płatności na stronie', 'also show this deadline in the payment window on the site')}</label>
+        <div style="margin-top:.7rem;padding:.55rem .65rem;border:1px solid var(--border);border-radius:9px;background:var(--surface2)">
+          <label style="display:flex;gap:.4rem;align-items:flex-start;font-size:.78rem;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" style="width:auto;margin-top:.15rem" ${_pr.auto ? 'checked' : ''} onchange="_pr.auto=this.checked;payRemindAuto()"> <span>⏰ <b>${_g('Automatycznie: 48 h i 24 h przed terminem', 'Automatic: 48 h and 24 h before the deadline')}</b><br><span style="font-size:.7rem;color:var(--muted)">${_g('Wysyła tę treść do drużyn bez płatności i bez wysłanego potwierdzenia.', 'Sends this message to teams with no payment and no proof sent.')}</span></span></label>
+          ${Object.keys(_pr.autoSent || {}).filter(k => k.startsWith((_pr.deadline || '') + '|')).length ? `<div style="font-size:.68rem;color:var(--win);margin-top:.3rem">✅ ${_g('wysłano automatycznie', 'sent automatically')}: ${Object.keys(_pr.autoSent).filter(k => k.startsWith(_pr.deadline + '|')).map(k => k.split('|')[1] + ' h').join(', ')}</div>` : ''}</div>
         ${_pr.lastAt ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.5rem">${_g('Ostatnie przypomnienie', 'Last reminder')}: ${_prAgo(_pr.lastAt)}</div>` : ''}
       </div>
       <div>
@@ -17729,6 +17816,9 @@ function _prDraw() {
 function _prPreview() { const el = document.getElementById('pr-preview'); if(!el) return; const T = _prTeams(), pv = T.find(x => x.id === _pr.previewId) || T.find(x => _pr.sel.has(x.id)) || T[0];
   el.innerHTML = `<div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.35rem"><span style="width:28px;height:28px;border-radius:50%;background:#f5c518;display:inline-flex;align-items:center;justify-content:center;font-size:.9rem">🏀</span><b style="color:#fff">${EU_MODE ? 'EU Chemik League' : '2K Pro-Am Ekstraklasa'}</b><span style="background:#5865f2;color:#fff;border-radius:3px;font-size:.58rem;padding:0 .25rem;font-weight:700">BOT</span></div>` + _prMd(payRemindRender(_pr.tpl, _prVars(pv))); }
 function _prIns(k) { const ta = document.getElementById('pr-tpl'); if(!ta) return; const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a; ta.value = ta.value.slice(0, a) + k + ta.value.slice(b); _pr.tpl = ta.value; ta.focus(); ta.setSelectionRange(a + k.length, a + k.length); _prPreview(); }
+async function payRemindAuto() { if(_pr.auto && !_pr.deadline) { showToast('⚠ ' + _g('Ustaw termin płatności — bez niego automat nie zadziała', 'Set a payment deadline — the automation needs it'), 'info'); }
+  const r = await _api('/team-payment/remind', 'POST', { saveAuto: true, auto: _pr.auto, message: _pr.tpl, deadline: _pr.deadline, saveDeadline: !!_pr.deadline }, { admin: true });
+  if(!r.ok) { showToast('❌ ' + (r.error || 'Błąd'), 'error'); return; } if(r.signup) window._signupInfo = r.signup; showToast(_pr.auto ? '⏰ ' + _g('Automatyczne przypomnienia włączone (z obecną treścią)', 'Automatic reminders on (with the current message)') : _g('Automatyczne przypomnienia wyłączone', 'Automatic reminders off'), 'success'); }
 async function payRemindSend() {
   const ids = _prTeams().filter(x => _pr.sel.has(x.id)).map(x => x.id); if(!ids.length) return;
   if(_pr.tpl.includes('{deadline}') && !_pr.deadline && !confirm(_g('Nie ustawiono terminu płatności — linie z {deadline} zostaną pominięte. Wysłać mimo to?', 'No payment deadline set — lines with {deadline} will be left out. Send anyway?'))) return;
