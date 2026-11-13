@@ -10482,6 +10482,7 @@ function renderStories() {
   let el = document.getElementById('dash-stories'); const ex = document.getElementById('dashboard-extras'); if(!ex) return;
   if(!el) { el = document.createElement('div'); el.id = 'dash-stories'; ex.parentNode.insertBefore(el, ex); }
   const L = seasonStorylines(), cap = captainChecklistHtml();
+  try { renderLaunchTop(); } catch(e) {}
   el.innerHTML = launchHtml() + cap + (L.length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem" data-notr><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><span style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted)">📰 ${_g('WĄTKI SEZONU', 'SEASON STORYLINES')}</span><a href="#" style="font-size:.72rem;color:var(--accent)" onclick="openMediaGallery();return false">🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</a></div>
     ${L.map(x => `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border);font-size:.86rem;${x.act ? 'cursor:pointer' : ''}" ${x.act ? `onclick="${x.act}"` : ''}><span style="font-size:1.1rem">${x.ico}</span><span style="flex:1">${x.t}</span>${x.act ? '<span style="color:var(--accent);font-size:.75rem">›</span>' : ''}</div>`).join('')}</div>` : (_mdTeams().length ? `<div class="card" style="padding:.75rem 1rem;margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap" data-notr><div><b>🎬 ${_g('Poznaj drużyny', 'Meet the teams')}</b><div style="font-size:.76rem;color:var(--muted)">${_g('Prezentacje drużyn przed sezonem', 'Team intros before the season')} · ${_mdTeams().filter(r => r.media?.at).length}/${_mdTeams().length}</div></div><button class="btn btn-primary" style="font-size:.74rem" onclick="openMediaGallery()">${_g('Zobacz', 'View')}</button></div>` : ''));
   adminFabUpdate();
@@ -11076,7 +11077,12 @@ function captainBoxHtml() {
 function _launchTarget(c) { if(!c?.on) return null; const t = c.mode === 'signups' ? c.signupsEnd : c.mode === 'custom' ? c.customAt : c.seasonStart; return t ? Date.parse(t) : null; }
 function _launchLabel(c) { return c.mode === 'signups' ? _g('Zapisy kończą się za', 'Registrations close in') : c.mode === 'custom' ? (c.customLabel || _g('Zostało', 'Time left')) : _g('Start sezonu za', 'Season starts in'); }
 function _cdParts(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return [Math.floor(s / 86400), Math.floor(s % 86400 / 3600), Math.floor(s % 3600 / 60), s % 60]; }
-function launchHtml() {
+function renderLaunchTop() { // ⏳ odliczanie — pierwszy element dashboardu
+  const v = document.getElementById('view-dashboard'); if(!v) return; let el = document.getElementById('launch-top');
+  if(!el) { el = document.createElement('div'); el.id = 'launch-top'; v.insertBefore(el, v.firstChild); } else if(v.firstChild !== el) v.insertBefore(el, v.firstChild);
+  el.innerHTML = launchCountdownHtml();
+}
+function launchCountdownHtml() {
   const L = window._launch || {}, c = L.countdown, t = _launchTarget(c); let out = '';
   if(t && t > Date.now()) { const [d, h, m, s] = _cdParts(t - Date.now()), box = (v, l, id) => `<div style="min-width:64px;background:rgba(0,0,0,.25);border-radius:10px;padding:.45rem .5rem;text-align:center"><div id="${id}" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2rem;line-height:1">${String(v).padStart(2, '0')}</div><div style="font-size:.6rem;letter-spacing:1px;opacity:.8">${l}</div></div>`;
     out += `<div class="card" id="launch-cd" data-t="${t}" style="padding:1rem 1.1rem;margin-bottom:1rem;background:linear-gradient(135deg,rgba(245,197,24,.22),rgba(245,197,24,.04));border:1px solid var(--accent)" data-notr>
@@ -11084,7 +11090,12 @@ function launchHtml() {
         <div style="font-size:.82rem;color:var(--muted);margin-top:.15rem">${new Date(t).toLocaleString(currentLang === 'en' ? 'en-GB' : 'pl-PL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</div></div>
         <div style="display:flex;gap:.4rem">${box(d, _g('DNI', 'DAYS'), 'cd-d')}${box(h, _g('GODZ', 'HRS'), 'cd-h')}${box(m, 'MIN', 'cd-m')}${box(s, 'SEK'.replace('SEK', _g('SEK', 'SEC')), 'cd-s')}</div></div>
       ${c.mode === 'signups' && !registrationsClosed ? `<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.7rem"><button class="btn btn-primary" style="font-size:.76rem" onclick="goToTeamRegistrations()">🧢 ${_g('Zapisz drużynę', 'Register your team')}</button><button class="btn btn-ghost" style="font-size:.76rem" onclick="showView('howto')">📖 ${_g('Jak to działa', 'How it works')}</button></div>` : ''}</div>`;
-    clearInterval(window._cdT); window._cdT = setInterval(() => { const el = document.getElementById('launch-cd'); if(!el) return clearInterval(window._cdT); const left = +el.dataset.t - Date.now(); if(left <= 0) { clearInterval(window._cdT); try { renderStories(); } catch(e) {} return; } const [d2, h2, m2, s2] = _cdParts(left); [['cd-d', d2], ['cd-h', h2], ['cd-m', m2], ['cd-s', s2]].forEach(([id, v]) => { const x = document.getElementById(id); if(x) x.textContent = String(v).padStart(2, '0'); }); }, 1000); }
+    clearInterval(window._cdT); window._cdT = setInterval(() => { const el = document.getElementById('launch-cd'); if(!el) return clearInterval(window._cdT); const left = +el.dataset.t - Date.now(); if(left <= 0) { clearInterval(window._cdT); try { renderLaunchTop(); } catch(e) {} return; } const [d2, h2, m2, s2] = _cdParts(left); [['cd-d', d2], ['cd-h', h2], ['cd-m', m2], ['cd-s', s2]].forEach(([id, v]) => { const x = document.getElementById(id); if(x) x.textContent = String(v).padStart(2, '0'); }); }, 1000);
+  }
+  return out;
+}
+function launchHtml() { // typy i przedsezonowy ranking (w bloku wątków sezonu)
+  const L = window._launch || {}; let out = '';
   if(L.picks?.on) { try { const ctx = { demo: false, seasonId: currentSeasonId || null }, pc = _predCardHtml(ctx); if(pc) out += `<div id="launch-picks">${pc}</div>`; } catch(e) {} }
   if(L.pre?.on && L.pre.items?.length && !_seasonMatchesOf(currentSeasonId || null).length) { const med = ['🥇', '🥈', '🥉'];
     out += `<div class="card" style="padding:.8rem 1rem;margin-bottom:1rem" data-notr><div style="font-size:.72rem;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">📊 ${_g('PRZEDSEZONOWY POWER RANKING', 'PRE-SEASON POWER RANKING')}</div>
