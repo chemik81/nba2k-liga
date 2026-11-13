@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 
   :root {
     --bg: #0a0c10;
@@ -878,3 +878,15 @@ body.eu #lang-toggle, body.eu #lang-pl, body.eu #lang-en{display:none!important}
 .fx-file{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap;max-width:100%}
 .fx-file-btn{font-size:.76rem;padding:.3rem .7rem}
 .fx-file-name{font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+
+.eued-row{display:grid;grid-template-columns:minmax(0,2.6fr) 112px minmax(0,1fr) 34px;gap:.35rem;margin-bottom:.35rem;align-items:center}
+.eued-head{font-size:.68rem;color:var(--muted);margin-bottom:.2rem}
+.eued-row.bad .gt{border-color:#ef4444!important;box-shadow:0 0 0 2px rgba(239,68,68,.25)}
+@media (max-width:560px){
+  .eued-head{display:none}
+  .eued-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;padding:.5rem;border:1px solid var(--border);border-radius:10px;background:var(--surface2);margin-bottom:.45rem}
+  .eued-row .gt{grid-column:1/3;grid-row:1}
+  .eued-row .rm{grid-column:3;grid-row:1}
+  .eued-row .pf{grid-column:1;grid-row:2}
+  .eued-row .xh{grid-column:2/4;grid-row:2}
+}

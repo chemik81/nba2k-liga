@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 function _draftTeamsInfo(ev) {
   let ovr = {}; try { _dsComputeOvr((ev.teams || []).flatMap(t => t.players || []), {}).forEach(p => { ovr[p.id] = p.ovr; }); } catch(e) {}
   let lg = {}; try { _mpAgg(() => true, 'season').forEach(r => { lg[_normNick(r.name)] = r; }); } catch(e) {}

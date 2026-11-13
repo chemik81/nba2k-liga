@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 // ═══ 🪪 KARTA ZAWODNIKA ══════════════════════════════════════════
 async function _shareCardCanvas(name) {
   const ed = _currentEdition();
@@ -76,7 +76,7 @@ function openEuTeamEdit(id) {
   _euEdDraw();
 }
 function _euEdDraw() {
-  const r = teamRegistrations.find(x => x.id === _euEd.id), m = _fxModal('euedit-modal', 600); m.classList.add('open');
+  const r = teamRegistrations.find(x => x.id === _euEd.id), m = _fxModal('euedit-modal', 700); m.classList.add('open');
   const sel = 'padding:.35rem .4rem;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:.8rem';
   m.querySelector('.modal').innerHTML = _fxHead('euedit-modal', `✏️ Edit team — ${_h(r.teamName)}`) + `<div data-notr>
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.55rem .7rem">
@@ -84,20 +84,23 @@ function _euEdDraw() {
       <div style="flex:1"><div style="font-weight:700;font-size:.85rem">Team logo</div><div style="font-size:.72rem;color:var(--muted)">PNG, JPG, WEBP or GIF — square works best.</div></div>
       <button class="btn btn-ghost" style="font-size:.74rem" onclick="changeTeamLogo('${r.id}')">🖼 ${r.logo ? 'Change logo' : 'Add logo'}</button></div>
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">You can edit your roster until registration closes: fix gamertags, change platforms, swap or add players (min. 5, max. 15). Fixed gamertags keep the player’s linked account.</div>
-    <div style="display:grid;grid-template-columns:1fr 92px 120px 32px;gap:.35rem;font-size:.68rem;color:var(--muted);margin-bottom:.2rem"><span>Gamertag</span><span>Platform</span><span>X profile (optional)</span><span></span></div>
-    ${_euEd.rows.map((p, i) => `<div style="display:grid;grid-template-columns:1fr 92px 120px 32px;gap:.35rem;margin-bottom:.3rem">
-      <input value="${_h(p.gamertag)}" maxlength="32" oninput="_euEd.rows[${i}].gamertag=this.value" placeholder="Gamertag" style="${_MODAL_INP};margin:0;padding:.35rem .55rem">
-      <select onchange="_euEd.rows[${i}].platform=this.value" style="${sel}"><option value="psn" ${p.platform !== 'xbox' ? 'selected' : ''}>PlayStation</option><option value="xbox" ${p.platform === 'xbox' ? 'selected' : ''}>Xbox</option></select>
-      <input value="${_h(p.x)}" maxlength="40" oninput="_euEd.rows[${i}].x=this.value" placeholder="@handle" style="${_MODAL_INP};margin:0;padding:.35rem .55rem">
-      <button class="btn btn-ghost" title="Remove player" style="padding:0;color:var(--loss)" onclick="_euEd.rows.splice(${i},1);_euEdDraw()">✕</button></div>`).join('')}
-    ${_euEd.rows.length < 15 ? `<button class="btn btn-ghost" style="font-size:.74rem;margin:.2rem 0 .7rem" onclick="_euEd.rows.push({gamertag:'',platform:'psn',x:''});_euEdDraw()">➕ Add player</button>` : ''}
+    <div class="eued-row eued-head"><span>Gamertag</span><span>Platform</span><span>X profile (optional)</span><span></span></div>
+    ${_euEd.rows.map((p, i) => `<div class="eued-row${_euEd.bad?.includes(i) ? ' bad' : ''}">
+      <input class="gt" id="eued-gt-${i}" value="${_h(p.gamertag)}" maxlength="32" oninput="_euEd.rows[${i}].gamertag=this.value;this.closest('.eued-row').classList.remove('bad')" placeholder="Player ${i + 1} — gamertag" style="${_MODAL_INP};margin:0;padding:.45rem .6rem;font-size:.9rem">
+      <select class="pf" onchange="_euEd.rows[${i}].platform=this.value" style="${sel}"><option value="psn" ${p.platform !== 'xbox' ? 'selected' : ''}>PlayStation</option><option value="xbox" ${p.platform === 'xbox' ? 'selected' : ''}>Xbox</option></select>
+      <input class="xh" value="${_h(p.x)}" maxlength="40" oninput="_euEd.rows[${i}].x=this.value" placeholder="X @handle (optional)" style="${_MODAL_INP};margin:0;padding:.35rem .55rem">
+      <button class="btn btn-ghost rm" title="Remove player" style="padding:0;color:var(--loss)" onclick="_euEd.rows.splice(${i},1);_euEd.bad=null;_euEdDraw()">✕</button></div>`).join('')}
+    <div style="font-size:.72rem;color:var(--muted);margin:.15rem 0 .2rem">${_euEd.rows.filter(p => String(p.gamertag || '').trim()).length} / 15 players</div>
+    ${_euEd.rows.length < 15 ? `<button class="btn btn-ghost" style="font-size:.78rem;margin:.2rem 0 .7rem" onclick="_euEd.rows.push({gamertag:'',platform:'psn',x:''});_euEd.bad=null;_euEdDraw();setTimeout(()=>document.getElementById('eued-gt-'+(_euEd.rows.length-1))?.focus(),30)">➕ Add player</button>` : `<div style="font-size:.74rem;color:var(--muted);margin:.2rem 0 .7rem">Maximum 15 players reached.</div>`}
     <label style="${_MODAL_LBL}">Team X profile (optional)</label>
     <input value="${_h(_euEd.xHandle)}" maxlength="40" oninput="_euEd.xHandle=this.value" placeholder="@yourteam" style="${_MODAL_INP};margin-bottom:.9rem">
     <div id="euedit-status" style="font-size:.78rem;min-height:1.1em;margin-bottom:.4rem"></div>
     <div style="display:flex;justify-content:flex-end;gap:.5rem"><button class="btn btn-ghost" onclick="_fxClose('euedit-modal')">Cancel</button><button class="btn btn-primary" onclick="saveEuTeamEdit()">💾 Save team</button></div></div>`;
 }
 async function saveEuTeamEdit() {
-  const rows = _euEd.rows.map(p => ({ ...p, gamertag: String(p.gamertag || '').trim() })).filter(p => p.gamertag), st = document.getElementById('euedit-status');
+  const empty = _euEd.rows.map((p, i) => String(p.gamertag || '').trim() ? -1 : i).filter(i => i >= 0), st = document.getElementById('euedit-status');
+  if(empty.length) { _euEd.bad = empty; _euEdDraw(); const s2 = document.getElementById('euedit-status'); s2.style.color = 'var(--loss)'; s2.textContent = `❌ Enter a gamertag for player ${empty.map(i => i + 1).join(', ')} — or remove the empty row (✕)`; document.getElementById('eued-gt-' + empty[0])?.focus(); return; }
+  const rows = _euEd.rows.map(p => ({ ...p, gamertag: String(p.gamertag || '').trim() })).filter(p => p.gamertag);
   if(rows.length < 5) { st.style.color = 'var(--loss)'; st.textContent = 'Minimum 5 players'; return; }
   const renames = rows.filter(p => p.orig && p.orig !== p.gamertag).map(p => ({ from: p.orig, to: p.gamertag }));
   st.style.color = 'var(--muted)'; st.textContent = '⏳ Saving…';

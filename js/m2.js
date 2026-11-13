@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 // Central Anthropic call — uses Worker if configured, else direct key
 async function callAnthropic(model, max_tokens, messages) {
   if(workerUrl) {

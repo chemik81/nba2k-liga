@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 function _wrPlayer(me) {
   const games = _mpAgg(() => true, _wr.scope).filter(r => _mpSame(r.name, me)).flatMap(r => r.games.map(g => ({ ...g, team: r.team, name: r.name })));
   if(!games.length) return null;

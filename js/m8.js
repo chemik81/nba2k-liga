@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 async function toggleChallenges() {
   if(!confirm(window._challengesOff ? 'Włączyć wyzwania miesiąca dla wszystkich?' : 'Wyłączyć wyzwania miesiąca dla wszystkich?')) return;
   window._challengesOff = !window._challengesOff;

@@ -1,4 +1,4 @@
-/*@v:af4a9d7b1a*/
+/*@v:739204317b*/
 // 🎬 film z Discorda: świeży adres od Workera (adresy plików Discorda wygasają) → odtwarzacz na stronie
 async function playDcClip(id) {
   const box = document.getElementById('clip-' + id); if(!box) return;
