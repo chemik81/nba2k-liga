@@ -1,2 +1,2 @@
-/*@v:c1baebcf6b*/
+/*@v:ea66abeef1*/
 function setLang(e){setTimeout(()=>{try{_syncExpLabels()}catch(t){}},0),"en"!==e&&(e="pl"),currentLang=e,localStorage.setItem("nba2k_lang",e),["pl","en","nl"].forEach(t=>{const n=document.getElementById("lang-"+t);if(!n)return;const a=t===e;n.style.background=a?"var(--accent)":"transparent",n.style.color=a?"#000":"var(--muted)",n.style.borderColor=a?"var(--accent)":"var(--border)"}),document.querySelectorAll("[data-i18n]").forEach(e=>{const n=e.getAttribute("data-i18n"),a=t(n);a&&(e.textContent=a)}),location.reload()}
